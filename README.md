@@ -25,6 +25,25 @@ bun run build
 
 The resulting single-file executable lands at `dist/crew`.
 
+## Install globally
+
+```
+bun run install-bin
+```
+
+Builds and installs the executable to `~/.local/bin/crew` by default.
+Override the destination by setting `CREW_INSTALL_PREFIX`:
+
+```
+CREW_INSTALL_PREFIX=/opt/homebrew/bin bun run install-bin
+```
+
+To remove it:
+
+```
+bun run uninstall-bin
+```
+
 ## Test
 
 ```

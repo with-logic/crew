@@ -246,14 +246,21 @@ at the top of this doc.
 ```sh
 bun install
 bun run src/index.ts version           # run from source
-bun run build                           # produce dist/crew
-bun test                                # run the full test suite
-bun run test:coverage                   # with coverage report
-bun run typecheck                       # tsc --noEmit
+bun run build                          # produce dist/crew
+bun test                               # run the full test suite
+bun run test:coverage                  # with coverage report
+bun run typecheck                      # tsc --noEmit
+bun run install-bin                    # build + copy to ~/.local/bin/crew
+bun run uninstall-bin                  # remove the installed binary
 ```
 
 `CREW_HOME=/tmp/xyz dist/crew install …` to try the compiled binary
 without disturbing your real `~/.crew`.
+
+`CREW_INSTALL_PREFIX=/opt/homebrew/bin bun run install-bin` to install
+into a non-default location. The script in `scripts/install.sh` creates
+the prefix if missing and prints a PATH-setup hint if the prefix isn't
+on `$PATH`.
 
 ---
 
