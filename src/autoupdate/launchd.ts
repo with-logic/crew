@@ -12,14 +12,23 @@ import { crewHome } from "../core/paths.ts";
 import { CrewError } from "../core/errors.ts";
 import { ensureDir, exists, rmrf, writeText } from "../util/fs.ts";
 import { dirname } from "node:path";
+import { BUNDLE_IDENTIFIER, writeAttributionBundle } from "./bundle.ts";
 
-/** Plist body per §10.2. */
+/**
+ * Plist body per §10.2, plus an `AssociatedBundleIdentifiers` key so
+ * macOS Login Items attributes this agent to "Crew Skill Autoupdate"
+ * rather than to the Bun binary's Apple Developer signer.
+ */
 export function plistXml(crewBinaryPath: string, intervalSeconds: number, logPath: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key><string>sh.crew.autoupdate</string>
+  <key>AssociatedBundleIdentifiers</key>
+  <array>
+    <string>${BUNDLE_IDENTIFIER}</string>
+  </array>
   <key>ProgramArguments</key>
   <array>
     <string>${escapeXml(crewBinaryPath)}</string>
@@ -45,12 +54,15 @@ export interface EnableInput {
   readonly home?: string;
 }
 
-/** Write the plist and (attempt to) load it via launchctl. */
+/** Write the attribution bundle + plist and (attempt to) load the agent. */
 export function enableAutoupdate(input: EnableInput): void {
   const home = input.home ?? crewHome();
   const p = paths(home);
   ensureDir(p.logsDir);
   ensureDir(dirname(p.autoupdatePlist));
+  // Write the attribution bundle first so the plist's
+  // `AssociatedBundleIdentifiers` resolves as soon as launchd loads it.
+  writeAttributionBundle(home);
   writeText(p.autoupdatePlist, plistXml(input.crewBinaryPath, input.intervalSeconds, p.autoupdateLog));
   if (!runLaunchctl(["bootstrap", `gui/${process.getuid?.() ?? 0}`, p.autoupdatePlist])) {
     if (!runLaunchctl(["load", p.autoupdatePlist])) {

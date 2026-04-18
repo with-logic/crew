@@ -160,8 +160,11 @@ Accepted on any command where they apply:
 │   └── git/<host>/<owner>/<repo>@<ref>/
 ├── store/               # content-addressed canonical skill copies
 │   └── <skill-name>@<short-sha>/
-└── logs/
-    └── autoupdate.log
+├── logs/
+│   └── autoupdate.log
+└── Crew.app/            # attribution bundle used by autoupdate (see §10.2)
+    └── Contents/
+        └── Info.plist
 ```
 
 All paths inside `~/.crew/` are owned by crew. External tools should not write here. Crew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable.
@@ -437,6 +440,10 @@ With no arguments, updates every installed skill. With arguments, updates only t
 <plist version="1.0">
 <dict>
   <key>Label</key><string>sh.crew.autoupdate</string>
+  <key>AssociatedBundleIdentifiers</key>
+  <array>
+    <string>sh.crew.autoupdater</string>
+  </array>
   <key>ProgramArguments</key>
   <array>
     <string><!-- absolute path to the crew executable --></string>
@@ -451,7 +458,22 @@ With no arguments, updates every installed skill. With arguments, updates only t
 </plist>
 ```
 
-After writing the plist, crew loads it via `launchctl bootstrap gui/<uid> <plist-path>` (or `launchctl load` on older macOS versions where `bootstrap` is unavailable). `config.yaml`'s `autoupdate.enabled` is set to `true` and `autoupdate.interval_seconds` to the chosen interval.
+**Attribution bundle.** On macOS Ventura and later, Login Items labels a
+launchd agent by the code-signing team of the executable unless the
+plist carries `AssociatedBundleIdentifiers` pointing at a resolvable
+bundle. To avoid Login Items showing the crew binary's signer, crew
+writes a minimal attribution bundle at `~/.crew/Crew.app/` containing
+`Contents/Info.plist` with `CFBundleIdentifier = sh.crew.autoupdater`
+and `CFBundleDisplayName = "Crew Skill Autoupdate"`. The bundle has no
+executable; it exists solely as metadata for Login Items. The plist's
+`AssociatedBundleIdentifiers` references `sh.crew.autoupdater` so macOS
+attributes the agent to this bundle.
+
+After writing the bundle and the plist, crew loads the agent via
+`launchctl bootstrap gui/<uid> <plist-path>` (or `launchctl load` on
+older macOS versions where `bootstrap` is unavailable). `config.yaml`'s
+`autoupdate.enabled` is set to `true` and `autoupdate.interval_seconds`
+to the chosen interval.
 
 `crew autoupdate disable` unloads the agent (`launchctl bootout gui/<uid>/sh.crew.autoupdate` or `launchctl unload`), removes the plist, and sets `autoupdate.enabled` to `false`.
 
@@ -831,6 +853,8 @@ Implementations and test suites refer to criteria by ID.
 | C-AUTO-06 | §10.2 | A failure to load the agent produces `launchd_failure`, exit 8, with a clear message. |
 | C-AUTO-07 | §10.2 | Default interval when none is specified is 14400 seconds (4 hours). |
 | C-AUTO-08 | §10.2 | Interval strings `30s`, `5m`, `2h`, `1d` are accepted. |
+| C-AUTO-09 | §10.2 | `crew autoupdate enable` writes an attribution bundle at `~/.crew/Crew.app/Contents/Info.plist` with `CFBundleIdentifier = sh.crew.autoupdater` and `CFBundleDisplayName = "Crew Skill Autoupdate"`. |
+| C-AUTO-10 | §10.2 | The plist carries an `AssociatedBundleIdentifiers` array containing `sh.crew.autoupdater`. |
 
 #### C-TARGET: Targets (§7)
 

@@ -1,28 +1,31 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { paths } from "../../src/core/paths.ts";
 import {
   resetLaunchctlRunner,
   setLaunchctlRunner,
 } from "../../src/autoupdate/launchd.ts";
+import { bundlePath } from "../../src/autoupdate/bundle.ts";
 import { readConfig } from "../../src/config/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 
-// launchctl writes to ~/Library/LaunchAgents — we redirect by setting
-// HOME. But since `paths()` reads homedir() at import time... actually
-// paths() does it on every call, so we can set process.env.HOME before.
-const realHome = homedir();
-let fakeHome: string;
+// Redirect the LaunchAgents dir so tests never touch the real
+// `~/Library/LaunchAgents/`. `paths()` reads this env var on every
+// call, so setting it per-test is sufficient.
+const savedLaunchAgentsDir = process.env.CREW_LAUNCH_AGENTS_DIR;
 
 beforeEach(() => {
-  fakeHome = makeCrewHome();
-  process.env.HOME = fakeHome;
+  process.env.CREW_LAUNCH_AGENTS_DIR = makeCrewHome();
 });
 
 afterEach(() => {
-  process.env.HOME = realHome;
+  if (savedLaunchAgentsDir === undefined) {
+    delete process.env.CREW_LAUNCH_AGENTS_DIR;
+  } else {
+    process.env.CREW_LAUNCH_AGENTS_DIR = savedLaunchAgentsDir;
+  }
   resetLaunchctlRunner();
 });
 
@@ -43,6 +46,22 @@ describe("autoupdate commands", () => {
     expect(config.autoupdate.enabled).toBe(true);
     expect(config.autoupdate.interval_seconds).toBe(14400);
     expect(loadedArgs.some((a) => a[0] === "bootstrap")).toBe(true);
+  });
+
+  test("enable writes the attribution bundle so Login Items shows 'Crew Skill Autoupdate'", () => {
+    const crewHome = makeCrewHome();
+    setLaunchctlRunner(() => true);
+    runCli(["autoupdate", "enable"], { home: crewHome, streams: captureStreams().streams });
+    const infoPlistPath = join(bundlePath(crewHome), "Contents", "Info.plist");
+    expect(existsSync(infoPlistPath)).toBe(true);
+    const infoPlist = readFileSync(infoPlistPath, "utf8");
+    expect(infoPlist).toContain("<string>Crew Skill Autoupdate</string>");
+    expect(infoPlist).toContain("<string>sh.crew.autoupdater</string>");
+
+    // The launchd plist must also reference the bundle identifier.
+    const plist = readFileSync(paths(crewHome).autoupdatePlist, "utf8");
+    expect(plist).toContain("<key>AssociatedBundleIdentifiers</key>");
+    expect(plist).toContain("<string>sh.crew.autoupdater</string>");
   });
 
   test("C-AUTO-06 enable fails when launchctl fails", () => {

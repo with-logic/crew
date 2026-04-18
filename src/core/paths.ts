@@ -17,6 +17,17 @@ export function crewHome(): string {
   return join(homedir(), ".crew");
 }
 
+/**
+ * Resolve the user's LaunchAgents directory. Normally
+ * `~/Library/LaunchAgents`, but tests and sandboxed environments can
+ * redirect via `CREW_LAUNCH_AGENTS_DIR`.
+ */
+export function launchAgentsDir(): string {
+  const override = process.env.CREW_LAUNCH_AGENTS_DIR;
+  if (override && override.length > 0) return override;
+  return join(homedir(), "Library", "LaunchAgents");
+}
+
 /** Every well-known path crew produces. */
 export interface CrewPaths {
   readonly home: string;
@@ -46,8 +57,8 @@ export function paths(home: string = crewHome()): CrewPaths {
     storeDir: join(home, "store"),
     logsDir: join(home, "logs"),
     autoupdateLog: join(home, "logs", "autoupdate.log"),
-    launchAgentsDir: join(homedir(), "Library", "LaunchAgents"),
-    autoupdatePlist: join(homedir(), "Library", "LaunchAgents", "sh.crew.autoupdate.plist"),
+    launchAgentsDir: launchAgentsDir(),
+    autoupdatePlist: join(launchAgentsDir(), "sh.crew.autoupdate.plist"),
   };
 }
 
