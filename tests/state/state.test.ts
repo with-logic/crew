@@ -102,13 +102,21 @@ describe("state lock", () => {
     lock.release();
   });
 
-  test("reaps stale PID", () => {
+  test("stale lock directory is reclaimed", () => {
+    // proper-lockfile creates the lock as a directory at
+    // `<stateFile>.lock` whose mtime tracks liveness. A lock older than
+    // `stale: 60_000` is considered abandoned. We simulate this by
+    // writing the lock dir with an ancient mtime, then confirming a
+    // fresh acquire succeeds.
     const home = makeCrewHome();
-    require("node:fs").mkdirSync(home, { recursive: true });
-    // Write an impossible PID (0 is not a valid acquirable PID).
-    writeFileSync(paths(home).stateLock, "99999999");
-    // Acquirer should reap and succeed.
-    const lock = acquireStateLock(home, 2000);
+    const { mkdirSync, utimesSync } = require("node:fs");
+    mkdirSync(home, { recursive: true });
+    writeFileSync(paths(home).stateFile, "{}");
+    const lockDir = `${paths(home).stateFile}.lock`;
+    mkdirSync(lockDir);
+    const ancient = new Date(0);
+    utimesSync(lockDir, ancient, ancient);
+    const lock = acquireStateLock(home, 5000);
     lock.release();
   });
 });

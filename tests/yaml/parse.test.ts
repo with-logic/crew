@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseYaml } from "../../src/yaml/parse.ts";
-import { stringifyYaml } from "../../src/yaml/stringify.ts";
+import { parseYaml, stringifyYaml } from "../../src/yaml/parse.ts";
 
 describe("parseYaml scalars", () => {
   test("empty returns null", () => {
@@ -105,7 +104,10 @@ describe("stringifyYaml round-trip", () => {
     expect(stringifyYaml(true)).toBe("true\n");
     expect(stringifyYaml(42)).toBe("42\n");
   });
-  test("top-level string quoted when necessary", () => {
-    expect(stringifyYaml("foo:bar")).toBe('"foo:bar"\n');
+  test("top-level string round-trips even when it looks syntactic", () => {
+    // Whatever quoting style js-yaml chooses, the round-trip must preserve
+    // the string exactly.
+    const s = stringifyYaml("foo:bar");
+    expect(parseYaml(s)).toBe("foo:bar");
   });
 });

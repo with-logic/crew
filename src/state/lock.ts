@@ -2,25 +2,24 @@
  * State-lock acquisition (§14).
  *
  * Every command that writes `state.json` or installs into a target
- * acquires an advisory lock on `~/.crew/state.json.lock` before doing so.
- * Read-only commands do not take the lock.
+ * acquires an advisory lock before doing so. Read-only commands do not.
  *
- * We implement a PID-file lock with `O_EXCL` creation. It is correct for
- * single-user CLI usage on macOS:
+ * We use `proper-lockfile`, a battle-tested PID-file lock library
+ * (npm:proper-lockfile). It handles:
  *
- *   - Process A creates the lock with its PID and holds it while it runs.
- *   - Process B attempts to create; fails with `EEXIST`; polls every
- *     100 ms, checking whether A is still alive.
- *   - If A has exited (normal or crashed) before releasing, B detects
- *     the stale lock via `kill -0 <pid>`, unlinks it, and retries.
- *   - If A never exits, B gives up after 30 s and throws `state_locked`.
+ *   - atomic O_EXCL create of the lock directory;
+ *   - stale-lock detection via PID liveness and mtime;
+ *   - cross-platform correctness.
+ *
+ * The library's lockfile actually lives at `<stateFile>.lock` (a sibling
+ * directory), which matches §6's `state.json.lock` path exactly.
  */
 
-import { closeSync, constants, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
-import { dirname } from "node:path";
+import lockfile from "proper-lockfile";
 import { CrewError } from "../core/errors.ts";
 import { crewHome, paths } from "../core/paths.ts";
-import { ensureDir } from "../util/fs.ts";
+import { ensureDir, exists, touch } from "../util/fs.ts";
+import { dirname } from "node:path";
 
 /** Handle representing a held state lock. */
 export interface StateLock {
@@ -29,86 +28,58 @@ export interface StateLock {
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
-const POLL_INTERVAL_MS = 100;
 
 /**
  * Acquire the state lock, blocking up to `timeoutMs` (default 30 s).
  * Throws `state_locked` if the lock cannot be acquired within the timeout.
  */
 export function acquireStateLock(home: string = crewHome(), timeoutMs: number = DEFAULT_TIMEOUT_MS): StateLock {
-  const lockPath = paths(home).stateLock;
-  ensureDir(dirname(lockPath));
-  const deadline = Date.now() + timeoutMs;
-  const pid = process.pid;
+  const stateFile = paths(home).stateFile;
+  ensureDir(dirname(stateFile));
 
+  // proper-lockfile requires the target file to exist. `state.json` may
+  // not yet — this is the first crew run — so touch it.
+  if (!exists(stateFile)) touch(stateFile);
+
+  const deadline = Date.now() + timeoutMs;
+  const pollMs = 100;
   for (;;) {
     try {
-      const fd = openSync(lockPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o644);
-      writeSync(fd, String(pid));
+      const release = lockfile.lockSync(stateFile, {
+        stale: 60_000,
+        realpath: false,
+        // Our `.lock` suffix matches §6 exactly.
+        lockfilePath: `${stateFile}.lock`,
+      });
       let released = false;
       return {
         release(): void {
           if (released) return;
           released = true;
           try {
-            closeSync(fd);
+            release();
           } catch {
-            /* ignore close errors */
-          }
-          try {
-            unlinkSync(lockPath);
-          } catch {
-            /* ignore unlink errors */
+            /* ignore double-release etc. */
           }
         },
       };
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
-      if (code !== "EEXIST") throw err;
-      // Someone else holds it — probe for staleness.
-      if (tryReapStaleLock(lockPath)) continue;
+      // "ELOCKED" means someone else holds it — retry until deadline.
+      if (code !== "ELOCKED") throw err;
       if (Date.now() >= deadline) {
-        throw new CrewError("state_locked", `could not acquire ${lockPath} within ${timeoutMs}ms`, { lockPath });
+        throw new CrewError(
+          "state_locked",
+          `could not acquire ${stateFile}.lock within ${timeoutMs}ms`,
+          { lockPath: `${stateFile}.lock` },
+        );
       }
-      Bun.sleepSync(POLL_INTERVAL_MS);
+      Bun.sleepSync(pollMs);
     }
   }
 }
 
-/**
- * Read the PID written in the lock file; if that process is no longer
- * alive, unlink the file and return true. Otherwise return false.
- */
-function tryReapStaleLock(lockPath: string): boolean {
-  let held = "";
-  try {
-    held = readFileSync(lockPath, "utf8").trim();
-  } catch {
-    return false;
-  }
-  const heldPid = parseInt(held, 10);
-  if (!Number.isFinite(heldPid) || heldPid <= 0) return false;
-  if (isAlive(heldPid)) return false;
-  try {
-    unlinkSync(lockPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** True if the given PID is still a running process. */
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    return code === "EPERM";
-  }
-}
-
-/** Wrap a callback to run while the lock is held; always release. */
+/** Run `fn` while holding the state lock; always release. */
 export function withStateLock<T>(fn: () => T, home: string = crewHome(), timeoutMs: number = DEFAULT_TIMEOUT_MS): T {
   const lock = acquireStateLock(home, timeoutMs);
   try {

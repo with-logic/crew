@@ -15,8 +15,7 @@ import { CrewError } from "../core/errors.ts";
 import type { Config, TapConfig } from "../core/types.ts";
 import { crewHome, paths } from "../core/paths.ts";
 import { exists, readText, writeText } from "../util/fs.ts";
-import { parseYaml, type YamlMap, type YamlValue } from "../yaml/parse.ts";
-import { stringifyYaml } from "../yaml/stringify.ts";
+import { parseYaml, stringifyYaml, type YamlMap, type YamlValue } from "../yaml/parse.ts";
 import {
   DEFAULT_AUTOUPDATE_INTERVAL_SECONDS,
   DEFAULT_TAP_NAME,

@@ -13,8 +13,7 @@ import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { commitAll, makeGitRepo, makeSkill, makeTempDir, skillFrontmatter, tagRepo } from "../helpers/fixtures.ts";
 import { setGitRunner, resetGitRunner } from "../../src/git/exec.ts";
 import { readState, writeState, upsertEntry } from "../../src/state/load.ts";
-import { parseYaml } from "../../src/yaml/parse.ts";
-import { stringifyYaml } from "../../src/yaml/stringify.ts";
+import { parseYaml, stringifyYaml } from "../../src/yaml/parse.ts";
 import { uninstallSkillFromTarget } from "../../src/targets/install.ts";
 import { CrewError } from "../../src/core/errors.ts";
 
