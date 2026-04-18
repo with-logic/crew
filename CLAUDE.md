@@ -224,6 +224,109 @@ genhtml coverage/lcov.info -o coverage/html && open coverage/html/index.html
 HTML view highlights uncovered lines in red — much faster than
 eyeballing the text table.
 
+### Coverage quirks in bun (known footguns)
+
+These are things we hit while getting to 100% and don't want to
+rediscover. If coverage is mysteriously off by a single line or
+function, check these first.
+
+**Only-loaded files are counted.** An unimported source file contributes
+zero to the coverage denominators — the gate doesn't fire on
+orphaned-but-exported code. Don't rely on the threshold to catch
+dead files; a type-level or code-review pass is the right tool.
+
+**`coverageThreshold` applies to BOTH line and function coverage.**
+Bun doesn't support a per-metric threshold. The nested-table form
+(`coverageThreshold = { line = 1.0 }`) is silently ignored — it
+doesn't fail-fast, it just behaves as no threshold. If you need to
+split thresholds, convert the key to a plain number and live with
+both metrics at the same bar, or switch to external tooling.
+
+**Setting `coverageThreshold = 1.0` can look like it's not enforcing.**
+If you edit `bunfig.toml` and tests still pass when you expected a
+fail, re-read the file — stale content from a previous edit is the
+usual cause (the TOML is small and `>>`/`cat <<` race conditions
+bite). Verify by temporarily setting the threshold below the actual
+coverage (`0.5`) and confirming tests still pass at exit 0; then
+back to `1.0`.
+
+**`coverageSkipTestFiles = true` silently disables the threshold.**
+We don't know why. Don't use it. Our test helpers are compact enough
+to hit 100% on their own.
+
+**Closing braces count as lines.** A pattern like:
+
+```ts
+if (entry) {
+  // ...
+  return { ... };
+}
+```
+
+can leave the closing `}` of the `if` block marked uncovered when
+every test takes the `return` branch. Restructure to avoid nesting
+when it's easy (hoist the condition, use early return at the outer
+scope). If the nesting is load-bearing, make sure at least one test
+falls through the block without returning so the closing `}` is
+"reached."
+
+**Chained `.filter(cb1).map(cb2)` = two function objects.**
+Each arrow callback counts separately. If one fires in every real
+path but the other only fires conditionally, you can end up at 99.9%
+function coverage with no clear way to hit the gap. Fold both into a
+single `for` loop:
+
+```ts
+// Avoids the two-callback problem
+const referenced = new Set<string>();
+for (const e of stateEntries) {
+  if (e.resolved_sha) referenced.add(key(e));
+}
+```
+
+**Exhaustive `switch` with a `default` returns an uncovered line.**
+TypeScript narrows `case` branches but a `default:` with no way to
+reach it still counts. Prefer discriminated `if` chains for
+discriminated unions; drop the `default` when the compiler proves
+exhaustiveness:
+
+```ts
+// Every source.type value is handled; no default needed.
+if (source.type === "tap") return { ... };
+if (source.type === "git") return { ... };
+return { type: "path", path: ... };  // `source.type === "path"` here
+```
+
+**`catch (err) { throw err }` without translation is dead.** If the
+only caller of a function that throws already catches the same error
+type, a rethrow-only catch adds no value and costs a line. Delete
+it; any real unexpected error still bubbles to the CLI top-level,
+which formats it as `usage_error`.
+
+**Type-casting `err` vs `instanceof` narrowing.** When the caller
+path guarantees a specific error type (e.g. `runGit` only throws
+`GitProcessError`), `const ge = err as GitProcessError;` is one line
+and 100% coverable. `if (err instanceof X) { ... } throw err;` is
+two paths, one of which is dead. Prefer the cast when the invariant
+holds, and document the invariant in a comment.
+
+**Identifying the last uncovered arrow.** If the text reporter says
+`92.86 | 100.00` on a file (function coverage but not line), one
+arrow is defined and never invoked. lcov's `FNF`/`FNH` confirms the
+count but doesn't tell you which one. Work top-down:
+
+1. Open the HTML report.
+2. Grep the file for `=>` and `function ` to enumerate callables.
+3. For each, ask "when does this run?" — the one with the narrowest
+   precondition is the likely culprit.
+4. Either write a test that meets the precondition, or restructure
+   to remove the callback (see the `for` loop pattern above).
+
+**`bun test --coverage-reporter=lcov` with no prior clean state.**
+If you delete `coverage/` and rerun, sometimes the `.info` file
+doesn't regenerate cleanly. Prefer `rm -rf coverage/ && bun test` to
+get a truly fresh report.
+
 **Test helpers live in `tests/helpers/`.**
 - `fixtures.ts` — `makeTempDir`, `makeSkill`, `makeGitRepo`, `commitAll`,
   `tagRepo`, `skillFrontmatter`. Prefer these over hand-rolled fs
