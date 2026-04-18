@@ -6,21 +6,40 @@
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "allowJs": false,
+    "isolatedModules": true,
 
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
 
+    // Strict suite — every flag in TypeScript's "strict" umbrella.
     "strict": true,
-    "skipLibCheck": true,
+    "alwaysStrict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": true,
+    "useUnknownInCatchVariables": true,
+
+    // Beyond `strict`: catches classes of bugs the default strict pass
+    // misses.
+    "exactOptionalPropertyTypes": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noPropertyAccessFromIndexSignature": false,
-    "exactOptionalPropertyTypes": false,
+
+    // Hygiene.
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
     "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
 
     "types": ["bun-types"]
   },

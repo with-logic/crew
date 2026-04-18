@@ -14,13 +14,13 @@
  * the rest. The summary decides the exit code.
  */
 
-import { CrewError } from "../core/errors.ts";
+import type { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
 import type { ResolvedSkill, Scope, StateFile } from "../core/types.ts";
-import { installSkillIntoTarget, type InstallOutcome } from "../targets/install.ts";
-import type { TargetAdapter } from "../targets/adapter.ts";
-import { nowIso } from "../util/time.ts";
 import { upsertEntry } from "../state/load.ts";
+import type { TargetAdapter } from "../targets/adapter.ts";
+import { type InstallOutcome, installSkillIntoTarget } from "../targets/install.ts";
+import { nowIso } from "../util/time.ts";
 
 /** Per-(skill, target) outcome. */
 export type PerTargetResult =
@@ -79,7 +79,10 @@ export function performInstall(
           contentHash: skill.contentHash,
           force: options.force,
         });
-        perTarget.push({ kind: outcome.kind === "installed" ? "installed" : "up_to_date", target: adapter.name });
+        perTarget.push({
+          kind: outcome.kind === "installed" ? "installed" : "up_to_date",
+          target: adapter.name,
+        });
         successfulTargets.push(adapter.name);
       } catch (err) {
         const ce = err as CrewError;

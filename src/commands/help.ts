@@ -57,17 +57,39 @@ const COMMANDS: Record<string, CommandHelp> = {
       "A <ref> is a local path, a git URL, or a skill name from a configured tap (see `crew help install` → EXAMPLES).",
     ],
     flags: [
-      { flag: "--scope {user,project}", description: "Install globally (default) or under the current directory." },
+      {
+        flag: "--scope {user,project}",
+        description: "Install globally (default) or under the current directory.",
+      },
       { flag: "--target <name>", description: "Restrict to named target(s). Repeatable." },
       { flag: "--dry-run", description: "Show what would be installed without writing files." },
-      { flag: "--force", description: "Overwrite a customized or untracked destination. Never overrides a name conflict." },
-      { flag: "--yes", description: "Answer `yes` to any confirmation prompt (e.g. taps being auto-added)." },
+      {
+        flag: "--force",
+        description:
+          "Overwrite a customized or untracked destination. Never overrides a name conflict.",
+      },
+      {
+        flag: "--yes",
+        description: "Answer `yes` to any confirmation prompt (e.g. taps being auto-added).",
+      },
     ],
     examples: [
-      { command: "crew install python-testing", description: "Install a skill discovered in the configured taps." },
-      { command: "crew install ./my-skill", description: "Install a skill from a local directory." },
-      { command: "crew install gh:acme/skills@v1.2.0//python/testing", description: "Install from a tagged GitHub repo at a subpath." },
-      { command: "crew install --scope project python-testing", description: "Install only into the current project." },
+      {
+        command: "crew install python-testing",
+        description: "Install a skill discovered in the configured taps.",
+      },
+      {
+        command: "crew install ./my-skill",
+        description: "Install a skill from a local directory.",
+      },
+      {
+        command: "crew install gh:acme/skills@v1.2.0//python/testing",
+        description: "Install from a tagged GitHub repo at a subpath.",
+      },
+      {
+        command: "crew install --scope project python-testing",
+        description: "Install only into the current project.",
+      },
     ],
     seeAlso: ["uninstall", "update", "info"],
   },
@@ -84,8 +106,14 @@ const COMMANDS: Record<string, CommandHelp> = {
       { flag: "--force", description: "Proceed even if the skill isn't tracked here." },
     ],
     examples: [
-      { command: "crew uninstall python-testing", description: "Remove a skill from every target it was installed in." },
-      { command: "crew uninstall --scope project python-testing", description: "Only remove the project-scope copy." },
+      {
+        command: "crew uninstall python-testing",
+        description: "Remove a skill from every target it was installed in.",
+      },
+      {
+        command: "crew uninstall --scope project python-testing",
+        description: "Only remove the project-scope copy.",
+      },
     ],
     seeAlso: ["list", "install"],
   },
@@ -98,12 +126,18 @@ const COMMANDS: Record<string, CommandHelp> = {
       "Pinned installs (exact SHA or tag) are skipped unless `--force`. Customized installs are skipped silently — your edits are preserved.",
     ],
     flags: [
-      { flag: "--force", description: "Update pinned skills too, overwriting customized installs." },
+      {
+        flag: "--force",
+        description: "Update pinned skills too, overwriting customized installs.",
+      },
     ],
     examples: [
       { command: "crew update", description: "Update every unpinned skill." },
       { command: "crew update python-testing", description: "Update a single skill by name." },
-      { command: "crew update --force python-testing", description: "Force-update even if pinned or customized." },
+      {
+        command: "crew update --force python-testing",
+        description: "Force-update even if pinned or customized.",
+      },
     ],
     seeAlso: ["autoupdate", "list"],
   },
@@ -114,12 +148,13 @@ const COMMANDS: Record<string, CommandHelp> = {
     summary: [
       "Print every skill crew currently manages, with its source, resolved SHA, and which targets it's installed in.",
     ],
-    flags: [
-      { flag: "--json", description: "Emit a structured array for scripting." },
-    ],
+    flags: [{ flag: "--json", description: "Emit a structured array for scripting." }],
     examples: [
       { command: "crew list", description: "Show installed skills." },
-      { command: "crew list --json | jq '.installations[].name'", description: "Pipe the names into a script." },
+      {
+        command: "crew list --json | jq '.installations[].name'",
+        description: "Pipe the names into a script.",
+      },
     ],
     seeAlso: ["info", "search"],
   },
@@ -130,12 +165,13 @@ const COMMANDS: Record<string, CommandHelp> = {
     summary: [
       "Show metadata for a skill. If the argument matches an installed skill name, details come from local state; otherwise the ref is resolved and the skill is inspected fresh.",
     ],
-    flags: [
-      { flag: "--json", description: "Emit a structured payload." },
-    ],
+    flags: [{ flag: "--json", description: "Emit a structured payload." }],
     examples: [
       { command: "crew info python-testing", description: "Show details for an installed skill." },
-      { command: "crew info gh:acme/skills//python/testing", description: "Inspect a skill without installing it." },
+      {
+        command: "crew info gh:acme/skills//python/testing",
+        description: "Inspect a skill without installing it.",
+      },
     ],
     seeAlso: ["list", "search"],
   },
@@ -146,9 +182,7 @@ const COMMANDS: Record<string, CommandHelp> = {
     summary: [
       "Match <query> case-insensitively against the name and description of every skill in every configured tap.",
     ],
-    flags: [
-      { flag: "--json", description: "Emit a structured array of matches." },
-    ],
+    flags: [{ flag: "--json", description: "Emit a structured array of matches." }],
     examples: [
       { command: "crew search python", description: "Find skills mentioning `python`." },
       { command: "crew search 'code review'", description: "Multi-word query (quoted)." },
@@ -168,7 +202,10 @@ const COMMANDS: Record<string, CommandHelp> = {
     ],
     examples: [
       { command: "crew tap list", description: "Show every configured tap." },
-      { command: "crew tap add --yes https://github.com/acme/skills.git acme", description: "Add a tap named `acme`." },
+      {
+        command: "crew tap add --yes https://github.com/acme/skills.git acme",
+        description: "Add a tap named `acme`.",
+      },
       { command: "crew tap remove acme", description: "Remove a tap and delete its local clone." },
     ],
     seeAlso: ["search", "install"],
@@ -181,13 +218,14 @@ const COMMANDS: Record<string, CommandHelp> = {
       "List every agent coder crew knows about and whether it's currently detected, force-enabled, or disabled.",
       "`enable` forces a target active even if auto-detection fails; `disable` skips a target on future install/update.",
     ],
-    flags: [
-      { flag: "--json", description: "Emit structured target info." },
-    ],
+    flags: [{ flag: "--json", description: "Emit structured target info." }],
     examples: [
       { command: "crew targets", description: "Show detection status for each adapter." },
       { command: "crew targets disable codex", description: "Skip Codex CLI on future installs." },
-      { command: "crew targets enable claude-code", description: "Install into Claude Code even if auto-detection missed it." },
+      {
+        command: "crew targets enable claude-code",
+        description: "Install into Claude Code even if auto-detection missed it.",
+      },
     ],
   },
 
@@ -199,12 +237,18 @@ const COMMANDS: Record<string, CommandHelp> = {
       "The agent shows up in System Settings → General → Login Items as `Crew Skill Autoupdate`.",
     ],
     flags: [
-      { flag: "--interval <dur>", description: "Interval for `enable`. Units: `s`, `m`, `h`, `d`. Default `4h`." },
+      {
+        flag: "--interval <dur>",
+        description: "Interval for `enable`. Units: `s`, `m`, `h`, `d`. Default `4h`.",
+      },
     ],
     examples: [
       { command: "crew autoupdate enable", description: "Turn on the default 4-hour schedule." },
       { command: "crew autoupdate enable --interval 30m", description: "Run every 30 minutes." },
-      { command: "crew autoupdate status", description: "Check whether the agent is loaded and when it last ran." },
+      {
+        command: "crew autoupdate status",
+        description: "Check whether the agent is loaded and when it last ran.",
+      },
       { command: "crew autoupdate disable", description: "Stop the background updates." },
     ],
     seeAlso: ["update"],
@@ -219,12 +263,18 @@ const COMMANDS: Record<string, CommandHelp> = {
     ],
     flags: [
       { flag: "--verify", description: "Recompute every install's content hash (slower)." },
-      { flag: "--repair", description: "Fix recoverable drift: orphan state, orphan markers, orphan store entries." },
+      {
+        flag: "--repair",
+        description: "Fix recoverable drift: orphan state, orphan markers, orphan store entries.",
+      },
       { flag: "--json", description: "Emit a structured list of findings." },
     ],
     examples: [
       { command: "crew doctor", description: "Quick check." },
-      { command: "crew doctor --verify", description: "Thorough check that also flags customizations." },
+      {
+        command: "crew doctor --verify",
+        description: "Thorough check that also flags customizations.",
+      },
       { command: "crew doctor --repair", description: "Reconcile drift." },
     ],
   },
@@ -236,18 +286,14 @@ const COMMANDS: Record<string, CommandHelp> = {
       "Delete the ephemeral git clone cache (`~/.crew/cache/`) and any store entries no longer referenced by state.",
       "Safe to run — crew re-fetches what it needs on the next install/update.",
     ],
-    examples: [
-      { command: "crew cache clean", description: "Reclaim disk space." },
-    ],
+    examples: [{ command: "crew cache clean", description: "Reclaim disk space." }],
     seeAlso: ["doctor"],
   },
 
   help: {
     name: "help",
     synopsis: "crew help [<command>]",
-    summary: [
-      "Show overall usage, or detailed help for a specific command.",
-    ],
+    summary: ["Show overall usage, or detailed help for a specific command."],
     examples: [
       { command: "crew help", description: "Overview and command list." },
       { command: "crew help install", description: "Detailed help for `install`." },
@@ -281,9 +327,13 @@ const ONELINERS: Record<string, string> = {
 /** Entry point for the `help` command. */
 export function helpCommand(ctx: CommandContext): CommandOutput {
   const sub = ctx.positional[0];
-  if (!sub) return overview();
+  if (!sub) {
+    return overview();
+  }
   const help = COMMANDS[sub];
-  if (!help) return overview();
+  if (!help) {
+    return overview();
+  }
   return renderCommand(help);
 }
 
@@ -336,7 +386,9 @@ function renderCommand(help: CommandHelp): CommandOutput {
   if (help.summary.length > 1) {
     lines.push("DESCRIPTION");
     for (const para of help.summary.slice(1)) {
-      for (const wrapped of wrap(para, 74)) lines.push(`  ${wrapped}`);
+      for (const wrapped of wrap(para, 74)) {
+        lines.push(`  ${wrapped}`);
+      }
     }
     lines.push("");
   }
@@ -362,7 +414,9 @@ function renderCommand(help: CommandHelp): CommandOutput {
     lines.push("");
   }
   // Drop the trailing blank line for a clean final output.
-  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  while (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
   return { exitCode: 0, human: lines, json: help };
 }
 
@@ -375,12 +429,14 @@ function wrap(text: string, width: number): string[] {
     if (current.length === 0) {
       current = word;
     } else if (current.length + 1 + word.length <= width) {
-      current += " " + word;
+      current += ` ${word}`;
     } else {
       lines.push(current);
       current = word;
     }
   }
-  if (current.length > 0) lines.push(current);
+  if (current.length > 0) {
+    lines.push(current);
+  }
   return lines;
 }

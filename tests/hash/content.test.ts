@@ -105,7 +105,7 @@ describe("hashDirectory", () => {
   });
 
   test("missing directory returns empty-directory hash", () => {
-    const h = hashDirectory("/tmp/does-not-exist-crew-test-" + Date.now());
+    const h = hashDirectory(`/tmp/does-not-exist-crew-test-${Date.now()}`);
     expect(h).toBe("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
   });
 

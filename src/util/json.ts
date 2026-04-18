@@ -18,14 +18,16 @@ export function tryReadJson<T>(path: string): T | null {
   try {
     return JSON.parse(readText(path)) as T;
   } catch (err) {
-    if (isEnoent(err)) return null;
+    if (isEnoent(err)) {
+      return null;
+    }
     throw err;
   }
 }
 
 /** Write a value as pretty JSON with a trailing newline. */
 export function writeJson(path: string, value: unknown): void {
-  writeText(path, JSON.stringify(value, null, 2) + "\n");
+  writeText(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function isEnoent(err: unknown): boolean {

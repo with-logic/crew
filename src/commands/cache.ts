@@ -2,17 +2,19 @@
  * `crew cache clean` — remove ephemeral caches and GC the store (§5.1).
  */
 
-import { readState } from "../state/load.ts";
-import { garbageCollectStore } from "../maintenance/gc.ts";
-import { paths } from "../core/paths.ts";
-import { rmrf } from "../util/fs.ts";
 import { CrewError } from "../core/errors.ts";
+import { paths } from "../core/paths.ts";
+import { garbageCollectStore } from "../maintenance/gc.ts";
+import { readState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
+import { rmrf } from "../util/fs.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function cacheCommand(ctx: CommandContext): CommandOutput {
   const sub = ctx.positional[0];
-  if (sub !== "clean") throw new CrewError("usage_error", "usage: crew cache clean");
+  if (sub !== "clean") {
+    throw new CrewError("usage_error", "usage: crew cache clean");
+  }
   let removedStore: string[] = [];
   withStateLock(() => {
     const state = readState(ctx.home);

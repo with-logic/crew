@@ -7,11 +7,11 @@
  */
 
 import { join } from "node:path";
-import { CrewError } from "../core/errors.ts";
 import { readConfig } from "../config/load.ts";
+import { CrewError } from "../core/errors.ts";
 import { tapPath } from "../core/paths.ts";
 import { ensureRepo } from "../git/repo.ts";
-import { loadSkill, hasSkillMd } from "../skill/load.ts";
+import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
@@ -36,7 +36,9 @@ export function searchCommand(ctx: CommandContext): CommandOutput {
     }
     for (const entry of listDir(tp)) {
       const dir = join(tp, entry);
-      if (!isDirectory(dir) || !hasSkillMd(dir)) continue;
+      if (!(isDirectory(dir) && hasSkillMd(dir))) {
+        continue;
+      }
       try {
         const skill = loadSkill(dir);
         const { name, description } = skill.frontmatter;
@@ -44,11 +46,14 @@ export function searchCommand(ctx: CommandContext): CommandOutput {
           hits.push({ tap: tap.name, name, description });
         }
       } catch {
-        continue;
+        // Invalid skill directories in a tap are silently ignored during
+        // search — an unparseable SKILL.md isn't a search-time error.
       }
     }
   }
-  hits.sort((a, b) => (a.tap === b.tap ? a.name.localeCompare(b.name) : a.tap.localeCompare(b.tap)));
+  hits.sort((a, b) =>
+    a.tap === b.tap ? a.name.localeCompare(b.name) : a.tap.localeCompare(b.tap),
+  );
   const human = hits.map((h) => `${h.tap}/${h.name}  ${h.description}`);
   return { exitCode: 0, human, json: { hits } };
 }

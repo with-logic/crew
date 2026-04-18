@@ -13,19 +13,19 @@
  *   - 1 if any skill had a hard failure (network, fetch, validation).
  */
 
-import { CrewError } from "../core/errors.ts";
 import { readConfig } from "../config/load.ts";
+import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
 import type { Config, StateEntry, StateFile } from "../core/types.ts";
-import { readState, upsertEntry, writeState } from "../state/load.ts";
-import { withStateLock } from "../state/lock.ts";
+import { garbageCollectStore } from "../maintenance/gc.ts";
 import { acquireSource } from "../sources/acquire.ts";
 import { expandSkills } from "../sources/expand.ts";
 import { stageIntoStore } from "../sources/store.ts";
-import { adapterByName } from "../targets/registry.ts";
+import { readState, upsertEntry, writeState } from "../state/load.ts";
+import { withStateLock } from "../state/lock.ts";
 import { installSkillIntoTarget } from "../targets/install.ts";
+import { adapterByName } from "../targets/registry.ts";
 import { nowIso } from "../util/time.ts";
-import { garbageCollectStore } from "../maintenance/gc.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 interface PerTargetUpdate {
@@ -83,11 +83,13 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
         rows.push({
           name: entry.name,
           scope: entry.scope,
-          outcome: { kind: "failed", error: { code: ce.code ?? "usage_error", message: ce.message } },
+          outcome: {
+            kind: "failed",
+            error: { code: ce.code ?? "usage_error", message: ce.message },
+          },
         });
-        if (["source_unreachable", "ref_not_found", "invalid_skill"].includes(ce.code)) {
+        if (["source_unreachable", "ref_not_found", "invalid_skill"].includes(ce.code))
           hardFailure = true;
-        }
       }
     }
     writeState(current, home);
@@ -99,8 +101,10 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
 
   const human = rows.map((r) => {
     if (r.outcome.kind === "up_to_date") return `${r.name} [${r.scope}]: up-to-date`;
-    if (r.outcome.kind === "updated") return `${r.name} [${r.scope}]: updated → ${r.outcome.new_sha.slice(0, 8)}`;
-    if (r.outcome.kind === "skipped") return `${r.name} [${r.scope}]: skipped (${r.outcome.reason})`;
+    if (r.outcome.kind === "updated")
+      return `${r.name} [${r.scope}]: updated → ${r.outcome.new_sha.slice(0, 8)}`;
+    if (r.outcome.kind === "skipped")
+      return `${r.name} [${r.scope}]: skipped (${r.outcome.reason})`;
     return `${r.name} [${r.scope}]: FAILED ${r.outcome.error.code}`;
   });
 
@@ -111,14 +115,17 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   };
 }
 
-function chooseEntries(state: StateFile, names: readonly string[], scope: StateEntry["scope"]): StateEntry[] {
+function chooseEntries(
+  state: StateFile,
+  names: readonly string[],
+  scope: StateEntry["scope"],
+): StateEntry[] {
   if (names.length === 0) return [...state.installations];
   const selected: StateEntry[] = [];
   for (const name of names) {
     const matches = state.installations.filter((e) => e.name === name && e.scope === scope);
-    if (matches.length === 0) {
+    if (matches.length === 0)
       throw new CrewError("unknown_skill", `\`${name}\` is not installed at ${scope} scope`);
-    }
     selected.push(...matches);
   }
   return selected;
@@ -173,7 +180,10 @@ function updateOne(entry: StateEntry, config: Config, home: string, force: boole
         contentHash: staged.contentHash,
         force,
       });
-      perTarget.push({ target: targetName, kind: res.kind === "installed" ? "installed" : "up_to_date" });
+      perTarget.push({
+        target: targetName,
+        kind: res.kind === "installed" ? "installed" : "up_to_date",
+      });
     } catch (err) {
       // `installSkillIntoTarget` only throws safety-check errors
       // (customized / untracked_directory / inconsistent_marker), all of
@@ -194,13 +204,22 @@ function reconstructSource(entry: StateEntry) {
     case "tap":
       return { type: "tap", tap: entry.source.tap, name: entry.name, ref: entry.ref } as const;
     case "git":
-      return { type: "git", url: entry.source.url, ref: entry.ref, subpath: entry.source.subpath } as const;
+      return {
+        type: "git",
+        url: entry.source.url,
+        ref: entry.ref,
+        subpath: entry.source.subpath,
+      } as const;
     case "path":
       return { type: "path", path: entry.source.path } as const;
   }
 }
 
-function rebuildStateEntry(entry: StateEntry, newSha: string, successfulTargets: string[]): StateEntry {
+function rebuildStateEntry(
+  entry: StateEntry,
+  newSha: string,
+  successfulTargets: string[],
+): StateEntry {
   return {
     ...entry,
     resolved_sha: newSha,

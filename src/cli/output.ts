@@ -26,22 +26,31 @@ export const defaultStreams: OutputStreams = {
 };
 
 /** Write a successful command output. */
-export function writeSuccess(output: CommandOutput, json: boolean, quiet: boolean, streams: OutputStreams): void {
+export function writeSuccess(
+  output: CommandOutput,
+  json: boolean,
+  quiet: boolean,
+  streams: OutputStreams,
+): void {
   if (json) {
-    streams.stdout(JSON.stringify(output.json ?? {}, null, 2) + "\n");
+    streams.stdout(`${JSON.stringify(output.json ?? {}, null, 2)}\n`);
     return;
   }
   if (!quiet) {
-    for (const line of output.human ?? []) streams.stdout(line + "\n");
+    for (const line of output.human ?? []) {
+      streams.stdout(`${line}\n`);
+    }
   }
-  for (const line of output.stderr ?? []) streams.stderr(line + "\n");
+  for (const line of output.stderr ?? []) {
+    streams.stderr(`${line}\n`);
+  }
 }
 
 /** Format a CrewError according to the output mode. */
 export function writeError(err: CrewError, json: boolean, streams: OutputStreams): void {
   if (json) {
     streams.stdout(
-      JSON.stringify(
+      `${JSON.stringify(
         {
           error: {
             name: err.code,
@@ -51,7 +60,7 @@ export function writeError(err: CrewError, json: boolean, streams: OutputStreams
         },
         null,
         2,
-      ) + "\n",
+      )}\n`,
     );
     return;
   }

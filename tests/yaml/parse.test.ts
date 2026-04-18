@@ -85,7 +85,11 @@ describe("stringifyYaml round-trip", () => {
     expect(parseYaml(serialized)).toEqual(obj);
   });
   test("nested round-trip", () => {
-    const obj = { taps: [{ name: "core", url: "https://x/y.git" }], disabled_targets: [], autoupdate: { enabled: false, interval_seconds: 14400 } };
+    const obj = {
+      taps: [{ name: "core", url: "https://x/y.git" }],
+      disabled_targets: [],
+      autoupdate: { enabled: false, interval_seconds: 14400 },
+    };
     const serialized = stringifyYaml(obj);
     expect(parseYaml(serialized)).toEqual(obj);
   });

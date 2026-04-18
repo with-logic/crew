@@ -7,11 +7,10 @@
 
 import { readConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
-import { readState } from "../state/load.ts";
-import { parseRef } from "../refs/parse.ts";
+import { NAME_PATTERN, parseRef } from "../refs/parse.ts";
 import { acquireSource } from "../sources/acquire.ts";
 import { expandSkills } from "../sources/expand.ts";
-import { NAME_PATTERN } from "../refs/parse.ts";
+import { readState } from "../state/load.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function infoCommand(ctx: CommandContext): CommandOutput {

@@ -12,7 +12,13 @@ import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
 import { codexAdapter } from "../../src/targets/codex.ts";
 import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
-import { commitAll, makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
+import {
+  commitAll,
+  makeGitRepo,
+  makeSkill,
+  makeTempDir,
+  skillFrontmatter,
+} from "../helpers/fixtures.ts";
 
 let ccRoot: string;
 let restore: (() => void) | null = null;
@@ -42,7 +48,12 @@ function setupTargets() {
   };
 }
 beforeEach(() => setupTargets());
-afterEach(() => { if (restore) restore(); restore = null; });
+afterEach(() => {
+  if (restore) {
+    restore();
+  }
+  restore = null;
+});
 
 describe("install: qualified git dependency", () => {
   test("git-sub dependency with subpath segment name", () => {
@@ -59,11 +70,18 @@ describe("install: qualified git dependency", () => {
     commitAll(depRepo, "init");
 
     const parent = makeTempDir();
-    makeSkill(parent, "root", skillFrontmatter({
-      name: "root",
-      dependencies: [`file://${depRepo}//tools/dep`],
-    }));
-    const code = runCli(["install", join(parent, "root")], { home, streams: captureStreams().streams });
+    makeSkill(
+      parent,
+      "root",
+      skillFrontmatter({
+        name: "root",
+        dependencies: [`file://${depRepo}//tools/dep`],
+      }),
+    );
+    const code = runCli(["install", join(parent, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(existsSync(join(ccRoot, "dep"))).toBe(true);
   });
@@ -75,11 +93,18 @@ describe("install: qualified git dependency", () => {
     makeSkill(depRepo, "dep", skillFrontmatter({ name: "dep" }));
     commitAll(depRepo, "init");
     const parent = makeTempDir();
-    makeSkill(parent, "root", skillFrontmatter({
-      name: "root",
-      dependencies: [`file://${depRepo}@main//dep`],
-    }));
-    const code = runCli(["install", join(parent, "root")], { home, streams: captureStreams().streams });
+    makeSkill(
+      parent,
+      "root",
+      skillFrontmatter({
+        name: "root",
+        dependencies: [`file://${depRepo}@main//dep`],
+      }),
+    );
+    const code = runCli(["install", join(parent, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
   });
 });
@@ -93,7 +118,10 @@ describe("install: sibling dep inside a git repo", () => {
     makeSkill(repo, "root", skillFrontmatter({ name: "root", dependencies: ["dep"] }));
     commitAll(repo, "init");
 
-    const code = runCli(["install", `file://${repo}//root`], { home, streams: captureStreams().streams });
+    const code = runCli(["install", `file://${repo}//root`], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(existsSync(join(ccRoot, "dep"))).toBe(true);
     expect(existsSync(join(ccRoot, "root"))).toBe(true);
@@ -104,7 +132,10 @@ describe("install: sibling dep inside a git repo", () => {
     const ctr = makeTempDir();
     makeSkill(ctr, "dep", skillFrontmatter({ name: "dep" }));
     makeSkill(ctr, "root", skillFrontmatter({ name: "root", dependencies: ["dep"] }));
-    const code = runCli(["install", join(ctr, "root")], { home, streams: captureStreams().streams });
+    const code = runCli(["install", join(ctr, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(existsSync(join(ccRoot, "dep"))).toBe(true);
   });
@@ -118,13 +149,19 @@ describe("install: qualified tap dep via tap/name", () => {
     makeGitRepo(tapRepo);
     makeSkill(tapRepo, "dep", skillFrontmatter({ name: "dep" }));
     commitAll(tapRepo, "init");
-    runCli(["tap", "add", "--yes", `file://${tapRepo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${tapRepo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
 
     // Root skill with qualified dep reference.
     const parent = makeTempDir();
     makeSkill(parent, "root", skillFrontmatter({ name: "root", dependencies: ["mytap/dep"] }));
-    const code = runCli(["install", join(parent, "root")], { home, streams: captureStreams().streams });
+    const code = runCli(["install", join(parent, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(existsSync(join(ccRoot, "dep"))).toBe(true);
   });

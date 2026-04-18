@@ -9,7 +9,13 @@ import { runCli } from "../../src/cli/main.ts";
 import { readConfig } from "../../src/config/load.ts";
 import { tapPath } from "../../src/core/paths.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
-import { commitAll, makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
+import {
+  commitAll,
+  makeGitRepo,
+  makeSkill,
+  makeTempDir,
+  skillFrontmatter,
+} from "../helpers/fixtures.ts";
 
 describe("crew tap", () => {
   function buildTapRepo(): string {
@@ -25,7 +31,10 @@ describe("crew tap", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
     const url = `file://${repo}`;
-    const code = runCli(["tap", "add", "--yes", url, "mytap"], { home, streams: captureStreams().streams });
+    const code = runCli(["tap", "add", "--yes", url, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(existsSync(join(tapPath("mytap", home), ".git"))).toBe(true);
   });
@@ -33,14 +42,20 @@ describe("crew tap", () => {
   test("C-TAP-02 add with explicit name", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
-    runCli(["tap", "add", "--yes", `file://${repo}`, "custom-name"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "custom-name"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(readConfig(home).taps.some((t) => t.name === "custom-name")).toBe(true);
   });
 
   test("C-TAP-03 remove deletes", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     const code = runCli(["tap", "remove", "mytap"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(false);
@@ -69,21 +84,33 @@ describe("crew tap", () => {
   test("tap add without --yes fails", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
-    const code = runCli(["tap", "add", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    const code = runCli(["tap", "add", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 
   test("tap add with invalid name fails", () => {
     const home = makeCrewHome();
-    const code = runCli(["tap", "add", "--yes", "file:///tmp/x", "Bad-Name"], { home, streams: captureStreams().streams });
+    const code = runCli(["tap", "add", "--yes", "file:///tmp/x", "Bad-Name"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 
   test("tap add duplicate name fails", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
-    const code = runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    const code = runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 
@@ -96,7 +123,10 @@ describe("crew tap", () => {
   test("C-TAP-07 search matches by description", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     const c = captureStreams();
     runCli(["search", "alpha"], { home, streams: c.streams });
     expect(c.stdout()).toContain("alpha");
@@ -105,7 +135,10 @@ describe("crew tap", () => {
   test("C-TAP-08 search --json", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     const c = captureStreams();
     runCli(["search", "--json", "alpha"], { home, streams: c.streams });
     const parsed = JSON.parse(c.stdout());

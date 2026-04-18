@@ -37,7 +37,10 @@ export function runGit(args: readonly string[], options: GitRunOptions = {}): Gi
   const result = runner(args, options);
   if (result.exitCode !== 0 && options.throwOnError !== false) {
     const stderr = result.stderr.trim();
-    throw new GitProcessError(`git ${args.join(" ")} failed (${result.exitCode}): ${stderr}`, result);
+    throw new GitProcessError(
+      `git ${args.join(" ")} failed (${result.exitCode}): ${stderr}`,
+      result,
+    );
   }
   return result;
 }

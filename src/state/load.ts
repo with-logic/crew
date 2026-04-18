@@ -10,8 +10,8 @@
  *   - Writes go through a prettify pass (indentation, trailing newline).
  */
 
-import type { StateEntry, StateFile } from "../core/types.ts";
 import { crewHome, paths } from "../core/paths.ts";
+import type { StateEntry, StateFile } from "../core/types.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
 
 /** Read state.json or return an empty state file. */
@@ -36,7 +36,9 @@ export function writeState(state: StateFile, home: string = crewHome()): void {
 
 /** Upsert one entry into state. Keyed by (name, scope). */
 export function upsertEntry(state: StateFile, entry: StateEntry): StateFile {
-  const installations = state.installations.filter((e) => !(e.name === entry.name && e.scope === entry.scope));
+  const installations = state.installations.filter(
+    (e) => !(e.name === entry.name && e.scope === entry.scope),
+  );
   return { schema_version: 1, installations: [...installations, entry] };
 }
 

@@ -11,7 +11,11 @@ import { codexAdapter } from "./codex.ts";
 import { geminiCliAdapter } from "./gemini-cli.ts";
 
 /** Every adapter crew ships. */
-export const ALL_ADAPTERS: readonly TargetAdapter[] = [claudeCodeAdapter, codexAdapter, geminiCliAdapter];
+export const ALL_ADAPTERS: readonly TargetAdapter[] = [
+  claudeCodeAdapter,
+  codexAdapter,
+  geminiCliAdapter,
+];
 
 /** Look up an adapter by name, or undefined if not registered. */
 export function adapterByName(name: string): TargetAdapter | undefined {

@@ -17,7 +17,13 @@ import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";
 import { ensureRepo, resolveRef } from "../../src/git/repo.ts";
 import { parseRef } from "../../src/refs/parse.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
-import { commitAll, makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
+import {
+  commitAll,
+  makeGitRepo,
+  makeSkill,
+  makeTempDir,
+  skillFrontmatter,
+} from "../helpers/fixtures.ts";
 
 afterEach(() => {
   resetGitRunner();
@@ -89,8 +95,7 @@ describe("cli/main — unexpected runtime error path", () => {
 
   test("error with no `.message` still produces a usage_error", () => {
     setGitRunner(() => {
-      // `throw "string"` — Error#message doesn't apply.
-      // eslint-disable-next-line @typescript-eslint/no-throw-literal
+      // biome-ignore lint/style/useThrowOnlyError: exercising a non-Error throw on purpose.
       throw "raw string throw";
     });
     const home = makeCrewHome();
@@ -152,7 +157,7 @@ describe("git/repo — error translation", () => {
     makeGitRepo(repo);
     commitAll(repo, "init");
     // Clone first so the dest exists.
-    const dest = makeTempDir() + "-clone";
+    const dest = `${makeTempDir()}-clone`;
     ensureRepo(`file://${repo}`, dest);
     // Now swap the runner so the subsequent `fetch` fails.
     setGitRunner((args, opts) => {
@@ -160,7 +165,12 @@ describe("git/repo — error translation", () => {
         return { stdout: "", stderr: "network down", exitCode: 1 };
       }
       // Delegate other git calls to a real run.
-      const proc = Bun.spawnSync({ cmd: ["git", ...args], cwd: opts.cwd, stdout: "pipe", stderr: "pipe" });
+      const proc = Bun.spawnSync({
+        cmd: ["git", ...args],
+        ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
       return {
         stdout: proc.stdout?.toString() ?? "",
         stderr: proc.stderr?.toString() ?? "",
@@ -181,7 +191,8 @@ describe("git/repo — error translation", () => {
     const repo = makeTempDir();
     makeGitRepo(repo);
     commitAll(repo, "init");
-    const { checkoutSha } = require("../../src/git/repo.ts") as typeof import("../../src/git/repo.ts");
+    const { checkoutSha } =
+      require("../../src/git/repo.ts") as typeof import("../../src/git/repo.ts");
     expect(() => checkoutSha(repo, "0".repeat(40))).toThrow(CrewError);
   });
 });
@@ -208,19 +219,18 @@ describe("refs/parse — URL canonicalization edge cases", () => {
 
 describe("skill/frontmatter — unterminated frontmatter", () => {
   test("missing end `---` raises invalid_skill (frontmatter.ts ~38)", () => {
-    const { extractFrontmatter } = require("../../src/skill/frontmatter.ts") as typeof import("../../src/skill/frontmatter.ts");
+    const { extractFrontmatter } =
+      require("../../src/skill/frontmatter.ts") as typeof import("../../src/skill/frontmatter.ts");
     expect(() => extractFrontmatter("---\nname: foo\n")).toThrow(CrewError);
   });
 });
 
 describe("skill/validate — compatibility non-string", () => {
   test("compatibility as a number fails (validate.ts)", () => {
-    const { validateFrontmatter } = require("../../src/skill/validate.ts") as typeof import("../../src/skill/validate.ts");
+    const { validateFrontmatter } =
+      require("../../src/skill/validate.ts") as typeof import("../../src/skill/validate.ts");
     expect(() =>
-      validateFrontmatter(
-        { name: "foo", description: "x", compatibility: 42 },
-        "/tmp/foo",
-      ),
+      validateFrontmatter({ name: "foo", description: "x", compatibility: 42 }, "/tmp/foo"),
     ).toThrow(CrewError);
   });
 });
@@ -237,7 +247,10 @@ describe("install/flow — marker source equality across kinds", () => {
     makeGitRepo(repo);
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo", description: "B" }));
     commitAll(repo, "init");
-    const code = runCli(["install", `file://${repo}//demo`], { home, streams: captureStreams().streams });
+    const code = runCli(["install", `file://${repo}//demo`], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 });
@@ -255,14 +268,21 @@ describe("install/resolve — dependency edge cases", () => {
     commitAll(depRepo, "init");
 
     const parent = makeTempDir();
-    makeSkill(parent, "root", skillFrontmatter({
-      name: "root",
-      // `file://<path>` with no `//` subpath — parent dir is not a valid
-      // skill, but the dep reference goes through the git-source-no-sub
-      // branch.
-      dependencies: [`file://${depRepo}//dep`],
-    }));
-    const code = runCli(["install", join(parent, "root")], { home, streams: captureStreams().streams });
+    makeSkill(
+      parent,
+      "root",
+      skillFrontmatter({
+        name: "root",
+        // `file://<path>` with no `//` subpath — parent dir is not a valid
+        // skill, but the dep reference goes through the git-source-no-sub
+        // branch.
+        dependencies: [`file://${depRepo}//dep`],
+      }),
+    );
+    const code = runCli(["install", join(parent, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
   });
 });
@@ -276,10 +296,14 @@ describe("targets/install — same-SHA early exit", () => {
 
     // Re-run the install algorithm directly (bypassing the flow-level
     // "already installed" short-circuit) with the same SHA and content.
-    const { installSkillIntoTarget } = require("../../src/targets/install.ts") as typeof import("../../src/targets/install.ts");
-    const { claudeCodeAdapter } = require("../../src/targets/claude-code.ts") as typeof import("../../src/targets/claude-code.ts");
-    const { hashDirectory } = require("../../src/hash/content.ts") as typeof import("../../src/hash/content.ts");
-    const { readState } = require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
+    const { installSkillIntoTarget } =
+      require("../../src/targets/install.ts") as typeof import("../../src/targets/install.ts");
+    const { claudeCodeAdapter } =
+      require("../../src/targets/claude-code.ts") as typeof import("../../src/targets/claude-code.ts");
+    const { hashDirectory } =
+      require("../../src/hash/content.ts") as typeof import("../../src/hash/content.ts");
+    const { readState } =
+      require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
     const entry = readState(home).installations[0]!;
     const storeDir = join(home, "store");
     const storeEntry = require("node:fs").readdirSync(storeDir)[0]!;
@@ -317,7 +341,10 @@ describe("sources/acquire — bare-name tap ambiguity", () => {
     makeGitRepo(repo);
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
     commitAll(repo, "init");
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const code = runCli(["install", "mytap/ghost"], { home, streams: captureStreams().streams });
     expect(code).toBe(4);
@@ -328,15 +355,16 @@ describe("targets/path — existsSync edge (path.ts:27-28)", () => {
   test("PATH entry whose file is neither a file nor a symlink is skipped", () => {
     // Create a directory (not a file) named `crew-test-stub` on a PATH
     // component and verify `isOnPath` returns false.
-    const { isOnPath } = require("../../src/targets/path.ts") as typeof import("../../src/targets/path.ts");
+    const { isOnPath } =
+      require("../../src/targets/path.ts") as typeof import("../../src/targets/path.ts");
     const dir = makeTempDir();
     require("node:fs").mkdirSync(join(dir, "target-dir-not-a-binary"));
-    const prev = process.env.PATH;
+    const prev = process.env["PATH"];
     try {
-      process.env.PATH = dir;
+      process.env["PATH"] = dir;
       expect(isOnPath("target-dir-not-a-binary")).toBe(false);
     } finally {
-      process.env.PATH = prev;
+      process.env["PATH"] = prev;
     }
   });
 });
@@ -358,7 +386,10 @@ describe("commands/tap — deriveTapName fallback branches", () => {
     // This path exercises the "no URL scheme" branch of deriveTapName by
     // using a non-standard URL shape. The add itself fails because --yes
     // is missing; we just want the function to run.
-    const code = runCli(["tap", "add", "git@example.com:owner/repo.git"], { home, streams: captureStreams().streams });
+    const code = runCli(["tap", "add", "git@example.com:owner/repo.git"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 
@@ -373,7 +404,10 @@ describe("commands/tap — deriveTapName fallback branches", () => {
     const tmpDir = makeTempDir();
     const validName = join(tmpDir, "mytap");
     require("node:fs").renameSync(repo, validName);
-    const code = runCli(["tap", "add", "--yes", `file://${validName}`], { home, streams: captureStreams().streams });
+    const code = runCli(["tap", "add", "--yes", `file://${validName}`], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
   });
 });
@@ -385,12 +419,19 @@ describe("commands/update — branch coverage", () => {
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     runCli(["install", skill], { home, streams: captureStreams().streams });
     // Inject a bogus target name into state.
-    const { readState, writeState } = require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
+    const { readState, writeState } =
+      require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
     const state = readState(home);
-    writeState({
-      ...state,
-      installations: state.installations.map((e) => ({ ...e, targets: [...e.targets, "bogus-xyz"] })),
-    }, home);
+    writeState(
+      {
+        ...state,
+        installations: state.installations.map((e) => ({
+          ...e,
+          targets: [...e.targets, "bogus-xyz"],
+        })),
+      },
+      home,
+    );
     // Force an update even though nothing moved — the path source
     // triggers update's re-install path.
     writeFileSync(join(skill, "CHANGED.md"), "x");
@@ -411,7 +452,8 @@ describe("commands/update — branch coverage", () => {
     // "skipped" (line 182 covered). For the "failed" branch we need an
     // install exception that is none of those three codes, e.g. a
     // filesystem error. Simulate by making dest read-only.
-    const { readState } = require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
+    const { readState } =
+      require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
     const entry = readState(home).installations[0]!;
     void entry;
     // Change the source so update re-stages.
@@ -427,11 +469,24 @@ describe("commands/update — branch coverage", () => {
     makeGitRepo(repo);
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
     commitAll(repo, "init");
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     runCli(["install", "mytap/demo"], { home, streams: captureStreams().streams });
     const code = runCli(["update"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
+  });
+});
+
+describe("targets list renders disabled flag (targets.ts:39)", () => {
+  test("disabled target shows `disabled` label in list output", () => {
+    const home = makeCrewHome();
+    runCli(["targets", "disable", "codex"], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    runCli(["targets"], { home, streams: c.streams });
+    expect(c.stdout()).toContain("disabled");
   });
 });
 
@@ -444,9 +499,16 @@ describe("search — sort across multiple hits in same tap (search.ts:51)", () =
     // between them inside the same tap, exercising both halves of the
     // ternary at search.ts:51.
     makeSkill(repo, "beta", skillFrontmatter({ name: "beta", description: "matches shared word" }));
-    makeSkill(repo, "alpha", skillFrontmatter({ name: "alpha", description: "matches shared word" }));
+    makeSkill(
+      repo,
+      "alpha",
+      skillFrontmatter({ name: "alpha", description: "matches shared word" }),
+    );
     commitAll(repo, "init");
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const c = captureStreams();
     runCli(["search", "--json", "shared"], { home, streams: c.streams });
@@ -468,7 +530,10 @@ describe("search — invalid skill in a tap is silently skipped (search.ts:46)",
       "---\nname: bad\n\tdescription: tabs cause parse error\n---\nbody",
     );
     commitAll(repo, "init");
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const c = captureStreams();
     const code = runCli(["search", "--json", "works"], { home, streams: c.streams });
@@ -482,7 +547,8 @@ describe("search — invalid skill in a tap is silently skipped (search.ts:46)",
 
 describe("skill/frontmatter — invalid yaml raises invalid_skill (frontmatter.ts:44-45)", () => {
   test("bad YAML inside frontmatter becomes invalid_skill", () => {
-    const { extractFrontmatter } = require("../../src/skill/frontmatter.ts") as typeof import("../../src/skill/frontmatter.ts");
+    const { extractFrontmatter } =
+      require("../../src/skill/frontmatter.ts") as typeof import("../../src/skill/frontmatter.ts");
     // Tab characters are illegal for indentation in YAML.
     expect(() => extractFrontmatter("---\nname: foo\n\tbad: tab\n---\nbody")).toThrow(CrewError);
   });
@@ -490,8 +556,10 @@ describe("skill/frontmatter — invalid yaml raises invalid_skill (frontmatter.t
 
 describe("targets/install — uninstall tolerates inconsistent marker with --force (install.ts:128)", () => {
   test("--force lets uninstall proceed past an inconsistent marker", () => {
-    const { claudeCodeAdapter } = require("../../src/targets/claude-code.ts") as typeof import("../../src/targets/claude-code.ts");
-    const { uninstallSkillFromTarget } = require("../../src/targets/install.ts") as typeof import("../../src/targets/install.ts");
+    const { claudeCodeAdapter } =
+      require("../../src/targets/claude-code.ts") as typeof import("../../src/targets/claude-code.ts");
+    const { uninstallSkillFromTarget } =
+      require("../../src/targets/install.ts") as typeof import("../../src/targets/install.ts");
     const projCwd = makeTempDir();
     const dir = join(projCwd, ".claude", "skills", "demo");
     require("node:fs").mkdirSync(dir, { recursive: true });
@@ -545,19 +613,31 @@ describe("doctor repair — adds missing adapter to existing entry (doctor.ts:17
     // and the `.map` iterates across a non-matching entry.
     const skill2 = makeSkill(src, "other", skillFrontmatter({ name: "other" }));
     const projCwd = makeTempDir();
-    runCli(["install", "--scope", "project", skill2], { home, cwd: projCwd, streams: captureStreams().streams });
+    runCli(["install", "--scope", "project", skill2], {
+      home,
+      cwd: projCwd,
+      streams: captureStreams().streams,
+    });
     // Truncate state's demo entry's targets to just claude-code.
-    const { readState, writeState } = require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
+    const { readState, writeState } =
+      require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
     const state = readState(home);
-    writeState({
-      ...state,
-      installations: state.installations.map((e) =>
-        e.name === "demo" ? { ...e, targets: ["claude-code"] } : e,
-      ),
-    }, home);
+    writeState(
+      {
+        ...state,
+        installations: state.installations.map((e) =>
+          e.name === "demo" ? { ...e, targets: ["claude-code"] } : e,
+        ),
+      },
+      home,
+    );
     // Repair should add the missing targets back to `demo` while leaving
     // `other` alone.
-    const code = runCli(["doctor", "--repair"], { home, cwd: projCwd, streams: captureStreams().streams });
+    const code = runCli(["doctor", "--repair"], {
+      home,
+      cwd: projCwd,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     const after = readState(home);
     const demo = after.installations.find((i) => i.name === "demo")!;
@@ -567,7 +647,8 @@ describe("doctor repair — adds missing adapter to existing entry (doctor.ts:17
 
 describe("git/classifyRef — abbreviated SHA (repo.ts:91-92)", () => {
   test("abbreviated hex SHA classifies as sha", () => {
-    const { classifyRef } = require("../../src/git/repo.ts") as typeof import("../../src/git/repo.ts");
+    const { classifyRef } =
+      require("../../src/git/repo.ts") as typeof import("../../src/git/repo.ts");
     const repo = makeTempDir();
     makeGitRepo(repo);
     commitAll(repo, "init");
@@ -591,7 +672,9 @@ describe("update — tag moved and missing-skill branches", () => {
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
     commitAll(repo, "v1");
     const { runGit } = require("../../src/git/exec.ts") as typeof import("../../src/git/exec.ts");
-    runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", "v1"], { cwd: repo });
+    runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", "v1"], {
+      cwd: repo,
+    });
     runCli(["install", `file://${repo}@v1//demo`], { home, streams: captureStreams().streams });
 
     // Move v1 to a new commit and also move the remote tag reference
@@ -599,7 +682,9 @@ describe("update — tag moved and missing-skill branches", () => {
     writeFileSync(join(repo, "demo", "MORE.md"), "more");
     commitAll(repo, "v2");
     runGit(["tag", "-d", "v1"], { cwd: repo });
-    runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", "v1"], { cwd: repo });
+    runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", "v1"], {
+      cwd: repo,
+    });
 
     // Force the crew cache of the repo to re-fetch tags with overwrite.
     const cacheRoot = join(home, "cache", "git");
@@ -608,9 +693,13 @@ describe("update — tag moved and missing-skill branches", () => {
       const out: string[] = [];
       for (const name of readdirSync(dir)) {
         const p = join(dir, name);
-        if (statSync(p).isDirectory()) out.push(...walk(p));
+        if (statSync(p).isDirectory()) {
+          out.push(...walk(p));
+        }
       }
-      if (require("node:fs").existsSync(join(dir, ".git"))) out.push(dir);
+      if (require("node:fs").existsSync(join(dir, ".git"))) {
+        out.push(dir);
+      }
       return out;
     };
     for (const clone of walk(cacheRoot)) {
@@ -659,7 +748,10 @@ describe("install/flow — name_conflict across every source kind", () => {
     makeGitRepo(tapRepo);
     makeSkill(tapRepo, "demo", skillFrontmatter({ name: "demo", description: "from tap" }));
     commitAll(tapRepo, "init");
-    runCli(["tap", "add", "--yes", `file://${tapRepo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${tapRepo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const code = runCli(["install", "mytap/demo"], { home, streams: captureStreams().streams });
     expect(code).toBe(4);

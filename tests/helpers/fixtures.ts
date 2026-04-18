@@ -18,7 +18,12 @@ export function makeTempDir(prefix: string = "crew-test-"): string {
 }
 
 /** Create a directory containing a `SKILL.md` with the given frontmatter body. */
-export function makeSkill(parentDir: string, name: string, frontmatter: string, body: string = ""): string {
+export function makeSkill(
+  parentDir: string,
+  name: string,
+  frontmatter: string,
+  body: string = "",
+): string {
   const skillDir = join(parentDir, name);
   mkdirSync(skillDir, { recursive: true });
   writeFileSync(join(skillDir, "SKILL.md"), `---\n${frontmatter}\n---\n${body}`);
@@ -37,15 +42,23 @@ export function skillFrontmatter(opts: {
   const lines: string[] = [];
   lines.push(`name: ${opts.name}`);
   lines.push(`description: ${opts.description ?? "A test skill for crew's test suite"}`);
-  if (opts.license !== undefined) lines.push(`license: ${opts.license}`);
-  if (opts.compatibility !== undefined) lines.push(`compatibility: ${opts.compatibility}`);
+  if (opts.license !== undefined) {
+    lines.push(`license: ${opts.license}`);
+  }
+  if (opts.compatibility !== undefined) {
+    lines.push(`compatibility: ${opts.compatibility}`);
+  }
   if (opts.homepage !== undefined || (opts.dependencies && opts.dependencies.length > 0)) {
     lines.push("metadata:");
     lines.push("  crew:");
-    if (opts.homepage !== undefined) lines.push(`    homepage: ${opts.homepage}`);
+    if (opts.homepage !== undefined) {
+      lines.push(`    homepage: ${opts.homepage}`);
+    }
     if (opts.dependencies && opts.dependencies.length > 0) {
       lines.push("    dependencies:");
-      for (const d of opts.dependencies) lines.push(`      - ${d}`);
+      for (const d of opts.dependencies) {
+        lines.push(`      - ${d}`);
+      }
     }
   }
   return lines.join("\n");
@@ -72,6 +85,7 @@ export function commitAll(path: string, message: string): string {
 
 /** Tag the current HEAD. Uses a lightweight, non-signed tag. */
 export function tagRepo(path: string, tag: string): void {
-  runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", tag], { cwd: path });
+  runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", tag], {
+    cwd: path,
+  });
 }
-

@@ -6,16 +6,16 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { isAutoupdateLoaded } from "../autoupdate/launchd.ts";
 import { readConfig } from "../config/load.ts";
 import { crewHome, paths } from "../core/paths.ts";
 import type { StateEntry } from "../core/types.ts";
-import { readState, writeState } from "../state/load.ts";
-import { withStateLock } from "../state/lock.ts";
-import { ALL_ADAPTERS } from "../targets/registry.ts";
-import { listInstalledForTarget } from "../targets/list.ts";
 import { hashDirectory } from "../hash/content.ts";
 import { garbageCollectStore } from "../maintenance/gc.ts";
-import { isAutoupdateLoaded } from "../autoupdate/launchd.ts";
+import { readState, writeState } from "../state/load.ts";
+import { withStateLock } from "../state/lock.ts";
+import { listInstalledForTarget } from "../targets/list.ts";
+import { ALL_ADAPTERS } from "../targets/registry.ts";
 import { isDirectory, rmrf } from "../util/fs.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
@@ -41,7 +41,10 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   })();
 
   // Build marker index.
-  interface MarkerEntry { record: ReturnType<typeof listInstalledForTarget>[number]; currentHash?: string }
+  interface MarkerEntry {
+    record: ReturnType<typeof listInstalledForTarget>[number];
+    currentHash?: string;
+  }
   const markers: MarkerEntry[] = [];
   for (const adapter of ALL_ADAPTERS) {
     for (const scope of ["user", "project"] as const) {
@@ -58,7 +61,10 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   for (const entry of stateEntries) {
     for (const targetName of entry.targets) {
       const match = markers.find(
-        (m) => m.record.marker.name === entry.name && m.record.scope === entry.scope && m.record.adapter === targetName,
+        (m) =>
+          m.record.marker.name === entry.name &&
+          m.record.scope === entry.scope &&
+          m.record.adapter === targetName,
       );
       if (!match) {
         findings.push({
@@ -71,7 +77,10 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   }
   for (const m of markers) {
     const match = stateEntries.find(
-      (e) => e.name === m.record.marker.name && e.scope === m.record.scope && e.targets.includes(m.record.adapter),
+      (e) =>
+        e.name === m.record.marker.name &&
+        e.scope === m.record.scope &&
+        e.targets.includes(m.record.adapter),
     );
     if (!match) {
       findings.push({
@@ -100,7 +109,7 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   // Check 4: target detection drift.
   if (config) {
     for (const adapter of ALL_ADAPTERS) {
-      if (!adapter.detect() && !config.forced_targets.includes(adapter.name)) {
+      if (!(adapter.detect() || config.forced_targets.includes(adapter.name))) {
         // Any state entry still targets this? Flag.
         const orphans = stateEntries.filter((e) => e.targets.includes(adapter.name));
         if (orphans.length > 0) {
@@ -119,13 +128,16 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   if (isDirectory(storeDir)) {
     // Already handled by GC in --repair below. For non-repair runs, just report.
     const referenced = new Set<string>();
-    for (const e of stateEntries) {
+    for (const e of stateEntries)
       if (e.resolved_sha) referenced.add(`${e.name}@${e.resolved_sha.slice(0, 8)}`);
-    }
     const { listDir } = require("../util/fs.ts") as typeof import("../util/fs.ts");
     for (const name of listDir(storeDir)) {
       if (!referenced.has(name)) {
-        findings.push({ level: "warn", code: "orphan_store_entry", message: `unreferenced store entry ${name}` });
+        findings.push({
+          level: "warn",
+          code: "orphan_store_entry",
+          message: `unreferenced store entry ${name}`,
+        });
       }
     }
   }
@@ -134,10 +146,18 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   if (config) {
     const loaded = isAutoupdateLoaded();
     if (config.autoupdate.enabled && !loaded) {
-      findings.push({ level: "warn", code: "autoupdate_not_loaded", message: "config says autoupdate enabled but launchd agent is not loaded" });
+      findings.push({
+        level: "warn",
+        code: "autoupdate_not_loaded",
+        message: "config says autoupdate enabled but launchd agent is not loaded",
+      });
     }
     if (!config.autoupdate.enabled && loaded) {
-      findings.push({ level: "warn", code: "autoupdate_unexpectedly_loaded", message: "autoupdate agent is loaded but config says disabled" });
+      findings.push({
+        level: "warn",
+        code: "autoupdate_unexpectedly_loaded",
+        message: "autoupdate agent is loaded but config says disabled",
+      });
     }
   }
 
@@ -171,7 +191,8 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
           (e) => e.name === marker.name && e.scope === m.record.scope,
         );
         if (!existing) {
-          const pinned = marker.ref !== null && (/^[0-9a-f]{40}$/i.test(marker.ref) || /^v?\d/.test(marker.ref));
+          const pinned =
+            marker.ref !== null && (/^[0-9a-f]{40}$/i.test(marker.ref) || /^v?\d/.test(marker.ref));
           const entry: StateEntry = {
             name: marker.name,
             source: marker.source,
@@ -213,4 +234,3 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   const exitCode = repair ? 0 : findings.some((f) => f.level === "error") ? 1 : 0;
   return { exitCode, human, json: { findings } };
 }
-

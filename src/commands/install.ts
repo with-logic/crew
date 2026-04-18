@@ -5,8 +5,8 @@
  * for human or JSON output, and picks the right exit code per §9/§18.6.
  */
 
-import { CrewError } from "../core/errors.ts";
 import { readConfig } from "../config/load.ts";
+import { CrewError } from "../core/errors.ts";
 import { runInstall } from "../install/flow.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
@@ -30,11 +30,14 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   // already installed), §15 says exit 2 if the user explicitly asked —
   // but the clean "already installed" short-circuit case is exit 0 per
   // §5.4. We follow §5.4 for already-installed and §18.6 for failures.
-  const allAlreadyInstalled = result.alreadyInstalled.length > 0 && result.summary.records.length === 0;
+  const allAlreadyInstalled =
+    result.alreadyInstalled.length > 0 && result.summary.records.length === 0;
   let exitCode = 0;
   if (!allAlreadyInstalled) {
     const anyRootFail = result.summary.records.some((r) => !r.anySuccess);
-    if (anyRootFail) exitCode = 1;
+    if (anyRootFail) {
+      exitCode = 1;
+    }
   }
 
   const human: string[] = [];
@@ -44,9 +47,13 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   for (const rec of result.summary.records) {
     const parts: string[] = [];
     for (const t of rec.targets) {
-      if (t.kind === "installed") parts.push(`${t.target}=installed`);
-      else if (t.kind === "up_to_date") parts.push(`${t.target}=up-to-date`);
-      else parts.push(`${t.target}=failed(${t.error.code})`);
+      if (t.kind === "installed") {
+        parts.push(`${t.target}=installed`);
+      } else if (t.kind === "up_to_date") {
+        parts.push(`${t.target}=up-to-date`);
+      } else {
+        parts.push(`${t.target}=failed(${t.error.code})`);
+      }
     }
     human.push(`${rec.name} [${rec.scope}]: ${parts.join(", ")}`);
   }

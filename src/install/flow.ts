@@ -16,11 +16,11 @@
 import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
 import type { Config, ResolvedSkill, Scope, StateFile } from "../core/types.ts";
-import { performInstall, type InstallSummary } from "./perform.ts";
-import { resolveInstallSet } from "./resolve.ts";
-import { computeTargetSet } from "./target-set.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
+import { type InstallSummary, performInstall } from "./perform.ts";
+import { resolveInstallSet } from "./resolve.ts";
+import { computeTargetSet } from "./target-set.ts";
 
 /** Options accepted by `runInstall`. */
 export interface InstallOptions {
@@ -86,7 +86,9 @@ function applyDuplicateRules(
   const alreadyInstalled: string[] = [];
 
   for (const skill of resolved) {
-    const existing = state.installations.find((e) => e.name === skill.name && e.scope === options.scope);
+    const existing = state.installations.find(
+      (e) => e.name === skill.name && e.scope === options.scope,
+    );
     if (!existing) {
       toInstall.push(skill);
       continue;
@@ -110,7 +112,10 @@ function applyDuplicateRules(
       );
     }
 
-    if (existing.resolved_sha === skill.resolvedSha && existing.content_hash === skill.contentHash) {
+    if (
+      existing.resolved_sha === skill.resolvedSha &&
+      existing.content_hash === skill.contentHash
+    ) {
       alreadyInstalled.push(skill.name);
       continue;
     }
@@ -120,7 +125,10 @@ function applyDuplicateRules(
   return { toInstall, alreadyInstalled };
 }
 
-function markerSourcesEqual(a: ResolvedSkill["markerSource"], b: ResolvedSkill["markerSource"]): boolean {
+function markerSourcesEqual(
+  a: ResolvedSkill["markerSource"],
+  b: ResolvedSkill["markerSource"],
+): boolean {
   if (a.type === "tap" && b.type === "tap") return a.tap === b.tap;
   if (a.type === "git" && b.type === "git") return a.url === b.url;
   if (a.type === "path" && b.type === "path") return a.path === b.path;

@@ -19,7 +19,9 @@ describe("parseRef: path", () => {
   test("../sibling is a path source", () => {
     const r = parseRef("../sibling", "/tmp/work");
     expect(r.type).toBe("path");
-    if (r.type === "path") expect(r.path).toBe("/tmp/sibling");
+    if (r.type === "path") {
+      expect(r.path).toBe("/tmp/sibling");
+    }
   });
   test("bare ~", () => {
     const r = parseRef("~", "/tmp");
@@ -30,19 +32,39 @@ describe("parseRef: path", () => {
 describe("parseRef: git", () => {
   test("C-REF-04 https URL", () => {
     const r = parseRef("https://github.com/owner/repo");
-    expect(r).toEqual({ type: "git", url: "https://github.com/owner/repo", ref: null, subpath: "" });
+    expect(r).toEqual({
+      type: "git",
+      url: "https://github.com/owner/repo",
+      ref: null,
+      subpath: "",
+    });
   });
   test("C-REF-05 https .git URL is accepted", () => {
     const r = parseRef("https://github.com/owner/repo.git");
-    expect(r).toEqual({ type: "git", url: "https://github.com/owner/repo.git", ref: null, subpath: "" });
+    expect(r).toEqual({
+      type: "git",
+      url: "https://github.com/owner/repo.git",
+      ref: null,
+      subpath: "",
+    });
   });
   test("C-REF-06 git@host:owner/repo", () => {
     const r = parseRef("git@github.com:owner/repo.git");
-    expect(r).toEqual({ type: "git", url: "git@github.com:owner/repo.git", ref: null, subpath: "" });
+    expect(r).toEqual({
+      type: "git",
+      url: "git@github.com:owner/repo.git",
+      ref: null,
+      subpath: "",
+    });
   });
   test("C-REF-07 gh:owner/repo", () => {
     const r = parseRef("gh:owner/repo");
-    expect(r).toEqual({ type: "git", url: "https://github.com/owner/repo.git", ref: null, subpath: "" });
+    expect(r).toEqual({
+      type: "git",
+      url: "https://github.com/owner/repo.git",
+      ref: null,
+      subpath: "",
+    });
   });
   test("C-REF-08 gl:owner/repo", () => {
     const r = parseRef("gl:owner/repo");
@@ -54,7 +76,12 @@ describe("parseRef: git", () => {
   });
   test("C-REF-10 gh:owner/repo@v1.2.0", () => {
     const r = parseRef("gh:owner/repo@v1.2.0");
-    expect(r).toEqual({ type: "git", url: "https://github.com/owner/repo.git", ref: "v1.2.0", subpath: "" });
+    expect(r).toEqual({
+      type: "git",
+      url: "https://github.com/owner/repo.git",
+      ref: "v1.2.0",
+      subpath: "",
+    });
   });
   test("C-REF-11 gh:owner/repo@a1b2c3d", () => {
     const r = parseRef("gh:owner/repo@a1b2c3d");
@@ -81,7 +108,9 @@ describe("parseRef: git", () => {
   test("https URL with // is a git source", () => {
     const r = parseRef("https://example.com/owner/repo//sub");
     expect(r.type).toBe("git");
-    if (r.type === "git") expect(r.subpath).toBe("sub");
+    if (r.type === "git") {
+      expect(r.subpath).toBe("sub");
+    }
   });
   test("invalid URL without path errors", () => {
     expect(() => parseRef("https://example.com")).toThrow();

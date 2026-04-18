@@ -16,8 +16,8 @@
  * thrown for anything that doesn't fit the grammar.
  */
 
-import { isAbsolute, resolve } from "node:path";
 import { homedir } from "node:os";
+import { isAbsolute, resolve } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { GitSource, PathSource, Source, TapSource } from "../core/types.ts";
 
@@ -39,15 +39,23 @@ export function parseRef(raw: string, cwd: string = process.cwd()): Source {
   const ref = raw.trim();
 
   // §8.5 precedence: path > explicit URL / shorthand > contains // > tap.
-  if (looksLikePath(ref)) return parsePath(ref, cwd);
-  if (looksLikeExplicitGit(ref) || looksLikeShorthand(ref)) return parseGit(ref);
-  if (ref.includes("//")) return parseGit(ref);
+  if (looksLikePath(ref)) {
+    return parsePath(ref, cwd);
+  }
+  if (looksLikeExplicitGit(ref) || looksLikeShorthand(ref)) {
+    return parseGit(ref);
+  }
+  if (ref.includes("//")) {
+    return parseGit(ref);
+  }
   return parseTap(ref);
 }
 
 /** True if `ref` should be treated as a path source. */
 function looksLikePath(ref: string): boolean {
-  return ref.startsWith("./") || ref.startsWith("../") || ref.startsWith("/") || ref.startsWith("~");
+  return (
+    ref.startsWith("./") || ref.startsWith("../") || ref.startsWith("/") || ref.startsWith("~")
+  );
 }
 
 /** True if `ref` is a URL-shaped git source. */
@@ -64,7 +72,9 @@ function looksLikeExplicitGit(ref: string): boolean {
 /** True if `ref` uses a shorthand host prefix like `gh:` or `gl:`. */
 function looksLikeShorthand(ref: string): boolean {
   const m = ref.match(/^([a-z]{2}):/);
-  if (!m) return false;
+  if (!m) {
+    return false;
+  }
   return m[1]! in SHORTHAND_HOSTS;
 }
 
@@ -104,7 +114,9 @@ function splitSubpath(ref: string): { head: string; subpath: string } {
   const schemeIdx = ref.indexOf("://");
   const searchFrom = schemeIdx >= 0 ? schemeIdx + 3 : 0;
   const idx = ref.indexOf("//", searchFrom);
-  if (idx < 0) return { head: ref, subpath: "" };
+  if (idx < 0) {
+    return { head: ref, subpath: "" };
+  }
   return { head: ref.slice(0, idx), subpath: ref.slice(idx + 2) };
 }
 
@@ -116,9 +128,13 @@ function splitGitRef(head: string): { url: string; ref: string | null } {
   const lastSlash = head.lastIndexOf("/");
   const tail = lastSlash >= 0 ? head.slice(lastSlash + 1) : head;
   const atIdx = tail.lastIndexOf("@");
-  if (atIdx <= 0) return { url: head, ref: null };
+  if (atIdx <= 0) {
+    return { url: head, ref: null };
+  }
   const possibleRef = tail.slice(atIdx + 1);
-  if (possibleRef.length === 0 || /[\s\/]/.test(possibleRef)) return { url: head, ref: null };
+  if (possibleRef.length === 0 || /[\s/]/.test(possibleRef)) {
+    return { url: head, ref: null };
+  }
   const url = head.slice(0, head.length - tail.length) + tail.slice(0, atIdx);
   return { url, ref: possibleRef };
 }
@@ -129,26 +145,39 @@ function canonicalizeUrl(raw: string): string | null {
 
   // Shorthand: `gh:owner/repo`, `gl:owner/repo`, `bb:owner/repo`.
   const shMatch = url.match(/^([a-z]{2}):(.+)$/);
-  if (shMatch && shMatch[1]! in SHORTHAND_HOSTS && !url.includes("://") && !url.startsWith("git@")) {
+  if (
+    shMatch &&
+    shMatch[1]! in SHORTHAND_HOSTS &&
+    !url.includes("://") &&
+    !url.startsWith("git@")
+  ) {
     const host = SHORTHAND_HOSTS[shMatch[1]!]!;
     const body = shMatch[2]!;
-    if (!body.includes("/")) return null;
+    if (!body.includes("/")) {
+      return null;
+    }
     url = `https://${host}/${body.endsWith(".git") ? body.slice(0, -4) : body}.git`;
   }
 
   // SSH: `git@host:owner/repo` — keep as-is but validate shape.
   if (url.startsWith("git@")) {
-    if (!/^git@[^:\s]+:[^\s]+$/.test(url)) return null;
+    if (!/^git@[^:\s]+:[^\s]+$/.test(url)) {
+      return null;
+    }
     return url;
   }
 
   // HTTP(S): validate and normalize.
   if (url.startsWith("http://") || url.startsWith("https://")) {
     const u = new URL(url);
-    if (!u.hostname || !u.pathname || u.pathname === "/") return null;
+    if (!(u.hostname && u.pathname) || u.pathname === "/") {
+      return null;
+    }
     // Path must have at least `/owner/repo`.
     const segments = u.pathname.split("/").filter(Boolean);
-    if (segments.length < 2) return null;
+    if (segments.length < 2) {
+      return null;
+    }
     return url;
   }
 
@@ -182,7 +211,7 @@ function parseTap(ref: string): TapSource {
       throw new CrewError("invalid_ref", `invalid tap reference: ${ref}`);
     }
     const [tap, name] = parts as [string, string];
-    if (!NAME_PATTERN.test(tap) || !NAME_PATTERN.test(name)) {
+    if (!(NAME_PATTERN.test(tap) && NAME_PATTERN.test(name))) {
       throw new CrewError("invalid_ref", `invalid tap reference: ${ref}`);
     }
     return { type: "tap", tap, name, ref: gitRef };

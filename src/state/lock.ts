@@ -15,11 +15,11 @@
  * directory), which matches §6's `state.json.lock` path exactly.
  */
 
+import { dirname } from "node:path";
 import lockfile from "proper-lockfile";
 import { CrewError } from "../core/errors.ts";
 import { crewHome, paths } from "../core/paths.ts";
 import { ensureDir, exists, touch } from "../util/fs.ts";
-import { dirname } from "node:path";
 
 /** Handle representing a held state lock. */
 export interface StateLock {
@@ -33,13 +33,18 @@ const DEFAULT_TIMEOUT_MS = 30_000;
  * Acquire the state lock, blocking up to `timeoutMs` (default 30 s).
  * Throws `state_locked` if the lock cannot be acquired within the timeout.
  */
-export function acquireStateLock(home: string = crewHome(), timeoutMs: number = DEFAULT_TIMEOUT_MS): StateLock {
+export function acquireStateLock(
+  home: string = crewHome(),
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): StateLock {
   const stateFile = paths(home).stateFile;
   ensureDir(dirname(stateFile));
 
   // proper-lockfile requires the target file to exist. `state.json` may
   // not yet — this is the first crew run — so touch it.
-  if (!exists(stateFile)) touch(stateFile);
+  if (!exists(stateFile)) {
+    touch(stateFile);
+  }
 
   const deadline = Date.now() + timeoutMs;
   const pollMs = 100;
@@ -80,7 +85,11 @@ export function acquireStateLock(home: string = crewHome(), timeoutMs: number = 
 }
 
 /** Run `fn` while holding the state lock; always release. */
-export function withStateLock<T>(fn: () => T, home: string = crewHome(), timeoutMs: number = DEFAULT_TIMEOUT_MS): T {
+export function withStateLock<T>(
+  fn: () => T,
+  home: string = crewHome(),
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): T {
   const lock = acquireStateLock(home, timeoutMs);
   try {
     return fn();

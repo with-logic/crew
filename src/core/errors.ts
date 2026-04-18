@@ -74,6 +74,10 @@ export class CrewError extends Error {
 }
 
 /** Convenience helper: throw a `CrewError` with the given code. */
-export function fail(code: CrewErrorName, message: string, details?: Record<string, unknown>): never {
+export function fail(
+  code: CrewErrorName,
+  message: string,
+  details?: Record<string, unknown>,
+): never {
   throw new CrewError(code, message, details);
 }

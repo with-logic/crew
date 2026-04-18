@@ -15,7 +15,10 @@ import type { TargetAdapter } from "../targets/adapter.ts";
 import { ALL_ADAPTERS, adapterByName } from "../targets/registry.ts";
 
 /** Compute the active set of target adapters. */
-export function computeTargetSet(config: Config, restrictTo: readonly string[] = []): TargetAdapter[] {
+export function computeTargetSet(
+  config: Config,
+  restrictTo: readonly string[] = [],
+): TargetAdapter[] {
   const unknown = restrictTo.filter((n) => !adapterByName(n));
   if (unknown.length > 0) {
     throw new CrewError("no_targets", `unknown target(s): ${unknown.join(", ")}`, { unknown });
@@ -25,8 +28,12 @@ export function computeTargetSet(config: Config, restrictTo: readonly string[] =
   for (const adapter of ALL_ADAPTERS) {
     const forced = config.forced_targets.includes(adapter.name);
     const detected = adapter.detect();
-    if (!forced && !detected) continue;
-    if (config.disabled_targets.includes(adapter.name)) continue;
+    if (!(forced || detected)) {
+      continue;
+    }
+    if (config.disabled_targets.includes(adapter.name)) {
+      continue;
+    }
     active.push(adapter);
   }
   if (restrictTo.length > 0) {

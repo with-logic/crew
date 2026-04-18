@@ -15,8 +15,15 @@
 
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
-import type { Config, GitSource, MarkerSource, PathSource, Source, TapSource } from "../core/types.ts";
 import { crewHome, paths, tapPath } from "../core/paths.ts";
+import type {
+  Config,
+  GitSource,
+  MarkerSource,
+  PathSource,
+  Source,
+  TapSource,
+} from "../core/types.ts";
 import { classifyRef, ensureRepo, resolveRef } from "../git/repo.ts";
 import { ensureDir, isDirectory } from "../util/fs.ts";
 
@@ -62,7 +69,10 @@ export function acquireGit(source: GitSource, home: string = crewHome()): Acquir
 
   const rootDir = source.subpath.length > 0 ? join(cacheDir, source.subpath) : cacheDir;
   if (!isDirectory(rootDir)) {
-    throw new CrewError("no_skills_found", `subpath ${source.subpath} not found in ${source.url}@${sha}`);
+    throw new CrewError(
+      "no_skills_found",
+      `subpath ${source.subpath} not found in ${source.url}@${sha}`,
+    );
   }
   return {
     rootDir,
@@ -74,12 +84,14 @@ export function acquireGit(source: GitSource, home: string = crewHome()): Acquir
 }
 
 /** Acquire a tap source, from a specified tap or by searching all taps. */
-export function acquireTap(source: TapSource, config: Config, home: string = crewHome()): AcquiredSource {
+export function acquireTap(
+  source: TapSource,
+  config: Config,
+  home: string = crewHome(),
+): AcquiredSource {
   if (source.tap !== null) {
     const tapConfig = config.taps.find((t) => t.name === source.tap);
-    if (!tapConfig) {
-      throw new CrewError("invalid_ref", `tap \`${source.tap}\` is not configured`);
-    }
+    if (!tapConfig) throw new CrewError("invalid_ref", `tap \`${source.tap}\` is not configured`);
     return acquireFromTap(tapConfig.name, tapConfig.url, source, home);
   }
 
@@ -92,19 +104,27 @@ export function acquireTap(source: TapSource, config: Config, home: string = cre
       found.push({ tapName: tap.name, tapUrl: tap.url });
     }
   }
-  if (found.length === 0) {
+  if (found.length === 0)
     throw new CrewError("invalid_ref", `skill \`${source.name}\` not found in any tap`);
-  }
   if (found.length > 1) {
     const candidates = found.map((f) => `${f.tapName}/${source.name}`).join(", ");
-    throw new CrewError("ambiguous_reference", `skill \`${source.name}\` is ambiguous; candidates: ${candidates}`, {
-      candidates,
-    });
+    throw new CrewError(
+      "ambiguous_reference",
+      `skill \`${source.name}\` is ambiguous; candidates: ${candidates}`,
+      {
+        candidates,
+      },
+    );
   }
   return acquireFromTap(found[0]!.tapName, found[0]!.tapUrl, source, home);
 }
 
-function acquireFromTap(tapName: string, tapUrl: string, source: TapSource, home: string): AcquiredSource {
+function acquireFromTap(
+  tapName: string,
+  tapUrl: string,
+  source: TapSource,
+  home: string,
+): AcquiredSource {
   const tp = tapPath(tapName, home);
   ensureRepo(tapUrl, tp);
   const sha = resolveRef(tp, source.ref);
@@ -128,7 +148,11 @@ function acquireFromTap(tapName: string, tapUrl: string, source: TapSource, home
 }
 
 /** Dispatch acquisition based on source kind. */
-export function acquireSource(source: Source, config: Config, home: string = crewHome()): AcquiredSource {
+export function acquireSource(
+  source: Source,
+  config: Config,
+  home: string = crewHome(),
+): AcquiredSource {
   switch (source.type) {
     case "path":
       return acquirePath(source);

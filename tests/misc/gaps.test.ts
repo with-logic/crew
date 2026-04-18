@@ -12,21 +12,35 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { resetLaunchctlRunner, setLaunchctlRunner } from "../../src/autoupdate/launchd.ts";
 import { runCli } from "../../src/cli/main.ts";
+import { parseDuration } from "../../src/commands/autoupdate.ts";
+import { CrewError } from "../../src/core/errors.ts";
+import {
+  crewHome as crewHomeDefault,
+  paths,
+  storeEntryPath,
+  tapPath,
+} from "../../src/core/paths.ts";
+import { readState, writeState } from "../../src/state/load.ts";
 import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
 import { codexAdapter } from "../../src/targets/codex.ts";
 import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
+import { uninstallSkillFromTarget } from "../../src/targets/install.ts";
+import { ALL_ADAPTERS, adapterByName } from "../../src/targets/registry.ts";
+import {
+  ensureDir,
+  exists,
+  isDirectory,
+  readBytes,
+  readSymlinkTarget,
+  toPosix,
+  touch,
+  walk,
+} from "../../src/util/fs.ts";
+import { readJson, tryReadJson, writeJson } from "../../src/util/json.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
-import { adapterByName, ALL_ADAPTERS } from "../../src/targets/registry.ts";
-import { uninstallSkillFromTarget } from "../../src/targets/install.ts";
-import { readJson, tryReadJson, writeJson } from "../../src/util/json.ts";
-import { ensureDir, exists, isDirectory, readBytes, readSymlinkTarget, toPosix, touch, walk } from "../../src/util/fs.ts";
-import { crewHome as crewHomeDefault, paths, storeEntryPath, tapPath } from "../../src/core/paths.ts";
-import { CrewError } from "../../src/core/errors.ts";
-import { readState, writeState } from "../../src/state/load.ts";
-import { setLaunchctlRunner, resetLaunchctlRunner } from "../../src/autoupdate/launchd.ts";
-import { parseDuration } from "../../src/commands/autoupdate.ts";
 
 describe("adapters: project paths and detect false branches", () => {
   test("every adapter has a user and project path", () => {
@@ -37,16 +51,16 @@ describe("adapters: project paths and detect false branches", () => {
   });
 
   test("adapter detect returns false without install", () => {
-    const prev = process.env.HOME;
+    const prev = process.env["HOME"];
     try {
-      process.env.HOME = "/tmp/empty-" + Date.now();
+      process.env["HOME"] = `/tmp/empty-${Date.now()}`;
       // claude-code may or may not be detected via isOnPath; both branches exercised.
       const detected = claudeCodeAdapter.detect();
       expect(typeof detected).toBe("boolean");
       expect(typeof codexAdapter.detect()).toBe("boolean");
       expect(typeof geminiCliAdapter.detect()).toBe("boolean");
     } finally {
-      process.env.HOME = prev;
+      process.env["HOME"] = prev;
     }
   });
 
@@ -103,7 +117,17 @@ describe("uninstallSkillFromTarget edges", () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       join(dir, ".crew.json"),
-      JSON.stringify({ schema_version: 1, name: "other", source: { type: "path", path: "/x" }, ref: null, resolved_sha: null, content_hash: "sha256:x", scope: "project", installed_at: "2026-04-18T00:00:00Z", installed_by: "crew/test" }),
+      JSON.stringify({
+        schema_version: 1,
+        name: "other",
+        source: { type: "path", path: "/x" },
+        ref: null,
+        resolved_sha: null,
+        content_hash: "sha256:x",
+        scope: "project",
+        installed_at: "2026-04-18T00:00:00Z",
+        installed_by: "crew/test",
+      }),
     );
     writeFileSync(join(dir, "SKILL.md"), "x");
     expect(() =>
@@ -135,10 +159,10 @@ describe("uninstallSkillFromTarget edges", () => {
 
 describe("fs utilities", () => {
   test("exists false for missing", () => {
-    expect(exists("/tmp/this-does-not-exist-" + Date.now())).toBe(false);
+    expect(exists(`/tmp/this-does-not-exist-${Date.now()}`)).toBe(false);
   });
   test("isDirectory false for missing", () => {
-    expect(isDirectory("/tmp/missing-" + Date.now())).toBe(false);
+    expect(isDirectory(`/tmp/missing-${Date.now()}`)).toBe(false);
   });
   test("ensureDir is idempotent", () => {
     const d = makeTempDir();
@@ -185,10 +209,10 @@ describe("fs utilities", () => {
 
 describe("json utilities", () => {
   test("readJson throws on missing", () => {
-    expect(() => readJson("/tmp/missing-" + Date.now())).toThrow();
+    expect(() => readJson(`/tmp/missing-${Date.now()}`)).toThrow();
   });
   test("tryReadJson returns null on missing", () => {
-    expect(tryReadJson("/tmp/missing-" + Date.now())).toBeNull();
+    expect(tryReadJson(`/tmp/missing-${Date.now()}`)).toBeNull();
   });
   test("writeJson + readJson round-trip", () => {
     const d = makeTempDir();
@@ -206,22 +230,27 @@ describe("json utilities", () => {
 
 describe("paths helpers", () => {
   test("crewHome uses $CREW_HOME", () => {
-    const prev = process.env.CREW_HOME;
+    const prev = process.env["CREW_HOME"];
     try {
-      process.env.CREW_HOME = "/tmp/custom-home";
+      process.env["CREW_HOME"] = "/tmp/custom-home";
       expect(crewHomeDefault()).toBe("/tmp/custom-home");
     } finally {
-      if (prev === undefined) delete process.env.CREW_HOME;
-      else process.env.CREW_HOME = prev;
+      if (prev === undefined) {
+        delete process.env["CREW_HOME"];
+      } else {
+        process.env["CREW_HOME"] = prev;
+      }
     }
   });
   test("crewHome defaults to ~/.crew when CREW_HOME absent", () => {
-    const prev = process.env.CREW_HOME;
+    const prev = process.env["CREW_HOME"];
     try {
-      delete process.env.CREW_HOME;
+      delete process.env["CREW_HOME"];
       expect(crewHomeDefault()).toBe(join(homedir(), ".crew"));
     } finally {
-      if (prev !== undefined) process.env.CREW_HOME = prev;
+      if (prev !== undefined) {
+        process.env["CREW_HOME"] = prev;
+      }
     }
   });
   test("tapPath and storeEntryPath", () => {
@@ -262,7 +291,12 @@ describe("doctor warnings — orphan store", () => {
       (geminiCliAdapter as { detect: () => boolean }).detect = originals.ge.d;
     };
   });
-  afterEach(() => { if (restore) restore(); restore = null; });
+  afterEach(() => {
+    if (restore) {
+      restore();
+    }
+    restore = null;
+  });
 
   test("doctor flags orphan store entries", () => {
     const home = makeCrewHome();
@@ -318,7 +352,8 @@ describe("doctor warnings — orphan store", () => {
   test("doctor flags autoupdate drift", () => {
     const home = makeCrewHome();
     // Enable in config without touching launchctl.
-    const { writeConfig, readConfig } = require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
+    const { writeConfig, readConfig } =
+      require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
     const cfg = readConfig(home);
     writeConfig({ ...cfg, autoupdate: { enabled: true, interval_seconds: 60 } }, home);
     setLaunchctlRunner(() => false); // not loaded
@@ -369,7 +404,8 @@ describe("copy idempotence", () => {
     const f = join(d1, "script.sh");
     writeFileSync(f, "#!/bin/sh\n");
     chmodSync(f, 0o700);
-    const { copyTree } = require("../../src/util/copy.ts") as typeof import("../../src/util/copy.ts");
+    const { copyTree } =
+      require("../../src/util/copy.ts") as typeof import("../../src/util/copy.ts");
     copyTree(d1, join(d2, "x"));
     expect(existsSync(join(d2, "x", "script.sh"))).toBe(true);
   });
@@ -384,7 +420,8 @@ describe("rename-based atomic replace", () => {
     writeFileSync(join(src, "f"), "x");
     mkdirSync(dest, { recursive: true });
     writeFileSync(join(dest, "old"), "old");
-    const { atomicReplace } = require("../../src/util/fs.ts") as typeof import("../../src/util/fs.ts");
+    const { atomicReplace } =
+      require("../../src/util/fs.ts") as typeof import("../../src/util/fs.ts");
     atomicReplace(src, dest);
     expect(existsSync(join(dest, "f"))).toBe(true);
     expect(existsSync(join(dest, "old"))).toBe(false);
@@ -397,7 +434,8 @@ describe("rename semantics for empty src", () => {
     const src = join(d, "a");
     const dest = join(d, "b");
     mkdirSync(src, { recursive: true });
-    const { atomicReplace } = require("../../src/util/fs.ts") as typeof import("../../src/util/fs.ts");
+    const { atomicReplace } =
+      require("../../src/util/fs.ts") as typeof import("../../src/util/fs.ts");
     atomicReplace(src, dest);
     expect(existsSync(dest)).toBe(true);
     expect(existsSync(src)).toBe(false);

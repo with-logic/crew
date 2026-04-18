@@ -10,19 +10,25 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
-import { captureStreams, makeCrewHome } from "../helpers/env.ts";
-import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter, commitAll } from "../helpers/fixtures.ts";
-import { classifyRef, initRepo } from "../../src/git/repo.ts";
-import { runGit } from "../../src/git/exec.ts";
-import { isOnPath } from "../../src/targets/path.ts";
-import { copyTree } from "../../src/util/copy.ts";
 import { CrewError, fail } from "../../src/core/errors.ts";
+import { runGit } from "../../src/git/exec.ts";
+import { classifyRef, initRepo } from "../../src/git/repo.ts";
 import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
 import { codexAdapter } from "../../src/targets/codex.ts";
 import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
+import { isOnPath } from "../../src/targets/path.ts";
+import { copyTree } from "../../src/util/copy.ts";
+import { captureStreams, makeCrewHome } from "../helpers/env.ts";
+import {
+  commitAll,
+  makeGitRepo,
+  makeSkill,
+  makeTempDir,
+  skillFrontmatter,
+} from "../helpers/fixtures.ts";
 
 let restore: (() => void) | null = null;
 let ccRoot: string;
@@ -52,7 +58,12 @@ function setupTargets() {
 }
 
 beforeEach(() => setupTargets());
-afterEach(() => { if (restore) restore(); restore = null; });
+afterEach(() => {
+  if (restore) {
+    restore();
+  }
+  restore = null;
+});
 
 describe("cache clean", () => {
   test("empty cache succeeds", () => {
@@ -115,12 +126,17 @@ describe("targets subcommands", () => {
     const c = captureStreams();
     runCli(["targets", "--json"], { home, streams: c.streams });
     const parsed = JSON.parse(c.stdout());
-    expect(parsed.targets.find((t: { name: string }) => t.name === "claude-code").forced).toBe(true);
+    expect(parsed.targets.find((t: { name: string }) => t.name === "claude-code").forced).toBe(
+      true,
+    );
   });
 
   test("unknown target errors", () => {
     const home = makeCrewHome();
-    const code = runCli(["targets", "enable", "no-such"], { home, streams: captureStreams().streams });
+    const code = runCli(["targets", "enable", "no-such"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 
@@ -149,12 +165,12 @@ describe("isOnPath", () => {
     expect(isOnPath("this-binary-does-not-exist-xyz")).toBe(false);
   });
   test("empty PATH returns false", () => {
-    const prev = process.env.PATH;
-    process.env.PATH = "";
+    const prev = process.env["PATH"];
+    process.env["PATH"] = "";
     try {
       expect(isOnPath("bun")).toBe(false);
     } finally {
-      process.env.PATH = prev;
+      process.env["PATH"] = prev;
     }
   });
 });
@@ -216,7 +232,9 @@ describe("git classifyRef", () => {
     const repo = makeTempDir();
     makeGitRepo(repo);
     commitAll(repo, "init");
-    runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", "v1"], { cwd: repo });
+    runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", "v1"], {
+      cwd: repo,
+    });
     expect(classifyRef(repo, "v1")).toBe("tag");
   });
 
@@ -277,8 +295,16 @@ describe("uninstall edge: multiple scopes", () => {
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     const projCwd = makeTempDir("crew-proj-");
     runCli(["install", skill], { home, streams: captureStreams().streams });
-    runCli(["install", "--scope", "project", skill], { home, cwd: projCwd, streams: captureStreams().streams });
-    const code = runCli(["uninstall", "demo"], { home, cwd: projCwd, streams: captureStreams().streams });
+    runCli(["install", "--scope", "project", skill], {
+      home,
+      cwd: projCwd,
+      streams: captureStreams().streams,
+    });
+    const code = runCli(["uninstall", "demo"], {
+      home,
+      cwd: projCwd,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
   });
 });
@@ -288,19 +314,28 @@ describe("flags parser", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const code = runCli(["install", "--scope=user", skill], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--scope=user", skill], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
   });
 
   test("--scope invalid value", () => {
     const home = makeCrewHome();
-    const code = runCli(["install", "--scope", "other", "foo"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--scope", "other", "foo"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 
   test("-- terminator", () => {
     const home = makeCrewHome();
-    const code = runCli(["install", "--", "--weird-name"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--", "--weird-name"], {
+      home,
+      streams: captureStreams().streams,
+    });
     // This parses as a single ref that can't be found; exit 4 (invalid_ref) or 1.
     expect([1, 4, 5]).toContain(code);
   });
@@ -327,7 +362,10 @@ describe("flags parser", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const code = runCli(["install", "--target", "claude-code", "--target", "codex", skill], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--target", "claude-code", "--target", "codex", skill], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
   });
 });
@@ -342,11 +380,18 @@ describe("install dependency: qualified refs", () => {
     commitAll(depRepo, "init");
 
     const parentDir = makeTempDir();
-    makeSkill(parentDir, "root", skillFrontmatter({
-      name: "root",
-      dependencies: [`file://${depRepo}//dep`],
-    }));
-    const code = runCli(["install", join(parentDir, "root")], { home, streams: captureStreams().streams });
+    makeSkill(
+      parentDir,
+      "root",
+      skillFrontmatter({
+        name: "root",
+        dependencies: [`file://${depRepo}//dep`],
+      }),
+    );
+    const code = runCli(["install", join(parentDir, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(existsSync(join(ccRoot, "dep"))).toBe(true);
   });

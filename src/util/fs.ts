@@ -13,8 +13,8 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   readlinkSync,
   renameSync,
   rmSync,
@@ -110,12 +110,9 @@ export function walk(root: string, options: WalkOptions = {}): WalkedEntry[] {
         isFile: lst.isFile() && !lst.isSymbolicLink(),
         isDirectory: lst.isDirectory() && !lst.isSymbolicLink(),
       };
-      if (!options.shouldEmit || options.shouldEmit(entry)) {
-        results.push(entry);
-      }
-      if (entry.isDirectory && (!options.shouldDescend || options.shouldDescend(entry))) {
+      if (!options.shouldEmit || options.shouldEmit(entry)) results.push(entry);
+      if (entry.isDirectory && (!options.shouldDescend || options.shouldDescend(entry)))
         stack.push(abs);
-      }
     }
   }
   return results;

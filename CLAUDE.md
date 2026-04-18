@@ -341,6 +341,120 @@ add a criterion, add a matching `C-*` test.
 
 ---
 
+## Lint and type rigor
+
+**Biome 2 is the source of truth for lint and format.** `biome.json`
+enables every non-stylistic category at `error`: a11y, complexity,
+correctness, performance, security, style, suspicious. The formatter
+is enforced too — `bun run lint` checks both.
+
+Philosophy: if a rule catches real bugs, we want it on; if it just
+expresses a style preference that conflicts with our other invariants
+(e.g. 100% coverage), it's off with a comment explaining why.
+
+Rules we've deliberately disabled and the reason:
+
+- **`useBlockStatements`** — always-braces around `if` bodies. Turned
+  off because Biome's formatter expands one-line bodies onto their own
+  line, which splits coverage instrumentation and drops line coverage.
+  100% coverage is the higher-priority invariant.
+- **`useLiteralKeys`** — prefers `obj.foo` over `obj["foo"]`. Turned
+  off because TypeScript's `noPropertyAccessFromIndexSignature` wants
+  the opposite for index-signature types, and that rule is load-bearing
+  for our strictness.
+- **`useTopLevelRegex`** — hoist regexes out of function bodies for
+  perf. Turned off because crew runs and exits; regex-compile overhead
+  is negligible and inline regexes read better next to the check.
+
+Per-directory overrides:
+
+- `tests/**` relaxes `noNonNullAssertion`, `noExplicitAny`,
+  `noConsole`, `noEmptyBlockStatements`, `noExcessiveCognitiveComplexity`,
+  `noDelete`, and `noUndeclaredDependencies`. Tests can be noisier than
+  production code; they exercise edges that sometimes require awkward
+  constructs.
+- `scripts/**/*.sh` is excluded entirely (not TypeScript).
+
+**TypeScript strict-plus.** `tsconfig.json` goes beyond `"strict": true`
+with every flag that catches a class of real bugs:
+
+- `exactOptionalPropertyTypes` — distinguishes `x?: T` from
+  `x: T | undefined`. Forces you to spread-merge optional fields
+  rather than passing `undefined`.
+- `noUncheckedIndexedAccess` — `arr[i]` is `T | undefined`, not `T`.
+  Forces `arr[i]!` or proper narrowing.
+- `noPropertyAccessFromIndexSignature` — must use `obj["foo"]` for
+  properties that only come from an index signature.
+- `noImplicitReturns` — every branch of a function that declares a
+  return type must return.
+- `useUnknownInCatchVariables` — `catch (err)` is `unknown`, not
+  `any`. Narrow before using.
+- `noUnusedLocals` / `noUnusedParameters` — dead-code deterrent.
+
+When adding code, type signatures first. If a new call-site's types
+don't line up, fix the types, not the call.
+
+### Biome quirks
+
+These are the specific Biome 2.x gotchas we've hit; save the next
+contributor from rediscovering them.
+
+**`coverageThreshold` collides with `useBlockStatements`.** Biome's
+block-wrap auto-fix splits `if (x) return 1;` into four lines; bun
+then instruments the inner `return` as a separate line, and untested
+branches drop coverage. We disable `useBlockStatements` to keep the
+100% coverage invariant intact.
+
+**`useLiteralKeys` vs `noPropertyAccessFromIndexSignature`.** These
+two rules want opposite things — the former insists on `obj.foo`,
+the latter (TypeScript) insists on `obj["foo"]` for index signatures.
+We turn off `useLiteralKeys` and let TS win.
+
+**Nursery rule names change between versions.** `noCommonJs` and
+similar rules graduated out of `nursery` between Biome 1 and 2.4;
+naming one that has moved is a config error (not a warning). We
+keep `nursery` at `"recommended": false` with no opt-ins to avoid
+churn on upgrade.
+
+**Config errors fail silently sometimes.** An invalid rule name
+produces an exit-code-1 config error AND prints the rule catalog.
+A malformed `overrides.includes` pattern, by contrast, may be
+accepted silently. When a rule seems not to fire, test with a
+deliberately-violating file to confirm it's wired up.
+
+**`biome check --write` vs `--write --unsafe`.** Safe fixes are
+automatic (e.g. add missing semicolons). "Unsafe" fixes change
+behavior or API (e.g. remove `continue` at end of loop,
+useLiteralKeys auto-convert, delete unused catch bindings). Use
+`--unsafe` deliberately; review the diff.
+
+**Overriding a rule on tests-only.** Per-file overrides go in
+`overrides[].includes`. Globs with `**/*.test.ts` work, but
+`tests/**` is shorter and matches our layout.
+
+### TypeScript quirks
+
+**`exactOptionalPropertyTypes` + spreading.** An object with `foo:
+string | undefined` can't be assigned to `{ foo?: string }` under
+this flag. Pattern: spread the property only if defined:
+
+```ts
+// Assembles an { foo?: string } from a maybe-undefined value.
+return {
+  ...(foo === undefined ? {} : { foo }),
+  ...rest,
+};
+```
+
+**`noUncheckedIndexedAccess` with known-safe indices.** `arr[0]` is
+`T | undefined` even when you've already checked `arr.length > 0`.
+Use `arr[0]!` with a comment, or `if (arr[0])` to narrow explicitly.
+
+**TS4111 fixes + test env.** Every `process.env.FOO` in the codebase
+becomes `process.env["FOO"]` under `noPropertyAccessFromIndexSignature`.
+When adding new env-var reads, reach for bracket syntax from the
+start.
+
 ## Style
 
 - **Comments**: only where the *why* is non-obvious. Don't narrate
@@ -388,12 +502,19 @@ bun run src/index.ts version           # run from source
 bun run build                          # produce dist/crew
 bun test                               # run the full test suite (with coverage)
 bun run typecheck                      # tsc --noEmit
+bun run lint                           # biome check (lint + format check)
+bun run lint:fix                       # biome check --write (auto-fix)
+bun run format                         # biome format --write
+bun run check                          # typecheck + lint + test (the full gate)
 bun run install-bin                    # build + copy to ~/.local/bin/crew
 bun run uninstall-bin                  # remove the installed binary
 ```
 
 `bun test` always runs with coverage (see `bunfig.toml`). The suite
 exits non-zero if coverage drops below 100%.
+
+`bun run check` is the full CI-style gate — run it before pushing. If
+it's clean, CI is clean.
 
 `CREW_HOME=/tmp/xyz dist/crew install …` to try the compiled binary
 without disturbing your real `~/.crew`.

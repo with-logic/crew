@@ -16,7 +16,9 @@ export function listCommand(ctx: CommandContext): CommandOutput {
     const sha = e.resolved_sha ? e.resolved_sha.slice(0, 8) : "(path)";
     return `${e.name}@${sha} [${e.scope}] → ${e.targets.join(",")}${e.pinned ? " (pinned)" : ""}`;
   });
-  if (sorted.length === 0) human.push("(no skills installed)");
+  if (sorted.length === 0) {
+    human.push("(no skills installed)");
+  }
   return {
     exitCode: 0,
     human,

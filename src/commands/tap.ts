@@ -9,13 +9,13 @@
  */
 
 import { statSync } from "node:fs";
-import { CrewError } from "../core/errors.ts";
-import { readConfig, writeConfig } from "../config/load.ts";
 import { DEFAULT_TAP_NAME } from "../config/defaults.ts";
+import { readConfig, writeConfig } from "../config/load.ts";
+import { CrewError } from "../core/errors.ts";
 import { tapPath } from "../core/paths.ts";
 import { ensureRepo } from "../git/repo.ts";
-import { rmrf } from "../util/fs.ts";
 import { withStateLock } from "../state/lock.ts";
+import { rmrf } from "../util/fs.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function tapCommand(ctx: CommandContext): CommandOutput {
@@ -68,9 +68,11 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
     if (!config.taps.some((t) => t.name === name)) {
       throw new CrewError("usage_error", `tap \`${name}\` is not configured`);
     }
-    if (name === DEFAULT_TAP_NAME && !ctx.flags.force) {
-      throw new CrewError("usage_error", `cannot remove default tap \`${DEFAULT_TAP_NAME}\` without --force`);
-    }
+    if (name === DEFAULT_TAP_NAME && !ctx.flags.force)
+      throw new CrewError(
+        "usage_error",
+        `cannot remove default tap \`${DEFAULT_TAP_NAME}\` without --force`,
+      );
     const updated = { ...config, taps: config.taps.filter((t) => t.name !== name) };
     writeConfig(updated, ctx.home);
     rmrf(tapPath(name, ctx.home));
@@ -94,15 +96,19 @@ function tapList(ctx: CommandContext): CommandOutput {
     }
     return { name: t.name, url: t.url, last_fetched: lastFetched };
   });
-  const human = rows.map((r) => `${r.name.padEnd(16)} ${r.url.padEnd(60)} last_fetched=${r.last_fetched ?? "-"}`);
+  const human = rows.map(
+    (r) => `${r.name.padEnd(16)} ${r.url.padEnd(60)} last_fetched=${r.last_fetched ?? "-"}`,
+  );
   return { exitCode: 0, human, json: { taps: rows } };
 }
 
 function deriveTapName(url: string): string {
   let last = url;
   const hashIdx = last.indexOf("://");
-  if (hashIdx >= 0) last = last.slice(hashIdx + 3);
-  const parts = last.split(/[\/:]/).filter(Boolean);
+  if (hashIdx >= 0) {
+    last = last.slice(hashIdx + 3);
+  }
+  const parts = last.split(/[/:]/).filter(Boolean);
   const tail = parts[parts.length - 1] ?? "tap";
   return tail.endsWith(".git") ? tail.slice(0, -4) : tail;
 }

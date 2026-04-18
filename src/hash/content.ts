@@ -42,7 +42,9 @@ export function hashDirectory(dir: string): string {
   });
 
   for (const e of entries) {
-    if (e.relPath === ".crew.json") continue; // belt-and-suspenders — marker exclusion is at the root.
+    if (e.relPath === ".crew.json") {
+      continue; // belt-and-suspenders — marker exclusion is at the root.
+    }
     let fileSha: string;
     if (e.isSymlink) {
       fileSha = sha256OfBytes(Buffer.from(readlinkSync(e.absPath), "utf8"));

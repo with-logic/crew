@@ -1,11 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
+import { CrewError } from "../../src/core/errors.ts";
 import { paths } from "../../src/core/paths.ts";
 import type { StateEntry } from "../../src/core/types.ts";
-import { readState, removeByName, removeEntry, upsertEntry, writeState } from "../../src/state/load.ts";
+import {
+  readState,
+  removeByName,
+  removeEntry,
+  upsertEntry,
+  writeState,
+} from "../../src/state/load.ts";
 import { acquireStateLock, withStateLock } from "../../src/state/lock.ts";
 import { makeCrewHome } from "../helpers/env.ts";
-import { CrewError } from "../../src/core/errors.ts";
 
 const sample: StateEntry = {
   name: "foo",
@@ -96,7 +102,11 @@ describe("state lock", () => {
 
   test("withStateLock releases on throw", () => {
     const home = makeCrewHome();
-    expect(() => withStateLock(() => { throw new Error("boom"); }, home)).toThrow();
+    expect(() =>
+      withStateLock(() => {
+        throw new Error("boom");
+      }, home),
+    ).toThrow();
     // Should be able to reacquire.
     const lock = acquireStateLock(home, 1000);
     lock.release();

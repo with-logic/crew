@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
+import { readState } from "../../src/state/load.ts";
 import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
 import { codexAdapter } from "../../src/targets/codex.ts";
 import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
@@ -19,7 +20,6 @@ import {
   skillFrontmatter,
   tagRepo,
 } from "../helpers/fixtures.ts";
-import { readState } from "../../src/state/load.ts";
 
 let restore: (() => void) | null = null;
 let targets: Record<string, string> = {};
@@ -53,7 +53,9 @@ function setup() {
 
 beforeEach(() => setup());
 afterEach(() => {
-  if (restore) restore();
+  if (restore) {
+    restore();
+  }
   restore = null;
 });
 
@@ -69,7 +71,10 @@ describe("git sources via file:// URL", () => {
 
     const rootRepo = makeTempDir("crew-rroot-");
     makeGitRepo(rootRepo);
-    writeFileSync(join(rootRepo, "SKILL.md"), `---\n${skillFrontmatter({ name: "rootskill" })}\n---\nbody`);
+    writeFileSync(
+      join(rootRepo, "SKILL.md"),
+      `---\n${skillFrontmatter({ name: "rootskill" })}\n---\nbody`,
+    );
     const rootSha = commitAll(rootRepo, "add root skill");
 
     // We need to put SKILL.md at repo root AND have the parent directory
@@ -83,7 +88,10 @@ describe("git sources via file:// URL", () => {
     makeSkill(subRepo, "demo", skillFrontmatter({ name: "demo" }));
     const sha = commitAll(subRepo, "add demo");
 
-    const code = runCli(["install", `file://${subRepo}//demo`], { home, streams: captureStreams().streams });
+    const code = runCli(["install", `file://${subRepo}//demo`], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(existsSync(join(targets["claude-code"]!, "demo", "SKILL.md"))).toBe(true);
 
@@ -99,7 +107,10 @@ describe("git sources via file:// URL", () => {
     commitAll(repo, "add demo");
     tagRepo(repo, "v1.0.0");
 
-    const code = runCli(["install", `file://${repo}@v1.0.0//demo`], { home, streams: captureStreams().streams });
+    const code = runCli(["install", `file://${repo}@v1.0.0//demo`], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     const state = readState(home);
     expect(state.installations[0]!.pinned).toBe(true);
@@ -147,7 +158,10 @@ describe("git sources via file:// URL", () => {
     makeGitRepo(repo);
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
     const firstSha = commitAll(repo, "add demo");
-    runCli(["install", `file://${repo}@${firstSha}//demo`], { home, streams: captureStreams().streams });
+    runCli(["install", `file://${repo}@${firstSha}//demo`], {
+      home,
+      streams: captureStreams().streams,
+    });
     writeFileSync(join(repo, "demo", "NEW.md"), "new");
     commitAll(repo, "upd");
 
@@ -185,7 +199,10 @@ describe("git sources via file:// URL", () => {
 
   test("invalid git URL -> source_unreachable", () => {
     const home = makeCrewHome();
-    const code = runCli(["install", "https://nonexistent.invalid/a/b.git"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "https://nonexistent.invalid/a/b.git"], {
+      home,
+      streams: captureStreams().streams,
+    });
     // Either source_unreachable (5) or parse path.
     expect([1, 4, 5]).toContain(code);
   });

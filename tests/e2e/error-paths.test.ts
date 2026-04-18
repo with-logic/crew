@@ -3,15 +3,21 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
+import { readState, writeState } from "../../src/state/load.ts";
 import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
 import { codexAdapter } from "../../src/targets/codex.ts";
 import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
-import { commitAll, makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
-import { readState, writeState } from "../../src/state/load.ts";
+import {
+  commitAll,
+  makeGitRepo,
+  makeSkill,
+  makeTempDir,
+  skillFrontmatter,
+} from "../helpers/fixtures.ts";
 
 let restore: (() => void) | null = null;
 let ccRoot: string;
@@ -42,7 +48,12 @@ function setupTargets() {
 }
 
 beforeEach(() => setupTargets());
-afterEach(() => { if (restore) restore(); restore = null; });
+afterEach(() => {
+  if (restore) {
+    restore();
+  }
+  restore = null;
+});
 
 describe("install: path source errors", () => {
   test("path source that is not a directory -> no_skills_found", () => {
@@ -70,10 +81,21 @@ describe("install: conflicting_dependencies", () => {
 
     // Two root skills, each pulling dep from a different repo.
     const ctr = makeTempDir();
-    makeSkill(ctr, "root1", skillFrontmatter({ name: "root1", dependencies: [`file://${r1}//dep`] }));
-    makeSkill(ctr, "root2", skillFrontmatter({ name: "root2", dependencies: [`file://${r2}//dep`] }));
+    makeSkill(
+      ctr,
+      "root1",
+      skillFrontmatter({ name: "root1", dependencies: [`file://${r1}//dep`] }),
+    );
+    makeSkill(
+      ctr,
+      "root2",
+      skillFrontmatter({ name: "root2", dependencies: [`file://${r2}//dep`] }),
+    );
 
-    const code = runCli(["install", join(ctr, "root1"), join(ctr, "root2")], { home, streams: captureStreams().streams });
+    const code = runCli(["install", join(ctr, "root1"), join(ctr, "root2")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 });
@@ -135,7 +157,10 @@ describe("install --target ghost fails with clean message", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const code = runCli(["install", "--target", "nonexistent", skill], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--target", "nonexistent", skill], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 });
@@ -150,11 +175,18 @@ describe("install dependency via git URL ref parsing", () => {
     const tagPath = join(depRepo);
     // Use main branch explicitly.
     const parent = makeTempDir();
-    makeSkill(parent, "root", skillFrontmatter({
-      name: "root",
-      dependencies: [`file://${tagPath}@main//dep`],
-    }));
-    const code = runCli(["install", join(parent, "root")], { home, streams: captureStreams().streams });
+    makeSkill(
+      parent,
+      "root",
+      skillFrontmatter({
+        name: "root",
+        dependencies: [`file://${tagPath}@main//dep`],
+      }),
+    );
+    const code = runCli(["install", join(parent, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
   });
 });
@@ -184,7 +216,10 @@ describe("name conflict cleanup in state", () => {
     const state = readState(home);
     expect(state.installations).toHaveLength(1);
     // Uninstall should succeed (force-through, since no marker).
-    const code = runCli(["uninstall", "--force", "stale"], { home, streams: captureStreams().streams });
+    const code = runCli(["uninstall", "--force", "stale"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
   });
 });

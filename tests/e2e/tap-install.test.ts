@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
+import { readState } from "../../src/state/load.ts";
 import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
 import { codexAdapter } from "../../src/targets/codex.ts";
 import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
@@ -18,7 +19,6 @@ import {
   skillFrontmatter,
   tagRepo,
 } from "../helpers/fixtures.ts";
-import { readState } from "../../src/state/load.ts";
 
 let ccRoot: string;
 let restore: (() => void) | null = null;
@@ -49,7 +49,12 @@ function setupTargets() {
 }
 
 beforeEach(() => setupTargets());
-afterEach(() => { if (restore) restore(); restore = null; });
+afterEach(() => {
+  if (restore) {
+    restore();
+  }
+  restore = null;
+});
 
 /** Build a repo that will be added as a tap (two skills: alpha, beta). */
 function buildTapRepo(): string {
@@ -65,7 +70,10 @@ describe("tap source install", () => {
   test("C-INST-01 install by bare name from added tap", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     // Remove core to avoid network-fetch attempts.
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const code = runCli(["install", "alpha"], { home, streams: captureStreams().streams });
@@ -76,7 +84,10 @@ describe("tap source install", () => {
   test("qualified tap ref", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const code = runCli(["install", "mytap/alpha"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
@@ -86,9 +97,15 @@ describe("tap source install", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
     tagRepo(repo, "v1.0.0");
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
-    const code = runCli(["install", "mytap/alpha@v1.0.0"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "mytap/alpha@v1.0.0"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(readState(home).installations[0]!.pinned).toBe(true);
   });
@@ -97,8 +114,14 @@ describe("tap source install", () => {
     const home = makeCrewHome();
     const r1 = buildTapRepo();
     const r2 = buildTapRepo();
-    runCli(["tap", "add", "--yes", `file://${r1}`, "tap1"], { home, streams: captureStreams().streams });
-    runCli(["tap", "add", "--yes", `file://${r2}`, "tap2"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${r1}`, "tap1"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    runCli(["tap", "add", "--yes", `file://${r2}`, "tap2"], {
+      home,
+      streams: captureStreams().streams,
+    });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const code = runCli(["install", "alpha"], { home, streams: captureStreams().streams });
     expect(code).toBe(4);
@@ -119,8 +142,14 @@ describe("tap source install", () => {
     makeSkill(tap2, "dep", skillFrontmatter({ name: "dep", description: "in tap2" }));
     commitAll(tap2, "init");
 
-    runCli(["tap", "add", "--yes", `file://${tap1}`, "tap1"], { home, streams: captureStreams().streams });
-    runCli(["tap", "add", "--yes", `file://${tap2}`, "tap2"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--yes", `file://${tap1}`, "tap1"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    runCli(["tap", "add", "--yes", `file://${tap2}`, "tap2"], {
+      home,
+      streams: captureStreams().streams,
+    });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
 
     const code = runCli(["install", "tap1/root"], { home, streams: captureStreams().streams });
@@ -133,7 +162,10 @@ describe("tap source install", () => {
 
   test("nonexistent tap name fails", () => {
     const home = makeCrewHome();
-    const code = runCli(["install", "no-such-tap/demo"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "no-such-tap/demo"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 });
@@ -159,7 +191,11 @@ describe("list on multi-scope", () => {
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     const projCwd = makeTempDir();
     runCli(["install", skill], { home, streams: captureStreams().streams });
-    runCli(["install", "--scope", "project", skill], { home, cwd: projCwd, streams: captureStreams().streams });
+    runCli(["install", "--scope", "project", skill], {
+      home,
+      cwd: projCwd,
+      streams: captureStreams().streams,
+    });
     const c = captureStreams();
     runCli(["list", "--json"], { home, streams: c.streams });
     const parsed = JSON.parse(c.stdout());

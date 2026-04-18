@@ -1,9 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
+import {
+  DEFAULT_AUTOUPDATE_INTERVAL_SECONDS,
+  DEFAULT_TAP_NAME,
+  DEFAULT_TAP_URL,
+  defaultConfig,
+} from "../../src/config/defaults.ts";
+import { normalizeConfig, readConfig, writeConfig } from "../../src/config/load.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import { paths } from "../../src/core/paths.ts";
-import { readConfig, writeConfig, normalizeConfig } from "../../src/config/load.ts";
-import { defaultConfig, DEFAULT_TAP_NAME, DEFAULT_TAP_URL, DEFAULT_AUTOUPDATE_INTERVAL_SECONDS } from "../../src/config/defaults.ts";
 import { makeCrewHome } from "../helpers/env.ts";
 
 describe("readConfig", () => {
@@ -13,7 +18,10 @@ describe("readConfig", () => {
     expect(c.taps).toEqual([{ name: DEFAULT_TAP_NAME, url: DEFAULT_TAP_URL }]);
     expect(c.disabled_targets).toEqual([]);
     expect(c.forced_targets).toEqual([]);
-    expect(c.autoupdate).toEqual({ enabled: false, interval_seconds: DEFAULT_AUTOUPDATE_INTERVAL_SECONDS });
+    expect(c.autoupdate).toEqual({
+      enabled: false,
+      interval_seconds: DEFAULT_AUTOUPDATE_INTERVAL_SECONDS,
+    });
   });
 
   test("invalid YAML throws config_invalid", () => {

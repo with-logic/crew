@@ -12,8 +12,8 @@
  */
 
 import { CrewError } from "../core/errors.ts";
-import type { Config, TapConfig } from "../core/types.ts";
 import { crewHome, paths } from "../core/paths.ts";
+import type { Config, TapConfig } from "../core/types.ts";
 import { exists, readText, writeText } from "../util/fs.ts";
 import { parseYaml, stringifyYaml, type YamlMap, type YamlValue } from "../yaml/parse.ts";
 import {
@@ -26,7 +26,9 @@ import {
 /** Read and normalize the config, or return defaults if absent. */
 export function readConfig(home: string = crewHome()): Config {
   const configPath = paths(home).configFile;
-  if (!exists(configPath)) return defaultConfig();
+  if (!exists(configPath)) {
+    return defaultConfig();
+  }
   let parsed: YamlValue;
   try {
     parsed = parseYaml(readText(configPath));
@@ -38,7 +40,9 @@ export function readConfig(home: string = crewHome()): Config {
 
 /** Normalize a parsed YAML value into a `Config`, filling defaults. */
 export function normalizeConfig(parsed: YamlValue): Config {
-  if (parsed === null || parsed === undefined) return defaultConfig();
+  if (parsed === null || parsed === undefined) {
+    return defaultConfig();
+  }
   if (typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new CrewError("config_invalid", "config.yaml must be a mapping");
   }
@@ -82,13 +86,19 @@ export function normalizeConfig(parsed: YamlValue): Config {
     const au = autoupdate as YamlMap;
     if (au["enabled"] !== undefined && au["enabled"] !== null) {
       if (typeof au["enabled"] !== "boolean") {
-        throw new CrewError("config_invalid", "config.yaml: `autoupdate.enabled` must be a boolean");
+        throw new CrewError(
+          "config_invalid",
+          "config.yaml: `autoupdate.enabled` must be a boolean",
+        );
       }
       enabled = au["enabled"];
     }
     if (au["interval_seconds"] !== undefined && au["interval_seconds"] !== null) {
       if (typeof au["interval_seconds"] !== "number" || au["interval_seconds"] <= 0) {
-        throw new CrewError("config_invalid", "config.yaml: `autoupdate.interval_seconds` must be a positive number");
+        throw new CrewError(
+          "config_invalid",
+          "config.yaml: `autoupdate.interval_seconds` must be a positive number",
+        );
       }
       interval_seconds = au["interval_seconds"];
     }
@@ -104,14 +114,19 @@ export function normalizeConfig(parsed: YamlValue): Config {
 
 function readStringList(map: YamlMap, key: string): string[] {
   const raw = map[key];
-  if (raw === undefined || raw === null) return [];
+  if (raw === undefined || raw === null) {
+    return [];
+  }
   if (!Array.isArray(raw)) {
     throw new CrewError("config_invalid", `config.yaml: \`${key}\` must be a list`);
   }
   const result: string[] = [];
   for (const item of raw) {
     if (typeof item !== "string" || item.length === 0) {
-      throw new CrewError("config_invalid", `config.yaml: every entry in \`${key}\` must be a non-empty string`);
+      throw new CrewError(
+        "config_invalid",
+        `config.yaml: every entry in \`${key}\` must be a non-empty string`,
+      );
     }
     result.push(item);
   }

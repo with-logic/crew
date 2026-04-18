@@ -7,11 +7,10 @@
  */
 
 import { readFileSync } from "node:fs";
-import { paths } from "../core/paths.ts";
-import { crewHome } from "../core/paths.ts";
-import { CrewError } from "../core/errors.ts";
-import { ensureDir, exists, rmrf, writeText } from "../util/fs.ts";
 import { dirname } from "node:path";
+import { CrewError } from "../core/errors.ts";
+import { crewHome, paths } from "../core/paths.ts";
+import { ensureDir, exists, rmrf, writeText } from "../util/fs.ts";
 import { BUNDLE_IDENTIFIER, writeAttributionBundle } from "./bundle.ts";
 
 /**
@@ -63,7 +62,10 @@ export function enableAutoupdate(input: EnableInput): void {
   // Write the attribution bundle first so the plist's
   // `AssociatedBundleIdentifiers` resolves as soon as launchd loads it.
   writeAttributionBundle(home);
-  writeText(p.autoupdatePlist, plistXml(input.crewBinaryPath, input.intervalSeconds, p.autoupdateLog));
+  writeText(
+    p.autoupdatePlist,
+    plistXml(input.crewBinaryPath, input.intervalSeconds, p.autoupdateLog),
+  );
   if (!runLaunchctl(["bootstrap", `gui/${process.getuid?.() ?? 0}`, p.autoupdatePlist])) {
     if (!runLaunchctl(["load", p.autoupdatePlist])) {
       throw new CrewError("launchd_failure", "launchctl could not load the autoupdate agent");
@@ -118,12 +120,19 @@ export function resetLaunchctlRunner(): void {
 }
 
 /** Read the last line of the autoupdate log (if any). */
-export function readAutoupdateLogTail(home: string = crewHome()): { last_run: string | null; last_line: string | null } {
+export function readAutoupdateLogTail(home: string = crewHome()): {
+  last_run: string | null;
+  last_line: string | null;
+} {
   const p = paths(home).autoupdateLog;
-  if (!exists(p)) return { last_run: null, last_line: null };
+  if (!exists(p)) {
+    return { last_run: null, last_line: null };
+  }
   const contents = readFileSync(p, "utf8");
   const lines = contents.split("\n").filter((l) => l.length > 0);
-  if (lines.length === 0) return { last_run: null, last_line: null };
+  if (lines.length === 0) {
+    return { last_run: null, last_line: null };
+  }
   return { last_run: null, last_line: lines[lines.length - 1]! };
 }
 

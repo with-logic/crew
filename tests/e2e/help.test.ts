@@ -124,7 +124,9 @@ describe("per-command help", () => {
   test("examples look like real commands (start with `crew `)", () => {
     const home = makeCrewHome();
     for (const cmd of EVERY_COMMAND) {
-      if (cmd === "version") continue;
+      if (cmd === "version") {
+        continue;
+      }
       const c = captureStreams();
       runCli(["help", cmd, "--json"], { home, streams: c.streams });
       const parsed = JSON.parse(c.stdout()) as { examples?: { command: string }[] };

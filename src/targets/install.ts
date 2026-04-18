@@ -12,8 +12,8 @@ import { CrewError } from "../core/errors.ts";
 import type { Marker, MarkerSource, Scope } from "../core/types.ts";
 import { CREW_INSTALLED_BY } from "../core/version.ts";
 import { hashDirectory } from "../hash/content.ts";
-import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { copyTree } from "../util/copy.ts";
+import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
 import { nowIso } from "../util/time.ts";
 import { baseFor, type TargetAdapter } from "./adapter.ts";
@@ -33,9 +33,7 @@ export interface InstallInput {
 }
 
 /** Outcome of one target install. */
-export type InstallOutcome =
-  | { kind: "installed" }
-  | { kind: "up_to_date" };
+export type InstallOutcome = { kind: "installed" } | { kind: "up_to_date" };
 
 /**
  * Install a staged skill into one target, performing all safety checks.
@@ -48,31 +46,41 @@ export function installSkillIntoTarget(input: InstallInput): InstallOutcome {
 
   if (existsSync(dest)) {
     const existingMarker = tryReadJson<Marker>(join(dest, ".crew.json"));
-    if (!existingMarker) {
-      if (!input.force) {
-        throw new CrewError("untracked_directory", `destination exists without a crew marker: ${dest}`, { dest });
-      }
-    } else {
-      if (existingMarker.name !== input.skillName) {
-        if (!input.force) {
-          throw new CrewError("inconsistent_marker", `marker name \`${existingMarker.name}\` does not match skill \`${input.skillName}\``, { dest });
-        }
-      } else {
+    if (existingMarker) {
+      if (existingMarker.name === input.skillName) {
         const currentHash = hashDirectory(dest);
         if (currentHash !== existingMarker.content_hash) {
-          if (!input.force) {
-            throw new CrewError("customized", `skill \`${input.skillName}\` was modified by the user since install`, {
-              dest,
-              expected: existingMarker.content_hash,
-              actual: currentHash,
-            });
-          }
+          if (!input.force)
+            throw new CrewError(
+              "customized",
+              `skill \`${input.skillName}\` was modified by the user since install`,
+              {
+                dest,
+                expected: existingMarker.content_hash,
+                actual: currentHash,
+              },
+            );
         }
         // Same hash, same name, same resolved SHA → up-to-date, no-op.
-        if (existingMarker.resolved_sha === input.resolvedSha && existingMarker.content_hash === input.contentHash && !input.force) {
+        if (
+          existingMarker.resolved_sha === input.resolvedSha &&
+          existingMarker.content_hash === input.contentHash &&
+          !input.force
+        )
           return { kind: "up_to_date" };
-        }
+      } else if (!input.force) {
+        throw new CrewError(
+          "inconsistent_marker",
+          `marker name \`${existingMarker.name}\` does not match skill \`${input.skillName}\``,
+          { dest },
+        );
       }
+    } else if (!input.force) {
+      throw new CrewError(
+        "untracked_directory",
+        `destination exists without a crew marker: ${dest}`,
+        { dest },
+      );
     }
   }
 
@@ -112,20 +120,29 @@ export function uninstallSkillFromTarget(input: UninstallInput): "removed" | "ab
   const base = baseFor(input.adapter, input.scope, input.cwd);
   const dest = join(base, input.skillName);
   if (!existsSync(dest)) {
-    if (!input.force) {
-      throw new CrewError("not_installed_here", `${input.skillName} is not installed under ${base}`, { dest });
-    }
+    if (!input.force)
+      throw new CrewError(
+        "not_installed_here",
+        `${input.skillName} is not installed under ${base}`,
+        { dest },
+      );
     return "absent";
   }
   const marker = tryReadJson<Marker>(join(dest, ".crew.json"));
   if (!marker) {
-    if (!input.force) {
-      throw new CrewError("untracked_directory", `destination exists without a crew marker: ${dest}`, { dest });
-    }
+    if (!input.force)
+      throw new CrewError(
+        "untracked_directory",
+        `destination exists without a crew marker: ${dest}`,
+        { dest },
+      );
   } else if (marker.name !== input.skillName) {
-    if (!input.force) {
-      throw new CrewError("inconsistent_marker", `marker name \`${marker.name}\` does not match skill \`${input.skillName}\``, { dest });
-    }
+    if (!input.force)
+      throw new CrewError(
+        "inconsistent_marker",
+        `marker name \`${marker.name}\` does not match skill \`${input.skillName}\``,
+        { dest },
+      );
   }
   rmrf(dest);
   return "removed";

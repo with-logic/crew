@@ -13,9 +13,14 @@
     "install-bin": "./scripts/install.sh",
     "uninstall-bin": "rm -fv \"${CREW_INSTALL_PREFIX:-$HOME/.local/bin}/crew\"",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check": "bun run typecheck && bun run lint && bun test"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.12",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
     "@types/proper-lockfile": "^4.1.4",

@@ -5,7 +5,6 @@
  * `CommandOutput`. Unknown commands produce `usage_error`.
  */
 
-import { CrewError } from "../core/errors.ts";
 import { autoupdateCommand } from "../commands/autoupdate.ts";
 import { cacheCommand } from "../commands/cache.ts";
 import { doctorCommand } from "../commands/doctor.ts";
@@ -16,9 +15,10 @@ import { listCommand } from "../commands/list.ts";
 import { searchCommand } from "../commands/search.ts";
 import { tapCommand } from "../commands/tap.ts";
 import { targetsCommand } from "../commands/targets.ts";
+import type { CommandContext, CommandOutput } from "../commands/types.ts";
 import { uninstallCommand } from "../commands/uninstall.ts";
 import { updateCommand } from "../commands/update.ts";
-import type { CommandContext, CommandOutput } from "../commands/types.ts";
+import { CrewError } from "../core/errors.ts";
 
 export type CommandHandler = (ctx: CommandContext) => CommandOutput;
 

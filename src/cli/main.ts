@@ -6,12 +6,12 @@
  * testable without spawning subprocesses.
  */
 
+import type { CommandContext } from "../commands/types.ts";
 import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
-import type { CommandContext } from "../commands/types.ts";
 import { parseArgs } from "./args.ts";
 import { dispatch } from "./dispatch.ts";
-import { defaultStreams, writeError, writeSuccess, type OutputStreams } from "./output.ts";
+import { defaultStreams, type OutputStreams, writeError, writeSuccess } from "./output.ts";
 
 /** Options for `runCli` (useful to tests). */
 export interface RunCliOptions {
@@ -26,7 +26,7 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
 
-  let parsed;
+  let parsed: ReturnType<typeof parseArgs>;
   try {
     parsed = parseArgs(argv);
   } catch (err) {
@@ -55,7 +55,11 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
     // Unexpected runtime error — wrap it in a usage error so the user
     // gets a formatted message and exit 4, rather than a raw stack trace.
     const message = (err as Error).message ?? String(err);
-    writeError(new CrewError("usage_error", `unexpected error: ${message}`), parsed.flags.json, streams);
+    writeError(
+      new CrewError("usage_error", `unexpected error: ${message}`),
+      parsed.flags.json,
+      streams,
+    );
     return 4;
   }
 }

@@ -6,7 +6,6 @@
 
 /** Current time as an RFC 3339 UTC string, with millisecond precision. */
 export function nowIso(): string {
-  const override = process.env.CREW_NOW;
-  if (override && override.length > 0) return override;
-  return new Date().toISOString();
+  const override = process.env["CREW_NOW"];
+  return override && override.length > 0 ? override : new Date().toISOString();
 }

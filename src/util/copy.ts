@@ -30,12 +30,19 @@ export function copyTree(src: string, dest: string, options: CopyTreeOptions = {
   copyDirInto(src, dest, "", stripRootMarker);
 }
 
-function copyDirInto(srcRoot: string, destRoot: string, rel: string, stripRootMarker: boolean): void {
+function copyDirInto(
+  srcRoot: string,
+  destRoot: string,
+  rel: string,
+  stripRootMarker: boolean,
+): void {
   const srcDir = rel === "" ? srcRoot : join(srcRoot, rel);
   const destDir = rel === "" ? destRoot : join(destRoot, rel);
   ensureDir(destDir);
   for (const name of readdirSync(srcDir)) {
-    if (stripRootMarker && rel === "" && name === ".crew.json") continue;
+    if (stripRootMarker && rel === "" && name === ".crew.json") {
+      continue;
+    }
     const srcPath = join(srcDir, name);
     const destPath = join(destDir, name);
     const lst = lstatSync(srcPath);

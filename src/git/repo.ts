@@ -9,7 +9,7 @@
 
 import { CrewError } from "../core/errors.ts";
 import { exists, isDirectory } from "../util/fs.ts";
-import { GitProcessError, runGit } from "./exec.ts";
+import { type GitProcessError, runGit } from "./exec.ts";
 
 /** Clone a repo into `dest`. Shallow unless `full` is true. */
 export function cloneRepo(url: string, dest: string, full: boolean = false): void {
@@ -41,7 +41,10 @@ export function ensureRepo(url: string, dest: string): boolean {
     runGit(["fetch", "--tags", "--prune", "origin"], { cwd: dest });
   } catch (err) {
     const ge = err as GitProcessError;
-    throw new CrewError("source_unreachable", `git fetch failed in ${dest}: ${ge.result.stderr.trim()}`);
+    throw new CrewError(
+      "source_unreachable",
+      `git fetch failed in ${dest}: ${ge.result.stderr.trim()}`,
+    );
   }
   return false;
 }
@@ -54,16 +57,15 @@ export function ensureRepo(url: string, dest: string): boolean {
  */
 export function resolveRef(repoPath: string, ref: string | null): string {
   const target = ref ?? "HEAD";
-  const candidates = ref === null
-    ? ["refs/remotes/origin/HEAD", "origin/HEAD", "HEAD"]
-    : [
-        `refs/tags/${ref}`,
-        `refs/remotes/origin/${ref}`,
-        `refs/heads/${ref}`,
-        ref,
-      ];
+  const candidates =
+    ref === null
+      ? ["refs/remotes/origin/HEAD", "origin/HEAD", "HEAD"]
+      : [`refs/tags/${ref}`, `refs/remotes/origin/${ref}`, `refs/heads/${ref}`, ref];
   for (const cand of candidates) {
-    const result = runGit(["rev-parse", "--verify", `${cand}^{commit}`], { cwd: repoPath, throwOnError: false });
+    const result = runGit(["rev-parse", "--verify", `${cand}^{commit}`], {
+      cwd: repoPath,
+      throwOnError: false,
+    });
     if (result.exitCode === 0) {
       const sha = result.stdout.trim();
       if (/^[0-9a-f]{40}$/.test(sha)) return sha;
@@ -73,20 +75,35 @@ export function resolveRef(repoPath: string, ref: string | null): string {
 }
 
 /** Classify a ref in a repo as "sha", "tag", "branch", or "unknown". */
-export function classifyRef(repoPath: string, ref: string | null): "sha" | "tag" | "branch" | "unknown" {
+export function classifyRef(
+  repoPath: string,
+  ref: string | null,
+): "sha" | "tag" | "branch" | "unknown" {
   if (ref === null) return "branch";
   // A 40-char hex is an exact SHA.
   if (/^[0-9a-f]{40}$/i.test(ref)) return "sha";
   // Tag?
-  const tagResult = runGit(["rev-parse", "--verify", `refs/tags/${ref}`], { cwd: repoPath, throwOnError: false });
+  const tagResult = runGit(["rev-parse", "--verify", `refs/tags/${ref}`], {
+    cwd: repoPath,
+    throwOnError: false,
+  });
   if (tagResult.exitCode === 0) return "tag";
   // Branch?
-  const branchResult = runGit(["rev-parse", "--verify", `refs/heads/${ref}`], { cwd: repoPath, throwOnError: false });
+  const branchResult = runGit(["rev-parse", "--verify", `refs/heads/${ref}`], {
+    cwd: repoPath,
+    throwOnError: false,
+  });
   if (branchResult.exitCode === 0) return "branch";
-  const originBranchResult = runGit(["rev-parse", "--verify", `refs/remotes/origin/${ref}`], { cwd: repoPath, throwOnError: false });
+  const originBranchResult = runGit(["rev-parse", "--verify", `refs/remotes/origin/${ref}`], {
+    cwd: repoPath,
+    throwOnError: false,
+  });
   if (originBranchResult.exitCode === 0) return "branch";
   // Maybe an abbreviated SHA.
-  const shaResult = runGit(["rev-parse", "--verify", `${ref}^{commit}`], { cwd: repoPath, throwOnError: false });
+  const shaResult = runGit(["rev-parse", "--verify", `${ref}^{commit}`], {
+    cwd: repoPath,
+    throwOnError: false,
+  });
   if (shaResult.exitCode === 0) {
     const full = shaResult.stdout.trim();
     if (/^[0-9a-f]{40}$/.test(full)) return "sha";

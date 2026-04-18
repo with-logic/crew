@@ -22,7 +22,9 @@ export function extractFrontmatter(raw: string): Frontmatter {
   const lines = raw.replace(/\r\n?/g, "\n").split("\n");
   // Skip leading blank lines; `---` must be on the first non-blank line.
   let i = 0;
-  while (i < lines.length && lines[i]!.trim() === "") i++;
+  while (i < lines.length && lines[i]!.trim() === "") {
+    i++;
+  }
   if (i >= lines.length || lines[i]!.trim() !== "---") {
     throw new CrewError("invalid_skill", "SKILL.md is missing YAML frontmatter");
   }
@@ -42,7 +44,10 @@ export function extractFrontmatter(raw: string): Frontmatter {
   try {
     data = parseYaml(yamlSource);
   } catch (err) {
-    throw new CrewError("invalid_skill", `SKILL.md frontmatter is not valid YAML: ${(err as Error).message}`);
+    throw new CrewError(
+      "invalid_skill",
+      `SKILL.md frontmatter is not valid YAML: ${(err as Error).message}`,
+    );
   }
   const body = lines.slice(end + 1).join("\n");
   return { data, body };

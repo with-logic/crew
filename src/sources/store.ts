@@ -16,8 +16,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { crewHome, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
-import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { copyTree } from "../util/copy.ts";
+import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 
 /** Record returned after staging. */
 export interface StoredSkill {
@@ -33,7 +33,12 @@ export interface StoredSkill {
  * entry already exists with a matching content hash, the existing one
  * is reused.
  */
-export function stageIntoStore(sourceDir: string, name: string, resolvedSha: string | null, home: string = crewHome()): StoredSkill {
+export function stageIntoStore(
+  sourceDir: string,
+  name: string,
+  resolvedSha: string | null,
+  home: string = crewHome(),
+): StoredSkill {
   // A path source with no SHA uses the hash itself as the short id so
   // different path-installed skills don't collide in the store.
   const shortSha = shortShaFor(sourceDir, resolvedSha);

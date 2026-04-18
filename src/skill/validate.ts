@@ -8,9 +8,9 @@
 
 import { basename } from "node:path";
 import { CrewError } from "../core/errors.ts";
+import type { SkillFrontmatter } from "../core/types.ts";
 import { NAME_PATTERN } from "../refs/parse.ts";
 import type { YamlValue } from "../yaml/parse.ts";
-import type { SkillFrontmatter } from "../core/types.ts";
 
 const MAX_NAME_LENGTH = 64;
 const MAX_DESCRIPTION_LENGTH = 1024;
@@ -51,16 +51,25 @@ export function validateFrontmatter(data: YamlValue, skillDir: string): SkillFro
   // Parent directory must equal name (§9 step 4).
   const dirName = basename(skillDir);
   if (dirName !== name) {
-    throw new CrewError("invalid_skill", `field \`name\` (\`${name}\`) does not match parent directory (\`${dirName}\`)`);
+    throw new CrewError(
+      "invalid_skill",
+      `field \`name\` (\`${name}\`) does not match parent directory (\`${dirName}\`)`,
+    );
   }
 
   // description
   const description = map["description"];
   if (typeof description !== "string" || description.length === 0) {
-    throw new CrewError("invalid_skill", "field `description` is required and must be a non-empty string");
+    throw new CrewError(
+      "invalid_skill",
+      "field `description` is required and must be a non-empty string",
+    );
   }
   if (description.length > MAX_DESCRIPTION_LENGTH) {
-    throw new CrewError("invalid_skill", `field \`description\` exceeds ${MAX_DESCRIPTION_LENGTH} characters`);
+    throw new CrewError(
+      "invalid_skill",
+      `field \`description\` exceeds ${MAX_DESCRIPTION_LENGTH} characters`,
+    );
   }
 
   // license (optional, string if present)
@@ -76,7 +85,10 @@ export function validateFrontmatter(data: YamlValue, skillDir: string): SkillFro
       throw new CrewError("invalid_skill", "field `compatibility` must be a string");
     }
     if (compatibility.length > MAX_COMPATIBILITY_LENGTH) {
-      throw new CrewError("invalid_skill", `field \`compatibility\` exceeds ${MAX_COMPATIBILITY_LENGTH} characters`);
+      throw new CrewError(
+        "invalid_skill",
+        `field \`compatibility\` exceeds ${MAX_COMPATIBILITY_LENGTH} characters`,
+      );
     }
   }
 
@@ -106,7 +118,10 @@ export function validateFrontmatter(data: YamlValue, skillDir: string): SkillFro
         const parsed: string[] = [];
         for (const entry of deps) {
           if (typeof entry !== "string" || entry.length === 0) {
-            throw new CrewError("invalid_skill", "each entry in `metadata.crew.dependencies` must be a non-empty string");
+            throw new CrewError(
+              "invalid_skill",
+              "each entry in `metadata.crew.dependencies` must be a non-empty string",
+            );
           }
           parsed.push(entry);
         }
@@ -119,7 +134,7 @@ export function validateFrontmatter(data: YamlValue, skillDir: string): SkillFro
       crewMeta = {
         crew: {
           ...(typeof homepage === "string" ? { homepage } : {}),
-          ...(depList !== undefined ? { dependencies: depList } : {}),
+          ...(depList === undefined ? {} : { dependencies: depList }),
         },
       };
     }
@@ -130,7 +145,7 @@ export function validateFrontmatter(data: YamlValue, skillDir: string): SkillFro
     description,
     ...(typeof license === "string" ? { license } : {}),
     ...(typeof compatibility === "string" ? { compatibility } : {}),
-    ...(crewMeta !== undefined ? { metadata: crewMeta } : {}),
+    ...(crewMeta === undefined ? {} : { metadata: crewMeta }),
   };
   return result;
 }

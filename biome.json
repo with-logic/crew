@@ -1,0 +1,174 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["**", "!**/node_modules", "!**/dist", "!**/coverage", "!bun.lock"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "quoteProperties": "asNeeded"
+    },
+    "globals": ["Bun"]
+  },
+  "json": {
+    "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+
+      "a11y": { "recommended": true },
+
+      "complexity": {
+        "recommended": true,
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 70 }
+        },
+        "noForEach": "error",
+        "noUselessStringConcat": "error",
+        "useDateNow": "error",
+        "useSimplifiedLogicExpression": "error",
+        "useLiteralKeys": "off"
+      },
+
+      "correctness": {
+        "recommended": true,
+        "noUndeclaredDependencies": "error",
+        "noUndeclaredVariables": "error",
+        "noUnusedFunctionParameters": "error",
+        "noUnusedImports": "error",
+        "noUnusedPrivateClassMembers": "error",
+        "noUnusedVariables": "error",
+        "useExhaustiveDependencies": "error",
+        "useImportExtensions": "error"
+      },
+
+      "performance": {
+        "recommended": true,
+        "noAccumulatingSpread": "error",
+        "noDelete": "error",
+        "useTopLevelRegex": "off"
+      },
+
+      "security": { "recommended": true },
+
+      "style": {
+        "recommended": true,
+        "noDefaultExport": "error",
+        "noDoneCallback": "error",
+        "noEnum": "error",
+        "noNamespace": "error",
+        "noNegationElse": "error",
+        "noNonNullAssertion": "off",
+        "noParameterAssign": "error",
+        "noParameterProperties": "error",
+        "noRestrictedGlobals": {
+          "level": "error",
+          "options": { "deniedGlobals": { "event": "use a typed event parameter" } }
+        },
+        "noShoutyConstants": "off",
+        "noYodaExpression": "error",
+        "useBlockStatements": "off",
+        "useCollapsedElseIf": "error",
+        "useConsistentArrayType": { "level": "error", "options": { "syntax": "shorthand" } },
+        "useConsistentBuiltinInstantiation": "error",
+        "useConst": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useExponentiationOperator": "error",
+        "useExportType": "error",
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "strictCase": false,
+            "requireAscii": true,
+            "filenameCases": ["kebab-case"]
+          }
+        },
+        "useForOf": "error",
+        "useFragmentSyntax": "error",
+        "useImportType": "error",
+        "useNamingConvention": {
+          "level": "off",
+          "options": { "strictCase": false, "requireAscii": true }
+        },
+        "useNodejsImportProtocol": "error",
+        "useNumberNamespace": "error",
+        "useShorthandAssign": "error",
+        "useSingleVarDeclarator": "error",
+        "useTemplate": "error",
+        "useThrowNewError": "error",
+        "useThrowOnlyError": "error"
+      },
+
+      "suspicious": {
+        "recommended": true,
+        "noApproximativeNumericConstant": "error",
+        "noConsole": { "level": "error", "options": { "allow": ["error"] } },
+        "noEmptyBlockStatements": "error",
+        "noEvolvingTypes": "error",
+        "noExportsInTest": "error",
+        "noFocusedTests": "error",
+        "noMisplacedAssertion": "error",
+        "noSkippedTests": "error",
+        "noSuspiciousSemicolonInJsx": "error",
+        "useAwait": "error",
+        "useErrorMessage": "error",
+        "useGuardForIn": "error",
+        "useNumberToFixedDigitsArgument": "error"
+      },
+
+      "nursery": { "recommended": false }
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": { "source": { "organizeImports": "on" } }
+  },
+  "overrides": [
+    {
+      "includes": ["tests/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off",
+            "noDefaultExport": "off"
+          },
+          "suspicious": {
+            "noConsole": "off",
+            "noExplicitAny": "off",
+            "noEmptyBlockStatements": "off"
+          },
+          "correctness": {
+            "noUndeclaredDependencies": "off"
+          },
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off"
+          },
+          "performance": {
+            "noDelete": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["scripts/**/*.sh"],
+      "linter": { "enabled": false },
+      "formatter": { "enabled": false }
+    }
+  ]
+}

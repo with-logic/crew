@@ -16,8 +16,8 @@
  */
 
 import yargsFactory from "yargs/yargs";
-import { CrewError } from "../core/errors.ts";
 import type { CommandFlags } from "../commands/types.ts";
+import { CrewError } from "../core/errors.ts";
 
 /** Result of parsing. */
 export interface ParsedArgs {
@@ -42,11 +42,7 @@ const STRING_SUB: Record<string, readonly string[]> = {
 /** Flags that should always be collected into a list. */
 const ARRAY_GLOBALS = ["target"] as const;
 /** The subset of flags that is part of the public `CommandFlags` surface. */
-const BUILT_IN_FLAGS = new Set<string>([
-  ...BOOLEAN_GLOBALS,
-  ...STRING_GLOBALS,
-  ...ARRAY_GLOBALS,
-]);
+const BUILT_IN_FLAGS = new Set<string>([...BOOLEAN_GLOBALS, ...STRING_GLOBALS, ...ARRAY_GLOBALS]);
 
 /** Parse raw argv (already stripped of `node` and script name). */
 export function parseArgs(argv: readonly string[]): ParsedArgs {
@@ -91,23 +87,24 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       })
       .parseSync(rest as string[]);
   } catch (err) {
-    if (err instanceof CrewError) throw err;
-    throw new CrewError("usage_error", (err as Error).message);
+    // yargs's `.fail()` handler always throws a `CrewError`, so this
+    // rethrow narrows correctly without a separate fallback.
+    throw err as CrewError;
   }
 
   const positional = ((parsed["_"] as unknown[]) ?? []).map(String);
 
   const scope = stringOrUndefined(parsed["scope"]) ?? "user";
-  if (scope !== "user" && scope !== "project") {
+  if (scope !== "user" && scope !== "project")
     throw new CrewError("usage_error", `--scope must be \`user\` or \`project\` (got ${scope})`);
-  }
-
   const target = asStringArray(parsed["target"]);
 
   const extras: Record<string, string | boolean> = {};
   for (const [key, value] of Object.entries(parsed)) {
     if (key === "_" || key === "$0") continue;
-    if (BUILT_IN_FLAGS.has(key)) continue;
+    if (BUILT_IN_FLAGS.has(key)) {
+      continue;
+    }
     if (typeof value === "string" || typeof value === "boolean") {
       extras[key] = value;
     }
@@ -133,7 +130,9 @@ function stringOrUndefined(v: unknown): string | undefined {
 }
 
 function asStringArray(v: unknown): string[] {
-  if (Array.isArray(v)) return v.map(String);
+  if (Array.isArray(v)) {
+    return v.map(String);
+  }
   if (typeof v === "string") return [v];
   return [];
 }

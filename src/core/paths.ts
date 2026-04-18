@@ -12,8 +12,10 @@ import { join } from "node:path";
 
 /** Resolve the effective crew home directory (`~/.crew` by default). */
 export function crewHome(): string {
-  const override = process.env.CREW_HOME;
-  if (override && override.length > 0) return override;
+  const override = process.env["CREW_HOME"];
+  if (override && override.length > 0) {
+    return override;
+  }
   return join(homedir(), ".crew");
 }
 
@@ -23,8 +25,10 @@ export function crewHome(): string {
  * redirect via `CREW_LAUNCH_AGENTS_DIR`.
  */
 export function launchAgentsDir(): string {
-  const override = process.env.CREW_LAUNCH_AGENTS_DIR;
-  if (override && override.length > 0) return override;
+  const override = process.env["CREW_LAUNCH_AGENTS_DIR"];
+  if (override && override.length > 0) {
+    return override;
+  }
   return join(homedir(), "Library", "LaunchAgents");
 }
 

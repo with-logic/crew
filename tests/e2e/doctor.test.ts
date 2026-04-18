@@ -6,10 +6,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
+import { readState } from "../../src/state/load.ts";
 import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
 import { codexAdapter } from "../../src/targets/codex.ts";
 import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
-import { readState } from "../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -43,7 +43,12 @@ function setup() {
 }
 
 beforeEach(() => setup());
-afterEach(() => { if (restore) restore(); restore = null; });
+afterEach(() => {
+  if (restore) {
+    restore();
+  }
+  restore = null;
+});
 
 describe("doctor", () => {
   test("clean state reports OK", () => {

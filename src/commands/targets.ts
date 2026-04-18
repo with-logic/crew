@@ -5,10 +5,10 @@
  * whether it's force-enabled or disabled.
  */
 
-import { CrewError } from "../core/errors.ts";
 import { readConfig, writeConfig } from "../config/load.ts";
-import { ALL_ADAPTERS, adapterByName } from "../targets/registry.ts";
+import { CrewError } from "../core/errors.ts";
 import { withStateLock } from "../state/lock.ts";
+import { ALL_ADAPTERS, adapterByName } from "../targets/registry.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function targetsCommand(ctx: CommandContext): CommandOutput {
@@ -38,10 +38,16 @@ function list(ctx: CommandContext): CommandOutput {
   return { exitCode: 0, human, json: { targets: rows } };
 }
 
-function toggle(ctx: CommandContext, args: readonly string[], mode: "enable" | "disable"): CommandOutput {
+function toggle(
+  ctx: CommandContext,
+  args: readonly string[],
+  mode: "enable" | "disable",
+): CommandOutput {
   if (args.length !== 1) throw new CrewError("usage_error", `usage: crew targets ${mode} <name>`);
   const name = args[0]!;
-  if (!adapterByName(name)) throw new CrewError("usage_error", `unknown target: ${name}`);
+  if (!adapterByName(name)) {
+    throw new CrewError("usage_error", `unknown target: ${name}`);
+  }
   withStateLock(() => {
     const config = readConfig(ctx.home);
     const forced = new Set(config.forced_targets);

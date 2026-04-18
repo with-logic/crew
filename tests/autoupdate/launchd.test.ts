@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { plistXml, readAutoupdateLogTail } from "../../src/autoupdate/launchd.ts";
 import { parseDuration } from "../../src/commands/autoupdate.ts";
 import { CrewError } from "../../src/core/errors.ts";
-import { makeCrewHome } from "../helpers/env.ts";
-import { writeFileSync, mkdirSync } from "node:fs";
 import { paths } from "../../src/core/paths.ts";
+import { makeCrewHome } from "../helpers/env.ts";
 
 describe("plistXml", () => {
   test("C-AUTO-01/02 contains required keys", () => {

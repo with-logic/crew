@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
-import { hasSkillMd, loadSkill } from "../../src/skill/load.ts";
 import { extractFrontmatter } from "../../src/skill/frontmatter.ts";
+import { hasSkillMd, loadSkill } from "../../src/skill/load.ts";
 import { validateFrontmatter } from "../../src/skill/validate.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -65,7 +65,7 @@ describe("loadSkill", () => {
   });
 
   test("C-SPEC-08 name longer than 64 chars fails", () => {
-    const longName = "a" + "b".repeat(64);
+    const longName = `a${"b".repeat(64)}`;
     const d = makeTempDir();
     const skill = makeSkill(d, longName, skillFrontmatter({ name: longName }));
     expect(() => loadSkill(skill)).toThrow(/name/);
@@ -93,7 +93,11 @@ describe("loadSkill", () => {
 
   test("compatibility within limits is accepted", () => {
     const d = makeTempDir();
-    const skill = makeSkill(d, "foo", skillFrontmatter({ name: "foo", compatibility: "Claude Code" }));
+    const skill = makeSkill(
+      d,
+      "foo",
+      skillFrontmatter({ name: "foo", compatibility: "Claude Code" }),
+    );
     const loaded = loadSkill(skill);
     expect(loaded.frontmatter.compatibility).toBe("Claude Code");
   });
@@ -106,7 +110,16 @@ describe("loadSkill", () => {
 
   test("valid skill loads", () => {
     const d = makeTempDir();
-    const skill = makeSkill(d, "foo", skillFrontmatter({ name: "foo", license: "MIT", homepage: "https://example.com", dependencies: ["bar"] }));
+    const skill = makeSkill(
+      d,
+      "foo",
+      skillFrontmatter({
+        name: "foo",
+        license: "MIT",
+        homepage: "https://example.com",
+        dependencies: ["bar"],
+      }),
+    );
     const loaded = loadSkill(skill);
     expect(loaded.frontmatter.name).toBe("foo");
     expect(loaded.frontmatter.license).toBe("MIT");

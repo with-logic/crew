@@ -13,15 +13,25 @@ import { tryReadJson } from "../util/json.ts";
 import { baseFor, type InstalledSkillRecord, type TargetAdapter } from "./adapter.ts";
 
 /** List every crew-installed skill for one adapter at one scope. */
-export function listInstalledForTarget(adapter: TargetAdapter, scope: Scope, cwd: string): InstalledSkillRecord[] {
+export function listInstalledForTarget(
+  adapter: TargetAdapter,
+  scope: Scope,
+  cwd: string,
+): InstalledSkillRecord[] {
   const base = baseFor(adapter, scope, cwd);
-  if (!isDirectory(base)) return [];
+  if (!isDirectory(base)) {
+    return [];
+  }
   const records: InstalledSkillRecord[] = [];
   for (const name of listDir(base)) {
     const installDir = join(base, name);
-    if (!isDirectory(installDir)) continue;
+    if (!isDirectory(installDir)) {
+      continue;
+    }
     const marker = tryReadJson<Marker>(join(installDir, ".crew.json"));
-    if (!marker) continue;
+    if (!marker) {
+      continue;
+    }
     records.push({ adapter: adapter.name, scope, installDir, marker });
   }
   return records;

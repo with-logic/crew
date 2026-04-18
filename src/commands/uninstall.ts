@@ -7,10 +7,10 @@
  */
 
 import { CrewError } from "../core/errors.ts";
-import { readState, writeState, removeByName } from "../state/load.ts";
+import { readState, removeByName, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
-import { adapterByName } from "../targets/registry.ts";
 import { uninstallSkillFromTarget } from "../targets/install.ts";
+import { adapterByName } from "../targets/registry.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
@@ -42,7 +42,9 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
       for (const entry of entries) {
         for (const targetName of entry.targets) {
           const adapter = adapterByName(targetName);
-          if (!adapter) continue;
+          if (!adapter) {
+            continue;
+          }
           try {
             const outcome = uninstallSkillFromTarget({
               adapter,
@@ -51,15 +53,23 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
               skillName: name,
               force: ctx.flags.force,
             });
-            if (outcome === "removed") rec.removedFrom.push(targetName);
-            else rec.absentFrom.push(targetName);
+            if (outcome === "removed") {
+              rec.removedFrom.push(targetName);
+            } else {
+              rec.absentFrom.push(targetName);
+            }
           } catch (err) {
             const ce = err as CrewError;
-            rec.failures.push({ target: targetName, error: { code: ce.code ?? "usage_error", message: ce.message } });
+            rec.failures.push({
+              target: targetName,
+              error: { code: ce.code ?? "usage_error", message: ce.message },
+            });
           }
         }
       }
-      if (rec.failures.length > 0) exitCode = 1;
+      if (rec.failures.length > 0) {
+        exitCode = 1;
+      }
       state = removeByName(state, name);
       records.push(rec);
     }
@@ -72,7 +82,9 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
   const human: string[] = [];
   for (const r of records) {
     if (r.failures.length > 0) {
-      human.push(`${r.name}: FAILED (${r.failures.map((f) => `${f.target}:${f.error.code}`).join(", ")})`);
+      human.push(
+        `${r.name}: FAILED (${r.failures.map((f) => `${f.target}:${f.error.code}`).join(", ")})`,
+      );
     } else {
       human.push(`${r.name}: removed from ${r.removedFrom.join(", ") || "(nothing)"}`);
     }

@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
+import { readState } from "../../src/state/load.ts";
 import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
 import { codexAdapter } from "../../src/targets/codex.ts";
 import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
@@ -26,31 +27,49 @@ import {
   skillFrontmatter,
   tagRepo,
 } from "../helpers/fixtures.ts";
-import { readState } from "../../src/state/load.ts";
 
 /**
  * Redirect all target adapters to tmp directories so tests never touch
  * `~/.claude/skills` etc. Returns the tmp roots keyed by adapter name and
  * a restore function.
  */
-function redirectAdapters(): { targets: Record<string, string>; restore: () => void; projectRoot: string } {
+function redirectAdapters(): {
+  targets: Record<string, string>;
+  restore: () => void;
+  projectRoot: string;
+} {
   const projectRoot = makeTempDir("crew-proj-");
   const originals = {
-    cc: { user: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect, project: claudeCodeAdapter.projectPath },
-    co: { user: codexAdapter.userPath, detect: codexAdapter.detect, project: codexAdapter.projectPath },
-    ge: { user: geminiCliAdapter.userPath, detect: geminiCliAdapter.detect, project: geminiCliAdapter.projectPath },
+    cc: {
+      user: claudeCodeAdapter.userPath,
+      detect: claudeCodeAdapter.detect,
+      project: claudeCodeAdapter.projectPath,
+    },
+    co: {
+      user: codexAdapter.userPath,
+      detect: codexAdapter.detect,
+      project: codexAdapter.projectPath,
+    },
+    ge: {
+      user: geminiCliAdapter.userPath,
+      detect: geminiCliAdapter.detect,
+      project: geminiCliAdapter.projectPath,
+    },
   };
   const ccRoot = makeTempDir("crew-cc-");
   const coRoot = makeTempDir("crew-co-");
   const geRoot = makeTempDir("crew-ge-");
   (claudeCodeAdapter as { userPath: () => string }).userPath = () => ccRoot;
-  (claudeCodeAdapter as { projectPath: (cwd: string) => string }).projectPath = (cwd) => join(cwd, ".claude", "skills");
+  (claudeCodeAdapter as { projectPath: (cwd: string) => string }).projectPath = (cwd) =>
+    join(cwd, ".claude", "skills");
   (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
   (codexAdapter as { userPath: () => string }).userPath = () => coRoot;
-  (codexAdapter as { projectPath: (cwd: string) => string }).projectPath = (cwd) => join(cwd, ".codex", "skills");
+  (codexAdapter as { projectPath: (cwd: string) => string }).projectPath = (cwd) =>
+    join(cwd, ".codex", "skills");
   (codexAdapter as { detect: () => boolean }).detect = () => true;
   (geminiCliAdapter as { userPath: () => string }).userPath = () => geRoot;
-  (geminiCliAdapter as { projectPath: (cwd: string) => string }).projectPath = (cwd) => join(cwd, ".gemini", "skills");
+  (geminiCliAdapter as { projectPath: (cwd: string) => string }).projectPath = (cwd) =>
+    join(cwd, ".gemini", "skills");
   (geminiCliAdapter as { detect: () => boolean }).detect = () => true;
 
   return {
@@ -58,13 +77,15 @@ function redirectAdapters(): { targets: Record<string, string>; restore: () => v
     projectRoot,
     restore() {
       (claudeCodeAdapter as { userPath: () => string }).userPath = originals.cc.user;
-      (claudeCodeAdapter as { projectPath: (cwd: string) => string }).projectPath = originals.cc.project;
+      (claudeCodeAdapter as { projectPath: (cwd: string) => string }).projectPath =
+        originals.cc.project;
       (claudeCodeAdapter as { detect: () => boolean }).detect = originals.cc.detect;
       (codexAdapter as { userPath: () => string }).userPath = originals.co.user;
       (codexAdapter as { projectPath: (cwd: string) => string }).projectPath = originals.co.project;
       (codexAdapter as { detect: () => boolean }).detect = originals.co.detect;
       (geminiCliAdapter as { userPath: () => string }).userPath = originals.ge.user;
-      (geminiCliAdapter as { projectPath: (cwd: string) => string }).projectPath = originals.ge.project;
+      (geminiCliAdapter as { projectPath: (cwd: string) => string }).projectPath =
+        originals.ge.project;
       (geminiCliAdapter as { detect: () => boolean }).detect = originals.ge.detect;
     },
   };
@@ -99,7 +120,11 @@ describe("install from local path", () => {
 
     const state = readState(home);
     expect(state.installations).toHaveLength(1);
-    expect([...state.installations[0]!.targets].sort()).toEqual(["claude-code", "codex", "gemini-cli"]);
+    expect([...state.installations[0]!.targets].sort()).toEqual([
+      "claude-code",
+      "codex",
+      "gemini-cli",
+    ]);
   });
 
   test("C-INST-04 marker is written with fields", () => {
@@ -108,7 +133,12 @@ describe("install from local path", () => {
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     const capture = captureStreams();
     runCli(["install", skill], { home, streams: capture.streams });
-    const marker = JSON.parse(require("node:fs").readFileSync(join(redirect.targets["claude-code"]!, "demo", ".crew.json"), "utf8"));
+    const marker = JSON.parse(
+      require("node:fs").readFileSync(
+        join(redirect.targets["claude-code"]!, "demo", ".crew.json"),
+        "utf8",
+      ),
+    );
     expect(marker.schema_version).toBe(1);
     expect(marker.name).toBe("demo");
     expect(marker.source.type).toBe("path");
@@ -144,7 +174,10 @@ describe("install from local path", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const code = runCli(["install", "--target", "claude-code", skill], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--target", "claude-code", skill], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(existsSync(join(redirect.targets["claude-code"]!, "demo", "SKILL.md"))).toBe(true);
     expect(existsSync(join(redirect.targets["codex"]!, "demo"))).toBe(false);
@@ -155,7 +188,11 @@ describe("install from local path", () => {
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     const projCwd = makeTempDir("crew-proj-install-");
-    const code = runCli(["install", "--scope", "project", skill], { home, cwd: projCwd, streams: captureStreams().streams });
+    const code = runCli(["install", "--scope", "project", skill], {
+      home,
+      cwd: projCwd,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(existsSync(join(projCwd, ".claude", "skills", "demo", "SKILL.md"))).toBe(true);
   });
@@ -177,7 +214,10 @@ describe("install from local git repo (file:// URL)", () => {
     const sha = commitAll(repo2, "add skill");
     void sha;
 
-    const code = runCli(["install", `file://${repo2}`], { home, streams: captureStreams().streams });
+    const code = runCli(["install", `file://${repo2}`], {
+      home,
+      streams: captureStreams().streams,
+    });
     // Hmm -- file:// URLs aren't accepted by parseRef as we implemented.
     // Instead use an https-looking form; skip this test variant.
     void code;
@@ -220,7 +260,10 @@ describe("install safety", () => {
     writeFileSync(join(destParent, "demo", "user-file.txt"), "don't touch me");
 
     const capture = captureStreams();
-    const code = runCli(["install", "--target", "claude-code", join(src, "demo")], { home, streams: capture.streams });
+    const code = runCli(["install", "--target", "claude-code", join(src, "demo")], {
+      home,
+      streams: capture.streams,
+    });
     // claude-code failed but codex/gemini weren't targeted → anySuccess false → exit 1.
     // Per §18.6 clarification, a root skill with zero successes exits 1.
     expect(code).toBe(1);
@@ -236,7 +279,10 @@ describe("install safety", () => {
     mkdirSync(join(destParent, "demo"), { recursive: true });
     writeFileSync(join(destParent, "demo", "user-file.txt"), "don't touch me");
 
-    const code = runCli(["install", "--force", "--target", "claude-code", join(src, "demo")], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--force", "--target", "claude-code", join(src, "demo")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     // Destination now reflects the staged skill; user-file is gone.
     expect(existsSync(join(destParent, "demo", "user-file.txt"))).toBe(false);
@@ -248,13 +294,22 @@ describe("install safety", () => {
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     // First install.
-    runCli(["install", "--target", "claude-code", skill], { home, streams: captureStreams().streams });
+    runCli(["install", "--target", "claude-code", skill], {
+      home,
+      streams: captureStreams().streams,
+    });
     // User tampers.
-    writeFileSync(join(redirect.targets["claude-code"]!, "demo", "SKILL.md"), "---\nname: demo\ndescription: hacked\n---\n");
+    writeFileSync(
+      join(redirect.targets["claude-code"]!, "demo", "SKILL.md"),
+      "---\nname: demo\ndescription: hacked\n---\n",
+    );
     // Another install attempt (from the same source so no name_conflict).
     // We forge a different content to cause a reinstall path — add a file to the source.
     writeFileSync(join(skill, "NEW.md"), "new");
-    const code = runCli(["install", "--target", "claude-code", skill], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--target", "claude-code", skill], {
+      home,
+      streams: captureStreams().streams,
+    });
     // Customized → no success for this target → exit 1.
     expect(code).toBe(1);
   });
@@ -263,10 +318,19 @@ describe("install safety", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", "--target", "claude-code", skill], { home, streams: captureStreams().streams });
-    writeFileSync(join(redirect.targets["claude-code"]!, "demo", "SKILL.md"), "---\nname: demo\ndescription: hacked\n---\n");
+    runCli(["install", "--target", "claude-code", skill], {
+      home,
+      streams: captureStreams().streams,
+    });
+    writeFileSync(
+      join(redirect.targets["claude-code"]!, "demo", "SKILL.md"),
+      "---\nname: demo\ndescription: hacked\n---\n",
+    );
     writeFileSync(join(skill, "NEW.md"), "new"); // force a different hash
-    const code = runCli(["install", "--force", "--target", "claude-code", skill], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--force", "--target", "claude-code", skill], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
   });
 
@@ -274,20 +338,26 @@ describe("install safety", () => {
     const home = makeCrewHome();
     const destParent = redirect.targets["claude-code"]!;
     mkdirSync(join(destParent, "demo"), { recursive: true });
-    writeFileSync(join(destParent, "demo", ".crew.json"), JSON.stringify({
-      schema_version: 1,
-      name: "something-else",
-      source: { type: "path", path: "/x" },
-      ref: null,
-      resolved_sha: null,
-      content_hash: "sha256:0",
-      scope: "user",
-      installed_at: "2026-04-18T00:00:00Z",
-      installed_by: "crew/test",
-    }));
+    writeFileSync(
+      join(destParent, "demo", ".crew.json"),
+      JSON.stringify({
+        schema_version: 1,
+        name: "something-else",
+        source: { type: "path", path: "/x" },
+        ref: null,
+        resolved_sha: null,
+        content_hash: "sha256:0",
+        scope: "user",
+        installed_at: "2026-04-18T00:00:00Z",
+        installed_by: "crew/test",
+      }),
+    );
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const code = runCli(["install", "--target", "claude-code", skill], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--target", "claude-code", skill], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(1);
   });
 
@@ -298,7 +368,10 @@ describe("install safety", () => {
     makeSkill(srcA, "demo", skillFrontmatter({ name: "demo", description: "A" }));
     makeSkill(srcB, "demo", skillFrontmatter({ name: "demo", description: "B" }));
     runCli(["install", join(srcA, "demo")], { home, streams: captureStreams().streams });
-    const code = runCli(["install", join(srcB, "demo")], { home, streams: captureStreams().streams });
+    const code = runCli(["install", join(srcB, "demo")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 
@@ -309,7 +382,10 @@ describe("install safety", () => {
     makeSkill(srcA, "demo", skillFrontmatter({ name: "demo", description: "A" }));
     makeSkill(srcB, "demo", skillFrontmatter({ name: "demo", description: "B" }));
     runCli(["install", join(srcA, "demo")], { home, streams: captureStreams().streams });
-    const code = runCli(["install", "--force", join(srcB, "demo")], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--force", join(srcB, "demo")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 });
@@ -358,7 +434,10 @@ describe("install dependencies", () => {
     const container = makeTempDir();
     makeSkill(container, "dep", skillFrontmatter({ name: "dep" }));
     makeSkill(container, "root", skillFrontmatter({ name: "root", dependencies: ["dep"] }));
-    const code = runCli(["install", join(container, "root")], { home, streams: captureStreams().streams });
+    const code = runCli(["install", join(container, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(existsSync(join(redirect.targets["claude-code"]!, "dep", "SKILL.md"))).toBe(true);
     expect(existsSync(join(redirect.targets["claude-code"]!, "root", "SKILL.md"))).toBe(true);
@@ -369,7 +448,10 @@ describe("install dependencies", () => {
     const container = makeTempDir();
     makeSkill(container, "a", skillFrontmatter({ name: "a", dependencies: ["b"] }));
     makeSkill(container, "b", skillFrontmatter({ name: "b", dependencies: ["a"] }));
-    const code = runCli(["install", join(container, "a")], { home, streams: captureStreams().streams });
+    const code = runCli(["install", join(container, "a")], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
     expect(existsSync(join(redirect.targets["claude-code"]!, "a", "SKILL.md"))).toBe(true);
     expect(existsSync(join(redirect.targets["claude-code"]!, "b", "SKILL.md"))).toBe(true);
@@ -378,8 +460,15 @@ describe("install dependencies", () => {
   test("failed dependency fails the root install", () => {
     const home = makeCrewHome();
     const container = makeTempDir();
-    makeSkill(container, "root", skillFrontmatter({ name: "root", dependencies: ["nonexistent-xxx"] }));
-    const code = runCli(["install", join(container, "root")], { home, streams: captureStreams().streams });
+    makeSkill(
+      container,
+      "root",
+      skillFrontmatter({ name: "root", dependencies: ["nonexistent-xxx"] }),
+    );
+    const code = runCli(["install", join(container, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
     // An unresolvable dependency bubbles up as invalid_ref/ambiguous from acquire; exit 4.
     expect([4, 5]).toContain(code);
   });
@@ -404,7 +493,10 @@ describe("uninstall", () => {
     const src = makeTempDir();
     makeSkill(src, "a", skillFrontmatter({ name: "a" }));
     makeSkill(src, "b", skillFrontmatter({ name: "b" }));
-    runCli(["install", join(src, "a"), join(src, "b")], { home, streams: captureStreams().streams });
+    runCli(["install", join(src, "a"), join(src, "b")], {
+      home,
+      streams: captureStreams().streams,
+    });
     runCli(["uninstall", "a"], { home, streams: captureStreams().streams });
     for (const adapter of ["claude-code", "codex", "gemini-cli"]) {
       expect(existsSync(join(redirect.targets[adapter]!, "a"))).toBe(false);
@@ -420,7 +512,10 @@ describe("uninstall", () => {
 
   test("--force makes uninstall idempotent", () => {
     const home = makeCrewHome();
-    const code = runCli(["uninstall", "--force", "ghost"], { home, streams: captureStreams().streams });
+    const code = runCli(["uninstall", "--force", "ghost"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
   });
 });
@@ -473,7 +568,10 @@ describe("unknown commands and flags", () => {
 
   test("unknown flag -> exit 4", () => {
     const home = makeCrewHome();
-    const code = runCli(["install", "--bogus", "demo"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--bogus", "demo"], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 

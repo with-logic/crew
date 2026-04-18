@@ -6,16 +6,23 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
+import { CrewError } from "../../src/core/errors.ts";
+import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";
+import { readState, upsertEntry, writeState } from "../../src/state/load.ts";
 import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
 import { codexAdapter } from "../../src/targets/codex.ts";
 import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
-import { captureStreams, makeCrewHome } from "../helpers/env.ts";
-import { commitAll, makeGitRepo, makeSkill, makeTempDir, skillFrontmatter, tagRepo } from "../helpers/fixtures.ts";
-import { setGitRunner, resetGitRunner } from "../../src/git/exec.ts";
-import { readState, writeState, upsertEntry } from "../../src/state/load.ts";
-import { parseYaml, stringifyYaml } from "../../src/yaml/parse.ts";
 import { uninstallSkillFromTarget } from "../../src/targets/install.ts";
-import { CrewError } from "../../src/core/errors.ts";
+import { parseYaml, stringifyYaml } from "../../src/yaml/parse.ts";
+import { captureStreams, makeCrewHome } from "../helpers/env.ts";
+import {
+  commitAll,
+  makeGitRepo,
+  makeSkill,
+  makeTempDir,
+  skillFrontmatter,
+  tagRepo,
+} from "../helpers/fixtures.ts";
 
 let restore: (() => void) | null = null;
 let ccRoot: string;
@@ -46,7 +53,9 @@ function setupTargets() {
 }
 beforeEach(() => setupTargets());
 afterEach(() => {
-  if (restore) restore();
+  if (restore) {
+    restore();
+  }
   restore = null;
   resetGitRunner();
 });
@@ -67,7 +76,9 @@ describe("update: tag moved without --force", () => {
     // Delete and recreate the tag so `git fetch --tags --prune` picks up the move.
     const { runGit } = require("../../src/git/exec.ts");
     runGit(["tag", "-d", "v1"], { cwd: repo });
-    runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", "v1"], { cwd: repo });
+    runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", "v1"], {
+      cwd: repo,
+    });
 
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
@@ -112,10 +123,16 @@ describe("update: target that's no longer registered", () => {
     runCli(["install", skill], { home, streams: captureStreams().streams });
     // Rewrite state to include a bogus target name.
     const state = readState(home);
-    writeState({
-      ...state,
-      installations: state.installations.map((e) => ({ ...e, targets: [...e.targets, "bogus-target"] })),
-    }, home);
+    writeState(
+      {
+        ...state,
+        installations: state.installations.map((e) => ({
+          ...e,
+          targets: [...e.targets, "bogus-target"],
+        })),
+      },
+      home,
+    );
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
     expect(code).toBe(0);
@@ -148,7 +165,10 @@ describe("yaml edge cases", () => {
   });
   test("stringify nested list-of-map", () => {
     const v: import("../../src/yaml/parse.ts").YamlValue = {
-      items: [{ a: 1 } as import("../../src/yaml/parse.ts").YamlValue, { b: 2 } as import("../../src/yaml/parse.ts").YamlValue],
+      items: [
+        { a: 1 } as import("../../src/yaml/parse.ts").YamlValue,
+        { b: 2 } as import("../../src/yaml/parse.ts").YamlValue,
+      ],
     };
     const s = stringifyYaml(v);
     const back = parseYaml(s);
@@ -186,7 +206,13 @@ describe("uninstall edges via direct function call", () => {
       );
       require("node:fs").writeFileSync(join(base, n, "SKILL.md"), "x");
     }
-    const res = uninstallSkillFromTarget({ adapter: claudeCodeAdapter, scope: "project", cwd: proj, skillName: "demo", force: false });
+    const res = uninstallSkillFromTarget({
+      adapter: claudeCodeAdapter,
+      scope: "project",
+      cwd: proj,
+      skillName: "demo",
+      force: false,
+    });
     expect(res).toBe("removed");
     expect(existsSync(join(base, "demo"))).toBe(false);
     expect(existsSync(join(base, "sibling"))).toBe(true);
@@ -252,12 +278,14 @@ describe("upsertEntry preserves other entries", () => {
 
 describe("parseRef unusual but legal forms", () => {
   test("file:// url parses", () => {
-    const { parseRef } = require("../../src/refs/parse.ts") as typeof import("../../src/refs/parse.ts");
+    const { parseRef } =
+      require("../../src/refs/parse.ts") as typeof import("../../src/refs/parse.ts");
     const r = parseRef("file:///tmp/my-repo");
     expect(r.type).toBe("git");
   });
   test("ssh:// url parses", () => {
-    const { parseRef } = require("../../src/refs/parse.ts") as typeof import("../../src/refs/parse.ts");
+    const { parseRef } =
+      require("../../src/refs/parse.ts") as typeof import("../../src/refs/parse.ts");
     const r = parseRef("ssh://git@example.com/owner/repo.git");
     expect(r.type).toBe("git");
   });
@@ -285,11 +313,24 @@ describe("install --force on inconsistent_marker", () => {
     require("node:fs").mkdirSync(dir, { recursive: true });
     writeFileSync(
       join(dir, ".crew.json"),
-      JSON.stringify({ schema_version: 1, name: "other", source: { type: "path", path: "/x" }, ref: null, resolved_sha: null, content_hash: "sha256:x", scope: "user", installed_at: "2026-04-18T00:00:00Z", installed_by: "crew/test" }),
+      JSON.stringify({
+        schema_version: 1,
+        name: "other",
+        source: { type: "path", path: "/x" },
+        ref: null,
+        resolved_sha: null,
+        content_hash: "sha256:x",
+        scope: "user",
+        installed_at: "2026-04-18T00:00:00Z",
+        installed_by: "crew/test",
+      }),
     );
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const code = runCli(["install", "--force", "--target", "claude-code", skill], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--force", "--target", "claude-code", skill], {
+      home,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(0);
   });
 });
@@ -298,7 +339,10 @@ describe("state load: non-object in installations", () => {
   test("non-array installations falls back to empty", () => {
     const home = makeCrewHome();
     require("node:fs").mkdirSync(home, { recursive: true });
-    writeFileSync(join(home, "state.json"), JSON.stringify({ schema_version: 1, installations: "bad" }));
+    writeFileSync(
+      join(home, "state.json"),
+      JSON.stringify({ schema_version: 1, installations: "bad" }),
+    );
     const s = readState(home);
     expect(s.installations).toEqual([]);
   });
