@@ -147,6 +147,128 @@ Accepted on any command where they apply:
 - If the source matches but the ref differs, treat as an update (§10).
 - If the source differs, fail with a name-conflict error (§13) unless `--force` is given, in which case the previous install is removed first.
 
+### 5.5 Help output
+
+Help is part of the product, not a footnote. Two independent
+implementations of this spec should feel like the same tool when a
+user runs `crew` or `crew help <command>`. This section defines the
+shape of help output; wording is left to each implementation.
+
+**Goals.**
+
+- A new user who types `crew` (no arguments) should, within five
+  seconds of reading, understand what crew is and know three commands
+  they can try.
+- Someone who remembers crew roughly but forgot a flag should be able
+  to run `crew help <command>` and see a realistic example of the
+  invocation they want.
+- Help is shown on stdout with exit code 0. It is not an error.
+
+**Invocation surface.**
+
+- `crew` with no arguments MUST print the overview and exit 0.
+- `crew help` MUST print the overview and exit 0.
+- `crew help <command>` MUST print per-command help and exit 0.
+- `crew help <unknown>` MUST fall back to the overview and exit 0.
+- `crew --json help` and `crew help <command> --json` MUST emit
+  machine-readable structured help.
+
+**Overview MUST contain:**
+
+1. A one-sentence description of what crew is.
+2. A "getting started" section with at least three example invocations
+   representative of common first tasks (e.g. search, install, list).
+3. A grouped command list. Every command from §5.1 MUST appear in
+   exactly one group with a one-line description. Groups are
+   implementation choice, but a reasonable grouping is:
+   "Managing skills" (install, uninstall, update, list, info),
+   "Discovery" (search, tap), "Agents & automation" (targets,
+   autoupdate), "Housekeeping" (doctor, cache), "Meta" (help,
+   version).
+4. A pointer to per-command help (e.g. "Run `crew help <command>`").
+
+**Per-command help MUST contain:**
+
+1. A `USAGE` line showing the synopsis (command + positional
+   placeholders).
+2. A one-to-three sentence description of what the command does and
+   when to reach for it.
+3. A `FLAGS` section listing every flag meaningful for this command,
+   with a one-line description each, if the command accepts any.
+4. An `EXAMPLES` section with at least one realistic invocation and a
+   one-line gloss, unless the command is so trivial that examples add
+   no information (e.g. `crew version`).
+
+Sections beyond these (related commands, environment variables,
+platform notes) are optional.
+
+**Worked example — overview (§18.4 normative).**
+
+```
+crew 0.3.0 — a package manager for Agent Skills.
+
+One command installs a skill into every agent coder on your machine
+(Claude Code, Codex CLI, Gemini CLI) and keeps it up to date.
+
+GETTING STARTED
+  crew search <query>           Find a skill.
+  crew install <skill>          Install it everywhere.
+  crew list                     See what's installed.
+
+COMMANDS
+  Managing skills
+    install      Install skills into every detected agent.
+    uninstall    Remove installed skills.
+    update       Update skills to their latest revision.
+    list         Show installed skills.
+    info         Show details for a skill (installed or not).
+  ...
+
+Run `crew help <command>` for details and examples.
+```
+
+**Worked example — per-command help:**
+
+```
+crew install — Install one or more skills into every detected agent coder.
+
+USAGE
+  crew install <ref> [<ref>...]
+
+DESCRIPTION
+  A <ref> is a local path, a git URL, or a skill name from a
+  configured tap.
+
+FLAGS
+  --scope {user,project}   Install globally (default) or under cwd.
+  --target <name>          Restrict to named target(s). Repeatable.
+  --dry-run                Show what would be installed.
+  --force                  Overwrite a customized destination.
+
+EXAMPLES
+  $ crew install python-testing
+      Install a skill from a configured tap.
+  $ crew install ./my-skill
+      Install a skill from a local directory.
+  $ crew install gh:acme/skills@v1.2.0//python/testing
+      Install from a tagged GitHub repo at a subpath.
+```
+
+The exact labels (`USAGE` vs `Usage:`), the column alignment, and the
+prose are all implementation choice; the sections and their contents
+are what conformance requires.
+
+**JSON help output.**
+
+With `--json`, help MUST emit a structured payload:
+
+- Overview: `{ "version": "<crew-version>", "commands": [ { "name",
+  "synopsis", "summary" } ] }`.
+- Per-command: `{ "name", "synopsis", "summary" (array of strings),
+  "flags" (array of `{flag, description}` or omitted), "examples"
+  (array of `{command, description}` or omitted), "seeAlso" (array of
+  strings or omitted) }`.
+
 ## 6. On-disk layout
 
 ```
@@ -881,13 +1003,19 @@ Implementations and test suites refer to criteria by ID.
 | ID | Reference | Assertion |
 |---|---|---|
 | C-CLI-01 | §5.1 | Every command listed in §5.1 is present and reachable. |
-| C-CLI-02 | §5.1 | `crew help` lists every subcommand. |
-| C-CLI-03 | §5.1 | `crew help <skill>` prints per-command usage. |
+| C-CLI-02 | §5.5 | `crew help` (and `crew` with no arguments) prints the overview on stdout and exits 0. |
+| C-CLI-03 | §5.5 | `crew help <command>` prints per-command help on stdout and exits 0. |
 | C-CLI-04 | §5.1 | `crew version` prints a version string and exits 0. |
 | C-CLI-05 | §5.2 | `--json` on `list`, `search`, `info`, `targets`, `autoupdate status` produces valid JSON on stdout and no human-readable noise. |
 | C-CLI-06 | §5.2 | `--quiet` suppresses non-error stdout. Error output still reaches stderr. |
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
+| C-CLI-09 | §5.5 | Bare `crew` is equivalent to `crew help` — same output, exit 0 (no "usage error"). |
+| C-CLI-10 | §5.5 | `crew help <unknown>` falls back to the overview and exits 0. |
+| C-CLI-11 | §5.5 | The overview contains a one-sentence description of crew, a getting-started section with at least three example invocations, and a command list covering every command from §5.1. |
+| C-CLI-12 | §5.5 | Per-command help for every command in §5.1 contains a USAGE synopsis and a description. Every command except `version` also contains at least one example. |
+| C-CLI-13 | §5.5 | `crew help --json` emits `{version, commands: [{name, synopsis, summary}]}` covering every command in §5.1. |
+| C-CLI-14 | §5.5 | `crew help <command> --json` emits `{name, synopsis, summary, ...}` with the per-command fields defined in §5.5. |
 
 ### 18.4 Worked examples
 

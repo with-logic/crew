@@ -50,11 +50,11 @@ const BUILT_IN_FLAGS = new Set<string>([
 
 /** Parse raw argv (already stripped of `node` and script name). */
 export function parseArgs(argv: readonly string[]): ParsedArgs {
-  if (argv.length === 0) {
-    throw new CrewError("usage_error", "usage: crew <command> [options] [args...]");
-  }
-  const command = argv[0]!;
-  const rest = argv.slice(1);
+  // Bare `crew` with no arguments: route to `help` so the user sees an
+  // overview and examples rather than a "usage_error".
+  const effective = argv.length === 0 ? (["help"] as readonly string[]) : argv;
+  const command = effective[0]!;
+  const rest = effective.slice(1);
 
   const booleans = [...BOOLEAN_GLOBALS, ...(BOOLEAN_SUB[command] ?? [])];
   const strings = [...STRING_GLOBALS, ...(STRING_SUB[command] ?? [])];

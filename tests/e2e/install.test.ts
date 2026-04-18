@@ -485,10 +485,14 @@ describe("unknown commands and flags", () => {
     expect(capture.stdout()).toMatch(/crew \d+\.\d+\.\d+/);
   });
 
-  test("no args -> exit 4 with usage error", () => {
+  test("bare `crew` shows the help overview and exits 0", () => {
     const home = makeCrewHome();
-    const code = runCli([], { home, streams: captureStreams().streams });
-    expect(code).toBe(4);
+    const capture = captureStreams();
+    const code = runCli([], { home, streams: capture.streams });
+    expect(code).toBe(0);
+    const stdout = capture.stdout();
+    expect(stdout).toContain("GETTING STARTED");
+    expect(stdout).toContain("COMMANDS");
   });
 
   test("--json outputs valid JSON", () => {
