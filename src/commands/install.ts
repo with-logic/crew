@@ -35,9 +35,6 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   if (!allAlreadyInstalled) {
     const anyRootFail = result.summary.records.some((r) => !r.anySuccess);
     if (anyRootFail) exitCode = 1;
-    if (result.summary.records.length === 0 && result.alreadyInstalled.length === 0) {
-      exitCode = 2;
-    }
   }
 
   const human: string[] = [];

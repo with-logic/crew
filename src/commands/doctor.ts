@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { readConfig } from "../config/load.ts";
 import { crewHome, paths } from "../core/paths.ts";
-import type { Marker, StateEntry } from "../core/types.ts";
+import type { StateEntry } from "../core/types.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { ALL_ADAPTERS } from "../targets/registry.ts";
@@ -118,7 +118,10 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   const storeDir = paths(home).storeDir;
   if (isDirectory(storeDir)) {
     // Already handled by GC in --repair below. For non-repair runs, just report.
-    const referenced = new Set(stateEntries.filter((e) => e.resolved_sha).map((e) => `${e.name}@${e.resolved_sha!.slice(0, 8)}`));
+    const referenced = new Set<string>();
+    for (const e of stateEntries) {
+      if (e.resolved_sha) referenced.add(`${e.name}@${e.resolved_sha.slice(0, 8)}`);
+    }
     const { listDir } = require("../util/fs.ts") as typeof import("../util/fs.ts");
     for (const name of listDir(storeDir)) {
       if (!referenced.has(name)) {
@@ -144,26 +147,42 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
       let current = readState(home);
       // Orphaned state entries: entries whose target markers are missing AND
       // the target is not detected — remove.
-      current = {
-        schema_version: 1,
-        installations: current.installations.filter((entry) => {
-          const anyMarkerExists = markers.some(
-            (m) =>
-              m.record.marker.name === entry.name &&
-              m.record.scope === entry.scope &&
-              entry.targets.includes(m.record.adapter),
-          );
-          return anyMarkerExists;
-        }),
-      };
+      const keep: StateEntry[] = [];
+      for (const entry of current.installations) {
+        let anyMarkerExists = false;
+        for (const m of markers) {
+          if (
+            m.record.marker.name === entry.name &&
+            m.record.scope === entry.scope &&
+            entry.targets.includes(m.record.adapter)
+          ) {
+            anyMarkerExists = true;
+            break;
+          }
+        }
+        if (anyMarkerExists) keep.push(entry);
+      }
+      current = { schema_version: 1, installations: keep };
 
       // Orphaned markers: reconstruct state entries from markers.
       for (const m of markers) {
+        const marker = m.record.marker;
         const existing = current.installations.find(
-          (e) => e.name === m.record.marker.name && e.scope === m.record.scope,
+          (e) => e.name === marker.name && e.scope === m.record.scope,
         );
         if (!existing) {
-          const entry: StateEntry = markerToStateEntry(m.record.marker, m.record.adapter);
+          const pinned = marker.ref !== null && (/^[0-9a-f]{40}$/i.test(marker.ref) || /^v?\d/.test(marker.ref));
+          const entry: StateEntry = {
+            name: marker.name,
+            source: marker.source,
+            ref: marker.ref,
+            resolved_sha: marker.resolved_sha,
+            content_hash: marker.content_hash,
+            scope: marker.scope,
+            installed_at: marker.installed_at,
+            targets: [m.record.adapter],
+            pinned,
+          };
           current = { schema_version: 1, installations: [...current.installations, entry] };
         } else if (!existing.targets.includes(m.record.adapter)) {
           current = {
@@ -195,17 +214,3 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   return { exitCode, human, json: { findings } };
 }
 
-function markerToStateEntry(marker: Marker, adapter: string): StateEntry {
-  const pinned = marker.ref !== null && (/^[0-9a-f]{40}$/i.test(marker.ref) || /^v?\d/.test(marker.ref));
-  return {
-    name: marker.name,
-    source: marker.source,
-    ref: marker.ref,
-    resolved_sha: marker.resolved_sha,
-    content_hash: marker.content_hash,
-    scope: marker.scope,
-    installed_at: marker.installed_at,
-    targets: [adapter],
-    pinned,
-  };
-}

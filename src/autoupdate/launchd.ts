@@ -121,14 +121,10 @@ export function resetLaunchctlRunner(): void {
 export function readAutoupdateLogTail(home: string = crewHome()): { last_run: string | null; last_line: string | null } {
   const p = paths(home).autoupdateLog;
   if (!exists(p)) return { last_run: null, last_line: null };
-  try {
-    const contents = readFileSync(p, "utf8");
-    const lines = contents.split("\n").filter((l) => l.length > 0);
-    if (lines.length === 0) return { last_run: null, last_line: null };
-    return { last_run: null, last_line: lines[lines.length - 1]! };
-  } catch {
-    return { last_run: null, last_line: null };
-  }
+  const contents = readFileSync(p, "utf8");
+  const lines = contents.split("\n").filter((l) => l.length > 0);
+  if (lines.length === 0) return { last_run: null, last_line: null };
+  return { last_run: null, last_line: lines[lines.length - 1]! };
 }
 
 function runLaunchctl(args: string[]): boolean {

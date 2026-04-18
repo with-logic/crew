@@ -47,5 +47,8 @@ bun run uninstall-bin
 ## Test
 
 ```
-bun test --coverage
+bun test
 ```
+
+The suite runs with coverage enabled and fails if either line or
+function coverage drops below 100% — see `bunfig.toml`.

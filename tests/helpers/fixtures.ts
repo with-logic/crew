@@ -75,8 +75,3 @@ export function tagRepo(path: string, tag: string): void {
   runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", tag], { cwd: path });
 }
 
-/** Write a file inside a directory (creating parents). */
-export function writeFile(path: string, contents: string): void {
-  mkdirSync(join(path, "..").replace(/[^/]+$/, ""), { recursive: true });
-  writeFileSync(path, contents);
-}

@@ -144,26 +144,18 @@ function canonicalizeUrl(raw: string): string | null {
 
   // HTTP(S): validate and normalize.
   if (url.startsWith("http://") || url.startsWith("https://")) {
-    try {
-      const u = new URL(url);
-      if (!u.hostname || !u.pathname || u.pathname === "/") return null;
-      // Path must have at least `/owner/repo`.
-      const segments = u.pathname.split("/").filter(Boolean);
-      if (segments.length < 2) return null;
-      return url;
-    } catch {
-      return null;
-    }
+    const u = new URL(url);
+    if (!u.hostname || !u.pathname || u.pathname === "/") return null;
+    // Path must have at least `/owner/repo`.
+    const segments = u.pathname.split("/").filter(Boolean);
+    if (segments.length < 2) return null;
+    return url;
   }
 
   // file:// and ssh:// URLs: accept as-is (mostly for testing / internal mirrors).
   if (url.startsWith("file://") || url.startsWith("ssh://")) {
-    try {
-      new URL(url);
-      return url;
-    } catch {
-      return null;
-    }
+    new URL(url); // validate; any parse error bubbles up.
+    return url;
   }
 
   return null;

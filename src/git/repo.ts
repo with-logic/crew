@@ -17,10 +17,10 @@ export function cloneRepo(url: string, dest: string, full: boolean = false): voi
     const args = full ? ["clone", url, dest] : ["clone", "--no-single-branch", url, dest];
     runGit(args);
   } catch (err) {
-    if (err instanceof GitProcessError) {
-      throw new CrewError("source_unreachable", `failed to clone ${url}: ${err.result.stderr.trim()}`);
-    }
-    throw err;
+    // `runGit` only ever throws `GitProcessError`, so this narrow is
+    // safe. Translate to the user-facing error category.
+    const ge = err as GitProcessError;
+    throw new CrewError("source_unreachable", `failed to clone ${url}: ${ge.result.stderr.trim()}`);
   }
 }
 
@@ -33,17 +33,15 @@ export function ensureRepo(url: string, dest: string): boolean {
     cloneRepo(url, dest);
     return true;
   }
-  if (!isDirectory(`${dest}/.git`) && !isDirectory(dest + "/.git")) {
-    // Something exists but isn't a git checkout — treat as missing and recreate.
+  if (!isDirectory(`${dest}/.git`)) {
+    // Something exists but isn't a git checkout.
     throw new CrewError("source_unreachable", `existing path ${dest} is not a git repository`);
   }
   try {
     runGit(["fetch", "--tags", "--prune", "origin"], { cwd: dest });
   } catch (err) {
-    if (err instanceof GitProcessError) {
-      throw new CrewError("source_unreachable", `git fetch failed in ${dest}: ${err.result.stderr.trim()}`);
-    }
-    throw err;
+    const ge = err as GitProcessError;
+    throw new CrewError("source_unreachable", `git fetch failed in ${dest}: ${ge.result.stderr.trim()}`);
   }
   return false;
 }
@@ -104,10 +102,8 @@ export function checkoutSha(repoPath: string, sha: string): void {
   try {
     runGit(["checkout", "--quiet", "--detach", sha], { cwd: repoPath });
   } catch (err) {
-    if (err instanceof GitProcessError) {
-      throw new CrewError("ref_not_found", `could not check out ${sha}: ${err.result.stderr.trim()}`);
-    }
-    throw err;
+    const ge = err as GitProcessError;
+    throw new CrewError("ref_not_found", `could not check out ${sha}: ${ge.result.stderr.trim()}`);
   }
 }
 

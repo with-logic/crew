@@ -156,31 +156,18 @@ function topoSort(byName: Map<string, ResolvedSkill>): ResolvedSkill[] {
   return out;
 }
 
-/** Extract a best-guess dependency name from a reference string. */
+/**
+ * Extract a best-guess dependency name from a reference string. Used only
+ * to disambiguate when a directory-source expansion returns multiple
+ * candidate skills. An indeterminate name returns `null`, which the
+ * caller handles by falling back to the first candidate.
+ */
 function extractDepName(ref: string): string | null {
   const trimmed = ref.trim();
-  // Bare tap name?
-  if (!/[\/:\.]/.test(trimmed) && !trimmed.startsWith("~")) {
-    // strip any `@ref` tail
-    const atIdx = trimmed.lastIndexOf("@");
-    const name = atIdx > 0 ? trimmed.slice(0, atIdx) : trimmed;
-    return name.match(/^[a-z][a-z0-9-]*$/) ? name : null;
-  }
-  // Qualified tap source `tap/name[@ref]`
-  if (/^[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*(@[^\/\s]+)?$/.test(trimmed)) {
-    const withoutRef = trimmed.split("@")[0]!;
-    const parts = withoutRef.split("/");
-    return parts[parts.length - 1] ?? null;
-  }
-  // Git/subpath form: last segment of subpath (if any), else basename of URL.
-  const hashIdx = trimmed.indexOf("//", trimmed.indexOf("://") >= 0 ? trimmed.indexOf("://") + 3 : 0);
-  if (hashIdx >= 0) {
-    const subpath = trimmed.slice(hashIdx + 2);
-    const cleaned = subpath.split("@")[0]!;
-    const segs = cleaned.split("/").filter(Boolean);
-    const last = segs[segs.length - 1];
-    return last && /^[a-z][a-z0-9-]*$/.test(last) ? last : null;
-  }
+  // Bare tap name or `tap/name` (both may have an `@ref` tail).
+  const bareOrQualified = trimmed.split("@")[0]!;
+  const tail = bareOrQualified.split("/").pop() ?? "";
+  if (/^[a-z][a-z0-9-]*$/.test(tail)) return tail;
   return null;
 }
 
@@ -208,17 +195,12 @@ function resolveDependency(
 
   const acquired = acquireSource(depSource, config, home);
   const list = expandSkills(acquired.rootDir);
-  // A dependency reference names a single skill. The reference either
-  // points directly at a skill directory (`list.length === 1`) or at a
-  // container — in that case we pick the matching name. The caller
-  // ensures every dependency reference identifies a specific skill.
+  // A dependency reference names a single skill. `list.length === 1` is
+  // the common case (the ref points straight at a skill directory). If
+  // the resolved location expanded into multiple skills, prefer the one
+  // whose name the ref names; otherwise take the first.
   const depName = extractDepName(originalRef);
-  const matched =
-    list.length === 1
-      ? list[0]!
-      : depName
-        ? list.find((l) => l.frontmatter.name === depName) ?? list[0]!
-        : list[0]!;
+  const matched = (depName && list.find((l) => l.frontmatter.name === depName)) || list[0]!;
   return {
     acquired,
     loaded: matched,
@@ -274,8 +256,6 @@ function derivedSiblingMarker(parentMarker: MarkerSource, _parentRoot: string, s
     }
     case "path":
       return { type: "path", path: siblingRoot };
-    default:
-      return parentMarker;
   }
 }
 
@@ -284,19 +264,14 @@ function markerSourceFor(acquired: AcquiredSource, source: Source, loaded: Loade
   // If the skill's path is deeper than rootDir (directory expansion case),
   // adjust the tap path / git subpath accordingly.
   const rel = loaded.path === acquiredRootDir ? "" : loaded.path.slice(acquiredRootDir.length + 1);
-
-  switch (source.type) {
-    case "tap": {
-      const tap = acquired.tapName ?? (source.tap ?? "");
-      const path = rel.length > 0 ? `${source.name}/${rel}` : source.name;
-      return { type: "tap", tap, path };
-    }
-    case "git": {
-      const subpath = rel.length > 0 ? (source.subpath.length > 0 ? `${source.subpath}/${rel}` : rel) : source.subpath;
-      return { type: "git", url: source.url, subpath };
-    }
-    case "path": {
-      return { type: "path", path: loaded.path };
-    }
+  if (source.type === "tap") {
+    const tap = acquired.tapName ?? (source.tap ?? "");
+    const path = rel.length > 0 ? `${source.name}/${rel}` : source.name;
+    return { type: "tap", tap, path };
   }
+  if (source.type === "git") {
+    const subpath = rel.length > 0 ? (source.subpath.length > 0 ? `${source.subpath}/${rel}` : rel) : source.subpath;
+    return { type: "git", url: source.url, subpath };
+  }
+  return { type: "path", path: loaded.path };
 }

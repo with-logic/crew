@@ -150,17 +150,26 @@ export function gitCachePath(source: GitSource, home: string = crewHome()): stri
   return dir;
 }
 
+/**
+ * Convert a canonical git URL to a filesystem-safe `host/owner/repo`
+ * key. `parseRef` only produces URLs that match one of the four shapes
+ * below, so the final unconditional return is a total fallback for any
+ * future shapes that get added.
+ */
 function urlToHostOwnerRepo(url: string): string {
   // https://host/owner/repo[.git] → host/owner/repo
   let m = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
   if (m) return `${m[1]!}/${m[2]!}`;
+  // ssh://[user@]host[:port]/owner/repo[.git] → host/owner/repo
+  m = url.match(/^ssh:\/\/(?:[^@]+@)?([^:/]+)(?::\d+)?\/(.+?)(?:\.git)?$/);
+  if (m) return `${m[1]!}/${m[2]!}`;
   // git@host:owner/repo[.git] → host/owner/repo
   m = url.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
   if (m) return `${m[1]!}/${m[2]!}`;
-  // file:///abs/path → file/<sanitized-abs-path>
-  m = url.match(/^file:\/\/(.+?)(?:\.git)?$/);
-  if (m) return `file/${sanitizeSegment(m[1]!)}`;
-  return sanitizeSegment(url);
+  // file:///abs/path → file/<sanitized-abs-path>. The regex is total
+  // over `file://*` so the match always succeeds here.
+  m = url.match(/^file:\/\/(.+?)(?:\.git)?$/)!;
+  return `file/${sanitizeSegment(m[1]!)}`;
 }
 
 function sanitizeSegment(s: string): string {

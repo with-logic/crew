@@ -84,11 +84,7 @@ export function parseDuration(raw: string): number {
   const m = raw.match(/^(\d+)([smhd])$/);
   if (!m) throw new CrewError("usage_error", `invalid duration: ${raw}`);
   const n = parseInt(m[1]!, 10);
-  switch (m[2]) {
-    case "s": return n;
-    case "m": return n * 60;
-    case "h": return n * 3600;
-    case "d": return n * 86400;
-  }
-  throw new CrewError("usage_error", `invalid duration: ${raw}`);
+  const unit = m[2] as "s" | "m" | "h" | "d";
+  const scale = { s: 1, m: 60, h: 3600, d: 86400 }[unit];
+  return n * scale;
 }

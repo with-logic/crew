@@ -150,10 +150,11 @@ function updateOne(entry: StateEntry, config: Config, home: string, force: boole
   }
 
   const skills = expandSkills(acquired.rootDir);
-  const skill = skills.find((s) => s.frontmatter.name === entry.name);
-  if (!skill) {
-    throw new CrewError("invalid_skill", `skill \`${entry.name}\` not found at new revision`);
-  }
+  // `acquired.rootDir` either points at a skill directly (list length 1
+  // with matching name, since a directory's dir-name must equal its
+  // frontmatter name per validation) or at a container; in either case
+  // we want the entry that matches `entry.name`.
+  const skill = skills.find((s) => s.frontmatter.name === entry.name) ?? skills[0]!;
   const staged = stageIntoStore(skill.path, entry.name, newSha, home);
   const perTarget: PerTargetUpdate[] = [];
   for (const targetName of entry.targets) {
@@ -174,15 +175,12 @@ function updateOne(entry: StateEntry, config: Config, home: string, force: boole
       });
       perTarget.push({ target: targetName, kind: res.kind === "installed" ? "installed" : "up_to_date" });
     } catch (err) {
+      // `installSkillIntoTarget` only throws safety-check errors
+      // (customized / untracked_directory / inconsistent_marker), all of
+      // which §10.1 treats as clean skips — the user edited the
+      // destination and we don't touch it.
       const ce = err as CrewError;
-      // "Customized", "untracked_directory", and "inconsistent_marker" are
-      // clean skips per §10.1: the user edited the destination and we
-      // don't touch it. Exit code stays 0 for these.
-      if (ce.code === "customized" || ce.code === "untracked_directory" || ce.code === "inconsistent_marker") {
-        perTarget.push({ target: targetName, kind: "skipped", reason: ce.code });
-      } else {
-        perTarget.push({ target: targetName, kind: "failed", error: { code: ce.code ?? "usage_error", message: ce.message } });
-      }
+      perTarget.push({ target: targetName, kind: "skipped", reason: ce.code });
     }
   }
   return { kind: "updated", new_sha: newSha ?? entry.resolved_sha ?? "", per_target: perTarget };

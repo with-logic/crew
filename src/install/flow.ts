@@ -121,13 +121,8 @@ function applyDuplicateRules(
 }
 
 function markerSourcesEqual(a: ResolvedSkill["markerSource"], b: ResolvedSkill["markerSource"]): boolean {
-  if (a.type !== b.type) return false;
-  switch (a.type) {
-    case "tap":
-      return a.tap === (b as typeof a).tap;
-    case "git":
-      return a.url === (b as typeof a).url;
-    case "path":
-      return a.path === (b as typeof a).path;
-  }
+  if (a.type === "tap" && b.type === "tap") return a.tap === b.tap;
+  if (a.type === "git" && b.type === "git") return a.url === b.url;
+  if (a.type === "path" && b.type === "path") return a.path === b.path;
+  return false;
 }

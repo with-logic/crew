@@ -22,21 +22,20 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
 
   // Bare names try state first.
   const state = readState(ctx.home);
-  if (NAME_PATTERN.test(arg)) {
-    const entry = state.installations.find((e) => e.name === arg);
-    if (entry) {
-      const human = [
-        `name: ${entry.name}`,
-        `scope: ${entry.scope}`,
-        `ref: ${entry.ref ?? "(default)"}`,
-        `resolved_sha: ${entry.resolved_sha ?? "(path)"}`,
-        `content_hash: ${entry.content_hash}`,
-        `targets: ${entry.targets.join(", ")}`,
-        `pinned: ${entry.pinned}`,
-        `installed_at: ${entry.installed_at}`,
-      ];
-      return { exitCode: 0, human, json: { installed: entry } };
-    }
+  const isBareName = NAME_PATTERN.test(arg);
+  const entry = isBareName ? state.installations.find((e) => e.name === arg) : undefined;
+  if (entry) {
+    const human = [
+      `name: ${entry.name}`,
+      `scope: ${entry.scope}`,
+      `ref: ${entry.ref ?? "(default)"}`,
+      `resolved_sha: ${entry.resolved_sha ?? "(path)"}`,
+      `content_hash: ${entry.content_hash}`,
+      `targets: ${entry.targets.join(", ")}`,
+      `pinned: ${entry.pinned}`,
+      `installed_at: ${entry.installed_at}`,
+    ];
+    return { exitCode: 0, human, json: { installed: entry } };
   }
 
   // Fall back to treating as a ref.

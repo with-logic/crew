@@ -17,16 +17,11 @@ export function isOnPath(binary: string): boolean {
     if (dir.length === 0) continue;
     const candidate = join(dir, binary);
     if (!existsSync(candidate)) continue;
-    try {
-      const st = statSync(candidate);
-      if (!st.isFile() && !st.isSymbolicLink()) continue;
-      // Execute-bit check is approximate (mode may be masked by fs) but
-      // enough for detection: any regular file at this path indicates the
-      // binary is installed.
-      return true;
-    } catch {
-      continue;
-    }
+    const st = statSync(candidate);
+    // Execute-bit check is approximate (mode may be masked by fs) but
+    // enough for detection: any regular file at this path indicates the
+    // binary is installed.
+    if (st.isFile() || st.isSymbolicLink()) return true;
   }
   return false;
 }

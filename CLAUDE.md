@@ -184,9 +184,45 @@ reassignment, and restore in `afterEach`. See
 `tests/e2e/install.test.ts` for the template. This is ugly but
 explicit; don't hide it inside a fixture helper.
 
-**Coverage target.** 100% function coverage across every file in
-`src/`. Line coverage ≥95% almost everywhere. Run `bun run
-test:coverage` before committing.
+**Coverage is a hard requirement.** `bunfig.toml` sets
+`coverageThreshold = 1.0`, which makes `bun test` exit non-zero if
+**either** line coverage OR function coverage falls below 100%. This
+is enforced locally and in CI — there is no "coverage is nice to
+have" mode.
+
+Rationale: at 100%, every uncovered line is always a line you wrote
+in the current branch. You never have to triage whether a gap is
+legacy or new. The incremental cost of keeping a change at 100% is
+tiny; the incremental value of a known-clean baseline is large.
+
+How to write to the rule:
+
+- Write the test alongside the code. If the code has a branch, write
+  a test that takes that branch.
+- If you add a defensive `throw` or fallback that genuinely can't
+  fire, delete it — don't test dead code. A `catch (err) { throw err
+  }` with no translation adds no value and only costs coverage.
+- Prefer narrowing over totalization. `if (source.type === "tap") {
+  ... } if (source.type === "git") { ... } return lastCase;` has
+  fewer uncovered branches than an exhaustive `switch` with a
+  `default` case that can't fire.
+- Chained `.filter(...).map(...)` creates two arrow callbacks; if
+  one is only conditionally exercised, a `for` loop that bundles the
+  work together avoids the issue.
+- If you genuinely can't reach a branch, it's dead code. Remove it.
+
+**Debugging a coverage drop.** The text reporter only tells you the
+file. For exact line numbers, use the lcov output (already enabled
+via `coverageReporter = ["text", "lcov"]`):
+
+```sh
+bun test
+# coverage/lcov.info is written alongside the text table.
+genhtml coverage/lcov.info -o coverage/html && open coverage/html/index.html
+```
+
+HTML view highlights uncovered lines in red — much faster than
+eyeballing the text table.
 
 **Test helpers live in `tests/helpers/`.**
 - `fixtures.ts` — `makeTempDir`, `makeSkill`, `makeGitRepo`, `commitAll`,
@@ -247,12 +283,14 @@ at the top of this doc.
 bun install
 bun run src/index.ts version           # run from source
 bun run build                          # produce dist/crew
-bun test                               # run the full test suite
-bun run test:coverage                  # with coverage report
+bun test                               # run the full test suite (with coverage)
 bun run typecheck                      # tsc --noEmit
 bun run install-bin                    # build + copy to ~/.local/bin/crew
 bun run uninstall-bin                  # remove the installed binary
 ```
+
+`bun test` always runs with coverage (see `bunfig.toml`). The suite
+exits non-zero if coverage drops below 100%.
 
 `CREW_HOME=/tmp/xyz dist/crew install …` to try the compiled binary
 without disturbing your real `~/.crew`.

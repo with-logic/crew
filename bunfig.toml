@@ -1,0 +1,15 @@
+# Bun configuration for crew.
+#
+# We enforce 100% line AND function coverage (bun applies the single
+# `coverageThreshold` to both). The overhead of maintaining it is low
+# once at 100%: every PR either ships a test for the new lines or it
+# fails. The upside is that any uncovered line is always recent work
+# you haven't exercised yet, not legacy code you forgot about.
+#
+# Debugging dropped coverage: the `lcov` reporter pinpoints the exact
+# uncovered lines more reliably than `text`. Convert to HTML with e.g.
+# `genhtml coverage/lcov.info -o coverage/html` for a browsable view.
+[test]
+coverage = true
+coverageThreshold = 1.0
+coverageReporter = ["text", "lcov"]

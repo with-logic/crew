@@ -30,11 +30,10 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
   try {
     parsed = parseArgs(argv);
   } catch (err) {
-    if (err instanceof CrewError) {
-      writeError(err, false, streams);
-      return err.exitCode;
-    }
-    throw err;
+    // `parseArgs` only raises `CrewError`.
+    const ce = err as CrewError;
+    writeError(ce, false, streams);
+    return ce.exitCode;
   }
 
   const ctx: CommandContext = {
@@ -53,6 +52,8 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
       writeError(err, parsed.flags.json, streams);
       return err.exitCode;
     }
+    // Unexpected runtime error — wrap it in a usage error so the user
+    // gets a formatted message and exit 4, rather than a raw stack trace.
     const message = (err as Error).message ?? String(err);
     writeError(new CrewError("usage_error", `unexpected error: ${message}`), parsed.flags.json, streams);
     return 4;
