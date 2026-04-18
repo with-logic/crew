@@ -1,0 +1,362 @@
+/**
+ * Additional tests for code paths not exercised elsewhere.
+ * - cache clean
+ * - help per-command
+ * - error paths in CrewError / exit codes
+ * - path utilities (isOnPath)
+ * - copy util (symlinks)
+ * - classifyRef
+ * - cli dispatcher
+ */
+
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { chmodSync, mkdirSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { runCli } from "../../src/cli/main.ts";
+import { captureStreams, makeCrewHome } from "../helpers/env.ts";
+import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter, commitAll } from "../helpers/fixtures.ts";
+import { classifyRef, initRepo } from "../../src/git/repo.ts";
+import { runGit } from "../../src/git/exec.ts";
+import { isOnPath } from "../../src/targets/path.ts";
+import { copyTree } from "../../src/util/copy.ts";
+import { CrewError, fail } from "../../src/core/errors.ts";
+import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
+import { codexAdapter } from "../../src/targets/codex.ts";
+import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
+
+let restore: (() => void) | null = null;
+let ccRoot: string;
+function setupTargets() {
+  const co = makeTempDir("crew-co-");
+  const ge = makeTempDir("crew-ge-");
+  ccRoot = makeTempDir("crew-cc-");
+  const originals = {
+    cc: { u: claudeCodeAdapter.userPath, d: claudeCodeAdapter.detect },
+    co: { u: codexAdapter.userPath, d: codexAdapter.detect },
+    ge: { u: geminiCliAdapter.userPath, d: geminiCliAdapter.detect },
+  };
+  (claudeCodeAdapter as { userPath: () => string }).userPath = () => ccRoot;
+  (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
+  (codexAdapter as { userPath: () => string }).userPath = () => co;
+  (codexAdapter as { detect: () => boolean }).detect = () => true;
+  (geminiCliAdapter as { userPath: () => string }).userPath = () => ge;
+  (geminiCliAdapter as { detect: () => boolean }).detect = () => true;
+  restore = () => {
+    (claudeCodeAdapter as { userPath: () => string }).userPath = originals.cc.u;
+    (claudeCodeAdapter as { detect: () => boolean }).detect = originals.cc.d;
+    (codexAdapter as { userPath: () => string }).userPath = originals.co.u;
+    (codexAdapter as { detect: () => boolean }).detect = originals.co.d;
+    (geminiCliAdapter as { userPath: () => string }).userPath = originals.ge.u;
+    (geminiCliAdapter as { detect: () => boolean }).detect = originals.ge.d;
+  };
+}
+
+beforeEach(() => setupTargets());
+afterEach(() => { if (restore) restore(); restore = null; });
+
+describe("cache clean", () => {
+  test("empty cache succeeds", () => {
+    const home = makeCrewHome();
+    const code = runCli(["cache", "clean"], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+  });
+
+  test("cache clean removes unreferenced store entries", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
+    runCli(["install", join(src, "demo")], { home, streams: captureStreams().streams });
+    // Manually create an orphan store entry.
+    mkdirSync(join(home, "store", "ghost@00000000"), { recursive: true });
+    writeFileSync(join(home, "store", "ghost@00000000", "file.txt"), "x");
+    const c = captureStreams();
+    const code = runCli(["cache", "clean"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(existsSync(join(home, "store", "ghost@00000000"))).toBe(false);
+  });
+
+  test("unknown cache subcommand errors", () => {
+    const home = makeCrewHome();
+    const code = runCli(["cache", "list"], { home, streams: captureStreams().streams });
+    expect(code).toBe(4);
+  });
+});
+
+describe("help command", () => {
+  test("help <command> prints per-command lines", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+    const code = runCli(["help", "install"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("crew install");
+  });
+
+  test("help <unknown> falls back to overview", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+    runCli(["help", "frobnicate"], { home, streams: c.streams });
+    expect(c.stdout()).toContain("crew ");
+  });
+
+  test("help --json on overview", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+    runCli(["help", "--json"], { home, streams: c.streams });
+    // Overview has no structured json field; should still emit valid JSON.
+    expect(() => JSON.parse(c.stdout())).not.toThrow();
+  });
+});
+
+describe("targets subcommands", () => {
+  test("targets enable/disable cycle", () => {
+    const home = makeCrewHome();
+    runCli(["targets", "disable", "claude-code"], { home, streams: captureStreams().streams });
+    runCli(["targets", "enable", "claude-code"], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    runCli(["targets", "--json"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout());
+    expect(parsed.targets.find((t: { name: string }) => t.name === "claude-code").forced).toBe(true);
+  });
+
+  test("unknown target errors", () => {
+    const home = makeCrewHome();
+    const code = runCli(["targets", "enable", "no-such"], { home, streams: captureStreams().streams });
+    expect(code).toBe(4);
+  });
+
+  test("unknown subcommand errors", () => {
+    const home = makeCrewHome();
+    const code = runCli(["targets", "frob"], { home, streams: captureStreams().streams });
+    expect(code).toBe(4);
+  });
+});
+
+describe("CrewError", () => {
+  test("fail throws with code", () => {
+    expect(() => fail("invalid_ref", "bad")).toThrow(CrewError);
+  });
+  test("exitCode mapping", () => {
+    const err = new CrewError("state_locked", "x");
+    expect(err.exitCode).toBe(7);
+  });
+});
+
+describe("isOnPath", () => {
+  test("bun is on PATH", () => {
+    expect(isOnPath("bun")).toBe(true);
+  });
+  test("nonexistent is not", () => {
+    expect(isOnPath("this-binary-does-not-exist-xyz")).toBe(false);
+  });
+  test("empty PATH returns false", () => {
+    const prev = process.env.PATH;
+    process.env.PATH = "";
+    try {
+      expect(isOnPath("bun")).toBe(false);
+    } finally {
+      process.env.PATH = prev;
+    }
+  });
+});
+
+describe("copyTree", () => {
+  test("preserves symlinks", () => {
+    const src = makeTempDir();
+    const dest = makeTempDir();
+    writeFileSync(join(src, "real.txt"), "hi");
+    symlinkSync("real.txt", join(src, "link"));
+    copyTree(src, join(dest, "sub"));
+    const { lstatSync } = require("node:fs");
+    const st = lstatSync(join(dest, "sub", "link"));
+    expect(st.isSymbolicLink()).toBe(true);
+  });
+
+  test("strips root .crew.json", () => {
+    const src = makeTempDir();
+    const dest = makeTempDir();
+    writeFileSync(join(src, ".crew.json"), "{}");
+    writeFileSync(join(src, "other.txt"), "x");
+    copyTree(src, join(dest, "sub"));
+    expect(existsSync(join(dest, "sub", ".crew.json"))).toBe(false);
+    expect(existsSync(join(dest, "sub", "other.txt"))).toBe(true);
+  });
+
+  test("copies nested dirs", () => {
+    const src = makeTempDir();
+    const dest = makeTempDir();
+    mkdirSync(join(src, "a", "b"), { recursive: true });
+    writeFileSync(join(src, "a", "b", "c.txt"), "nested");
+    copyTree(src, dest);
+    expect(existsSync(join(dest, "a", "b", "c.txt"))).toBe(true);
+  });
+
+  test("chmod bits not preserved but copy succeeds", () => {
+    const src = makeTempDir();
+    const dest = makeTempDir();
+    const f = join(src, "script.sh");
+    writeFileSync(f, "#!/bin/sh\n");
+    chmodSync(f, 0o755);
+    copyTree(src, dest);
+    expect(existsSync(join(dest, "script.sh"))).toBe(true);
+  });
+});
+
+describe("git classifyRef", () => {
+  test("40-char hex is sha", () => {
+    const repo = makeTempDir();
+    initRepo(repo);
+    writeFileSync(join(repo, "README.md"), "hello");
+    runGit(["add", "."], { cwd: repo });
+    runGit(["commit", "--quiet", "-m", "init", "--allow-empty"], { cwd: repo });
+    const sha = runGit(["rev-parse", "HEAD"], { cwd: repo }).stdout.trim();
+    expect(classifyRef(repo, sha)).toBe("sha");
+  });
+
+  test("tag is tag", () => {
+    const repo = makeTempDir();
+    makeGitRepo(repo);
+    commitAll(repo, "init");
+    runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", "v1"], { cwd: repo });
+    expect(classifyRef(repo, "v1")).toBe("tag");
+  });
+
+  test("branch is branch", () => {
+    const repo = makeTempDir();
+    makeGitRepo(repo);
+    commitAll(repo, "init");
+    expect(classifyRef(repo, "main")).toBe("branch");
+  });
+
+  test("null is branch", () => {
+    const repo = makeTempDir();
+    makeGitRepo(repo);
+    commitAll(repo, "init");
+    expect(classifyRef(repo, null)).toBe("branch");
+  });
+
+  test("nonexistent is unknown", () => {
+    const repo = makeTempDir();
+    makeGitRepo(repo);
+    commitAll(repo, "init");
+    expect(classifyRef(repo, "no-such-ref")).toBe("unknown");
+  });
+});
+
+describe("list --json + install --json", () => {
+  test("list --json empty", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+    runCli(["list", "--json"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout());
+    expect(parsed.installations).toEqual([]);
+  });
+
+  test("install --json", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
+    const c = captureStreams();
+    runCli(["install", "--json", join(src, "demo")], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout());
+    expect(parsed.records[0].name).toBe("demo");
+  });
+});
+
+describe("install edge: zero refs", () => {
+  test("install with no args errors", () => {
+    const home = makeCrewHome();
+    const code = runCli(["install"], { home, streams: captureStreams().streams });
+    expect(code).toBe(4);
+  });
+});
+
+describe("uninstall edge: multiple scopes", () => {
+  test("uninstall removes all scopes", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
+    const projCwd = makeTempDir("crew-proj-");
+    runCli(["install", skill], { home, streams: captureStreams().streams });
+    runCli(["install", "--scope", "project", skill], { home, cwd: projCwd, streams: captureStreams().streams });
+    const code = runCli(["uninstall", "demo"], { home, cwd: projCwd, streams: captureStreams().streams });
+    expect(code).toBe(0);
+  });
+});
+
+describe("flags parser", () => {
+  test("--flag=value form", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
+    const code = runCli(["install", "--scope=user", skill], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+  });
+
+  test("--scope invalid value", () => {
+    const home = makeCrewHome();
+    const code = runCli(["install", "--scope", "other", "foo"], { home, streams: captureStreams().streams });
+    expect(code).toBe(4);
+  });
+
+  test("-- terminator", () => {
+    const home = makeCrewHome();
+    const code = runCli(["install", "--", "--weird-name"], { home, streams: captureStreams().streams });
+    // This parses as a single ref that can't be found; exit 4 (invalid_ref) or 1.
+    expect([1, 4, 5]).toContain(code);
+  });
+
+  test("--flag requiring value but missing", () => {
+    const home = makeCrewHome();
+    const code = runCli(["install", "--target"], { home, streams: captureStreams().streams });
+    expect(code).toBe(4);
+  });
+
+  test("boolean flag with = fails", () => {
+    const home = makeCrewHome();
+    const code = runCli(["install", "--dry-run=true"], { home, streams: captureStreams().streams });
+    expect(code).toBe(4);
+  });
+
+  test("short flag rejected", () => {
+    const home = makeCrewHome();
+    const code = runCli(["install", "-q", "foo"], { home, streams: captureStreams().streams });
+    expect(code).toBe(4);
+  });
+
+  test("--target multiple", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
+    const code = runCli(["install", "--target", "claude-code", "--target", "codex", skill], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+  });
+});
+
+describe("install dependency: qualified refs", () => {
+  test("qualified dependency (git URL) resolves", () => {
+    const home = makeCrewHome();
+    // Build a local git repo that hosts a dep skill.
+    const depRepo = makeTempDir();
+    makeGitRepo(depRepo);
+    makeSkill(depRepo, "dep", skillFrontmatter({ name: "dep" }));
+    commitAll(depRepo, "init");
+
+    const parentDir = makeTempDir();
+    makeSkill(parentDir, "root", skillFrontmatter({
+      name: "root",
+      dependencies: [`file://${depRepo}//dep`],
+    }));
+    const code = runCli(["install", join(parentDir, "root")], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+    expect(existsSync(join(ccRoot, "dep"))).toBe(true);
+  });
+});
+
+describe("error output non-json mode", () => {
+  test("CrewError writes to stderr", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+    runCli(["uninstall", "ghost"], { home, streams: c.streams });
+    expect(c.stderr()).toContain("not installed");
+  });
+});

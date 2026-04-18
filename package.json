@@ -1,0 +1,21 @@
+{
+  "name": "crew",
+  "version": "0.3.0",
+  "description": "A package manager for Agent Skills",
+  "type": "module",
+  "module": "src/index.ts",
+  "bin": {
+    "crew": "./dist/crew"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "build": "bun build --compile --minify --sourcemap --target=bun src/index.ts --outfile dist/crew",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}
