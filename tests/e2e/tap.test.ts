@@ -372,6 +372,25 @@ describe("crew tap", () => {
     expect(c.stderr()).toContain(`crew tap add file://${repo}//other <tap-name>`);
   });
 
+  test("failed clone leaves NO config entry behind (tap add is transactional)", () => {
+    // Regression: earlier versions wrote config first, then cloned —
+    // so a typo'd URL would fail the clone but still show up in
+    // `crew tap list`. The fix is to clone first.
+    const home = makeCrewHome();
+    const c = captureStreams();
+    // `file://` on a non-existent path makes `git clone` fail cleanly
+    // without touching the network.
+    const code = runCli(["tap", "add", "file:///definitely/does/not/exist/crew-typo", "typo-tap"], {
+      home,
+      streams: c.streams,
+    });
+    expect(code).not.toBe(0);
+    // Config must NOT list the failed tap.
+    expect(readConfig(home).taps.some((t) => t.name === "typo-tap")).toBe(false);
+    // No leftover clone dir either.
+    expect(existsSync(tapPath("typo-tap", home))).toBe(false);
+  });
+
   test("`crew tap add <local-path>` is a usage error (not a git source)", () => {
     // A relative/absolute local path parses as a `path` source, not a git
     // source — taps must be git-backed so `crew update` can refresh them.

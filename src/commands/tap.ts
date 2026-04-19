@@ -29,7 +29,7 @@ import type { TapConfig } from "../core/types.ts";
 import { ensureRepo } from "../git/repo.ts";
 import { parseRef } from "../refs/parse.ts";
 import { withStateLock } from "../state/lock.ts";
-import { rmrf } from "../util/fs.ts";
+import { exists, rmrf } from "../util/fs.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function tapCommand(ctx: CommandContext): CommandOutput {
@@ -98,10 +98,21 @@ function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
         },
       );
     }
+    // Clone FIRST so a failed clone (bad URL, no network, no access)
+    // doesn't leave a half-added entry in config that would then show
+    // up in `crew tap list` as a tap the user never successfully added.
+    // If the clone partially materializes before failing, rm the
+    // directory so retry gets a clean slate.
+    const cloneDir = tapPath(name, ctx.home);
+    try {
+      ensureRepo(url, cloneDir);
+    } catch (err) {
+      if (exists(cloneDir)) rmrf(cloneDir);
+      throw err;
+    }
     const newTap: TapConfig = subpath === undefined ? { name, url } : { name, url, subpath };
     const updated = { ...config, taps: [...config.taps, newTap] };
     writeConfig(updated, ctx.home);
-    ensureRepo(url, tapPath(name, ctx.home));
   }, ctx.home);
   const target = displayTarget(subpath === undefined ? { url } : { url, subpath });
   if (alreadyMatched) {
