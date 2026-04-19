@@ -133,18 +133,44 @@ describe("crew tap", () => {
     expect(code).toBe(4);
   });
 
-  test("tap add duplicate name fails", () => {
+  test("tap add is idempotent when name + URL already match", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
     runCli(["tap", "add", `file://${repo}`, "mytap"], {
       home,
       streams: captureStreams().streams,
     });
+    const c = captureStreams();
     const code = runCli(["tap", "add", `file://${repo}`, "mytap"], {
+      home,
+      streams: c.streams,
+    });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("already configured");
+    expect(c.stdout()).toContain("nothing to do");
+    expect(readConfig(home).taps.filter((t) => t.name === "mytap")).toHaveLength(1);
+  });
+
+  test("tap add with same name but different URL fails with a useful remedy", () => {
+    const home = makeCrewHome();
+    const repoA = buildTapRepo();
+    const repoB = buildTapRepo();
+    runCli(["tap", "add", `file://${repoA}`, "mytap"], {
       home,
       streams: captureStreams().streams,
     });
+    const c = captureStreams();
+    const code = runCli(["tap", "add", `file://${repoB}`, "mytap"], {
+      home,
+      streams: c.streams,
+    });
     expect(code).toBe(4);
+    // Tells the user where the existing tap points.
+    expect(c.stderr()).toContain(`file://${repoA}`);
+    // Tells the user exactly how to resolve it — including the URL
+    // they just tried, so the suggested command is copy-pasteable.
+    expect(c.stderr()).toContain(`crew tap add file://${repoB}`);
+    expect(c.stderr()).toContain("<your-name>");
   });
 
   test("tap remove nonexistent fails", () => {

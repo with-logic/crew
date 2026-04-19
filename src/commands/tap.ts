@@ -69,19 +69,34 @@ function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
       { name },
     );
   }
+  let alreadyAtSameUrl = false;
   withStateLock(() => {
     const config = readConfig(ctx.home);
-    if (config.taps.some((t) => t.name === name)) {
+    const existing = config.taps.find((t) => t.name === name);
+    if (existing) {
+      if (existing.url === url) {
+        // Same name, same URL — no-op. Makes `crew tap <url>` idempotent
+        // so scripts don't have to special-case "already added."
+        alreadyAtSameUrl = true;
+        return;
+      }
       throw new CrewError(
         "usage_error",
-        `tap \`${name}\` is already configured — run \`crew tap list\` to see its URL, or use a different name`,
-        { name },
+        `tap \`${name}\` is already configured at \`${existing.url}\` — to add this one under a different name, run \`crew tap add ${url} <your-name>\``,
+        { name, existingUrl: existing.url, incomingUrl: url },
       );
     }
     const updated = { ...config, taps: [...config.taps, { name, url }] };
     writeConfig(updated, ctx.home);
     ensureRepo(url, tapPath(name, ctx.home));
   }, ctx.home);
+  if (alreadyAtSameUrl) {
+    return {
+      exitCode: 0,
+      human: [`tap ${name} is already configured at ${url} — nothing to do`],
+      json: { name, url, already: true },
+    };
+  }
   return {
     exitCode: 0,
     human: [`added tap ${name} → ${url}`],
