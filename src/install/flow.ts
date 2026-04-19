@@ -7,17 +7,17 @@
  *      (in `./resolve.ts`).
  *   2. Compute the active target set (in `./target-set.ts`).
  *   3. Detect "already installed" and "name conflict" against the current
- *      state (§5.4).
+ *      state (§5.4; in `./duplicate-rules.ts`).
  *   4. Perform the installs (in `./perform.ts`).
  *   5. Write state back under the lock, and return a structured summary
  *      the CLI layer can format.
  */
 
-import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
-import type { Config, ResolvedSkill, Scope, StateFile } from "../core/types.ts";
+import type { Config, Scope, StateFile } from "../core/types.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
+import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules.ts";
 import { type InstallSummary, performInstall } from "./perform.ts";
 import { type RequiredByMap, resolveInstallSet } from "./resolve.ts";
 import { computeTargetSet } from "./target-set.ts";
@@ -31,17 +31,6 @@ export interface InstallOptions {
   readonly restrictTargets: readonly string[];
   readonly cwd?: string;
   readonly home?: string;
-}
-
-/** A skill that was already installed at the same ref/SHA — no-op. */
-export interface AlreadyInstalled {
-  readonly name: string;
-  /** Ref the existing install was installed from (or null for default). */
-  readonly ref: string | null;
-  /** Full 40-char resolved SHA, or null for path sources. */
-  readonly resolvedSha: string | null;
-  readonly scope: Scope;
-  readonly targets: readonly string[];
 }
 
 /** Full result: summary plus any "already installed" short-circuit records. */
@@ -69,7 +58,8 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
   const { toInstall, alreadyInstalled, promoteToExplicit } = applyDuplicateRules(
     resolvedAll,
     currentState,
-    options,
+    options.scope,
+    cwd,
   );
 
   if (options.dryRun) {
@@ -130,82 +120,5 @@ function promoteExplicit(
 }
 
 // Keep `RequiredByMap` exported under this module's name for consumers.
-export type { RequiredByMap };
-
-function applyDuplicateRules(
-  resolved: readonly ResolvedSkill[],
-  state: StateFile,
-  options: InstallOptions,
-): {
-  toInstall: ResolvedSkill[];
-  alreadyInstalled: AlreadyInstalled[];
-  promoteToExplicit: string[];
-} {
-  const toInstall: ResolvedSkill[] = [];
-  const alreadyInstalled: AlreadyInstalled[] = [];
-  const promoteToExplicit: string[] = [];
-
-  // For project-scope installs, match by (name, scope, project_root).
-  // Two project installs of the same skill under different roots are
-  // independent entries, not a name conflict. For user scope
-  // `project_root` is undefined on both sides → comparison collapses.
-  const cwd = options.cwd ?? process.cwd();
-  const incomingProjectRoot = options.scope === "project" ? cwd : null;
-  for (const skill of resolved) {
-    const existing = state.installations.find(
-      (e) =>
-        e.name === skill.name &&
-        e.scope === options.scope &&
-        (e.project_root ?? null) === incomingProjectRoot,
-    );
-    if (!existing) {
-      toInstall.push(skill);
-      continue;
-    }
-
-    const sameSource = markerSourcesEqual(existing.source, skill.markerSource);
-    if (!sameSource) {
-      // Per §13: --force does NOT override name_conflict, so we throw
-      // the same message either way. The user has to remove the old
-      // install first, then install from the new source.
-      throw new CrewError(
-        "name_conflict",
-        `a skill named \`${skill.name}\` is already installed from a different source — run \`crew uninstall ${skill.name}\` first, then install from the new source`,
-        { existing: existing.source, incoming: skill.markerSource },
-      );
-    }
-
-    if (
-      existing.resolved_sha === skill.resolvedSha &&
-      existing.content_hash === skill.contentHash
-    ) {
-      alreadyInstalled.push({
-        name: skill.name,
-        ref: existing.ref,
-        resolvedSha: existing.resolved_sha,
-        scope: existing.scope,
-        targets: existing.targets,
-      });
-      // §11.1: a previously dep-only entry named directly by the user
-      // must be promoted to `explicit: true`, even if the SHA is
-      // unchanged and no reinstall happens.
-      if (skill.explicit && !existing.explicit) {
-        promoteToExplicit.push(skill.name);
-      }
-      continue;
-    }
-    // Same source, different SHA → treat as update.
-    toInstall.push(skill);
-  }
-  return { toInstall, alreadyInstalled, promoteToExplicit };
-}
-
-function markerSourcesEqual(
-  a: ResolvedSkill["markerSource"],
-  b: ResolvedSkill["markerSource"],
-): boolean {
-  if (a.type === "tap" && b.type === "tap") return a.tap === b.tap;
-  if (a.type === "git" && b.type === "git") return a.url === b.url;
-  if (a.type === "path" && b.type === "path") return a.path === b.path;
-  return false;
-}
+// Re-export `AlreadyInstalled` for legacy callers of this module.
+export type { AlreadyInstalled, RequiredByMap };

@@ -17,15 +17,16 @@
  *      resolved set): return `source_gone` so the caller can surface it.
  *
  * Children still present are handled by the regular per-skill update
- * logic — this module only reconciles additions and removals.
+ * logic — this module only reconciles additions and removals. The
+ * installer for a new child lives in `./install-child.ts`.
  */
 
 import { existsSync } from "node:fs";
-import type { CrewError } from "../core/errors.ts";
-import type { BundleRef, Config, Scope, StateEntry, StateFile } from "../core/types.ts";
-import { parseRef } from "../refs/parse.ts";
-import { acquireSource } from "../sources/acquire.ts";
-import { expandSkills } from "../sources/expand.ts";
+import type { CrewError } from "../../core/errors.ts";
+import type { BundleRef, Config, Scope, StateEntry, StateFile } from "../../core/types.ts";
+import { parseRef } from "../../refs/parse.ts";
+import { acquireSource } from "../../sources/acquire/index.ts";
+import { expandSkills } from "../../sources/expand.ts";
 
 /** One bundle re-expansion outcome, one row per child affected. */
 export interface BundleRow {
@@ -171,3 +172,5 @@ function tryAcquireBundle(
     return null;
   }
 }
+
+export { installNewBundleChild } from "./install-child.ts";

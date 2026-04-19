@@ -11,25 +11,21 @@
  * multi-skill bundle the user referenced. It is false for skills
  * pulled in solely as transitive dependencies. `bundle` is set on
  * every child of a multi-skill directory expansion (§10.1.1).
+ *
+ * Topological sort lives in `install/topo.ts`; the dependency-reference
+ * precedence and marker-source derivation live in
+ * `install/dep-resolution.ts`. This file is the BFS driver.
  */
 
-import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
-import type {
-  BundleRef,
-  Config,
-  LoadedSkill,
-  MarkerSource,
-  ResolvedSkill,
-  Source,
-} from "../core/types.ts";
+import type { BundleRef, Config, LoadedSkill, MarkerSource, ResolvedSkill } from "../core/types.ts";
 import { parseRef } from "../refs/parse.ts";
-import { hasSkillMd } from "../skill/load.ts";
-import { type AcquiredSource, acquireSource } from "../sources/acquire.ts";
+import { type AcquiredSource, acquireSource } from "../sources/acquire/index.ts";
 import { expandSkills } from "../sources/expand.ts";
 import { stageIntoStore } from "../sources/store.ts";
-import { isDirectory } from "../util/fs.ts";
+import { markerSourceFor, resolveDependency } from "./dep-resolution.ts";
+import { topoSort } from "./topo.ts";
 
 /** Options for resolution. */
 export interface ResolveOptions {
@@ -149,9 +145,11 @@ export function resolveInstallSet(
     const deps = item.loaded.frontmatter.metadata?.crew?.dependencies ?? [];
     for (const depRef of deps) {
       const depSource = parseRef(depRef, cwd);
-      const resolvedDep = resolveDependency(depSource, depRef, item.parentAcquired, config, home);
+      const resolvedDep = resolveDependency(depSource, depRef, item.parentAcquired, (s) =>
+        acquireSource(s, config, home),
+      );
       if (resolvedDep === null) continue;
-      const { acquired, loaded, markerSource, effectiveSource } = resolvedDep;
+      const { acquired, loaded, markerSource } = resolvedDep;
       pending.push({
         loaded,
         markerSource,
@@ -167,194 +165,8 @@ export function resolveInstallSet(
       const depName = loaded.frontmatter.name;
       if (!requiredBy.has(depName)) requiredBy.set(depName, new Set());
       requiredBy.get(depName)!.add(name);
-      // Silence the unused-warning on `effectiveSource`.
-      void effectiveSource;
     }
   }
 
   return { skills: topoSort(byName), requiredBy };
-}
-
-/** Topological sort: dependency before dependent. */
-function topoSort(byName: Map<string, ResolvedSkill>): ResolvedSkill[] {
-  const out: ResolvedSkill[] = [];
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-
-  const names = [...byName.keys()];
-  const deps = new Map<string, string[]>();
-  for (const name of names) {
-    const skill = byName.get(name)!;
-    const depList = skill.frontmatter.metadata?.crew?.dependencies ?? [];
-    deps.set(
-      name,
-      depList.map((d) => extractDepName(d)).filter((n): n is string => n !== null && byName.has(n)),
-    );
-  }
-
-  function visit(name: string): void {
-    if (visited.has(name)) return;
-    if (visiting.has(name)) {
-      return; // cycle — terminate naturally per §9 step 6
-    }
-    visiting.add(name);
-    for (const d of deps.get(name) ?? []) {
-      visit(d);
-    }
-    visiting.delete(name);
-    visited.add(name);
-    out.push(byName.get(name)!);
-  }
-  for (const name of names) {
-    visit(name);
-  }
-  return out;
-}
-
-/**
- * Extract a best-guess dependency name from a reference string. Used only
- * to disambiguate when a directory-source expansion returns multiple
- * candidate skills. An indeterminate name returns `null`, which the
- * caller handles by falling back to the first candidate.
- */
-function extractDepName(ref: string): string | null {
-  const trimmed = ref.trim();
-  // Bare tap name or `tap/name` (both may have an `@ref` tail).
-  const bareOrQualified = trimmed.split("@")[0]!;
-  const tail = bareOrQualified.split("/").pop() ?? "";
-  if (/^[a-z][a-z0-9-]*$/.test(tail)) return tail;
-  return null;
-}
-
-/** Resolve a dependency reference using §9 step 6's precedence. */
-function resolveDependency(
-  depSource: Source,
-  originalRef: string,
-  parent: AcquiredSource | null,
-  config: Config,
-  home: string,
-): {
-  acquired: AcquiredSource;
-  loaded: LoadedSkill;
-  markerSource: MarkerSource;
-  effectiveSource: Source;
-} | null {
-  // Only bare-name tap references go through precedence.
-  if (depSource.type === "tap" && depSource.tap === null) {
-    // (1) sibling at the same source+ref is always tried first. For tap
-    // sources this matches the "same tap" case because taps are flat at
-    // the top level (every tap skill is a sibling of every other).
-    if (parent) {
-      const sibling = findSibling(parent, depSource.name);
-      if (sibling) return sibling;
-    }
-    // (2) otherwise search all configured taps. `acquireSource` below
-    // handles that via bare-tap resolution and raises
-    // `ambiguous_reference` if multiple taps match.
-  }
-
-  const acquired = acquireSource(depSource, config, home);
-  const list = expandSkills(acquired.rootDir);
-  // A dependency reference names a single skill. `list.length === 1` is
-  // the common case (the ref points straight at a skill directory). If
-  // the resolved location expanded into multiple skills, prefer the one
-  // whose name the ref names; otherwise take the first.
-  const depName = extractDepName(originalRef);
-  const matched = (depName && list.find((l) => l.frontmatter.name === depName)) || list[0]!;
-  return {
-    acquired,
-    loaded: matched,
-    markerSource: markerSourceFor(acquired, depSource, matched, acquired.rootDir),
-    effectiveSource: depSource,
-  };
-}
-
-/** Given a parent acquired source, look for a sibling skill by name. */
-function findSibling(
-  parent: AcquiredSource,
-  depName: string,
-): {
-  acquired: AcquiredSource;
-  loaded: LoadedSkill;
-  markerSource: MarkerSource;
-  effectiveSource: Source;
-} | null {
-  // A sibling is a directory at the same level as the parent's rootDir.
-  // Only meaningful if rootDir is inside a parent directory whose own
-  // siblings are skills.
-  const parentOfParent = parent.rootDir.replace(/\/[^/]+$/, "");
-  if (parentOfParent === parent.rootDir) return null;
-  if (!isDirectory(parentOfParent)) return null;
-  const candidate = join(parentOfParent, depName);
-  if (!(isDirectory(candidate) && hasSkillMd(candidate))) return null;
-  const { loadSkill } = require("../skill/load.ts") as typeof import("../skill/load.ts");
-  const loaded = loadSkill(candidate);
-  // Adopt the parent's resolution metadata (same repo, same SHA).
-  const siblingMarkerSource = derivedSiblingMarker(parent.markerSource, parent.rootDir, candidate);
-  const siblingAcquired: AcquiredSource = {
-    rootDir: candidate,
-    resolvedSha: parent.resolvedSha,
-    requestedRef: parent.requestedRef,
-    pinned: parent.pinned,
-    markerSource: siblingMarkerSource,
-    ...(parent.tapName === undefined ? {} : { tapName: parent.tapName }),
-  };
-  return {
-    acquired: siblingAcquired,
-    loaded,
-    markerSource: siblingMarkerSource,
-    effectiveSource: { type: "tap", tap: parent.tapName ?? null, name: depName, ref: null },
-  };
-}
-
-/** Derive a marker source for a sibling that lives next to the original skill. */
-function derivedSiblingMarker(
-  parentMarker: MarkerSource,
-  _parentRoot: string,
-  siblingRoot: string,
-): MarkerSource {
-  switch (parentMarker.type) {
-    case "tap":
-      return {
-        type: "tap",
-        tap: parentMarker.tap,
-        path: siblingRoot.split("/").pop() ?? parentMarker.path,
-      };
-    case "git": {
-      // Parent subpath's last segment was the original skill dir. Replace it.
-      const newSub = siblingRoot.split("/").pop() ?? parentMarker.subpath;
-      const prefix = parentMarker.subpath.split("/").slice(0, -1).join("/");
-      const subpath = prefix.length > 0 ? `${prefix}/${newSub}` : newSub;
-      return { type: "git", url: parentMarker.url, subpath };
-    }
-    case "path":
-      return { type: "path", path: siblingRoot };
-  }
-}
-
-/** Build a marker source for a skill loaded after directory expansion. */
-function markerSourceFor(
-  acquired: AcquiredSource,
-  source: Source,
-  loaded: LoadedSkill,
-  acquiredRootDir: string,
-): MarkerSource {
-  // If the skill's path is deeper than rootDir (directory expansion case),
-  // adjust the tap path / git subpath accordingly.
-  const rel = loaded.path === acquiredRootDir ? "" : loaded.path.slice(acquiredRootDir.length + 1);
-  if (source.type === "tap") {
-    const tap = acquired.tapName ?? source.tap ?? "";
-    const path = rel.length > 0 ? `${source.name}/${rel}` : source.name;
-    return { type: "tap", tap, path };
-  }
-  if (source.type === "git") {
-    const subpath =
-      rel.length > 0
-        ? source.subpath.length > 0
-          ? `${source.subpath}/${rel}`
-          : rel
-        : source.subpath;
-    return { type: "git", url: source.url, subpath };
-  }
-  return { type: "path", path: loaded.path };
 }

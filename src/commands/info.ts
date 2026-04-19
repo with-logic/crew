@@ -8,7 +8,7 @@
 import { readConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
 import { NAME_PATTERN, parseRef } from "../refs/parse.ts";
-import { acquireSource } from "../sources/acquire.ts";
+import { acquireSource } from "../sources/acquire/index.ts";
 import { expandSkills } from "../sources/expand.ts";
 import { readState } from "../state/load.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";

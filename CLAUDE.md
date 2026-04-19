@@ -84,7 +84,7 @@ leave a PRD change unimplemented across a commit.
 src/
 ├── index.ts              # entry point — reads argv, calls runCli
 ├── cli/                  # argv parser, dispatcher, output formatter
-├── commands/             # one file per subcommand
+├── commands/             # one file per subcommand; complex commands are directories
 ├── core/                 # types, errors, paths, version
 ├── config/               # config.yaml read/write + defaults
 ├── state/                # state.json + PID-file state lock
@@ -102,9 +102,60 @@ src/
 └── core/version.ts       # CREW_VERSION constant
 ```
 
-Every file is **< 200 lines** and **has a top-of-file docstring** that
-names the spec section(s) it implements. Keep this invariant when
-adding new code.
+### Organization conventions
+
+These are load-bearing. Please keep them.
+
+**1. Hard file-size cap: < 200 lines per file.** Counted by `wc -l`. A
+file at 205 lines is a file to split, not an exception. This is a
+navigability rule, not a stylistic preference — big files hide
+structure, and every grep hit becomes a scroll. Split before the file
+grows, not after.
+
+If splitting makes a single logical unit awkward (e.g. a state
+machine), that's a signal the unit is doing too much — extract a
+helper, collapse a dead branch, or introduce a data table. The 200-line
+cap has not once forced genuinely worse code in this codebase.
+
+**2. Group related files into directories, not with filename prefixes.**
+If you have `foo.ts` + `foo-checks.ts` + `foo-render.ts`, that's a
+`foo/` directory with `index.ts`, `checks.ts`, `render.ts`. The
+filename-prefix pattern (e.g. `help-content.ts`, `doctor-repair.ts`) is
+**not** how we organize. It:
+
+- Makes grep noisier (`grep foo-` misses the entry `foo.ts`).
+- Pretends directories don't exist.
+- Implicitly encodes a group in filenames, which rots when names
+  change.
+
+When a concept needs multiple files, it gets a directory. The entry
+point is `index.ts`. Callers import `foo/index.ts` explicitly — we
+don't rely on implicit `index.ts` resolution because our tsconfig
+requires explicit `.ts` extensions.
+
+Conversely, a file whose name is a single multi-word concept
+(`bundle-update.ts`, `dep-resolution.ts`, `target-set.ts`) is fine —
+it's one name, not a group prefix.
+
+**3. Data and logic split into different files.** When a file is large
+because of a static table of help text, error messages, or other
+hardcoded content, extract the data into its own file(s) — not because
+pure data is special, but because it evolves independently and
+shouldn't share a file with logic. For large data registries (every
+help page, every error-code remedy), split one entry per file and
+aggregate in an `index.ts`.
+
+**4. Every file opens with a docstring** that says what the file does
+and which PRD section(s) it implements. Non-obvious invariants get a
+one-line comment referencing the spec (e.g. `// §7.3 step 5b`).
+
+**5. Named exports only.** No default exports. Easier to grep, easier
+to rename, less ambiguous at import sites.
+
+**6. Re-exports are OK when they preserve a stable import path for
+callers during a refactor**, but don't use them as a pattern for
+architectural layering — that just hides the real dependency graph.
+Prefer fixing the callers.
 
 ### Key design decisions
 
@@ -466,8 +517,6 @@ start.
   `noImplicitOverride`. Keep them on.
 - **`readonly` aggressively** in public types (see `src/core/types.ts`).
   Mutable locals are fine; mutable public APIs are not.
-- **No default exports.** Named exports only. Easier to grep, easier
-  to rename.
 - **Paths**: always absolute in-code. `posix` separators in hashes and
   markers (PRD §12.1). `toPosix()` from `src/util/fs.ts` when needed.
 - **Time**: always through `nowIso()` (`src/util/time.ts`). Honors
@@ -479,7 +528,7 @@ start.
 
 | Want to… | Touch… |
 |---|---|
-| Add a new command | `src/commands/<name>.ts`; register in `src/cli/dispatch.ts` and `src/commands/help.ts` |
+| Add a new command | `src/commands/<name>.ts` (or `src/commands/<name>/` for multi-file commands); register in `src/cli/dispatch.ts`; add help entry at `src/commands/help/content/<name>.ts` and register in `src/commands/help/content/index.ts` |
 | Add a new global flag | `src/cli/args.ts` (BOOLEAN_GLOBALS / VALUE_GLOBALS); thread through `CommandFlags` in `src/commands/types.ts` |
 | Add a new target adapter | new file in `src/targets/`; register in `src/targets/registry.ts` |
 | Add a new error type | `src/core/errors.ts` (both `CrewErrorName` and `EXIT_CODES`); update PRD §13/§15 |
