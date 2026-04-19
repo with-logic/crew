@@ -68,6 +68,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       dryRun: true,
       home,
       requiredBy,
+      allResolved: resolvedAll,
     });
     return { summary, alreadyInstalled };
   }
@@ -79,6 +80,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       dryRun: false,
       home,
       requiredBy,
+      allResolved: resolvedAll,
     });
     // Apply explicit promotions for skills that were `already installed`
     // but are now being named directly. Scope to this install's

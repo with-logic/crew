@@ -59,6 +59,14 @@ export function performInstall(
     readonly dryRun: boolean;
     readonly home?: string;
     readonly requiredBy: RequiredByMap;
+    /**
+     * The full resolve set (including skills that were already
+     * installed and thus skipped during the per-target loop). Used to
+     * maintain `required_by` edges on already-installed shared deps —
+     * e.g. installing `b` when `a` and `b` both depend on `shared`.
+     * Defaults to `resolved` when absent.
+     */
+    readonly allResolved?: readonly ResolvedSkill[];
   },
 ): InstallSummary {
   const home = options.home ?? crewHome();
@@ -112,11 +120,12 @@ export function performInstall(
     }
   }
 
-  // Rebuild `required_by` across every touched skill (§11.1 invariant).
-  // Any skill in the resolved set is authoritative for the current run;
-  // other existing state entries are untouched.
+  // Rebuild `required_by` across every skill in the resolve set (both
+  // the ones we just installed and any that were already-installed
+  // shared deps). Skills outside the resolve set are untouched.
   if (!options.dryRun) {
-    state = rebuildRequiredBy(state, resolved, scope, options.requiredBy, cwd);
+    const forEdges = options.allResolved ?? resolved;
+    state = rebuildRequiredBy(state, forEdges, scope, options.requiredBy, cwd);
   }
 
   return { records, newState: state };
@@ -166,10 +175,14 @@ function buildStateEntry(
 
 /**
  * Rewrite `required_by` on every skill in the resolved set so that the
- * edges computed during resolution are reflected on disk. Entries not
- * in the resolved set are left alone (their `required_by` may still
- * reference resolved skills, but those edges are authoritative only
- * for skills the current command touched).
+ * edges computed during resolution are reflected on disk.
+ *
+ * This install's roots (the explicit skills named by the user) are
+ * authoritative over edges from themselves: if `foo` was a root and
+ * `foo` previously claimed `bar` as a dep but no longer does, we drop
+ * that edge. Other skills' edges are preserved, so that two independent
+ * installs that share a common dep both end up in the dep's
+ * `required_by` list (avoids a shared dep getting mis-pruned later).
  */
 function rebuildRequiredBy(
   state: StateFile,
@@ -179,14 +192,25 @@ function rebuildRequiredBy(
   cwd: string,
 ): StateFile {
   const touched = new Set(resolved.map((s) => s.name));
+  // The roots of this install (skills the user named directly, plus
+  // every child of a multi-skill bundle per §9 step 5). Any existing
+  // `required_by` edge FROM one of these roots is considered stale and
+  // replaced with this install's freshly-resolved edges.
+  const roots = new Set(resolved.filter((s) => s.explicit).map((s) => s.name));
   const incomingProjectRoot = scope === "project" ? cwd : null;
   return {
     schema_version: 1,
     installations: state.installations.map((e) => {
       if (e.scope !== scope || !touched.has(e.name)) return e;
       if ((e.project_root ?? null) !== incomingProjectRoot) return e;
-      const required = [...(requiredBy.get(e.name) ?? [])].sort();
-      return { ...e, required_by: required };
+      // Start from existing edges minus any that came from this
+      // install's roots (stale-edge removal). Then layer the fresh
+      // edges on top.
+      const preserved = e.required_by.filter((n) => !roots.has(n));
+      const fresh = requiredBy.get(e.name) ?? new Set<string>();
+      const merged = new Set<string>(preserved);
+      for (const r of fresh) merged.add(r);
+      return { ...e, required_by: [...merged].sort() };
     }),
   };
 }

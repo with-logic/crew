@@ -42,6 +42,13 @@ export interface UpdateRow {
   readonly name: string;
   readonly scope: string;
   readonly outcome: Outcome;
+  /**
+   * For `crew update <name>...`, the top-level names that transitively
+   * pulled this entry into the update set. Absent/empty when the entry
+   * was named on the command line directly (or when update had no
+   * arguments).
+   */
+  readonly transitively_required_by?: readonly string[];
 }
 
 /** Per-entry update: returns a row, the new state, and whether to bump hardFailure. */

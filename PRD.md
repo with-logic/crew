@@ -633,10 +633,10 @@ Exit code: 0 if every skill succeeded in at least one target; 1 if any skill fai
 
 With no arguments, updates every installed skill. With arguments, updates only the named skills.
 
-1. For each configured tap, run `git fetch` and fast-forward the local clone to the tracked ref. Taps that fail to update produce a warning but do not abort the run.
+1. Fetch upstream for the taps this run will actually touch. With no args, that is every configured tap. With `<name>...`, it is the subset of taps that host the named entries — plus any taps hosting entries pulled in by step 2's dependency closure, and bundle-member taps for any bundle being re-expanded. Taps that fail to fetch produce a warning but do not abort the run.
 2. Build the list of skills to consider:
    - `crew update` with no args → every entry in `state.json`.
-   - `crew update <name>...` → only those names; an unknown name is an error per argument.
+   - `crew update <name>...` → the named entries, **plus their transitive dependency closure**. Concretely: for each name, take its state entry's direct deps (from its SKILL.md `metadata.crew.dependencies`, resolved against `required_by` in state), then their deps, and so on. A dep that isn't in state — one that was never installed — is not added; crew does not install new skills during update. Entries pulled in this way appear in the results alongside the named ones, marked `transitively_required_by: [<name>...]` in JSON output so callers can tell them apart. An unknown top-level name (`<name>` not in state) is an error per argument.
 2b. **Re-expand bundles** per §10.1.1. Any newly-added child skill is
    added to the list of skills to consider as a fresh install; any
    child skill that has disappeared from the bundle is reported with
@@ -1219,6 +1219,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` on a bundle with pending additions lists those additions without installing anything. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
 | C-UPD-23 | §10.1 / §16.4 | `crew update <name>...` restricts fetching to taps and ad-hoc git caches that back the named entries (and members of any bundle targeted by the name filter). Taps hosting only unrelated skills are NOT fetched. |
+| C-UPD-24 | §10.1 | `crew update <name>...` includes each named entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the named ones, marked as transitively required in `--json` output. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background agent from its launchd-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
