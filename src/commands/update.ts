@@ -8,9 +8,15 @@
  * scope) pair.
  *
  * Bundle re-expansion (§10.1.1) runs first: for every distinct bundle
- * in state, re-resolve the original reference, install newly-added
- * children, and mark removed children as `source_gone`. This is how
- * `crew install @org/skills` + autoupdate pulls in new team skills.
+ * in state (filtered by `names` if given), re-resolve the original
+ * reference, install newly-added children, and mark removed children
+ * as `source_gone`. This is how `crew install @org/skills` + autoupdate
+ * pulls in new team skills.
+ *
+ * Fetch scope (§16.4): `crew update` with no args refreshes every
+ * configured tap. `crew update <name>...` refreshes only the taps
+ * that back the named (or bundle-member) entries — other taps are
+ * left untouched, keeping a targeted update fast.
  *
  * Error isolation: a failure on one skill is recorded against that
  * skill only; processing continues. Exit code follows §10.1:
@@ -21,7 +27,7 @@
 import { readConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
-import type { StateEntry, StateFile } from "../core/types.ts";
+import type { Config, StateEntry, StateFile, TapConfig } from "../core/types.ts";
 import { type BundleRow, installNewBundleChild, reexpandBundles } from "../install/bundle/index.ts";
 import { type UpdateRow, updateOneEntry } from "../install/update-one.ts";
 import { garbageCollectStore } from "../maintenance/gc.ts";
@@ -44,11 +50,15 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   const newState = withStateLock(() => {
     let current = readState(home);
 
-    // §10.1 step 1: fetch every configured tap so local clones reflect
-    // upstream. Per-tap failures become warnings, not hard errors — an
-    // offline tap doesn't stop updates for the rest. This is what keeps
-    // `crew search` in sync with upstream without requiring a reinstall.
-    tapRows = refreshTaps(config.taps, home);
+    // §10.1 step 1 (scoped): fetch only the taps that back the entries
+    // this run will actually touch. `crew update` with no args refreshes
+    // every configured tap; `crew update <name>...` restricts the
+    // fetch set to the taps that host those entries (and any bundles
+    // being re-expanded because one of their members was named). Per-tap
+    // failures become warnings, not hard errors — an offline tap
+    // doesn't stop updates for the rest.
+    const tapsToRefresh = tapsToRefreshFor(current, config, names);
+    tapRows = refreshTaps(tapsToRefresh, home);
 
     // §10.1 step 2b: re-expand bundles before walking per-skill updates.
     const reexpanded = reexpandBundles(current, config, home, names, (args) =>
@@ -108,6 +118,35 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
     human,
     json: { rows, bundle_rows: bundleRows, tap_rows: tapRows },
   };
+}
+
+/**
+ * Compute the set of tap configs whose clones this run needs fresh.
+ *
+ * Empty `names`: every configured tap (full refresh — matches
+ * `crew update` with no args).
+ *
+ * Non-empty `names`: only the taps that host an entry we're going to
+ * touch — either directly selected by the name filter, or pulled in
+ * because its bundle is being re-expanded (same name-filter rule
+ * `reexpandBundles` uses). Other taps are left untouched.
+ */
+function tapsToRefreshFor(state: StateFile, config: Config, names: readonly string[]): TapConfig[] {
+  if (names.length === 0) return [...config.taps];
+  const wantedTapNames = new Set<string>();
+  const nameSet = new Set(names);
+  for (const entry of state.installations) {
+    const inNameSet = nameSet.has(entry.name);
+    const inTargetedBundle =
+      entry.bundle !== undefined &&
+      (nameSet.has(entry.bundle.ref) ||
+        state.installations.some(
+          (e) => e.bundle?.ref === entry.bundle?.ref && nameSet.has(e.name),
+        ));
+    if (!(inNameSet || inTargetedBundle)) continue;
+    if (entry.source.type === "tap") wantedTapNames.add(entry.source.tap);
+  }
+  return config.taps.filter((t) => wantedTapNames.has(t.name));
 }
 
 function formatRow(r: UpdateRow): string {

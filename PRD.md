@@ -1034,7 +1034,12 @@ Crew ships with a default tap named `core` at a URL specified by the implementat
 
 **Network policy.** Read-only commands (`crew search`, `crew info`, `crew list`, `crew install <bare-name>` and `<tap>/<skill>` forms, bundle re-expansion during `crew update`) MUST NOT contact the network. They read from local tap clones as-of the last `crew update` / `crew tap update`. A tap that has never been cloned is materialized on demand on first use; if that initial clone fails (offline, bad URL), the command warns on stderr and skips that tap — it does not fail the whole run.
 
-The only commands that actively fetch from upstream are `crew update` (§10.1 step 1, every configured tap), `crew tap update` (every configured tap, or a named subset), `crew tap add` (initial clone of a freshly-added tap), and `crew install <git-url>` (the specific ad-hoc URL the user named — not other configured taps).
+The only commands that actively fetch from upstream are:
+
+- `crew update` (§10.1 step 1). Without args: every configured tap. With `<name>...`: only the taps and git caches that back the named entries (and any bundle being re-expanded because one of its members was named). Taps hosting unrelated skills are not touched.
+- `crew tap update` — every configured tap, or the named subset.
+- `crew tap add` — initial clone of the freshly-added tap.
+- `crew install <git-url>` — the specific ad-hoc URL the user named. Not other configured taps.
 
 ## 17. Implementation latitude
 
@@ -1212,7 +1217,8 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-16 | §10.1.1 | A child skill removed from a bundle upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
 | C-UPD-17 | §10.1.1 | A single-skill expansion (resolved source has a root `SKILL.md`) does NOT record a `bundle` field. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` on a bundle with pending additions lists those additions without installing anything. |
-| C-UPD-19 | §10.1 | `crew update` fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
+| C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
+| C-UPD-23 | §10.1 / §16.4 | `crew update <name>...` restricts fetching to taps and ad-hoc git caches that back the named entries (and members of any bundle targeted by the name filter). Taps hosting only unrelated skills are NOT fetched. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background agent from its launchd-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |

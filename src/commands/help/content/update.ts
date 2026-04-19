@@ -7,6 +7,7 @@ export const updateHelp: CommandHelp = {
     "Re-resolve each installed skill's ref and reinstall if the upstream SHA has moved.",
     "Pinned installs (exact SHA or tag) are skipped unless `--force`. Customized installs are skipped silently — your edits are preserved.",
     "Bundles are re-expanded: new siblings upstream get installed; siblings that disappeared upstream are reported as `source_gone` and left in place locally.",
+    "Fetch scope: without args, every configured tap is fetched. With `<name>...`, only the taps and ad-hoc git caches that back those skills (or the bundles they're part of) are fetched — other taps are left untouched.",
   ],
   flags: [
     {
@@ -29,6 +30,7 @@ export const updateHelp: CommandHelp = {
   notes: [
     "Upstream deletion is soft: if a skill is removed upstream but its source still resolves, `crew update` reports `source_gone` and leaves your local install untouched. Run `crew uninstall <name>` when you want it gone.",
     "Network failures are isolated per-skill — one broken source doesn't stop the rest.",
+    "Use `crew tap update` if you only want to refresh tap clones (for faster `crew search`) without touching installed skills.",
   ],
   seeAlso: ["autoupdate", "install", "list"],
 };
