@@ -170,7 +170,7 @@ describe("crew tap", () => {
     // Tells the user exactly how to resolve it — including the URL
     // they just tried, so the suggested command is copy-pasteable.
     expect(c.stderr()).toContain(`crew tap add file://${repoB}`);
-    expect(c.stderr()).toContain("<your-name>");
+    expect(c.stderr()).toContain("<tap-name>");
   });
 
   test("tap remove nonexistent fails", () => {

@@ -82,7 +82,7 @@ function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
       }
       throw new CrewError(
         "usage_error",
-        `tap \`${name}\` is already configured at \`${existing.url}\` — to add this one under a different name, run \`crew tap add ${url} <your-name>\``,
+        `tap \`${name}\` is already configured at \`${existing.url}\` — to add this one under a different name, run \`crew tap add ${url} <tap-name>\``,
         { name, existingUrl: existing.url, incomingUrl: url },
       );
     }
