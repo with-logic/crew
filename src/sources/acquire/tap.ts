@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { crewHome, tapPath } from "../../core/paths.ts";
 import type { Config, TapConfig, TapSource } from "../../core/types.ts";
-import { checkoutSha, classifyRef, ensureRepo, resolveRef } from "../../git/repo.ts";
+import { checkoutSha, classifyRef, ensureClone, resolveRef } from "../../git/repo.ts";
 import { isDirectory } from "../../util/fs.ts";
 import type { AcquiredSource } from "./index.ts";
 
@@ -38,11 +38,19 @@ export function acquireTap(
     return acquireFromTap(tapConfig, source, home);
   }
 
-  // Bare name: search every tap.
+  // Bare name: search every tap. We only clone taps that don't exist
+  // yet — never fetch. If a never-cloned tap is unreachable right now,
+  // skip it silently so `crew install foo` still works for taps that
+  // ARE reachable. `crew update` / `crew tap update` are the commands
+  // that get to raise hard network errors.
   const found: TapConfig[] = [];
   for (const tap of config.taps) {
     const tp = tapPath(tap.name, home);
-    ensureRepo(tap.url, tp);
+    try {
+      ensureClone(tap.url, tp);
+    } catch {
+      continue;
+    }
     if (isDirectory(join(tapRootDir(tp, tap), source.name))) {
       found.push(tap);
     }
@@ -72,7 +80,9 @@ export function acquireTap(
 
 function acquireFromTap(tap: TapConfig, source: TapSource, home: string): AcquiredSource {
   const tp = tapPath(tap.name, home);
-  ensureRepo(tap.url, tp);
+  // Materialize the clone if it hasn't been created yet; no fetch.
+  // Users pick up upstream changes via `crew update` / `crew tap update`.
+  ensureClone(tap.url, tp);
   const sha = resolveRef(tp, source.ref);
   const kind = classifyRef(tp, source.ref);
   checkoutSha(tp, sha);

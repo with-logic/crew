@@ -20,23 +20,15 @@
 
 import { readConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
-import { crewHome, tapPath } from "../core/paths.ts";
+import { crewHome } from "../core/paths.ts";
 import type { StateEntry, StateFile } from "../core/types.ts";
-import { ensureRepo } from "../git/repo.ts";
 import { type BundleRow, installNewBundleChild, reexpandBundles } from "../install/bundle/index.ts";
 import { type UpdateRow, updateOneEntry } from "../install/update-one.ts";
 import { garbageCollectStore } from "../maintenance/gc.ts";
 import { readState, upsertEntry, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
+import { refreshTaps, type TapRefreshRow } from "./tap/refresh.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
-
-/** Result of refreshing one configured tap at the start of an update run. */
-interface TapRow {
-  name: string;
-  url: string;
-  kind: "refreshed" | "failed";
-  error?: { code: string; message: string };
-}
 
 export function updateCommand(ctx: CommandContext): CommandOutput {
   const config = readConfig(ctx.home);
@@ -46,7 +38,7 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
 
   const rows: UpdateRow[] = [];
   const bundleRows: BundleRow[] = [];
-  const tapRows: TapRow[] = [];
+  let tapRows: readonly TapRefreshRow[] = [];
   let hardFailure = false;
 
   const newState = withStateLock(() => {
@@ -56,20 +48,7 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
     // upstream. Per-tap failures become warnings, not hard errors — an
     // offline tap doesn't stop updates for the rest. This is what keeps
     // `crew search` in sync with upstream without requiring a reinstall.
-    for (const tap of config.taps) {
-      try {
-        ensureRepo(tap.url, tapPath(tap.name, home));
-        tapRows.push({ name: tap.name, url: tap.url, kind: "refreshed" });
-      } catch (err) {
-        const ce = err as CrewError;
-        tapRows.push({
-          name: tap.name,
-          url: tap.url,
-          kind: "failed",
-          error: { code: ce.code ?? "source_unreachable", message: ce.message },
-        });
-      }
-    }
+    tapRows = refreshTaps(config.taps, home);
 
     // §10.1 step 2b: re-expand bundles before walking per-skill updates.
     const reexpanded = reexpandBundles(current, config, home, names, (args) =>

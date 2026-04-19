@@ -214,11 +214,14 @@ describe("C-UPD-19: crew update refreshes every configured tap", () => {
     // Remove core so the search only reflects our test tap.
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
 
-    // Search before upstream changes — only alpha, beta exist.
+    // Search before upstream changes — only alpha, beta exist. Use
+    // --json so we can check hits structurally (the human output now
+    // mentions the query in a "no matches" message).
     {
       const c = captureStreams();
-      runCli(["search", "gamma"], { home, streams: c.streams });
-      expect(c.stdout()).not.toContain("gamma");
+      runCli(["search", "--json", "gamma"], { home, streams: c.streams });
+      const parsed = JSON.parse(c.stdout()) as { hits: { name: string }[] };
+      expect(parsed.hits).toHaveLength(0);
     }
 
     // Upstream publishes a new skill. No crew install from this tap yet.

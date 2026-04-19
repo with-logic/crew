@@ -7,6 +7,7 @@
  */
 
 import type { Scope } from "../core/types.ts";
+import type { Styler } from "../util/term.ts";
 
 /** Parsed flags + positionals plus environment for the run. */
 export interface CommandContext {
@@ -18,6 +19,14 @@ export interface CommandContext {
   readonly cwd: string;
   /** Effective `~/.crew/` home. */
   readonly home: string;
+  /**
+   * Styler for human output: wraps strings in ANSI codes when the
+   * output stream is a TTY and `NO_COLOR` isn't set, otherwise returns
+   * strings unchanged. Tests default to the plain styler.
+   */
+  readonly style: Styler;
+  /** Terminal width for human output wrapping/truncation. */
+  readonly width: number;
 }
 
 /** Global flags as parsed by the CLI. */

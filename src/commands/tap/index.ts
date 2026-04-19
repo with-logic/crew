@@ -21,16 +21,17 @@
  */
 
 import { statSync } from "node:fs";
-import { DEFAULT_TAP_NAME } from "../config/defaults.ts";
-import { readConfig, writeConfig } from "../config/load.ts";
-import { CrewError } from "../core/errors.ts";
-import { tapPath } from "../core/paths.ts";
-import type { TapConfig } from "../core/types.ts";
-import { ensureRepo } from "../git/repo.ts";
-import { parseRef } from "../refs/parse.ts";
-import { withStateLock } from "../state/lock.ts";
-import { exists, rmrf } from "../util/fs.ts";
-import type { CommandContext, CommandOutput } from "./types.ts";
+import { DEFAULT_TAP_NAME } from "../../config/defaults.ts";
+import { readConfig, writeConfig } from "../../config/load.ts";
+import { CrewError } from "../../core/errors.ts";
+import { tapPath } from "../../core/paths.ts";
+import type { TapConfig } from "../../core/types.ts";
+import { ensureClone } from "../../git/repo.ts";
+import { parseRef } from "../../refs/parse.ts";
+import { withStateLock } from "../../state/lock.ts";
+import { exists, rmrf } from "../../util/fs.ts";
+import type { CommandContext, CommandOutput } from "../types.ts";
+import { refreshTaps, type TapRefreshRow } from "./refresh.ts";
 
 export function tapCommand(ctx: CommandContext): CommandOutput {
   const sub = ctx.positional[0];
@@ -38,16 +39,17 @@ export function tapCommand(ctx: CommandContext): CommandOutput {
   if (sub === "add") return tapAdd(ctx, rest);
   if (sub === "remove") return tapRemove(ctx, rest);
   if (sub === "list") return tapList(ctx);
+  if (sub === "update") return tapUpdate(ctx, rest);
   // Shorthand: `crew tap <git-url> [<name>]` → `crew tap add <git-url> [<name>]`.
   // Only dispatch to add when the first positional parses as a git
   // source; plain words fall through to the usage error so typos of
-  // `list`/`remove` don't silently try to add them as taps.
+  // `list`/`remove`/`update` don't silently try to add them as taps.
   if (sub && looksLikeGitSource(sub, ctx.cwd)) {
     return tapAdd(ctx, ctx.positional);
   }
   throw new CrewError(
     "usage_error",
-    "`crew tap` takes one of: `<git-url> [<name>]`, `add <git-url> [<name>]`, `remove <name>`, or `list`",
+    "`crew tap` takes one of: `<git-url> [<name>]`, `add <git-url> [<name>]`, `remove <name>`, `update [<name>]`, or `list`",
   );
 }
 
@@ -105,7 +107,9 @@ function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
     // directory so retry gets a clean slate.
     const cloneDir = tapPath(name, ctx.home);
     try {
-      ensureRepo(url, cloneDir);
+      // Initial clone only — no fetch needed since `git clone` already
+      // has the latest tip of the default branch.
+      ensureClone(url, cloneDir);
     } catch (err) {
       if (exists(cloneDir)) rmrf(cloneDir);
       throw err;
@@ -200,6 +204,52 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
     human: [`removed tap ${name}`],
     json: { name },
   };
+}
+
+/**
+ * `crew tap update [<name>]` — fetch + fast-forward one or every tap.
+ *
+ * This is the "refresh taps without touching installed skills" knob.
+ * `crew update` still does both in one shot; this exists so users who
+ * just want search/install to see fresh upstream state don't have to
+ * churn through the per-skill update loop.
+ *
+ * Per-tap failures are reported in a rows table; exit code is 1 if
+ * any tap failed, 0 otherwise.
+ */
+function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput {
+  const config = readConfig(ctx.home);
+  const selected: readonly TapConfig[] =
+    args.length === 0 ? config.taps : tapsMatching(config.taps, args);
+  const rows: TapRefreshRow[] = refreshTaps(selected, ctx.home);
+  const anyFailed = rows.some((r) => r.kind === "failed");
+  const human = rows.map((r) =>
+    r.kind === "refreshed"
+      ? `${r.name}: refreshed (${r.url})`
+      : `${r.name}: FAILED (${r.error?.code ?? "unknown"}) — ${r.error?.message ?? ""}`,
+  );
+  return {
+    exitCode: anyFailed ? 1 : 0,
+    human,
+    json: { rows },
+  };
+}
+
+/** Resolve one-or-more tap names from the positional args; unknown names are usage errors. */
+function tapsMatching(all: readonly TapConfig[], names: readonly string[]): TapConfig[] {
+  const out: TapConfig[] = [];
+  for (const n of names) {
+    const tap = all.find((t) => t.name === n);
+    if (!tap) {
+      throw new CrewError(
+        "usage_error",
+        `no tap named \`${n}\` is configured — run \`crew tap list\` to see what's there`,
+        { name: n },
+      );
+    }
+    out.push(tap);
+  }
+  return out;
 }
 
 function tapList(ctx: CommandContext): CommandOutput {

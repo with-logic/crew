@@ -1026,10 +1026,15 @@ Crew ships with a default tap named `core` at a URL specified by the implementat
 - Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`) — the subpath is entirely internal to the tap's configuration and never appears in skill references.
 - `crew tap remove <name>` deletes the local clone and removes the tap from config.
 - `crew tap list` prints each tap's name, URL, and last-fetched timestamp.
+- `crew tap update [<name>...]` fetches upstream for every configured tap (or only the named ones) and fast-forwards each tap's working tree. It does **not** touch installed skills — it is the "refresh taps only" knob; contrast with `crew update`, which refreshes taps **and** updates installed skills. Per-tap failures are reported per-row and do not abort the run; exit code is 1 if any tap failed, 0 otherwise.
 
-### 16.4 Search
+### 16.4 Search and network policy
 
-`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every tap. Output is one skill per line: `<tap>/<name>  <description-truncated-to-terminal-width>`. `--json` emits a structured array.
+`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured tap. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. `--json` emits a structured `{ hits, warnings }` object.
+
+**Network policy.** Read-only commands (`crew search`, `crew info`, `crew list`, `crew install <bare-name>` and `<tap>/<skill>` forms, bundle re-expansion during `crew update`) MUST NOT contact the network. They read from local tap clones as-of the last `crew update` / `crew tap update`. A tap that has never been cloned is materialized on demand on first use; if that initial clone fails (offline, bad URL), the command warns on stderr and skips that tap — it does not fail the whole run.
+
+The only commands that actively fetch from upstream are `crew update` (§10.1 step 1, every configured tap), `crew tap update` (every configured tap, or a named subset), `crew tap add` (initial clone of a freshly-added tap), and `crew install <git-url>` (the specific ad-hoc URL the user named — not other configured taps).
 
 ## 17. Implementation latitude
 
@@ -1250,6 +1255,8 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-13 | §16.3 | Default name derivation for a subpath tap is `<last-repo-segment>-<last-subpath-segment>` (e.g. `@with-logic/backend//skills` → `backend-skills`); for a root tap it remains the final repo segment. |
 | C-TAP-14 | §16.3 | Adding a tap whose `(name, url, subpath)` already exists is a no-op (exit 0). Adding the same name with a different URL or subpath is `usage_error`. |
 | C-TAP-15 | §16.3 | `crew tap add` is transactional: if the clone fails, the tap is NOT recorded in `config.yaml` and does NOT appear in `crew tap list`. Any partially-materialized clone directory is removed. |
+| C-TAP-16 | §16.3 | `crew tap update` fetches + fast-forwards every configured tap. `crew tap update <name>...` restricts to the named taps. Unknown names produce `usage_error`. It does not touch installed skills. |
+| C-TAP-17 | §16.4 | `crew search`, `crew info`, `crew list`, and `crew install` for bare-name or `<tap>/<skill>` references do not issue a `git fetch`. They read from local tap clones only. A missing clone is materialized on first read; an unreachable tap at that moment warns and is skipped. |
 
 #### C-STATE: State and markers (§11)
 

@@ -13,7 +13,7 @@ import { infoCommand } from "../commands/info.ts";
 import { installCommand } from "../commands/install.ts";
 import { listCommand } from "../commands/list.ts";
 import { searchCommand } from "../commands/search.ts";
-import { tapCommand } from "../commands/tap.ts";
+import { tapCommand } from "../commands/tap/index.ts";
 import { targetsCommand } from "../commands/targets.ts";
 import type { CommandContext, CommandOutput } from "../commands/types.ts";
 import { uninstallCommand } from "../commands/uninstall/index.ts";

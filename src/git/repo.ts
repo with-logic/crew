@@ -5,6 +5,13 @@
  * Every external operation translates `GitProcessError` into crew's
  * `source_unreachable` / `ref_not_found` errors with appropriate exit
  * codes, so callers just catch `CrewError` and report.
+ *
+ * Network policy (§16.4): read-only commands (`crew search`, bare-name
+ * `crew install`) call `ensureClone` — clones a missing tap the first
+ * time, but never fetches. Only `crew update`, `crew tap update`, and
+ * `crew install <git-url>` fetch upstream; they combine `ensureClone`
+ * with `fetchAndCheckout` (or use the `ensureRepo` wrapper that bundles
+ * both).
  */
 
 import { CrewError } from "../core/errors.ts";
@@ -29,31 +36,36 @@ export function cloneRepo(url: string, dest: string, full: boolean = false): voi
 }
 
 /**
- * Ensure a clone of `url` exists at `dest`; if it does, fetch AND
- * fast-forward the working tree to the remote's default branch so the
- * files on disk match upstream. Returns true if the clone was newly
- * created, false if it was fetched + fast-forwarded.
+ * Clone `url` into `dest` if the clone doesn't already exist. Otherwise
+ * verify the existing directory is a git repo. Never contacts the network
+ * when the clone is already present — use `fetchAndCheckout` (or the
+ * `ensureRepo` wrapper) to refresh it.
  *
- * Per PRD §10.1 step 1, tap clones must reflect the tracked ref after
- * `crew update` so that `crew search` sees newly-published skills
- * without requiring a re-install. A bare `git fetch` only updates
- * remote-tracking refs; it leaves the working tree frozen. We
- * additionally reset the working tree to `origin/HEAD`, detached so we
- * don't fight with any branch git would otherwise try to track.
+ * Returns true if a clone was newly created, false if the existing
+ * clone was reused.
  */
-export function ensureRepo(url: string, dest: string): boolean {
+export function ensureClone(url: string, dest: string): boolean {
   if (!exists(dest)) {
     cloneRepo(url, dest);
     return true;
   }
   if (!isDirectory(`${dest}/.git`)) {
-    // Something exists but isn't a git checkout.
     throw new CrewError(
       "source_unreachable",
       `\`${dest}\` exists but isn't a git repository — something clobbered it outside crew's control; remove it and retry`,
       { dest },
     );
   }
+  return false;
+}
+
+/**
+ * Fetch upstream refs into an existing clone at `dest`, then fast-forward
+ * the working tree to `origin/HEAD` (detached) so callers that read files
+ * (e.g. `crew search`) see upstream additions. Assumes `dest` is already
+ * a valid clone — callers pair this with `ensureClone`.
+ */
+export function fetchAndCheckout(dest: string): void {
   try {
     runGit(["fetch", "--tags", "--prune", "origin"], { cwd: dest });
   } catch (err) {
@@ -66,8 +78,7 @@ export function ensureRepo(url: string, dest: string): boolean {
   }
   // Fast-forward the working tree to origin/HEAD. Failures here are
   // non-fatal — the fetched refs are still usable by `acquireSource`,
-  // which resolves specific SHAs directly. This matters only for
-  // callers that read files from the working tree (e.g. `crew search`).
+  // which resolves specific SHAs directly.
   const headSha = runGit(["rev-parse", "--verify", "refs/remotes/origin/HEAD^{commit}"], {
     cwd: dest,
     throwOnError: false,
@@ -78,6 +89,21 @@ export function ensureRepo(url: string, dest: string): boolean {
       runGit(["checkout", "--quiet", "--detach", sha], { cwd: dest, throwOnError: false });
     }
   }
+}
+
+/**
+ * Clone-if-missing AND fetch-if-present. Used by commands that both
+ * materialize a new clone and want it refreshed in one shot: `crew update`
+ * (every configured tap), `crew tap update`, and `crew install <git-url>`
+ * (ad-hoc git sources, where the user expects the named ref to be fresh).
+ */
+export function ensureRepo(url: string, dest: string): boolean {
+  const freshlyCloned = ensureClone(url, dest);
+  if (freshlyCloned) {
+    // Just cloned — already has the latest; skip the fetch round-trip.
+    return true;
+  }
+  fetchAndCheckout(dest);
   return false;
 }
 

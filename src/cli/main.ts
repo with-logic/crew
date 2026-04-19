@@ -9,6 +9,7 @@
 import type { CommandContext } from "../commands/types.ts";
 import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
+import { colorEnabled, makeStyler, type Styler, terminalWidth } from "../util/term.ts";
 import { parseArgs } from "./args.ts";
 import { dispatch } from "./dispatch.ts";
 import { defaultStreams, type OutputStreams, writeError, writeSuccess } from "./output.ts";
@@ -18,6 +19,10 @@ export interface RunCliOptions {
   readonly cwd?: string;
   readonly home?: string;
   readonly streams?: OutputStreams;
+  /** Override the styler (tests use the plain one; default detects TTY). */
+  readonly style?: Styler;
+  /** Override terminal width (default reads process.stdout.columns). */
+  readonly width?: number;
 }
 
 /** Run the CLI with the given argv. Returns an exit code. */
@@ -25,6 +30,11 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
   const streams = options.streams ?? defaultStreams;
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
+  // When the caller supplied a streams override (tests, pipes), force
+  // plain-text output regardless of whether the real stdout is a TTY —
+  // color codes in captured buffers are almost never what you want.
+  const style = options.style ?? makeStyler(options.streams === undefined && colorEnabled());
+  const width = options.width ?? terminalWidth();
 
   let parsed: ReturnType<typeof parseArgs>;
   try {
@@ -41,6 +51,8 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
     flags: parsed.flags,
     cwd,
     home,
+    style,
+    width,
   };
 
   try {

@@ -2,11 +2,12 @@ import type { CommandHelp } from "./types.ts";
 
 export const tapHelp: CommandHelp = {
   name: "tap",
-  synopsis: "crew tap [add|remove|list] [args...]",
+  synopsis: "crew tap [add|remove|list|update] [args...]",
   summary: [
     "Taps are git-managed directories filled with skills. The default tap `core` is always present unless you explicitly remove it.",
     "After adding a tap you can install any skill in it by bare name (e.g. `crew install python-testing`) without naming the tap.",
     "`crew tap <git-url> [<name>]` is a shorthand for `crew tap add <git-url> [<name>]` — when the first argument looks like a git source, the `add` keyword is optional.",
+    "Read-only commands (`crew search`, `crew info`, `crew install`) never hit the network — they read your local tap clones. Run `crew tap update` (or `crew update`) when you want to pick up upstream changes.",
   ],
   flags: [
     { flag: "--force", description: "Allow removing the default `core` tap." },
@@ -29,6 +30,14 @@ export const tapHelp: CommandHelp = {
       command: "crew tap @with-logic/backend//skills",
       description:
         "Add a subpath tap — the skills live in the `skills/` directory of a larger repo. Default name: `backend-skills`.",
+    },
+    {
+      command: "crew tap update",
+      description: "Fetch upstream for every configured tap. Doesn't touch installed skills.",
+    },
+    {
+      command: "crew tap update acme",
+      description: "Refresh only the named tap(s).",
     },
     { command: "crew tap remove acme", description: "Remove a tap and delete its local clone." },
   ],
@@ -86,6 +95,8 @@ export const tapHelp: CommandHelp = {
     "Adding a tap is non-destructive — it just clones into `~/.crew/taps/<name>/` and indexes the skills inside. No confirmation is needed.",
     "Re-adding the same tap (same name, same URL, same subpath) is a no-op. Re-adding with the same name but a different URL or subpath is rejected — pick a different name.",
     "Ambiguous bare names (a skill in two different taps) produce `ambiguous_reference` — qualify with `<tap>/<skill>` to pick one.",
+    "`crew tap update` is the lightweight sibling of `crew update`: it refreshes the tap clones you use for search/install but leaves installed skills alone. Use `crew update` when you also want installed skills rolled forward.",
+    "If `crew search` shows a tap as \"not cloned yet and couldn't be reached,\" run `crew tap update <name>` once you're back online.",
   ],
   seeAlso: ["search", "install"],
 };
