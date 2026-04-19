@@ -3,6 +3,11 @@
  * `tap/skill`), ensure the tap's git clone is up to date, and point
  * `rootDir` at the named skill's directory within the tap.
  *
+ * A tap optionally carries a `subpath` — when present, the tap is
+ * rooted at `<clone>/<subpath>` rather than the clone root. This is
+ * invisible in references: users still type `crew install <skill>`
+ * or `<tap>/<skill>`; the subpath is joined internally on every walk.
+ *
  * A bare name (`<skill>`) searches every configured tap, raising
  * `invalid_ref` if no tap carries it and `ambiguous_reference` if more
  * than one does.
@@ -11,7 +16,7 @@
 import { join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { crewHome, tapPath } from "../../core/paths.ts";
-import type { Config, TapSource } from "../../core/types.ts";
+import type { Config, TapConfig, TapSource } from "../../core/types.ts";
 import { checkoutSha, classifyRef, ensureRepo, resolveRef } from "../../git/repo.ts";
 import { isDirectory } from "../../util/fs.ts";
 import type { AcquiredSource } from "./index.ts";
@@ -30,16 +35,16 @@ export function acquireTap(
         `no tap named \`${source.tap}\` is configured — run \`crew tap list\` to see configured taps, or \`crew tap add\` to add one`,
         { tap: source.tap },
       );
-    return acquireFromTap(tapConfig.name, tapConfig.url, source, home);
+    return acquireFromTap(tapConfig, source, home);
   }
 
   // Bare name: search every tap.
-  const found: { tapName: string; tapUrl: string }[] = [];
+  const found: TapConfig[] = [];
   for (const tap of config.taps) {
     const tp = tapPath(tap.name, home);
     ensureRepo(tap.url, tp);
-    if (isDirectory(join(tp, source.name))) {
-      found.push({ tapName: tap.name, tapUrl: tap.url });
+    if (isDirectory(join(tapRootDir(tp, tap), source.name))) {
+      found.push(tap);
     }
   }
   if (found.length === 0) {
@@ -55,35 +60,30 @@ export function acquireTap(
     );
   }
   if (found.length > 1) {
-    const candidates = found.map((f) => `${f.tapName}/${source.name}`).join(", ");
+    const candidates = found.map((f) => `${f.name}/${source.name}`).join(", ");
     throw new CrewError(
       "ambiguous_reference",
       `skill \`${source.name}\` matches multiple taps (${candidates}) — qualify with one of those names to pick`,
       { candidates },
     );
   }
-  return acquireFromTap(found[0]!.tapName, found[0]!.tapUrl, source, home);
+  return acquireFromTap(found[0]!, source, home);
 }
 
-function acquireFromTap(
-  tapName: string,
-  tapUrl: string,
-  source: TapSource,
-  home: string,
-): AcquiredSource {
-  const tp = tapPath(tapName, home);
-  ensureRepo(tapUrl, tp);
+function acquireFromTap(tap: TapConfig, source: TapSource, home: string): AcquiredSource {
+  const tp = tapPath(tap.name, home);
+  ensureRepo(tap.url, tp);
   const sha = resolveRef(tp, source.ref);
   const kind = classifyRef(tp, source.ref);
   checkoutSha(tp, sha);
 
-  const relative = source.name;
-  const rootDir = join(tp, relative);
+  const root = tapRootDir(tp, tap);
+  const rootDir = join(root, source.name);
   if (!isDirectory(rootDir)) {
     throw new CrewError(
       "invalid_ref",
-      `tap \`${tapName}\` has no skill named \`${source.name}\` — \`crew search ${source.name}\` checks every tap`,
-      { tap: tapName, skill: source.name },
+      `tap \`${tap.name}\` has no skill named \`${source.name}\` — \`crew search ${source.name}\` checks every tap`,
+      { tap: tap.name, skill: source.name },
     );
   }
   return {
@@ -91,7 +91,21 @@ function acquireFromTap(
     resolvedSha: sha,
     requestedRef: source.ref,
     pinned: kind === "sha" || kind === "tag",
-    markerSource: { type: "tap", tap: tapName, path: relative },
-    tapName,
+    // The marker's `path` is the skill's location relative to the tap's
+    // root (i.e. relative to `tapRootDir`, not to the clone root).
+    // That keeps marker semantics independent of whether a tap is
+    // subpath-rooted or not — moving a tap's subpath doesn't rewrite
+    // every installed marker.
+    markerSource: { type: "tap", tap: tap.name, path: source.name },
+    tapName: tap.name,
   };
+}
+
+/**
+ * Where a tap is "rooted": the clone path for a plain tap, or
+ * `<clone>/<subpath>` for a subpath tap. Exported so `crew search` can
+ * walk the same directory as `acquireTap`.
+ */
+export function tapRootDir(clonePath: string, tap: TapConfig): string {
+  return tap.subpath && tap.subpath.length > 0 ? join(clonePath, tap.subpath) : clonePath;
 }

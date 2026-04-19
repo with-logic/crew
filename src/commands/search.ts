@@ -12,6 +12,7 @@ import { CrewError } from "../core/errors.ts";
 import { tapPath } from "../core/paths.ts";
 import { ensureRepo } from "../git/repo.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
+import { tapRootDir } from "../sources/acquire/tap.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
@@ -34,8 +35,10 @@ export function searchCommand(ctx: CommandContext): CommandOutput {
     } catch {
       continue; // silent skip on network issues
     }
-    for (const entry of listDir(tp)) {
-      const dir = join(tp, entry);
+    const root = tapRootDir(tp, tap);
+    if (!isDirectory(root)) continue;
+    for (const entry of listDir(root)) {
+      const dir = join(root, entry);
       if (!(isDirectory(dir) && hasSkillMd(dir))) {
         continue;
       }

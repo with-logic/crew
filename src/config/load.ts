@@ -84,7 +84,21 @@ export function normalizeConfig(parsed: YamlValue): Config {
           "config.yaml: each tap needs a non-empty `url` (git clone URL)",
         );
       }
-      taps.push({ name, url });
+      const rawSubpath = em["subpath"];
+      let subpath: string | undefined;
+      if (rawSubpath !== undefined && rawSubpath !== null) {
+        if (typeof rawSubpath !== "string") {
+          throw new CrewError(
+            "config_invalid",
+            "config.yaml: tap `subpath`, when present, must be a string (directory inside the repo)",
+          );
+        }
+        // Normalize away leading/trailing slashes so join() doesn't
+        // accidentally pick up an absolute or double-slashed path.
+        const trimmed = rawSubpath.replace(/^\/+|\/+$/g, "");
+        if (trimmed.length > 0) subpath = trimmed;
+      }
+      taps.push(subpath === undefined ? { name, url } : { name, url, subpath });
     }
   }
 
@@ -157,7 +171,11 @@ function readStringList(map: YamlMap, key: string): string[] {
 /** Write a config to disk as YAML. */
 export function writeConfig(config: Config, home: string = crewHome()): void {
   const obj: YamlValue = {
-    taps: config.taps.map((t) => ({ name: t.name, url: t.url })),
+    taps: config.taps.map((t) =>
+      t.subpath === undefined || t.subpath.length === 0
+        ? { name: t.name, url: t.url }
+        : { name: t.name, url: t.url, subpath: t.subpath },
+    ),
     disabled_targets: [...config.disabled_targets],
     forced_targets: [...config.forced_targets],
     autoupdate: {

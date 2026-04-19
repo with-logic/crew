@@ -319,6 +319,12 @@ taps:
     url: https://github.com/crew-sh/core.git
   - name: acme
     url: https://github.com/acme/crew-skills.git
+  # `subpath` is optional. When present, the tap points at that
+  # directory inside the repo instead of the repo root — useful for
+  # monorepos where skills live in e.g. `skills/`.
+  - name: backend-skills
+    url: https://github.com/with-logic/backend.git
+    subpath: skills
 
 # Targets the user has force-disabled. Any target not listed here is auto-detected.
 disabled_targets: []
@@ -992,7 +998,7 @@ Crew mutates state from multiple entry points (interactive commands, autoupdate)
 
 ### 16.1 Tap repository structure
 
-A tap is any git repository whose top-level directories are skills (each containing a `SKILL.md`). Nested organization is permitted but only top-level directories are indexed by `crew search`. Example:
+A tap is any git-managed directory whose immediate children are skills (each containing a `SKILL.md`). By default, the tap directory is the root of the configured repo; a tap may optionally point at a subdirectory of the repo via `subpath` (see §6.1 and §16.3), which is useful for monorepos where skills live under a path like `skills/`. Nested organization below the tap directory is permitted but only its immediate children are indexed by `crew search`. Example:
 
 ```
 acme-skills/
@@ -1013,8 +1019,10 @@ Crew ships with a default tap named `core` at a URL specified by the implementat
 
 ### 16.3 Tap management
 
-- `crew tap add <url> [name]` clones the repo into `~/.crew/taps/<name>/`. If `name` is omitted, it is derived from the final path component of the URL (minus `.git`). No confirmation is required — adding a tap only affects what crew searches and doesn't modify anything outside `~/.crew/`.
+- `crew tap add <url> [name]` clones the repo into `~/.crew/taps/<name>/`. `<url>` may carry a `//<subpath>` tail (the same `//` syntax git-shaped references use, per §8.2) to point the tap at a directory inside the repo instead of the root — e.g. `crew tap add @with-logic/backend//skills`. If `name` is omitted, it is derived from the URL: for root taps, the final path component (minus `.git`); for subpath taps, `<last-repo-segment>-<last-subpath-segment>` (so `@with-logic/backend//skills` → `backend-skills`). No confirmation is required — adding a tap only affects what crew searches and doesn't modify anything outside `~/.crew/`.
+- Adding a tap with a `name` + `url` (+ `subpath`) triplet that already exists is a no-op (exit 0). Adding the same name with a different URL or subpath is a `usage_error` — the user must pick a different name.
 - `crew tap <url> [name]` is a shorthand for `crew tap add <url> [name]`. When the first positional argument to `crew tap` is a recognized reference (a git URL, `gh:`, `@owner/repo`, or any shape that parses as a git source per §8.2), crew treats it as `add`. Positionals that aren't git-shaped fall through to subcommand dispatch; unknown subcommands produce `usage_error`.
+- Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`) — the subpath is entirely internal to the tap's configuration and never appears in skill references.
 - `crew tap remove <name>` deletes the local clone and removes the tap from config.
 - `crew tap list` prints each tap's name, URL, and last-fetched timestamp.
 
@@ -1237,6 +1245,9 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-08 | §16.4 | `crew search --json` emits a structured array of matches. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source produces `usage_error`. |
+| C-TAP-12 | §16.3 | `crew tap add <url>//<subpath>` configures a tap rooted at `<subpath>` inside the repo. Skills at the top level of `<subpath>` are installable by bare name, just like a root tap. |
+| C-TAP-13 | §16.3 | Default name derivation for a subpath tap is `<last-repo-segment>-<last-subpath-segment>` (e.g. `@with-logic/backend//skills` → `backend-skills`); for a root tap it remains the final repo segment. |
+| C-TAP-14 | §16.3 | Adding a tap whose `(name, url, subpath)` already exists is a no-op (exit 0). Adding the same name with a different URL or subpath is `usage_error`. |
 
 #### C-STATE: State and markers (§11)
 

@@ -140,6 +140,13 @@ export interface StateFile {
 export interface TapConfig {
   readonly name: string;
   readonly url: string;
+  /**
+   * Optional subdirectory inside the repo. When present, the tap is
+   * rooted at `<clone>/<subpath>` instead of the clone root; useful
+   * for monorepos where skills live under e.g. `skills/`. Missing or
+   * empty means "use the repo root" — users never need to care.
+   */
+  readonly subpath?: string;
 }
 
 /** The parsed, normalized config.yaml. */

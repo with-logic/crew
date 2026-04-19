@@ -63,6 +63,21 @@ describe("normalizeConfig", () => {
     expect(() => normalizeConfig({ taps: [{ name: "x" }] })).toThrow(CrewError);
   });
 
+  test("tap subpath, when present, must be a string", () => {
+    expect(() => normalizeConfig({ taps: [{ name: "a", url: "x", subpath: 42 }] })).toThrow(
+      CrewError,
+    );
+  });
+
+  test("tap subpath is normalized (leading/trailing slashes stripped)", () => {
+    // Both an all-slashes value (which collapses to empty) and a well-formed
+    // value with stray slashes exercise the normalization path.
+    const dropped = normalizeConfig({ taps: [{ name: "a", url: "x", subpath: "//" }] });
+    expect(dropped.taps[0]!.subpath).toBeUndefined();
+    const kept = normalizeConfig({ taps: [{ name: "b", url: "x", subpath: "/skills/" }] });
+    expect(kept.taps[0]!.subpath).toBe("skills");
+  });
+
   test("disabled_targets must be a list of strings", () => {
     expect(() => normalizeConfig({ disabled_targets: "foo" })).toThrow(CrewError);
     expect(() => normalizeConfig({ disabled_targets: [42] })).toThrow(CrewError);
