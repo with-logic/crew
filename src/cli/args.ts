@@ -34,6 +34,7 @@ const STRING_GLOBALS = ["scope", "from-git"] as const;
 /** Subcommand-specific boolean flags. */
 const BOOLEAN_SUB: Record<string, readonly string[]> = {
   doctor: ["verify", "repair"],
+  uninstall: ["prune"],
 };
 /** Subcommand-specific string flags. */
 const STRING_SUB: Record<string, readonly string[]> = {
@@ -96,7 +97,10 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
   const scope = stringOrUndefined(parsed["scope"]) ?? "user";
   if (scope !== "user" && scope !== "project")
-    throw new CrewError("usage_error", `--scope must be \`user\` or \`project\` (got ${scope})`);
+    throw new CrewError(
+      "usage_error",
+      `--scope must be \`user\` or \`project\` (got \`${scope}\`) — \`user\` is the default`,
+    );
   const target = asStringArray(parsed["target"]);
 
   const extras: Record<string, string | boolean> = {};

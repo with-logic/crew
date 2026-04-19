@@ -5,12 +5,25 @@
  * This is the heart of `crew install` (§9 steps 1–6). The output is
  * every `ResolvedSkill` that must be staged and copied into targets,
  * plus an install-order guaranteed to place dependencies before dependents.
+ *
+ * `ResolvedSkill.explicit` is true for skills the user named on the
+ * command line (roots), and — per §9 step 5 — for every child of a
+ * multi-skill bundle the user referenced. It is false for skills
+ * pulled in solely as transitive dependencies. `bundle` is set on
+ * every child of a multi-skill directory expansion (§10.1.1).
  */
 
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
-import type { Config, LoadedSkill, MarkerSource, ResolvedSkill, Source } from "../core/types.ts";
+import type {
+  BundleRef,
+  Config,
+  LoadedSkill,
+  MarkerSource,
+  ResolvedSkill,
+  Source,
+} from "../core/types.ts";
 import { parseRef } from "../refs/parse.ts";
 import { hasSkillMd } from "../skill/load.ts";
 import { type AcquiredSource, acquireSource } from "../sources/acquire.ts";
@@ -25,13 +38,25 @@ export interface ResolveOptions {
 }
 
 /**
+ * Map of `skill name → direct dependents (at the same scope)`. The
+ * install flow consumes this to set `required_by` on every state entry.
+ */
+export type RequiredByMap = Map<string, Set<string>>;
+
+/** Output of resolution: the ordered install set plus the dependent graph. */
+export interface ResolveResult {
+  readonly skills: readonly ResolvedSkill[];
+  readonly requiredBy: RequiredByMap;
+}
+
+/**
  * Resolve a list of references into a topologically-ordered install set.
  */
 export function resolveInstallSet(
   refs: readonly string[],
   config: Config,
   options: Partial<ResolveOptions> = {},
-): ResolvedSkill[] {
+): ResolveResult {
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
 
@@ -45,6 +70,8 @@ export function resolveInstallSet(
     readonly requestedRef: string | null;
     readonly pinned: boolean;
     readonly parentAcquired: AcquiredSource | null;
+    readonly explicit: boolean;
+    readonly bundle: BundleRef | null;
   }
   const pending: PendingResolution[] = [];
 
@@ -53,6 +80,13 @@ export function resolveInstallSet(
     const source = parseRef(raw, cwd);
     const acquired = acquireSource(source, config, home);
     const loadedList = expandSkills(acquired.rootDir);
+    // §9 step 5: a multi-skill expansion is a bundle. A single-skill
+    // expansion (root SKILL.md present) is not. `BundleRef.source`
+    // excludes `path` by construction, so we narrow before storing.
+    const bundle: BundleRef | null =
+      loadedList.length > 1 && acquired.markerSource.type !== "path"
+        ? { ref: raw, source: acquired.markerSource }
+        : null;
     for (const loaded of loadedList) {
       const markerSource = markerSourceFor(acquired, source, loaded, acquired.rootDir);
       pending.push({
@@ -62,14 +96,17 @@ export function resolveInstallSet(
         requestedRef: acquired.requestedRef,
         pinned: acquired.pinned,
         parentAcquired: acquired,
+        explicit: true,
+        bundle,
       });
     }
   }
 
+  const requiredBy: RequiredByMap = new Map();
+
   // Step 6: dependency walk. We do this breadth-first, processing each
   // pending skill: stage it, then for each dependency queue a new
   // `PendingResolution` if we don't already have it.
-  const order: string[] = [];
   while (pending.length > 0) {
     const item = pending.shift()!;
     const name = item.loaded.frontmatter.name;
@@ -79,8 +116,15 @@ export function resolveInstallSet(
       if (existing.resolvedSha !== item.resolvedSha)
         throw new CrewError(
           "conflicting_dependencies",
-          `two skills named \`${name}\` resolve to different SHAs: ${existing.resolvedSha} vs ${item.resolvedSha}`,
+          `\`${name}\` appears twice in this install set with different SHAs (${(existing.resolvedSha ?? "<null>").slice(0, 8)} vs ${(item.resolvedSha ?? "<null>").slice(0, 8)}) — pin one to a specific version, or install them separately`,
+          { name, existing: existing.resolvedSha, incoming: item.resolvedSha },
         );
+      // Roots are enqueued before any dep walk, so by the time a dep's
+      // second visit arrives, the matching root has already populated
+      // `byName` with `explicit: true`. A late visit is either a
+      // non-explicit dep (skip) or re-entry of the same explicit root
+      // (also skip, no change). In-flight explicit promotion would
+      // need deps enqueued before roots, which doesn't happen here.
       continue;
     }
 
@@ -94,11 +138,14 @@ export function resolveInstallSet(
       resolvedSha: item.resolvedSha,
       pinned: item.pinned,
       contentHash: staged.contentHash,
+      explicit: item.explicit,
+      ...(item.bundle === null ? {} : { bundle: item.bundle }),
     };
     byName.set(name, resolved);
-    order.push(name);
 
-    // Enqueue dependencies (if any).
+    // Enqueue dependencies (if any). Deps are never explicit and never
+    // inherit the parent's bundle (§11.1 — dependencies belong to their
+    // parent, not to the bundle that pulled in the parent).
     const deps = item.loaded.frontmatter.metadata?.crew?.dependencies ?? [];
     for (const depRef of deps) {
       const depSource = parseRef(depRef, cwd);
@@ -112,17 +159,20 @@ export function resolveInstallSet(
         requestedRef: acquired.requestedRef,
         pinned: acquired.pinned,
         parentAcquired: acquired,
+        explicit: false,
+        bundle: null,
       });
+      // Record the parent→dep edge so the install flow can set
+      // `required_by` on the dep entry.
+      const depName = loaded.frontmatter.name;
+      if (!requiredBy.has(depName)) requiredBy.set(depName, new Set());
+      requiredBy.get(depName)!.add(name);
       // Silence the unused-warning on `effectiveSource`.
       void effectiveSource;
     }
   }
 
-  // Topological install order: dependencies installed before dependents.
-  // We collected skills in an order where parents were enqueued before
-  // their dependencies, so `order` is PARENT-first — we need to reverse
-  // into dependency-first order. Do a proper topo sort.
-  return topoSort(byName);
+  return { skills: topoSort(byName), requiredBy };
 }
 
 /** Topological sort: dependency before dependent. */

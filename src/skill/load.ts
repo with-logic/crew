@@ -18,7 +18,11 @@ import { validateFrontmatter } from "./validate.ts";
 export function loadSkill(path: string): LoadedSkill {
   const skillMdPath = join(path, "SKILL.md");
   if (!exists(skillMdPath)) {
-    throw new CrewError("invalid_skill", `missing SKILL.md in ${path}`);
+    throw new CrewError(
+      "invalid_skill",
+      `no SKILL.md in \`${path}\` — every skill directory needs one`,
+      { path },
+    );
   }
   const raw = readText(skillMdPath);
   const { data } = extractFrontmatter(raw);

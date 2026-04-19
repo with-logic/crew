@@ -56,7 +56,10 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
     // gets a formatted message and exit 4, rather than a raw stack trace.
     const message = (err as Error).message ?? String(err);
     writeError(
-      new CrewError("usage_error", `unexpected error: ${message}`),
+      new CrewError(
+        "usage_error",
+        `crew hit an unexpected error: ${message} — please report this at https://github.com/logic-app/crew/issues with steps to reproduce`,
+      ),
       parsed.flags.json,
       streams,
     );

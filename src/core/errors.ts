@@ -12,6 +12,7 @@ export type CrewErrorName =
   | "invalid_skill"
   | "no_skills_found"
   | "source_unreachable"
+  | "source_gone"
   | "ref_not_found"
   | "ambiguous_reference"
   | "ambiguous_dependency"
@@ -34,6 +35,10 @@ export const EXIT_CODES: Record<CrewErrorName, number> = {
   invalid_skill: 4,
   no_skills_found: 4,
   source_unreachable: 5,
+  // `source_gone` is a soft outcome (§10.1) — the source resolved but the
+  // skill no longer exists upstream. Carries exit 0; `crew update`
+  // preserves the local install and never escalates.
+  source_gone: 0,
   ref_not_found: 5,
   ambiguous_reference: 4,
   ambiguous_dependency: 4,

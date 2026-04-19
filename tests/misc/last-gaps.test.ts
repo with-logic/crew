@@ -71,6 +71,8 @@ describe("doctor warns when target in state no longer detected", () => {
             installed_at: "2026-04-18T00:00:00Z",
             targets: ["codex"],
             pinned: false,
+            explicit: true,
+            required_by: [],
           },
         ],
       },

@@ -25,7 +25,10 @@ export function autoupdateCommand(ctx: CommandContext): CommandOutput {
   if (sub === "status") {
     return status(ctx);
   }
-  throw new CrewError("usage_error", "usage: crew autoupdate {enable|disable|status}");
+  throw new CrewError(
+    "usage_error",
+    "`crew autoupdate` takes one of: `enable [--interval <dur>]`, `disable`, or `status`",
+  );
 }
 
 function enable(ctx: CommandContext): CommandOutput {
@@ -83,7 +86,11 @@ function status(ctx: CommandContext): CommandOutput {
 export function parseDuration(raw: string): number {
   const m = raw.match(/^(\d+)([smhd])$/);
   if (!m) {
-    throw new CrewError("usage_error", `invalid duration: ${raw}`);
+    throw new CrewError(
+      "usage_error",
+      `can't parse duration \`${raw}\` — expected a number followed by s/m/h/d, like \`30s\`, \`5m\`, \`2h\`, or \`1d\``,
+      { raw },
+    );
   }
   const n = Number.parseInt(m[1]!, 10);
   const unit = m[2] as "s" | "m" | "h" | "d";

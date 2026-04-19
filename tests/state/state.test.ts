@@ -23,6 +23,8 @@ const sample: StateEntry = {
   installed_at: "2026-04-18T12:00:00Z",
   targets: ["claude-code"],
   pinned: false,
+  explicit: true,
+  required_by: [],
 };
 
 describe("state load/write", () => {

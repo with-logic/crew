@@ -118,20 +118,27 @@ describe("update: source_unreachable marks hard failure", () => {
 });
 
 describe("update: missing skill at new revision", () => {
-  test("SKILL.md deleted upstream → hard failure", () => {
+  test("C-UPD-11 SKILL.md deleted upstream → source_gone soft outcome", () => {
     const home = makeCrewHome();
     const repo = makeTempDir();
     makeGitRepo(repo);
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
     commitAll(repo, "init");
     runCli(["install", `file://${repo}//demo`], { home, streams: captureStreams().streams });
-    // Delete the subpath upstream — acquireGit will error.
+    // Delete the subpath upstream — acquireGit's `no_skills_found`
+    // maps to `source_gone` under §10.1's upstream-deletion rule.
     rmSync(join(repo, "demo"), { recursive: true });
     commitAll(repo, "delete");
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
-    expect([0, 1]).toContain(code);
-    expect(c.stdout()).toMatch(/FAILED|skipped|up-to-date|updated/);
+    // C-UPD-12: exit 0 (soft outcome) — the local install is preserved.
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("source_gone");
+    // C-UPD-13: the state entry is preserved untouched.
+    const { readState } =
+      require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
+    const state = readState(home);
+    expect(state.installations.find((e) => e.name === "demo")).toBeDefined();
   });
 });
 
@@ -208,6 +215,8 @@ describe("name conflict cleanup in state", () => {
             installed_at: "2026-04-18T00:00:00Z",
             targets: ["claude-code"],
             pinned: false,
+            explicit: true,
+            required_by: [],
           },
         ],
       },

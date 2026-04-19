@@ -13,7 +13,7 @@ import type { CommandContext, CommandOutput } from "./types.ts";
 export function cacheCommand(ctx: CommandContext): CommandOutput {
   const sub = ctx.positional[0];
   if (sub !== "clean") {
-    throw new CrewError("usage_error", "usage: crew cache clean");
+    throw new CrewError("usage_error", "`crew cache` currently has one subcommand: `clean`");
   }
   let removedStore: string[] = [];
   withStateLock(() => {

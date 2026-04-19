@@ -53,7 +53,7 @@ export function installSkillIntoTarget(input: InstallInput): InstallOutcome {
           if (!input.force)
             throw new CrewError(
               "customized",
-              `skill \`${input.skillName}\` was modified by the user since install`,
+              `\`${input.skillName}\` has local edits at \`${dest}\` — leaving them alone`,
               {
                 dest,
                 expected: existingMarker.content_hash,
@@ -71,14 +71,14 @@ export function installSkillIntoTarget(input: InstallInput): InstallOutcome {
       } else if (!input.force) {
         throw new CrewError(
           "inconsistent_marker",
-          `marker name \`${existingMarker.name}\` does not match skill \`${input.skillName}\``,
-          { dest },
+          `\`${dest}\` has a crew marker for \`${existingMarker.name}\` but we're installing \`${input.skillName}\` — investigate before forcing`,
+          { dest, existingName: existingMarker.name, incomingName: input.skillName },
         );
       }
     } else if (!input.force) {
       throw new CrewError(
         "untracked_directory",
-        `destination exists without a crew marker: ${dest}`,
+        `\`${dest}\` exists but wasn't installed by crew (no .crew.json marker)`,
         { dest },
       );
     }
@@ -123,7 +123,7 @@ export function uninstallSkillFromTarget(input: UninstallInput): "removed" | "ab
     if (!input.force)
       throw new CrewError(
         "not_installed_here",
-        `${input.skillName} is not installed under ${base}`,
+        `\`${input.skillName}\` isn't installed in \`${base}\``,
         { dest },
       );
     return "absent";
@@ -133,15 +133,15 @@ export function uninstallSkillFromTarget(input: UninstallInput): "removed" | "ab
     if (!input.force)
       throw new CrewError(
         "untracked_directory",
-        `destination exists without a crew marker: ${dest}`,
+        `\`${dest}\` exists but isn't crew-managed (no .crew.json) — refusing to remove`,
         { dest },
       );
   } else if (marker.name !== input.skillName) {
     if (!input.force)
       throw new CrewError(
         "inconsistent_marker",
-        `marker name \`${marker.name}\` does not match skill \`${input.skillName}\``,
-        { dest },
+        `\`${dest}\` has a crew marker for \`${marker.name}\`, not \`${input.skillName}\` — investigate before forcing`,
+        { dest, markerName: marker.name, incomingName: input.skillName },
       );
   }
   rmrf(dest);

@@ -2,7 +2,7 @@
 
 **A package manager for Agent Skills.**
 
-Version: 0.3
+Version: 0.1 (pre-release)
 Status: Specification, ready for implementation
 Platform: macOS (Apple Silicon and Intel)
 
@@ -104,6 +104,7 @@ crew search <query>               Search across configured taps.
 crew info <ref-or-name>           Show details for an installed or searchable skill.
 
 crew tap add <git-url> [<name>]   Add a registry (name defaults to repo name).
+crew tap <git-url> [<name>]       Shorthand for `crew tap add`.
 crew tap remove <name>            Remove a registry.
 crew tap list                     List configured registries.
 
@@ -139,11 +140,18 @@ Accepted on any command where they apply:
 
 - `--from-git <url>[@<ref>]` — explicit git source, equivalent to passing the URL as the ref but disambiguates when the argument might look like a tap name.
 
+### 5.3.1 Uninstall-time flags
+
+- `--prune` — after removing the named skills, recursively uninstall any
+  remaining skill that was only installed as a transitive dependency
+  (§7.4 step 5) and is no longer required by anything. Equivalent to
+  running `crew uninstall` followed by an autoremove pass.
+
 ### 5.4 Duplicate installs
 
 `crew install <name>` on a skill already installed at the same scope:
 
-- If the source and resolved SHA match, print "already installed" and exit 0.
+- If the source and resolved SHA match, report the skill as already installed and exit 0. In human mode, implementations SHOULD surface the installed ref and/or short SHA so the user sees which version is on their machine (e.g. `foo: already installed (v1.2.0 @ a1b2c3d4)`). The literal wording is implementation choice; the JSON payload is specified in §15.
 - If the source matches but the ref differs, treat as an update (§10).
 - If the source differs, fail with a name-conflict error (§13) unless `--force` is given, in which case the previous install is removed first.
 
@@ -214,6 +222,7 @@ GETTING STARTED
   crew search <query>           Find a skill.
   crew install <skill>          Install it everywhere.
   crew list                     See what's installed.
+  crew help <command>           See flags and examples for any command.
 
 COMMANDS
   Managing skills
@@ -257,6 +266,16 @@ EXAMPLES
 The exact labels (`USAGE` vs `Usage:`), the column alignment, and the
 prose are all implementation choice; the sections and their contents
 are what conformance requires.
+
+**Tone and usefulness.** Help should read like a peer showing another
+peer how to use the tool — direct, specific, and example-first, not
+reference-manual dry. Examples are the most valuable part of per-command
+help: they show the shape of a real invocation, not just the grammar.
+An implementation that lists every flag with a one-word description
+and no examples technically satisfies the schema above but fails the
+spirit of this section — `crew help` should actually help. Optional
+sections like `NOTES` (gotchas, platform caveats, pointers to the spec)
+or `SEE ALSO` are encouraged when they save the user a second lookup.
 
 **JSON help output.**
 
@@ -365,9 +384,42 @@ Given a staged skill directory in the store, a skill name, a target adapter, and
 
 ### 7.4 Uninstall algorithm
 
+**Target set.** The default is to remove the skill from every target
+it's recorded against in state. `--target <name>` (repeatable,
+§5.2) restricts removal to the named targets only — other targets
+keep the install. A `--target` that names a target the skill isn't in
+at the current scope is a silent per-target no-op; it never aborts the
+run.
+
+For each target in the computed target set:
+
 1. Read the marker at `dest/.crew.json`. If absent, abort with error `not_installed_here` unless `--force`.
 2. If present, verify the marker's `name` matches the skill being uninstalled. Mismatch → `inconsistent_marker` error unless `--force`.
 3. Remove `dest` and its contents.
+
+**Then update `state.json` (§11.1):**
+
+4. Remove the just-removed target names from the entry's `targets`
+   array. If the array is now empty, remove the entry entirely, AND
+   for every other entry whose `required_by` listed this skill, remove
+   the name from that list. If the array still has targets, the entry
+   survives with a reduced target list and its `required_by` is left
+   alone (the skill isn't truly gone — it's still installed elsewhere).
+5. **If `--prune` was passed AND the entry was fully removed in step 4**,
+   walk the remaining state entries at the same scope. Any entry with
+   `explicit: false` AND an empty `required_by` is an orphan;
+   recursively uninstall it (steps 1–4), which may produce further
+   orphans. Continue until a full pass finds none. Orphans that abort
+   on a safety check (`customized`, `untracked_directory`) are skipped
+   and reported, not forced; the user can rerun with `--force --prune`
+   to override. A partial `--target` removal that leaves the entry
+   alive does NOT trigger pruning — the skill is still installed, so
+   its dependencies are still required.
+
+Without `--prune`, transitive dependencies are never auto-removed — a
+skill pulled in only as a dependency stays on disk until the user
+names it directly or asks for a prune. This matches `apt-get remove` /
+`brew uninstall` defaults, not `apt-get autoremove`.
 
 ### 7.5 Marker format (`.crew.json`)
 
@@ -435,7 +487,15 @@ git@<host>:<owner>/<repo>[.git]
 gh:<owner>/<repo>             # shorthand for https://github.com/<owner>/<repo>.git
 gl:<owner>/<repo>             # shorthand for https://gitlab.com/<owner>/<repo>.git
 bb:<owner>/<repo>             # shorthand for https://bitbucket.org/<owner>/<repo>.git
+@<owner>/<repo>               # shorthand for https://github.com/<owner>/<repo>.git (GitHub)
 ```
+
+The leading-`@` form is an ergonomic alias for `gh:` — GitHub is the
+overwhelming common case, and the `@` prefix matches how users already
+speak and type GitHub org names (`@with-logic/skills`). `gh:` remains
+available and is preferred when a tool needs to be explicit. Leading
+`@` always means GitHub; users on other forges use `gl:` / `bb:` or a
+full URL.
 
 A ref may be appended with `@`:
 
@@ -479,6 +539,7 @@ ref         := path | git-source | tap-source
 path        := "./..." | "../..." | "/..." | "~..."
 git-source  := git-url [ "@" git-ref ] [ "//" subpath ]
 git-url     := "https://..." | "git@...:..." | shorthand-host ":" owner "/" repo
+             | "@" owner "/" repo
 shorthand-host := "gh" | "gl" | "bb"
 tap-source  := [ tap-name "/" ] skill-name [ "@" tap-ref ]
 tap-name    := [a-z][a-z0-9-]*
@@ -494,10 +555,19 @@ When the argument could match multiple forms, crew applies these rules in order:
 
 1. If the argument starts with `./`, `../`, `/`, or `~` → path.
 2. If the argument matches `https://`, `http://`, `git@`, or `<shorthand>:` → git source.
-3. If the argument contains `//` → git source (subpath syntax is git-only).
-4. Otherwise → tap source.
+3. If the argument starts with `@` followed by `<owner>/<repo>` → git source (GitHub shorthand).
+4. If the argument contains `//` → git source (subpath syntax is git-only).
+5. Otherwise → tap source.
 
-`@` can appear in both git and tap sources and does not shift which form applies.
+Between `@` forms, rule 2's `git@host:...` takes precedence over rule 3
+because rule 2 runs first. A bare `@` with nothing after it, or `@name`
+with no `/`, is not a valid git source — rule 3 does not match, and
+rule 5 sends it to tap-source parsing, which rejects it as `invalid_ref`
+because tap names cannot start with `@`.
+
+Infix `@` inside git and tap sources (`gh:owner/repo@v1.0`,
+`core/python-testing@v1.0`) continues to denote a ref and does not
+shift which form applies.
 
 ## 9. Resolution and install flow
 
@@ -518,6 +588,13 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Every other spec rule from the Agent Skills specification.
    Invalid skills abort with `invalid_skill` (§13) before any files are written.
 5. **Expand directories.** If the resolved source location has a `SKILL.md` at its root, it is one skill. If not, crew walks **exactly one directory level deep** under the resolved location and adds every subdirectory containing a `SKILL.md` to the install set. Deeper nesting is ignored. A directory with no valid children and no root `SKILL.md` aborts with `no_skills_found`.
+   - **Bundle tagging.** When directory expansion produces more than
+     one child skill, every child is tagged with the same `bundle`
+     record (§11.1): `{ ref: <user's original reference string>,
+     source: <parsed source> }`. A single-skill expansion (root
+     `SKILL.md` present) is not a bundle and does not set this field.
+     The bundle record is what enables `crew update` to re-expand the
+     source and pick up skills added upstream (§10.1.1).
 6. **Resolve dependencies.** For each skill in the install set, read `metadata.crew.dependencies` and add each to the install set. Continue recursively until no new dependencies appear. Cycles are allowed and terminate naturally (a skill already in the set is not re-added).
    - **Bare-name resolution precedence:** (1) a sibling directory at the same source and ref (for sources where "sibling" is meaningful — git sources with a parent directory and path sources in a parent directory); (2) the tap the parent skill was installed from, if any; (3) search across all configured taps. An unqualified name matching multiple taps aborts with `ambiguous_dependency` naming the candidates.
    - **Conflict detection:** if two skills in the install set have the same `name` but resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
@@ -525,6 +602,21 @@ Given one or more skill references on the command line, `crew install` proceeds 
 8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. If the store entry already exists and its content hash matches, reuse it.
 9. **Install into each target.** For each skill × each target in the target set × the scope, run the install algorithm from §7.3. Record per-target results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, target) pair does not stop others.
 10. **Update state.** For each successfully installed (skill, target) pair, add or replace the entry in `state.json` per §11.1. Do this under the state lock (§14).
+    - Skills named directly on the command line (the "roots") are
+      recorded with `explicit: true`. Skills pulled in only via
+      `metadata.crew.dependencies` are recorded with `explicit: false`.
+      If a dependency is also a root on the same command, the root
+      wins and the entry is `explicit: true`.
+    - A skill whose existing state entry had `explicit: false` is
+      promoted to `explicit: true` if the user names it directly on
+      this install; the reverse demotion does not happen (once a user
+      explicitly wants a skill, we keep remembering).
+    - `required_by` for each skill is recomputed from the direct
+      dependency graph built during steps 1–6: entry `X.required_by`
+      contains every installed `Y` at the same scope whose
+      `metadata.crew.dependencies` directly names `X`. Transitive
+      relationships are not stored — they are derivable by walking the
+      graph. `required_by` is symmetric to `dependencies` at one hop.
 11. **Print summary.** Human-readable: one line per skill reporting which targets it succeeded, was skipped, or failed in. `--json` mode emits the structured equivalent (§15).
 
 Exit code: 0 if every skill succeeded in at least one target; 1 if any skill failed in every target; 2 if nothing was attempted (empty install set after expansion when the user explicitly asked for something). Other exit codes per §15.
@@ -539,6 +631,14 @@ With no arguments, updates every installed skill. With arguments, updates only t
 2. Build the list of skills to consider:
    - `crew update` with no args → every entry in `state.json`.
    - `crew update <name>...` → only those names; an unknown name is an error per argument.
+2b. **Re-expand bundles** per §10.1.1. Any newly-added child skill is
+   added to the list of skills to consider as a fresh install; any
+   child skill that has disappeared from the bundle is reported with
+   `source_gone` (per the upstream-deletion rule above) and left in
+   place. Only bundles reachable from the current update scope are
+   re-expanded — on `crew update <name>`, a bundle is re-expanded only
+   if `<name>` is one of its members or the bundle `ref` itself is
+   passed as `<name>`.
 3. For each skill:
    a. Skip if the skill is pinned to an exact SHA, unless `--force`.
    b. If pinned to a tag, re-resolve the tag: if the tag moved and `--force` is given, proceed; otherwise skip.
@@ -549,6 +649,64 @@ With no arguments, updates every installed skill. With arguments, updates only t
 5. Print summary (human or JSON).
 
 **Error isolation.** Every skill is processed independently. A failure — network error, fetch error, spec validation error on a newly pulled version, customized install detected, dependency resolution failure, target install failure — is recorded against that skill and does not stop processing of the rest. Exit code is 0 if all skills were either up-to-date, updated successfully, or cleanly skipped as customized. Exit code is 1 if any skill encountered a hard failure (network, fetch, validation).
+
+**Upstream deletion does not remove local installs.** If an installed
+skill's source still resolves (the repo or tap is reachable) but the
+specific skill is no longer present — the directory was deleted
+upstream, or the tap dropped it — crew records a per-skill `source_gone`
+outcome and leaves the local install, its marker, and its state entry
+untouched. The skill keeps working at its last-resolved SHA. This is a
+soft outcome: exit code stays 0 for an update run whose only
+abnormalities are `source_gone`. Removal of an unwanted local skill is
+always explicit (`crew uninstall <name>`).
+
+This rule also applies when a whole source becomes unresolvable: a
+tap's clone URL 404s, or a git repo is gone. Those produce
+`source_unreachable` (hard failure, exit 1) per-skill as before —
+`source_gone` is reserved for "source resolved, skill inside it did
+not." The distinction matters because a transient network failure
+should not be confused with a deliberate upstream deletion.
+
+### 10.1.1 Bundle re-expansion
+
+A **bundle** is the expansion record produced when the user installs a
+source that has no root `SKILL.md` and so is walked one level deep
+(§9 step 5). The source's own `ref` — the string the user typed —
+becomes the `bundle.ref` on every resulting state entry (§11.1).
+
+On every `crew update` run, for each distinct `bundle` present in
+state, crew:
+
+1. Re-parses `bundle.ref` as a skill reference and re-acquires the
+   source per §9 steps 1–2. Failures here produce a per-bundle
+   `source_unreachable` or `ref_not_found` outcome; all members of the
+   bundle are left in place.
+2. Walks one level deep under the resolved location (§9 step 5) and
+   builds the current child set.
+3. For each child that is **not** already in state (a skill added to
+   the bundle upstream since the user's last update): runs the install
+   algorithm (§7.3) for every target in the current target set, at the
+   scope the bundle was originally installed to, with `explicit: true`
+   and `bundle` set to the same bundle record. This is how
+   `crew install @with-logic/skills` + autoupdate picks up new skills
+   as the team adds them.
+4. For each skill in state with this bundle whose directory is **no
+   longer present** under the resolved location: reports `source_gone`
+   and leaves the local install untouched (per the upstream-deletion
+   rule in §10.1). Removal is always explicit.
+5. For each skill in state with this bundle whose directory is still
+   present: proceeds with the normal per-skill update logic (step 3
+   of §10.1) — stage, re-resolve, reinstall if SHA moved.
+
+**Autoupdate.** The background agent (§10.2) runs `crew update`, so
+bundle re-expansion is automatic. This is the expected flow: a user
+runs `crew install @with-logic/skills` once and enables autoupdate;
+as the team adds skills to the repo, they appear in the user's agents
+on the next autoupdate tick without further action.
+
+**`--dry-run` on update** reports bundle additions and deletions
+separately from per-skill updates so users can preview what
+autoupdate would do.
 
 ### 10.2 `crew autoupdate`
 
@@ -624,18 +782,91 @@ UTF-8 JSON with a trailing newline. Single top-level object.
       "scope": "user",
       "installed_at": "2026-04-18T12:00:00Z",
       "targets": ["claude-code", "codex", "gemini-cli"],
-      "pinned": false
+      "pinned": false,
+      "explicit": true,
+      "required_by": []
+    },
+    {
+      "name": "team-conventions",
+      "source": { "type": "git", "url": "https://github.com/acme/skills.git", "subpath": "team" },
+      "ref": null,
+      "resolved_sha": "b2c3d4e5f6789abcdef0123456789abcdef01234",
+      "content_hash": "sha256:...",
+      "scope": "project",
+      "project_root": "/Users/alice/work/product-x",
+      "installed_at": "2026-04-19T10:15:00Z",
+      "targets": ["claude-code"],
+      "pinned": false,
+      "explicit": true,
+      "required_by": []
     }
   ]
 }
 ```
 
-One entry per (skill, scope) pair. If the same skill is installed at both user and project scope, there are two entries. `targets` is the list of target adapter names this skill is currently installed into.
+One entry per (skill, scope, project_root) triple: the same skill can be installed at user scope, at project scope under `~/work/product-x`, and at project scope under `~/work/product-y` — that's three independent entries. `targets` is the list of target adapter names this skill is currently installed into.
+
+**`project_root`** (string). Present iff `scope === "project"`. The
+absolute path to the directory the skill was installed from (the
+user's working directory at install time). Every subsequent command —
+`crew update`, `crew uninstall`, `crew doctor` — uses this path when
+resolving the adapter's project-scope base directory, NOT the user's
+current working directory. That way, `crew update` run from any
+directory (or by the autoupdate background agent from its
+launchd-assigned cwd) still updates each project-scope install at its
+original location.
+
+A stale `project_root` (directory no longer exists, was moved,
+permissions changed) is reported by `crew doctor` as a
+`missing_project_root` finding and is a clean skip on `crew update` —
+the local install is preserved and the user is informed they can
+`crew uninstall` to drop the entry if the project directory is truly
+gone.
+
+**`explicit`** (boolean). True if the user asked for this skill by name
+on a `crew install` command, either directly or via a bundle reference
+(§10.1.1) the user named. False if the skill was pulled in solely as a
+transitive dependency of another install. A skill first installed as a
+dependency and later named directly by the user is promoted to
+`explicit: true` on that later install.
+
+**`required_by`** (array of strings). Names of other installed skills
+at the same scope whose `dependencies` include this skill. Maintained
+by crew on every install and uninstall. A skill with both
+`explicit: false`, an empty `required_by`, and no `bundle` is an
+autoremovable orphan — `crew uninstall --prune` removes it.
+
+**`bundle`** (object, optional). Present only on entries installed via
+directory expansion (§9 step 5) from a git or tap source — i.e. the
+user ran `crew install @with-logic/skills` and the source had no root
+`SKILL.md`, so crew walked one level deep and installed every child.
+Records what the user asked for so update can re-expand the bundle.
+
+```json
+"bundle": {
+  "ref": "@with-logic/skills",
+  "source": { "type": "git", "url": "https://github.com/with-logic/skills.git", "subpath": "" }
+}
+```
+
+- `ref` — the exact reference string the user typed on the command
+  line. Used verbatim by `crew update` to re-resolve the bundle.
+- `source` — the parsed source of the bundle (same shape as the
+  top-level `source` field). Recorded so update can re-resolve even
+  if the shorthand format of `ref` evolves across crew versions.
+
+Every skill installed from the same bundle invocation shares the same
+`bundle` value. A skill can belong to at most one bundle at a given
+(scope). A skill installed directly by name has no `bundle`. A skill
+installed as a dependency has no `bundle` (dependencies belong to
+their parent skill, not to the bundle that pulled in the parent).
 
 **Invariants:**
 
 - Every entry in `state.json` should correspond to a `.crew.json` marker in every listed target. `crew doctor` detects and reports drift.
 - `pinned` is true if the ref was an exact SHA or a tag. Otherwise false.
+- Every name appearing in any entry's `required_by` is itself an installed skill at the same scope. `crew doctor` detects and reports dangling `required_by` names.
+- `project_root` is present iff `scope === "project"`. User-scope entries MUST NOT carry a `project_root`; project-scope entries MUST.
 
 ### 11.2 `crew doctor`
 
@@ -648,6 +879,7 @@ One entry per (skill, scope) pair. If the same skill is installed at both user a
 5. No `store/` entry is orphaned (not referenced by any state entry).
 6. `config.yaml` parses.
 7. If autoupdate is enabled in config, the launchd agent is actually loaded.
+8. For every project-scope entry, `project_root` exists on disk and a `.crew.json` marker lives under `<project_root>/<adapter-base>/<name>/`. A `project_root` that no longer exists produces a `missing_project_root` finding (warn, not error — the user may have simply moved the project, and the right fix is a `crew uninstall` from their new location).
 
 `--verify` includes check 3 (hash recomputation); without it, check 3 is skipped for speed.
 
@@ -693,6 +925,7 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `no_skills_found` | 4 | A directory source expanded to zero valid skills. |
 | `source_unreachable` | 5 | Network or git failure acquiring a source. |
 | `ref_not_found` | 5 | Ref doesn't exist in the repo. |
+| `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
 | `ambiguous_reference` | 4 | A bare name matches skills in more than one tap. |
 | `ambiguous_dependency` | 4 | A dependency's bare name is ambiguous across taps. |
 | `conflicting_dependencies` | 4 | Two skills with the same name resolve to different SHAs. |
@@ -707,6 +940,31 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `launchd_failure` | 8 | Autoupdate enable/disable couldn't load/unload the agent. |
 
 The `--force` flag overrides `customized`, `untracked_directory`, `inconsistent_marker`, and `not_installed_here`. It does **not** override `invalid_skill`, `name_conflict`, `conflicting_dependencies`, or any other error.
+
+**Human-mode error quality.** In human mode, an error message should
+name the offending thing (path, skill, ref, URL) and — whenever a
+reasonable next step exists — point the user at what to try. The stable
+error name and exit code are the only machine contract (they're what
+`--json` and conformance tests consume), but the human-readable output
+is part of the product. Implementations SHOULD follow these guidelines:
+
+- **Name the thing.** "`python-testing` isn't in any configured tap"
+  beats "skill not found."
+- **Point at a remedy.** Errors with an obvious next step should carry
+  a one-line hint — the command to run, the flag that overrides, the
+  file to edit. A remedy separate from the primary message (e.g. a
+  trailing `→ <hint>` line) is easy for users to skim past when they
+  don't need it.
+- **Speak as a peer.** "run `crew list` to see what's installed" lands
+  better than "the requested skill is not present in the state file."
+- **Respect `--force` semantics.** If the error is one `--force`
+  overrides (§13 list), say so. If it's one `--force` won't override,
+  also say so — it saves a second attempt.
+
+These are SHOULD-level recommendations, not MUST. Conformance tests
+assert the machine contract (name + exit code), not the wording. But
+two conformant implementations should feel like the same tool; the
+bar here is craft, not compliance.
 
 ## 14. Concurrency
 
@@ -755,7 +1013,8 @@ Crew ships with a default tap named `core` at a URL specified by the implementat
 
 ### 16.3 Tap management
 
-- `crew tap add <url> [name]` clones the repo into `~/.crew/taps/<name>/`. If `name` is omitted, it is derived from the final path component of the URL (minus `.git`). A confirmation prompt shows the URL unless `--yes` is given.
+- `crew tap add <url> [name]` clones the repo into `~/.crew/taps/<name>/`. If `name` is omitted, it is derived from the final path component of the URL (minus `.git`). No confirmation is required — adding a tap only affects what crew searches and doesn't modify anything outside `~/.crew/`.
+- `crew tap <url> [name]` is a shorthand for `crew tap add <url> [name]`. When the first positional argument to `crew tap` is a recognized reference (a git URL, `gh:`, `@owner/repo`, or any shape that parses as a git source per §8.2), crew treats it as `add`. Positionals that aren't git-shaped fall through to subcommand dispatch; unknown subcommands produce `usage_error`.
 - `crew tap remove <name>` deletes the local clone and removes the tap from config.
 - `crew tap list` prints each tap's name, URL, and last-fetched timestamp.
 
@@ -831,6 +1090,9 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-15 | §8.3 | `core/python-testing` is parsed as a tap source qualified to tap `core`. |
 | C-REF-16 | §8.3 | `core/python-testing@v1.0` is parsed as a qualified tap source with ref `v1.0`. |
 | C-REF-17 | §8.4 | Invalid references (empty string, whitespace-only, unparseable grammar) produce exit code 4 with error name `invalid_ref`. |
+| C-REF-18 | §8.2 | `@owner/repo` is parsed as a git source and expanded to `https://github.com/owner/repo.git` (identical handling to `gh:owner/repo`). |
+| C-REF-19 | §8.2 | `@owner/repo@v1.0.0` is parsed as a git source with ref `v1.0.0` (leading `@` is the shorthand, infix `@` is the ref separator). |
+| C-REF-20 | §8.2 | `@owner/repo//sub/path` is parsed as a git source with subpath `sub/path`. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -871,6 +1133,8 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-15 | §9 | `--dry-run` on install produces a summary of what would happen and writes no files. |
 | C-INST-16 | §9 | `--target <skill>` restricts the operation to the named target(s). |
 | C-INST-17 | §9 | `--scope project` writes to the target's project-scope path instead of the user-scope path. |
+| C-INST-18 | §11.1 | A project-scope install records `project_root` in the state entry equal to the user's working directory at install time. User-scope installs do NOT have a `project_root`. |
+| C-INST-19 | §9 | `state.json` may contain multiple project-scope entries for the same skill name, each with a different `project_root` — they're independent installs, not duplicates. |
 
 #### C-DEP: Dependencies (§9 step 6)
 
@@ -926,6 +1190,18 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-08 | §10.1 | The summary at end of `crew update` lists successes, skips (with reason), and failures. |
 | C-UPD-09 | §10.1 | `crew update` exits 0 when every skill was either up-to-date, updated, or cleanly skipped (customized / pinned). |
 | C-UPD-10 | §10.1 | `crew update` exits 1 when any skill had a hard failure (network, fetch, validation). |
+| C-UPD-11 | §10.1 | When an installed skill's upstream source resolves but the skill's directory or tap entry no longer exists, `crew update` reports `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
+| C-UPD-12 | §10.1 | An update run whose only abnormalities are `source_gone` exits 0. |
+| C-UPD-13 | §10.1 | `crew update` never deletes a target's installed skill directory, its marker, or its state entry as a consequence of upstream changes. Removal is only ever performed by `crew uninstall`. |
+| C-UPD-14 | §10.1.1 | `crew install <dir-source>` on a source with no root `SKILL.md` records a `bundle` object on every resulting state entry whose `ref` is the user's original reference string and `source` is its parsed source. |
+| C-UPD-15 | §10.1.1 | `crew update` re-resolves every distinct bundle in state and installs any child skill that was added to the bundle upstream since the last update. |
+| C-UPD-16 | §10.1.1 | A child skill removed from a bundle upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
+| C-UPD-17 | §10.1.1 | A single-skill expansion (resolved source has a root `SKILL.md`) does NOT record a `bundle` field. |
+| C-UPD-18 | §10.1.1 | `crew update --dry-run` on a bundle with pending additions lists those additions without installing anything. |
+| C-UPD-19 | §10.1 | `crew update` fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
+| C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
+| C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background agent from its launchd-assigned cwd. |
+| C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
 
 #### C-UNINST: Uninstall (§7.4)
 
@@ -935,6 +1211,17 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-02 | §7.4 | Uninstall updates `state.json` to no longer list the skill. |
 | C-UNINST-03 | §7.4 | Uninstall does not touch sibling skill directories in the same target. |
 | C-UNINST-04 | §7.4 | `crew uninstall` on a skill that is not installed produces `not_installed_here`, exit 6, without `--force`. |
+| C-UNINST-05 | §7.4 | `crew uninstall <name>` without `--prune` does NOT remove that skill's transitive dependencies, even if they are no longer required by anything else. |
+| C-UNINST-06 | §7.4 | `crew uninstall <name> --prune` removes the named skill, then recursively removes any remaining skill with `explicit: false` and an empty `required_by` at the same scope. |
+| C-UNINST-07 | §7.4 | `--prune` never removes a skill with `explicit: true`, even if no other skill depends on it. |
+| C-UNINST-08 | §11.1 | After `crew uninstall`, every remaining state entry's `required_by` no longer names the uninstalled skill. |
+| C-UNINST-09 | §11.1 | A skill first installed as a dependency (`explicit: false`) and then later installed directly (`crew install <name>`) has `explicit: true` after the second install. |
+| C-UNINST-10 | §7.4 | `crew uninstall --target <name> <skill>` removes the skill only from the named target(s); other targets keep their installs. |
+| C-UNINST-11 | §7.4 | After a partial `--target` uninstall, the state entry survives with a reduced `targets` list; `required_by` on other entries is unchanged. |
+| C-UNINST-12 | §7.4 | When `--target` removal empties the `targets` list, the entry is removed entirely and `required_by` on other entries is scrubbed — as with a full uninstall. |
+| C-UNINST-13 | §7.4 | `--prune` does not cascade through a partial (`--target`) uninstall that leaves the entry alive. Pruning only triggers when the entry was fully removed. |
+| C-UNINST-14 | §7.4 | `--target <name>` naming a target the skill isn't installed in is a silent per-target no-op; it never causes `not_installed_here` on its own. |
+| C-UNINST-15 | §11.1 | `crew uninstall --scope project <name>` removes the install at the entry's recorded `project_root`, NOT the user's current working directory. Run from any cwd, it finds and removes the correct files. |
 
 #### C-TAP: Taps (§16)
 
@@ -948,7 +1235,8 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-06 | §16.2 | `crew tap remove core` is refused without `--force`. |
 | C-TAP-07 | §16.4 | `crew search <skill>` matches case-insensitively against `name` and `description` across every tap. |
 | C-TAP-08 | §16.4 | `crew search --json` emits a structured array of matches. |
-| C-TAP-09 | §16.3 | `crew tap add` without `--yes` prompts for confirmation showing the URL. |
+| C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
+| C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source produces `usage_error`. |
 
 #### C-STATE: State and markers (§11)
 
@@ -962,6 +1250,8 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-06 | §11.2 | `crew doctor --repair` reconstructs `state.json` from markers if `state.json` is deleted. |
 | C-STATE-07 | §11.2 | `crew doctor --verify` recomputes content hashes and reports mismatches. |
 | C-STATE-08 | §11.2 | `crew doctor --repair` never modifies files outside `~/.crew/` and the managed skill directories. |
+| C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same scope. |
+| C-STATE-11 | §11.2 | `crew doctor` reports `missing_project_root` for any project-scope entry whose `project_root` directory no longer exists. |
 
 #### C-AUTO: Autoupdate (§10.2)
 
@@ -1114,6 +1404,52 @@ crew update
 - Stdout summary lists outcomes for all three skills: `a` updated or up-to-date, `b` failed with `source_unreachable`, `c` updated or up-to-date.
 - Exit code: 1 (at least one hard failure).
 - `a` and `c` reflect their latest SHAs. `b` is unchanged on disk and in state.
+
+#### Example 6: Bundle auto-expansion
+
+**Setup.** A GitHub repo `github.com/with-logic/skills` has no root
+`SKILL.md`. Its top level contains two skill directories, `alpha/` and
+`beta/`, each with a valid `SKILL.md`.
+
+**Command.**
+```
+crew install @with-logic/skills
+```
+
+**Expected observable outcome.**
+- Exit 0.
+- Two skills installed: `alpha` and `beta`.
+- Each state entry has a `bundle` object with `ref: "@with-logic/skills"` and the parsed git source.
+- Each entry has `explicit: true` (both were installed via a reference the user typed).
+
+**Setup continues.** The `with-logic/skills` repo maintainers add a
+third directory `gamma/` with a valid `SKILL.md` and push to the
+default branch.
+
+**Command.**
+```
+crew update
+```
+
+**Expected observable outcome.**
+- Exit 0.
+- `gamma` is installed into every target `alpha` and `beta` were installed into, at the same scope.
+- `gamma`'s state entry has the same `bundle` record as `alpha` and `beta`.
+- `alpha` and `beta` are reported as updated or up-to-date per normal §10.1 logic.
+
+**Setup continues.** The maintainers later delete `beta/` from the repo.
+
+**Command.**
+```
+crew update
+```
+
+**Expected observable outcome.**
+- Exit 0 (upstream deletion is a soft outcome).
+- `beta` is reported as `source_gone`.
+- `{target-base}/beta/` is still present on disk, unchanged.
+- `state.json` still contains the `beta` entry.
+- The user removes it explicitly with `crew uninstall beta` when they decide to.
 
 ### 18.5 Test suite
 

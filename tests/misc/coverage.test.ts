@@ -402,6 +402,43 @@ describe("error output non-json mode", () => {
     const home = makeCrewHome();
     const c = captureStreams();
     runCli(["uninstall", "ghost"], { home, streams: c.streams });
-    expect(c.stderr()).toContain("not installed");
+    // Error message names the skill and points the user toward a remedy.
+    expect(c.stderr()).toContain("ghost");
+    expect(c.stderr()).toContain("crew list");
+  });
+
+  test("error renderer appends a remedy hint line for known codes", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+    // `crew install` with no args → `usage_error`, which has a remedy hint.
+    runCli(["install"], { home, streams: c.streams });
+    expect(c.stderr()).toContain("error:");
+    // The `→` prefix is how remedy hints are rendered.
+    expect(c.stderr()).toContain("→");
+    expect(c.stderr()).toContain("crew help");
+  });
+
+  test("tap add with no URL surfaces a friendly usage hint", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+    const code = runCli(["tap", "add"], { home, streams: c.streams });
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("crew tap add");
+  });
+
+  test("tap remove with no name surfaces a friendly usage hint", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+    const code = runCli(["tap", "remove"], { home, streams: c.streams });
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("crew tap remove");
+  });
+
+  test("targets enable/disable with no name surfaces a friendly usage hint", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+    const code = runCli(["targets", "enable"], { home, streams: c.streams });
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("crew targets enable");
   });
 });

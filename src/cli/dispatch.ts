@@ -42,7 +42,11 @@ export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
 export function dispatch(command: string, ctx: CommandContext): CommandOutput {
   const handler = COMMAND_HANDLERS[command];
   if (!handler) {
-    throw new CrewError("usage_error", `unknown command: ${command}`);
+    throw new CrewError(
+      "usage_error",
+      `no command named \`${command}\` — run \`crew help\` for the list`,
+      { command },
+    );
   }
   return handler(ctx);
 }

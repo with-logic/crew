@@ -247,6 +247,8 @@ describe("upsertEntry preserves other entries", () => {
       installed_at: "2026-04-18T00:00:00Z",
       targets: ["claude-code"],
       pinned: false,
+      explicit: true,
+      required_by: [],
     });
     state = upsertEntry(state, {
       name: "b",
@@ -258,6 +260,8 @@ describe("upsertEntry preserves other entries", () => {
       installed_at: "2026-04-18T00:00:00Z",
       targets: ["claude-code"],
       pinned: false,
+      explicit: true,
+      required_by: [],
     });
     state = upsertEntry(state, {
       name: "a",
@@ -269,6 +273,8 @@ describe("upsertEntry preserves other entries", () => {
       installed_at: "2026-04-18T00:00:00Z",
       targets: ["codex"],
       pinned: false,
+      explicit: true,
+      required_by: [],
     });
     expect(state.installations).toHaveLength(2);
     const a = state.installations.find((i) => i.name === "a")!;

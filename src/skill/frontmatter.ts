@@ -26,7 +26,10 @@ export function extractFrontmatter(raw: string): Frontmatter {
     i++;
   }
   if (i >= lines.length || lines[i]!.trim() !== "---") {
-    throw new CrewError("invalid_skill", "SKILL.md is missing YAML frontmatter");
+    throw new CrewError(
+      "invalid_skill",
+      "SKILL.md is missing its YAML frontmatter — the first line should be `---`",
+    );
   }
   const start = i + 1;
   let end = -1;
@@ -37,7 +40,10 @@ export function extractFrontmatter(raw: string): Frontmatter {
     }
   }
   if (end < 0) {
-    throw new CrewError("invalid_skill", "SKILL.md frontmatter is not terminated");
+    throw new CrewError(
+      "invalid_skill",
+      "SKILL.md frontmatter never closes — add a `---` line after the last YAML field",
+    );
   }
   const yamlSource = lines.slice(start, end).join("\n");
   let data: YamlValue;
@@ -46,7 +52,7 @@ export function extractFrontmatter(raw: string): Frontmatter {
   } catch (err) {
     throw new CrewError(
       "invalid_skill",
-      `SKILL.md frontmatter is not valid YAML: ${(err as Error).message}`,
+      `SKILL.md frontmatter isn't valid YAML — ${(err as Error).message}`,
     );
   }
   const body = lines.slice(end + 1).join("\n");

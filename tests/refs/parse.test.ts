@@ -121,6 +121,54 @@ describe("parseRef: git", () => {
   test("invalid ssh URL errors", () => {
     expect(() => parseRef("git@ bad")).toThrow();
   });
+  test("C-REF-18 @owner/repo expands to github https", () => {
+    const r = parseRef("@with-logic/skills");
+    expect(r).toEqual({
+      type: "git",
+      url: "https://github.com/with-logic/skills.git",
+      ref: null,
+      subpath: "",
+    });
+  });
+  test("C-REF-19 @owner/repo@v1.0 pins ref", () => {
+    const r = parseRef("@with-logic/skills@v1.0.0");
+    expect(r).toEqual({
+      type: "git",
+      url: "https://github.com/with-logic/skills.git",
+      ref: "v1.0.0",
+      subpath: "",
+    });
+  });
+  test("C-REF-20 @owner/repo//sub/path carries subpath", () => {
+    const r = parseRef("@with-logic/skills//python/testing");
+    expect(r).toEqual({
+      type: "git",
+      url: "https://github.com/with-logic/skills.git",
+      ref: null,
+      subpath: "python/testing",
+    });
+  });
+  test("@owner/repo@ref//sub combines all three", () => {
+    const r = parseRef("@with-logic/skills@v1.0.0//python/testing");
+    expect(r).toEqual({
+      type: "git",
+      url: "https://github.com/with-logic/skills.git",
+      ref: "v1.0.0",
+      subpath: "python/testing",
+    });
+  });
+  test("@owner/repo accepts .git suffix", () => {
+    const r = parseRef("@with-logic/skills.git");
+    expect((r as { url: string }).url).toBe("https://github.com/with-logic/skills.git");
+  });
+  test("@name with no /repo falls to tap parsing and errors", () => {
+    // `@name` is not a valid GitHub shorthand (no /repo) and not a
+    // valid tap name (tap names don't start with @).
+    expect(() => parseRef("@solo")).toThrow(CrewError);
+  });
+  test("@/repo with empty owner is invalid", () => {
+    expect(() => parseRef("@/repo")).toThrow(CrewError);
+  });
 });
 
 describe("parseRef: tap", () => {

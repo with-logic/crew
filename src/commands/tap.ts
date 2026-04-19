@@ -6,6 +6,12 @@
  * special rule for the default `core` tap which requires `--force`.
  * List prints every tap with its URL and last-fetched time (stat mtime
  * of the clone directory).
+ *
+ * Shorthand: `crew tap <git-url>` (no `add` keyword) is equivalent to
+ * `crew tap add <git-url>`. We detect this by re-parsing the first
+ * positional with `parseRef`: anything that comes back as a git source
+ * is treated as an `add`. Plain words (subcommand names, typos) fall
+ * through to subcommand dispatch.
  */
 
 import { statSync } from "node:fs";
@@ -14,6 +20,7 @@ import { readConfig, writeConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
 import { tapPath } from "../core/paths.ts";
 import { ensureRepo } from "../git/repo.ts";
+import { parseRef } from "../refs/parse.ts";
 import { withStateLock } from "../state/lock.ts";
 import { rmrf } from "../util/fs.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
@@ -24,30 +31,52 @@ export function tapCommand(ctx: CommandContext): CommandOutput {
   if (sub === "add") return tapAdd(ctx, rest);
   if (sub === "remove") return tapRemove(ctx, rest);
   if (sub === "list") return tapList(ctx);
-  throw new CrewError("usage_error", "usage: crew tap {add|remove|list} ...");
+  // Shorthand: `crew tap <git-url> [<name>]` → `crew tap add <git-url> [<name>]`.
+  // Only dispatch to add when the first positional parses as a git
+  // source; plain words fall through to the usage error so typos of
+  // `list`/`remove` don't silently try to add them as taps.
+  if (sub && looksLikeGitSource(sub, ctx.cwd)) {
+    return tapAdd(ctx, ctx.positional);
+  }
+  throw new CrewError(
+    "usage_error",
+    "`crew tap` takes one of: `<git-url> [<name>]`, `add <git-url> [<name>]`, `remove <name>`, or `list`",
+  );
+}
+
+/** True if `ref` parses as a git source (URL, `gh:`, `@owner/repo`, etc.). */
+function looksLikeGitSource(ref: string, cwd: string): boolean {
+  try {
+    return parseRef(ref, cwd).type === "git";
+  } catch {
+    return false;
+  }
 }
 
 function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
-  if (args.length < 1) throw new CrewError("usage_error", "usage: crew tap add <git-url> [<name>]");
+  if (args.length < 1)
+    throw new CrewError(
+      "usage_error",
+      "`crew tap add` needs a git URL — e.g. `crew tap add https://github.com/acme/skills.git acme`",
+    );
   const url = args[0]!;
   const explicitName = args[1];
   const name = explicitName ?? deriveTapName(url);
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
-    throw new CrewError("usage_error", `invalid tap name: ${name}`);
-  }
-  if (!ctx.flags.yes) {
-    // In `--json` or non-TTY mode we require `--yes`. The CLI wrapper will
-    // have already set `--yes` based on `stdin.isTTY`; if we get here
-    // without it, the user must opt in explicitly.
-    // We surface a clear error rather than prompting from a subroutine.
-    // (Interactive prompting would couple this to process.stdin which
-    // breaks testability.)
-    throw new CrewError("usage_error", "confirmation required for `crew tap add`; pass --yes");
+    throw new CrewError(
+      "usage_error",
+      `tap name \`${name}\` has invalid characters — use lowercase letters, digits, and hyphens only (starting with a letter)`,
+      { name },
+    );
   }
   withStateLock(() => {
     const config = readConfig(ctx.home);
     if (config.taps.some((t) => t.name === name)) {
-      throw new CrewError("usage_error", `tap \`${name}\` already exists`);
+      throw new CrewError(
+        "usage_error",
+        `tap \`${name}\` is already configured — run \`crew tap list\` to see its URL, or use a different name`,
+        { name },
+      );
     }
     const updated = { ...config, taps: [...config.taps, { name, url }] };
     writeConfig(updated, ctx.home);
@@ -61,17 +90,25 @@ function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
 }
 
 function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput {
-  if (args.length !== 1) throw new CrewError("usage_error", "usage: crew tap remove <name>");
+  if (args.length !== 1)
+    throw new CrewError(
+      "usage_error",
+      "`crew tap remove` needs exactly one tap name — see `crew tap list`",
+    );
   const name = args[0]!;
   withStateLock(() => {
     const config = readConfig(ctx.home);
     if (!config.taps.some((t) => t.name === name)) {
-      throw new CrewError("usage_error", `tap \`${name}\` is not configured`);
+      throw new CrewError(
+        "usage_error",
+        `no tap named \`${name}\` is configured — run \`crew tap list\` to see what's there`,
+        { name },
+      );
     }
     if (name === DEFAULT_TAP_NAME && !ctx.flags.force)
       throw new CrewError(
         "usage_error",
-        `cannot remove default tap \`${DEFAULT_TAP_NAME}\` without --force`,
+        `\`${DEFAULT_TAP_NAME}\` is the default tap — pass \`--force\` if you're sure you want to remove it`,
       );
     const updated = { ...config, taps: config.taps.filter((t) => t.name !== name) };
     writeConfig(updated, ctx.home);

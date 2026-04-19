@@ -16,7 +16,10 @@ export function targetsCommand(ctx: CommandContext): CommandOutput {
   if (!sub) return list(ctx);
   if (sub === "enable") return toggle(ctx, ctx.positional.slice(1), "enable");
   if (sub === "disable") return toggle(ctx, ctx.positional.slice(1), "disable");
-  throw new CrewError("usage_error", "usage: crew targets [enable|disable <name>]");
+  throw new CrewError(
+    "usage_error",
+    "`crew targets` takes no args (to list), or `enable <name>` / `disable <name>`",
+  );
 }
 
 function list(ctx: CommandContext): CommandOutput {
@@ -43,10 +46,17 @@ function toggle(
   args: readonly string[],
   mode: "enable" | "disable",
 ): CommandOutput {
-  if (args.length !== 1) throw new CrewError("usage_error", `usage: crew targets ${mode} <name>`);
+  if (args.length !== 1)
+    throw new CrewError(
+      "usage_error",
+      `\`crew targets ${mode}\` needs exactly one target name — see \`crew targets\` for the list`,
+    );
   const name = args[0]!;
   if (!adapterByName(name)) {
-    throw new CrewError("usage_error", `unknown target: ${name}`);
+    const known = ALL_ADAPTERS.map((a) => a.name).join(", ");
+    throw new CrewError("usage_error", `unknown target \`${name}\` — known targets: ${known}`, {
+      name,
+    });
   }
   withStateLock(() => {
     const config = readConfig(ctx.home);

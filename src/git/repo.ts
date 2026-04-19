@@ -20,13 +20,26 @@ export function cloneRepo(url: string, dest: string, full: boolean = false): voi
     // `runGit` only ever throws `GitProcessError`, so this narrow is
     // safe. Translate to the user-facing error category.
     const ge = err as GitProcessError;
-    throw new CrewError("source_unreachable", `failed to clone ${url}: ${ge.result.stderr.trim()}`);
+    throw new CrewError(
+      "source_unreachable",
+      `couldn't clone \`${url}\` — ${ge.result.stderr.trim()}`,
+      { url },
+    );
   }
 }
 
 /**
- * Ensure a clone of `url` exists at `dest`; if it does, fetch. Returns
- * true if the clone was newly created, false if it was fetched.
+ * Ensure a clone of `url` exists at `dest`; if it does, fetch AND
+ * fast-forward the working tree to the remote's default branch so the
+ * files on disk match upstream. Returns true if the clone was newly
+ * created, false if it was fetched + fast-forwarded.
+ *
+ * Per PRD §10.1 step 1, tap clones must reflect the tracked ref after
+ * `crew update` so that `crew search` sees newly-published skills
+ * without requiring a re-install. A bare `git fetch` only updates
+ * remote-tracking refs; it leaves the working tree frozen. We
+ * additionally reset the working tree to `origin/HEAD`, detached so we
+ * don't fight with any branch git would otherwise try to track.
  */
 export function ensureRepo(url: string, dest: string): boolean {
   if (!exists(dest)) {
@@ -35,7 +48,11 @@ export function ensureRepo(url: string, dest: string): boolean {
   }
   if (!isDirectory(`${dest}/.git`)) {
     // Something exists but isn't a git checkout.
-    throw new CrewError("source_unreachable", `existing path ${dest} is not a git repository`);
+    throw new CrewError(
+      "source_unreachable",
+      `\`${dest}\` exists but isn't a git repository — something clobbered it outside crew's control; remove it and retry`,
+      { dest },
+    );
   }
   try {
     runGit(["fetch", "--tags", "--prune", "origin"], { cwd: dest });
@@ -43,8 +60,23 @@ export function ensureRepo(url: string, dest: string): boolean {
     const ge = err as GitProcessError;
     throw new CrewError(
       "source_unreachable",
-      `git fetch failed in ${dest}: ${ge.result.stderr.trim()}`,
+      `git fetch failed for the clone at \`${dest}\` — ${ge.result.stderr.trim()}`,
+      { dest },
     );
+  }
+  // Fast-forward the working tree to origin/HEAD. Failures here are
+  // non-fatal — the fetched refs are still usable by `acquireSource`,
+  // which resolves specific SHAs directly. This matters only for
+  // callers that read files from the working tree (e.g. `crew search`).
+  const headSha = runGit(["rev-parse", "--verify", "refs/remotes/origin/HEAD^{commit}"], {
+    cwd: dest,
+    throwOnError: false,
+  });
+  if (headSha.exitCode === 0) {
+    const sha = headSha.stdout.trim();
+    if (/^[0-9a-f]{40}$/.test(sha)) {
+      runGit(["checkout", "--quiet", "--detach", sha], { cwd: dest, throwOnError: false });
+    }
   }
   return false;
 }
@@ -71,7 +103,11 @@ export function resolveRef(repoPath: string, ref: string | null): string {
       if (/^[0-9a-f]{40}$/.test(sha)) return sha;
     }
   }
-  throw new CrewError("ref_not_found", `ref not found: ${target}`);
+  throw new CrewError(
+    "ref_not_found",
+    `no tag, branch, or commit named \`${target}\` in this repo`,
+    { ref: target },
+  );
 }
 
 /** Classify a ref in a repo as "sha", "tag", "branch", or "unknown". */
@@ -120,7 +156,11 @@ export function checkoutSha(repoPath: string, sha: string): void {
     runGit(["checkout", "--quiet", "--detach", sha], { cwd: repoPath });
   } catch (err) {
     const ge = err as GitProcessError;
-    throw new CrewError("ref_not_found", `could not check out ${sha}: ${ge.result.stderr.trim()}`);
+    throw new CrewError(
+      "ref_not_found",
+      `couldn't check out ${sha.slice(0, 8)} — ${ge.result.stderr.trim()}`,
+      { sha },
+    );
   }
 }
 

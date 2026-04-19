@@ -34,21 +34,44 @@ const SHORTHAND_HOSTS: Record<string, string> = {
 /** Parse a skill reference per §8. `cwd` is used to resolve relative paths. */
 export function parseRef(raw: string, cwd: string = process.cwd()): Source {
   if (typeof raw !== "string" || raw.trim().length === 0) {
-    throw new CrewError("invalid_ref", "reference is empty");
+    throw new CrewError("invalid_ref", "no skill reference given");
   }
   const ref = raw.trim();
 
-  // §8.5 precedence: path > explicit URL / shorthand > contains // > tap.
+  // §8.5 precedence: path > explicit URL / shorthand > leading-@ GitHub
+  // shorthand > contains // > tap.
   if (looksLikePath(ref)) {
     return parsePath(ref, cwd);
   }
   if (looksLikeExplicitGit(ref) || looksLikeShorthand(ref)) {
     return parseGit(ref);
   }
+  if (looksLikeAtShorthand(ref)) {
+    return parseGit(ref);
+  }
   if (ref.includes("//")) {
     return parseGit(ref);
   }
   return parseTap(ref);
+}
+
+/**
+ * True if `ref` is the leading-`@` GitHub shorthand (`@owner/repo` with
+ * optional `@ref` and `//subpath`). Requires an `owner/repo` body.
+ */
+function looksLikeAtShorthand(ref: string): boolean {
+  if (!ref.startsWith("@")) return false;
+  // Body is everything after `@` up to the first `//` (subpath) or
+  // last `@` (ref). We only need to verify the owner/repo shape.
+  const beforeSubpath = ref.split("//", 1)[0]!;
+  const body = beforeSubpath.slice(1);
+  // Strip an optional `@ref` tail — the shorthand can carry one.
+  const atIdx = body.lastIndexOf("@");
+  const ownerRepo = atIdx > 0 ? body.slice(0, atIdx) : body;
+  const parts = ownerRepo.split("/");
+  if (parts.length !== 2) return false;
+  const [owner, repo] = parts as [string, string];
+  return owner.length > 0 && repo.length > 0;
 }
 
 /** True if `ref` should be treated as a path source. */
@@ -97,7 +120,7 @@ function parseGit(ref: string): GitSource {
   const { url: baseUrl, ref: gitRef } = splitGitRef(head);
   const canonical = canonicalizeUrl(baseUrl);
   if (canonical === null) {
-    throw new CrewError("invalid_ref", `not a valid git reference: ${ref}`);
+    throw new CrewError("invalid_ref", `\`${ref}\` isn't a valid git reference`, { ref });
   }
   return {
     type: "git",
@@ -142,6 +165,14 @@ function splitGitRef(head: string): { url: string; ref: string | null } {
 /** Canonicalize a git URL: expand shorthand, strip `.git`, normalize. */
 function canonicalizeUrl(raw: string): string | null {
   let url = raw;
+
+  // Leading-`@` GitHub shorthand: `@owner/repo` → github.com. Done
+  // before the `gh:`/`gl:` match so we don't recurse into it.
+  if (url.startsWith("@") && !url.includes("://")) {
+    const body = url.slice(1);
+    if (!body.includes("/")) return null;
+    url = `https://github.com/${body.endsWith(".git") ? body.slice(0, -4) : body}.git`;
+  }
 
   // Shorthand: `gh:owner/repo`, `gl:owner/repo`, `bb:owner/repo`.
   const shMatch = url.match(/^([a-z]{2}):(.+)$/);
@@ -200,7 +231,11 @@ function parseTap(ref: string): TapSource {
     identifier = ref.slice(0, atIdx);
     gitRef = ref.slice(atIdx + 1);
     if (gitRef.length === 0 || /\s/.test(gitRef)) {
-      throw new CrewError("invalid_ref", `invalid tap ref: ${ref}`);
+      throw new CrewError(
+        "invalid_ref",
+        `\`${ref}\` has an invalid \`@ref\` tail (refs can't be empty or contain whitespace)`,
+        { ref },
+      );
     }
   }
 
@@ -208,18 +243,30 @@ function parseTap(ref: string): TapSource {
   if (identifier.includes("/")) {
     const parts = identifier.split("/");
     if (parts.length !== 2) {
-      throw new CrewError("invalid_ref", `invalid tap reference: ${ref}`);
+      throw new CrewError(
+        "invalid_ref",
+        `\`${ref}\` looks like a tap reference but has too many \`/\` segments (expected \`tap/skill\`)`,
+        { ref },
+      );
     }
     const [tap, name] = parts as [string, string];
     if (!(NAME_PATTERN.test(tap) && NAME_PATTERN.test(name))) {
-      throw new CrewError("invalid_ref", `invalid tap reference: ${ref}`);
+      throw new CrewError(
+        "invalid_ref",
+        `\`${ref}\` isn't a valid tap reference — names must match [a-z][a-z0-9-]*`,
+        { ref },
+      );
     }
     return { type: "tap", tap, name, ref: gitRef };
   }
 
   // Bare name.
   if (!NAME_PATTERN.test(identifier)) {
-    throw new CrewError("invalid_ref", `invalid skill name: ${ref}`);
+    throw new CrewError(
+      "invalid_ref",
+      `\`${ref}\` isn't a valid skill name (must match [a-z][a-z0-9-]*) or a known ref shape`,
+      { ref },
+    );
   }
   return { type: "tap", tap: null, name: identifier, ref: gitRef };
 }

@@ -135,4 +135,39 @@ describe("per-command help", () => {
       }
     }
   });
+
+  test("`crew help install` documents every supported reference form", () => {
+    // Someone on GitLab or Bitbucket, or anyone wondering "can I do that
+    // too?", should find their host/shape listed. Lock the contract so
+    // a refactor doesn't silently drop GitLab or Bitbucket from docs.
+    const home = makeCrewHome();
+    const c = captureStreams();
+    runCli(["help", "install"], { home, streams: c.streams });
+    const out = c.stdout();
+    expect(out).toContain("REFERENCE FORMS");
+    // Each of the four shorthand prefixes is documented.
+    expect(out).toContain("gh:");
+    expect(out).toContain("gl:");
+    expect(out).toContain("bb:");
+    expect(out).toContain("@acme/skills");
+    // Ref + subpath composition is explained.
+    expect(out).toContain("@v1.2.0//python/testing");
+  });
+
+  test("`crew help tap` explains tap shape and authoring", () => {
+    // A user who wants to publish their own tap should be able to find
+    // the instructions in `crew help tap`. Lock the content shape so a
+    // future refactor doesn't silently drop it.
+    const home = makeCrewHome();
+    const c = captureStreams();
+    runCli(["help", "tap"], { home, streams: c.streams });
+    const out = c.stdout();
+    // Structure explainer is present and references the directory layout.
+    expect(out).toContain("WHAT A TAP LOOKS LIKE");
+    expect(out).toContain("SKILL.md");
+    expect(out).toContain("my-skills/");
+    // Authoring walkthrough is present with a concrete first step.
+    expect(out).toContain("AUTHORING YOUR OWN TAP");
+    expect(out).toContain("git init");
+  });
 });

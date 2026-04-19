@@ -21,7 +21,12 @@ export function computeTargetSet(
 ): TargetAdapter[] {
   const unknown = restrictTo.filter((n) => !adapterByName(n));
   if (unknown.length > 0) {
-    throw new CrewError("no_targets", `unknown target(s): ${unknown.join(", ")}`, { unknown });
+    const known = ALL_ADAPTERS.map((a) => a.name).join(", ");
+    throw new CrewError(
+      "no_targets",
+      `unknown target${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")} — known targets: ${known}`,
+      { unknown },
+    );
   }
 
   let active: TargetAdapter[] = [];
@@ -41,7 +46,10 @@ export function computeTargetSet(
     active = active.filter((a) => set.has(a.name));
   }
   if (active.length === 0) {
-    throw new CrewError("no_targets", "no agent targets are active; run `crew targets` to check");
+    throw new CrewError(
+      "no_targets",
+      "no agent coders are active — install Claude Code, Codex CLI, or Gemini CLI, or run `crew targets enable <name>` to force one on",
+    );
   }
   return active;
 }

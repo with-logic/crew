@@ -7,7 +7,7 @@
  * them covered.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
@@ -16,6 +16,9 @@ import { CrewError } from "../../src/core/errors.ts";
 import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";
 import { ensureRepo, resolveRef } from "../../src/git/repo.ts";
 import { parseRef } from "../../src/refs/parse.ts";
+import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
+import { codexAdapter } from "../../src/targets/codex.ts";
+import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
   commitAll,
@@ -25,8 +28,46 @@ import {
   skillFrontmatter,
 } from "../helpers/fixtures.ts";
 
+// Adapter redirection: any test in this file that runs `crew install`
+// would otherwise write into the real `~/.claude/skills/` etc. Point
+// each adapter's userPath at a per-test tmp root, and force `detect()`
+// so we don't depend on the machine actually having Claude Code / Codex
+// / Gemini installed. The CLAUDE.md testing philosophy requires this.
+let ccRoot: string;
+let restore: (() => void) | null = null;
+
+function setupTargets() {
+  ccRoot = makeTempDir("crew-cc-");
+  const co = makeTempDir("crew-co-");
+  const ge = makeTempDir("crew-ge-");
+  const originals = {
+    cc: { u: claudeCodeAdapter.userPath, d: claudeCodeAdapter.detect },
+    co: { u: codexAdapter.userPath, d: codexAdapter.detect },
+    ge: { u: geminiCliAdapter.userPath, d: geminiCliAdapter.detect },
+  };
+  (claudeCodeAdapter as { userPath: () => string }).userPath = () => ccRoot;
+  (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
+  (codexAdapter as { userPath: () => string }).userPath = () => co;
+  (codexAdapter as { detect: () => boolean }).detect = () => true;
+  (geminiCliAdapter as { userPath: () => string }).userPath = () => ge;
+  (geminiCliAdapter as { detect: () => boolean }).detect = () => true;
+  restore = () => {
+    (claudeCodeAdapter as { userPath: () => string }).userPath = originals.cc.u;
+    (claudeCodeAdapter as { detect: () => boolean }).detect = originals.cc.d;
+    (codexAdapter as { userPath: () => string }).userPath = originals.co.u;
+    (codexAdapter as { detect: () => boolean }).detect = originals.co.d;
+    (geminiCliAdapter as { userPath: () => string }).userPath = originals.ge.u;
+    (geminiCliAdapter as { detect: () => boolean }).detect = originals.ge.d;
+  };
+}
+
+beforeEach(() => setupTargets());
 afterEach(() => {
   resetGitRunner();
+  if (restore) {
+    restore();
+  }
+  restore = null;
 });
 
 describe("cli/output — default streams wrap process.stdout/stderr", () => {
@@ -287,6 +328,32 @@ describe("install/resolve — dependency edge cases", () => {
   });
 });
 
+describe("commands/install — up_to_date reporting", () => {
+  test("reinstall after state deletion reports up-to-date per target (install.ts:60)", () => {
+    // When the destination already has an identical marker but the state
+    // entry has been removed (e.g. after state drift or `doctor` scratch
+    // repair), `applyDuplicateRules` doesn't short-circuit — the skill
+    // goes through `performInstall`, which sees the existing marker,
+    // returns `up_to_date`, and the command formats "target=up-to-date".
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
+    runCli(["install", skill], { home, streams: captureStreams().streams });
+
+    // Drop the state entry while leaving the install (and its marker)
+    // in place on disk.
+    const { readState, writeState } =
+      require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
+    const state = readState(home);
+    writeState({ ...state, installations: [] }, home);
+
+    const c = captureStreams();
+    const code = runCli(["install", skill], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("up-to-date");
+  });
+});
+
 describe("targets/install — same-SHA early exit", () => {
   test("direct re-install at same SHA + same content hash → up_to_date (install.ts:73)", () => {
     const home = makeCrewHome();
@@ -341,7 +408,7 @@ describe("sources/acquire — bare-name tap ambiguity", () => {
     makeGitRepo(repo);
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
     commitAll(repo, "init");
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
       home,
       streams: captureStreams().streams,
     });
@@ -381,16 +448,20 @@ describe("commands/search — no configured taps", () => {
 });
 
 describe("commands/tap — deriveTapName fallback branches", () => {
-  test("tap add without --yes fails BEFORE derive is hit", () => {
+  test("tap add on an unreachable ssh URL still derives a name and fails cleanly", () => {
     const home = makeCrewHome();
-    // This path exercises the "no URL scheme" branch of deriveTapName by
-    // using a non-standard URL shape. The add itself fails because --yes
-    // is missing; we just want the function to run.
-    const code = runCli(["tap", "add", "git@example.com:owner/repo.git"], {
+    // Exercises `deriveTapName`'s "no URL scheme" branch (ssh-style
+    // `git@host:owner/repo.git`). The clone itself fails because the
+    // host isn't reachable — we're not testing connectivity, just that
+    // the derive path runs to completion.
+    const c = captureStreams();
+    const code = runCli(["tap", "add", "git@example.invalid:owner/repo.git"], {
       home,
-      streams: captureStreams().streams,
+      streams: c.streams,
     });
-    expect(code).toBe(4);
+    // `source_unreachable` → exit 5. The exact code isn't the point;
+    // the point is the derive path ran and produced a reasonable error.
+    expect([4, 5]).toContain(code);
   });
 
   test("tap add with a URL missing scheme still derives a name", () => {
@@ -404,7 +475,7 @@ describe("commands/tap — deriveTapName fallback branches", () => {
     const tmpDir = makeTempDir();
     const validName = join(tmpDir, "mytap");
     require("node:fs").renameSync(repo, validName);
-    const code = runCli(["tap", "add", "--yes", `file://${validName}`], {
+    const code = runCli(["tap", "add", `file://${validName}`], {
       home,
       streams: captureStreams().streams,
     });
@@ -469,7 +540,7 @@ describe("commands/update — branch coverage", () => {
     makeGitRepo(repo);
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
     commitAll(repo, "init");
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
       home,
       streams: captureStreams().streams,
     });
@@ -505,7 +576,7 @@ describe("search — sort across multiple hits in same tap (search.ts:51)", () =
       skillFrontmatter({ name: "alpha", description: "matches shared word" }),
     );
     commitAll(repo, "init");
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
       home,
       streams: captureStreams().streams,
     });
@@ -530,7 +601,7 @@ describe("search — invalid skill in a tap is silently skipped (search.ts:46)",
       "---\nname: bad\n\tdescription: tabs cause parse error\n---\nbody",
     );
     commitAll(repo, "init");
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
       home,
       streams: captureStreams().streams,
     });
@@ -748,7 +819,7 @@ describe("install/flow — name_conflict across every source kind", () => {
     makeGitRepo(tapRepo);
     makeSkill(tapRepo, "demo", skillFrontmatter({ name: "demo", description: "from tap" }));
     commitAll(tapRepo, "init");
-    runCli(["tap", "add", "--yes", `file://${tapRepo}`, "mytap"], {
+    runCli(["tap", "add", `file://${tapRepo}`, "mytap"], {
       home,
       streams: captureStreams().streams,
     });

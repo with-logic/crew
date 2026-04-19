@@ -328,6 +328,8 @@ describe("doctor warnings — orphan store", () => {
             installed_at: "2026-04-18T00:00:00Z",
             targets: ["claude-code"],
             pinned: false,
+            explicit: true,
+            required_by: [],
           },
         ],
       },

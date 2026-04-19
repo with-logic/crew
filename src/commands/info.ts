@@ -15,7 +15,10 @@ import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function infoCommand(ctx: CommandContext): CommandOutput {
   if (ctx.positional.length !== 1) {
-    throw new CrewError("usage_error", "usage: crew info <ref-or-name>");
+    throw new CrewError(
+      "usage_error",
+      "`crew info` needs exactly one skill name or reference — e.g. `crew info python-testing` or `crew info gh:acme/skills//python/testing`",
+    );
   }
   const arg = ctx.positional[0]!;
 

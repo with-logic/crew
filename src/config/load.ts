@@ -33,7 +33,10 @@ export function readConfig(home: string = crewHome()): Config {
   try {
     parsed = parseYaml(readText(configPath));
   } catch (err) {
-    throw new CrewError("config_invalid", `config.yaml did not parse: ${(err as Error).message}`);
+    throw new CrewError(
+      "config_invalid",
+      `~/.crew/config.yaml isn't valid YAML — ${(err as Error).message}`,
+    );
   }
   return normalizeConfig(parsed);
 }
@@ -44,7 +47,10 @@ export function normalizeConfig(parsed: YamlValue): Config {
     return defaultConfig();
   }
   if (typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new CrewError("config_invalid", "config.yaml must be a mapping");
+    throw new CrewError(
+      "config_invalid",
+      "~/.crew/config.yaml must be a YAML mapping at the top level",
+    );
   }
   const map = parsed as YamlMap;
 
@@ -54,20 +60,29 @@ export function normalizeConfig(parsed: YamlValue): Config {
     taps.push({ name: DEFAULT_TAP_NAME, url: DEFAULT_TAP_URL });
   } else {
     if (!Array.isArray(rawTaps)) {
-      throw new CrewError("config_invalid", "config.yaml: `taps` must be a list");
+      throw new CrewError(
+        "config_invalid",
+        "config.yaml: `taps` must be a list of {name, url} entries",
+      );
     }
     for (const entry of rawTaps) {
       if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
-        throw new CrewError("config_invalid", "config.yaml: every `taps` entry must be a mapping");
+        throw new CrewError(
+          "config_invalid",
+          "config.yaml: each `taps` entry must be a mapping like `- name: foo\\n  url: https://...`",
+        );
       }
       const em = entry as YamlMap;
       const name = em["name"];
       const url = em["url"];
       if (typeof name !== "string" || name.length === 0) {
-        throw new CrewError("config_invalid", "config.yaml: tap `name` must be a non-empty string");
+        throw new CrewError("config_invalid", "config.yaml: each tap needs a non-empty `name`");
       }
       if (typeof url !== "string" || url.length === 0) {
-        throw new CrewError("config_invalid", "config.yaml: tap `url` must be a non-empty string");
+        throw new CrewError(
+          "config_invalid",
+          "config.yaml: each tap needs a non-empty `url` (git clone URL)",
+        );
       }
       taps.push({ name, url });
     }
@@ -81,14 +96,17 @@ export function normalizeConfig(parsed: YamlValue): Config {
   let interval_seconds = DEFAULT_AUTOUPDATE_INTERVAL_SECONDS;
   if (autoupdate !== undefined && autoupdate !== null) {
     if (typeof autoupdate !== "object" || Array.isArray(autoupdate)) {
-      throw new CrewError("config_invalid", "config.yaml: `autoupdate` must be a mapping");
+      throw new CrewError(
+        "config_invalid",
+        "config.yaml: `autoupdate` must be a mapping with `enabled` and `interval_seconds`",
+      );
     }
     const au = autoupdate as YamlMap;
     if (au["enabled"] !== undefined && au["enabled"] !== null) {
       if (typeof au["enabled"] !== "boolean") {
         throw new CrewError(
           "config_invalid",
-          "config.yaml: `autoupdate.enabled` must be a boolean",
+          "config.yaml: `autoupdate.enabled` must be `true` or `false`",
         );
       }
       enabled = au["enabled"];
@@ -97,7 +115,7 @@ export function normalizeConfig(parsed: YamlValue): Config {
       if (typeof au["interval_seconds"] !== "number" || au["interval_seconds"] <= 0) {
         throw new CrewError(
           "config_invalid",
-          "config.yaml: `autoupdate.interval_seconds` must be a positive number",
+          "config.yaml: `autoupdate.interval_seconds` must be a positive number (seconds between autoupdate runs)",
         );
       }
       interval_seconds = au["interval_seconds"];
@@ -118,14 +136,17 @@ function readStringList(map: YamlMap, key: string): string[] {
     return [];
   }
   if (!Array.isArray(raw)) {
-    throw new CrewError("config_invalid", `config.yaml: \`${key}\` must be a list`);
+    throw new CrewError(
+      "config_invalid",
+      `config.yaml: \`${key}\` must be a list of target names (or omitted)`,
+    );
   }
   const result: string[] = [];
   for (const item of raw) {
     if (typeof item !== "string" || item.length === 0) {
       throw new CrewError(
         "config_invalid",
-        `config.yaml: every entry in \`${key}\` must be a non-empty string`,
+        `config.yaml: each entry in \`${key}\` must be a non-empty target name (e.g. \`claude-code\`)`,
       );
     }
     result.push(item);

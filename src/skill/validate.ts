@@ -26,26 +26,44 @@ const MAX_COMPATIBILITY_LENGTH = 500;
  */
 export function validateFrontmatter(data: YamlValue, skillDir: string): SkillFrontmatter {
   if (data === null || typeof data !== "object" || Array.isArray(data)) {
-    throw new CrewError("invalid_skill", "frontmatter must be a mapping");
+    throw new CrewError(
+      "invalid_skill",
+      "SKILL.md frontmatter must be a YAML mapping (`key: value` pairs), not a scalar or list",
+    );
   }
   const map = data as Record<string, YamlValue>;
 
   // name
   const name = map["name"];
   if (typeof name !== "string" || name.length === 0) {
-    throw new CrewError("invalid_skill", "field `name` is required and must be a non-empty string");
+    throw new CrewError(
+      "invalid_skill",
+      "SKILL.md frontmatter is missing `name` — add a non-empty string, e.g. `name: my-skill`",
+    );
   }
   if (name.length > MAX_NAME_LENGTH) {
-    throw new CrewError("invalid_skill", `field \`name\` exceeds ${MAX_NAME_LENGTH} characters`);
+    throw new CrewError(
+      "invalid_skill",
+      `\`name\` is ${name.length} characters; max is ${MAX_NAME_LENGTH}`,
+    );
   }
   if (!NAME_PATTERN.test(name)) {
-    throw new CrewError("invalid_skill", `field \`name\` must match ${NAME_PATTERN.source}`);
+    throw new CrewError(
+      "invalid_skill",
+      `\`name: ${name}\` has invalid characters — use lowercase letters, digits, and hyphens only, starting with a letter`,
+    );
   }
   if (name.endsWith("-")) {
-    throw new CrewError("invalid_skill", "field `name` must not end with `-`");
+    throw new CrewError(
+      "invalid_skill",
+      `\`name: ${name}\` ends with a hyphen — drop the trailing \`-\``,
+    );
   }
   if (name.includes("--")) {
-    throw new CrewError("invalid_skill", "field `name` must not contain `--`");
+    throw new CrewError(
+      "invalid_skill",
+      `\`name: ${name}\` contains \`--\` — collapse consecutive hyphens to single ones`,
+    );
   }
 
   // Parent directory must equal name (§9 step 4).
@@ -53,7 +71,8 @@ export function validateFrontmatter(data: YamlValue, skillDir: string): SkillFro
   if (dirName !== name) {
     throw new CrewError(
       "invalid_skill",
-      `field \`name\` (\`${name}\`) does not match parent directory (\`${dirName}\`)`,
+      `\`name: ${name}\` doesn't match the parent directory name \`${dirName}\` — rename one so they match`,
+      { name, dirName },
     );
   }
 
@@ -62,32 +81,32 @@ export function validateFrontmatter(data: YamlValue, skillDir: string): SkillFro
   if (typeof description !== "string" || description.length === 0) {
     throw new CrewError(
       "invalid_skill",
-      "field `description` is required and must be a non-empty string",
+      "SKILL.md frontmatter is missing `description` — add a non-empty one-line summary the agent will read to decide whether to use this skill",
     );
   }
   if (description.length > MAX_DESCRIPTION_LENGTH) {
     throw new CrewError(
       "invalid_skill",
-      `field \`description\` exceeds ${MAX_DESCRIPTION_LENGTH} characters`,
+      `\`description\` is ${description.length} characters; max is ${MAX_DESCRIPTION_LENGTH}`,
     );
   }
 
   // license (optional, string if present)
   const license = map["license"];
   if (license !== undefined && license !== null && typeof license !== "string") {
-    throw new CrewError("invalid_skill", "field `license` must be a string");
+    throw new CrewError("invalid_skill", "`license` must be a string (e.g. `license: MIT`)");
   }
 
   // compatibility (optional)
   const compatibility = map["compatibility"];
   if (compatibility !== undefined && compatibility !== null) {
     if (typeof compatibility !== "string") {
-      throw new CrewError("invalid_skill", "field `compatibility` must be a string");
+      throw new CrewError("invalid_skill", "`compatibility` must be a string if present");
     }
     if (compatibility.length > MAX_COMPATIBILITY_LENGTH) {
       throw new CrewError(
         "invalid_skill",
-        `field \`compatibility\` exceeds ${MAX_COMPATIBILITY_LENGTH} characters`,
+        `\`compatibility\` is ${compatibility.length} characters; max is ${MAX_COMPATIBILITY_LENGTH}`,
       );
     }
   }
@@ -97,30 +116,39 @@ export function validateFrontmatter(data: YamlValue, skillDir: string): SkillFro
   const metadata = map["metadata"];
   if (metadata !== undefined && metadata !== null) {
     if (typeof metadata !== "object" || Array.isArray(metadata)) {
-      throw new CrewError("invalid_skill", "field `metadata` must be a mapping");
+      throw new CrewError(
+        "invalid_skill",
+        "`metadata` must be a YAML mapping if present (nested `key: value` pairs)",
+      );
     }
     const crew = (metadata as Record<string, YamlValue>)["crew"];
     if (crew !== undefined && crew !== null) {
       if (typeof crew !== "object" || Array.isArray(crew)) {
-        throw new CrewError("invalid_skill", "field `metadata.crew` must be a mapping");
+        throw new CrewError("invalid_skill", "`metadata.crew` must be a YAML mapping if present");
       }
       const crewMap = crew as Record<string, YamlValue>;
       const homepage = crewMap["homepage"];
       if (homepage !== undefined && homepage !== null && typeof homepage !== "string") {
-        throw new CrewError("invalid_skill", "field `metadata.crew.homepage` must be a string");
+        throw new CrewError(
+          "invalid_skill",
+          "`metadata.crew.homepage` must be a URL string (e.g. `homepage: https://...`)",
+        );
       }
       const deps = crewMap["dependencies"];
       let depList: readonly string[] | undefined;
       if (deps !== undefined && deps !== null) {
         if (!Array.isArray(deps)) {
-          throw new CrewError("invalid_skill", "field `metadata.crew.dependencies` must be a list");
+          throw new CrewError(
+            "invalid_skill",
+            "`metadata.crew.dependencies` must be a YAML list of skill references",
+          );
         }
         const parsed: string[] = [];
         for (const entry of deps) {
           if (typeof entry !== "string" || entry.length === 0) {
             throw new CrewError(
               "invalid_skill",
-              "each entry in `metadata.crew.dependencies` must be a non-empty string",
+              "each `metadata.crew.dependencies` entry must be a non-empty skill reference string",
             );
           }
           parsed.push(entry);

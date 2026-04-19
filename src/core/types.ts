@@ -87,6 +87,23 @@ export type MarkerSource =
   | { readonly type: "git"; readonly url: string; readonly subpath: string }
   | { readonly type: "path"; readonly path: string };
 
+/**
+ * Bundle record on a state entry that was installed via directory
+ * expansion of a git or tap source (§9 step 5 + §10.1.1). Records the
+ * original reference so `crew update` can re-expand the bundle and
+ * pick up newly-added sibling skills.
+ *
+ * Path sources are intentionally excluded: a local directory isn't
+ * published upstream, so auto-expanding new siblings on update is
+ * surprising. If you add a new local skill, run `crew install` again.
+ */
+export interface BundleRef {
+  /** The exact reference string the user typed. */
+  readonly ref: string;
+  /** The parsed source shape (so update doesn't need to re-parse `ref`). */
+  readonly source: Extract<MarkerSource, { type: "git" | "tap" }>;
+}
+
 /** An entry in state.json per §11.1. */
 export interface StateEntry {
   readonly name: string;
@@ -98,6 +115,19 @@ export interface StateEntry {
   readonly installed_at: string;
   readonly targets: readonly string[];
   readonly pinned: boolean;
+  /** True if the user asked for this skill by name. False for dep-only installs. */
+  readonly explicit: boolean;
+  /** Names of installed skills at this scope that depend on this one. */
+  readonly required_by: readonly string[];
+  /** Present only on entries installed via directory expansion of a multi-skill source. */
+  readonly bundle?: BundleRef;
+  /**
+   * For `scope === "project"` entries: the absolute directory the skill
+   * was installed from. Used by update/uninstall/doctor so these
+   * operations work correctly regardless of the user's current cwd.
+   * Absent on user-scope entries.
+   */
+  readonly project_root?: string;
 }
 
 /** The state.json file on disk. */
@@ -141,4 +171,11 @@ export interface ResolvedSkill {
   readonly pinned: boolean;
   /** Content hash of the store entry. */
   readonly contentHash: string;
+  /**
+   * True if this skill was named on the command line (or via a bundle
+   * the user named). False if it's here only as a transitive dependency.
+   */
+  readonly explicit: boolean;
+  /** Bundle membership, if installed via directory expansion. */
+  readonly bundle?: BundleRef;
 }

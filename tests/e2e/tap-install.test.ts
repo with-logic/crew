@@ -70,7 +70,7 @@ describe("tap source install", () => {
   test("C-INST-01 install by bare name from added tap", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
       home,
       streams: captureStreams().streams,
     });
@@ -84,7 +84,7 @@ describe("tap source install", () => {
   test("qualified tap ref", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
       home,
       streams: captureStreams().streams,
     });
@@ -97,7 +97,7 @@ describe("tap source install", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
     tagRepo(repo, "v1.0.0");
-    runCli(["tap", "add", "--yes", `file://${repo}`, "mytap"], {
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
       home,
       streams: captureStreams().streams,
     });
@@ -114,11 +114,11 @@ describe("tap source install", () => {
     const home = makeCrewHome();
     const r1 = buildTapRepo();
     const r2 = buildTapRepo();
-    runCli(["tap", "add", "--yes", `file://${r1}`, "tap1"], {
+    runCli(["tap", "add", `file://${r1}`, "tap1"], {
       home,
       streams: captureStreams().streams,
     });
-    runCli(["tap", "add", "--yes", `file://${r2}`, "tap2"], {
+    runCli(["tap", "add", `file://${r2}`, "tap2"], {
       home,
       streams: captureStreams().streams,
     });
@@ -142,11 +142,11 @@ describe("tap source install", () => {
     makeSkill(tap2, "dep", skillFrontmatter({ name: "dep", description: "in tap2" }));
     commitAll(tap2, "init");
 
-    runCli(["tap", "add", "--yes", `file://${tap1}`, "tap1"], {
+    runCli(["tap", "add", `file://${tap1}`, "tap1"], {
       home,
       streams: captureStreams().streams,
     });
-    runCli(["tap", "add", "--yes", `file://${tap2}`, "tap2"], {
+    runCli(["tap", "add", `file://${tap2}`, "tap2"], {
       home,
       streams: captureStreams().streams,
     });
@@ -200,6 +200,96 @@ describe("list on multi-scope", () => {
     runCli(["list", "--json"], { home, streams: c.streams });
     const parsed = JSON.parse(c.stdout());
     expect(parsed.installations.length).toBe(2);
+  });
+});
+
+describe("C-UPD-19: crew update refreshes every configured tap", () => {
+  test("new skill added to a tap is searchable after crew update", () => {
+    const home = makeCrewHome();
+    const tapRepo = buildTapRepo();
+    runCli(["tap", "add", `file://${tapRepo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    // Remove core so the search only reflects our test tap.
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+
+    // Search before upstream changes — only alpha, beta exist.
+    {
+      const c = captureStreams();
+      runCli(["search", "gamma"], { home, streams: c.streams });
+      expect(c.stdout()).not.toContain("gamma");
+    }
+
+    // Upstream publishes a new skill. No crew install from this tap yet.
+    makeSkill(tapRepo, "gamma", skillFrontmatter({ name: "gamma" }));
+    commitAll(tapRepo, "add gamma");
+
+    // `crew update` fetches every configured tap and fast-forwards the
+    // working tree (C-UPD-19). After update, `crew search` reflects
+    // upstream state for any tap — even taps the user never installed
+    // from.
+    const code = runCli(["update"], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+
+    const c = captureStreams();
+    runCli(["search", "gamma"], { home, streams: c.streams });
+    expect(c.stdout()).toContain("gamma");
+
+    // The clone's working tree is now at the new HEAD, so the file
+    // landed under ~/.crew/taps/mytap/gamma/SKILL.md — the same path
+    // `crew search` reads from.
+    const { join } = require("node:path") as typeof import("node:path");
+    const { existsSync } = require("node:fs") as typeof import("node:fs");
+    expect(existsSync(join(home, "taps", "mytap", "gamma", "SKILL.md"))).toBe(true);
+  });
+});
+
+describe("C-UPD-20: per-tap fetch failure doesn't abort update", () => {
+  test("one broken tap emits a warning; other taps and skills still process", () => {
+    const home = makeCrewHome();
+
+    // Good tap: a real local git repo we can fetch from.
+    const goodRepo = buildTapRepo();
+    runCli(["tap", "add", `file://${goodRepo}`, "good"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    // Broken tap: a file:// URL to a path that was deleted before update.
+    const brokenRepoPath = makeTempDir("crew-broken-tap-");
+    const fs = require("node:fs");
+    fs.rmSync(brokenRepoPath, { recursive: true, force: true });
+    // Inject the broken tap by hand (can't use `tap add`; it validates by cloning).
+    const { writeConfig, readConfig } =
+      require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
+    const cfg = readConfig(home);
+    writeConfig(
+      { ...cfg, taps: [...cfg.taps, { name: "broken", url: `file://${brokenRepoPath}` }] },
+      home,
+    );
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+
+    // Install from the good tap so there's per-skill work to do during update.
+    runCli(["install", "good/alpha"], { home, streams: captureStreams().streams });
+
+    // Upstream: add a new sibling to the good tap.
+    makeSkill(goodRepo, "delta", skillFrontmatter({ name: "delta" }));
+    commitAll(goodRepo, "add delta");
+
+    const c = captureStreams();
+    const code = runCli(["update"], { home, streams: c.streams });
+    // Exit 0: broken-tap fetch is a warning, not a hard failure.
+    expect(code).toBe(0);
+    // The warning is surfaced in human output.
+    expect(c.stdout()).toMatch(/warning.*broken/);
+    // The good tap's per-skill work still happened: alpha was processed
+    // (either updated or up-to-date) — we just need to see the per-skill
+    // row for it to confirm the update loop ran.
+    expect(c.stdout()).toContain("alpha");
+    // And search picks up delta from the good tap even though broken failed.
+    const s = captureStreams();
+    runCli(["search", "delta"], { home, streams: s.streams });
+    expect(s.stdout()).toContain("delta");
   });
 });
 

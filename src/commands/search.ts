@@ -17,7 +17,7 @@ import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function searchCommand(ctx: CommandContext): CommandOutput {
   if (ctx.positional.length === 0) {
-    throw new CrewError("usage_error", "usage: crew search <query>");
+    throw new CrewError("usage_error", "`crew search` needs a query — e.g. `crew search python`");
   }
   const query = ctx.positional.join(" ").toLowerCase();
   const config = readConfig(ctx.home);

@@ -25,6 +25,63 @@ interface Finding {
   message: string;
 }
 
+interface MarkerEntry {
+  record: ReturnType<typeof listInstalledForTarget>[number];
+  currentHash?: string;
+  /** For project-scope markers, the cwd we walked from — used as `project_root` during --repair. */
+  projectRoot?: string;
+}
+
+/**
+ * Build the marker index used for drift checks. Walks every adapter's
+ * user base once, then every distinct `project_root` in state (plus the
+ * current cwd) for project-scope markers. A project_root that doesn't
+ * exist on disk is silently skipped — check 8 already reports it, so
+ * reporting again here would be noise.
+ */
+function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: string): MarkerEntry[] {
+  const markers: MarkerEntry[] = [];
+  const projectRoots = new Set<string>([cwd]);
+  for (const e of stateEntries) {
+    if (e.scope === "project" && e.project_root) projectRoots.add(e.project_root);
+  }
+  for (const adapter of ALL_ADAPTERS) {
+    for (const rec of listInstalledForTarget(adapter, "user", cwd)) {
+      markers.push({ record: rec });
+    }
+    for (const root of projectRoots) {
+      if (!existsSync(root)) continue;
+      for (const rec of listInstalledForTarget(adapter, "project", root)) {
+        markers.push({ record: rec, projectRoot: root });
+      }
+    }
+  }
+  return markers;
+}
+
+/**
+ * Check 8 (C-STATE-11): every project-scope entry's recorded
+ * `project_root` directory still exists. A missing directory is a
+ * warn (not an error) — the local install files may still be on disk
+ * and removing them on the user's behalf isn't doctor's job. The
+ * right fix is `crew uninstall <name>` once the user knows the project
+ * is gone.
+ */
+function checkProjectRoots(stateEntries: readonly StateEntry[]): Finding[] {
+  const findings: Finding[] = [];
+  for (const entry of stateEntries) {
+    if (entry.scope !== "project" || !entry.project_root) continue;
+    if (!existsSync(entry.project_root)) {
+      findings.push({
+        level: "warn",
+        code: "missing_project_root",
+        message: `${entry.name}@project was installed under \`${entry.project_root}\` but that directory no longer exists`,
+      });
+    }
+  }
+  return findings;
+}
+
 export function doctorCommand(ctx: CommandContext): CommandOutput {
   const verify = Boolean(ctx.flags.extras["verify"]);
   const repair = Boolean(ctx.flags.extras["repair"]);
@@ -40,22 +97,9 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
     }
   })();
 
-  // Build marker index.
-  interface MarkerEntry {
-    record: ReturnType<typeof listInstalledForTarget>[number];
-    currentHash?: string;
-  }
-  const markers: MarkerEntry[] = [];
-  for (const adapter of ALL_ADAPTERS) {
-    for (const scope of ["user", "project"] as const) {
-      for (const rec of listInstalledForTarget(adapter, scope, ctx.cwd)) {
-        markers.push({ record: rec });
-      }
-    }
-  }
-
   const state = readState(home);
   const stateEntries = state.installations;
+  const markers = buildMarkerIndex(stateEntries, ctx.cwd);
 
   // Check 1 & 2: state ↔ markers drift.
   for (const entry of stateEntries) {
@@ -142,6 +186,8 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
     }
   }
 
+  findings.push(...checkProjectRoots(stateEntries));
+
   // Check 7: autoupdate drift.
   if (config) {
     const loaded = isAutoupdateLoaded();
@@ -203,6 +249,12 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
             installed_at: marker.installed_at,
             targets: [m.record.adapter],
             pinned,
+            // Reconstructed entries are treated as explicit — we can't
+            // infer dependency status from markers alone, so we pick the
+            // safe default that keeps the skill around.
+            explicit: true,
+            ...(marker.scope === "project" && m.projectRoot ? { project_root: m.projectRoot } : {}),
+            required_by: [],
           };
           current = { schema_version: 1, installations: [...current.installations, entry] };
         } else if (!existing.targets.includes(m.record.adapter)) {

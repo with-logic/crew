@@ -149,7 +149,7 @@ describe("install: qualified tap dep via tap/name", () => {
     makeGitRepo(tapRepo);
     makeSkill(tapRepo, "dep", skillFrontmatter({ name: "dep" }));
     commitAll(tapRepo, "init");
-    runCli(["tap", "add", "--yes", `file://${tapRepo}`, "mytap"], {
+    runCli(["tap", "add", `file://${tapRepo}`, "mytap"], {
       home,
       streams: captureStreams().streams,
     });

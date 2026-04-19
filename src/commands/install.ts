@@ -12,7 +12,10 @@ import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function installCommand(ctx: CommandContext): CommandOutput {
   if (ctx.positional.length === 0) {
-    throw new CrewError("usage_error", "usage: crew install <ref> [<ref>...]");
+    throw new CrewError(
+      "usage_error",
+      "`crew install` needs at least one skill reference — e.g. `crew install python-testing`, `crew install @acme/skills`, or `crew install ./my-skill`",
+    );
   }
   const config = readConfig(ctx.home);
   const result = runInstall(config, {
@@ -41,8 +44,12 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   }
 
   const human: string[] = [];
-  for (const name of result.alreadyInstalled) {
-    human.push(`${name}: already installed`);
+  for (const existing of result.alreadyInstalled) {
+    // Show the user what they already have: ref (if any) and short SHA
+    // (if any). Makes "already installed" actually informative.
+    const version = formatVersion(existing.ref, existing.resolvedSha);
+    const targets = existing.targets.length > 0 ? ` in ${existing.targets.join(", ")}` : "";
+    human.push(`${existing.name}: already installed${version ? ` (${version})` : ""}${targets}`);
   }
   for (const rec of result.summary.records) {
     const parts: string[] = [];
@@ -67,4 +74,18 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       dry_run: ctx.flags.dryRun,
     },
   };
+}
+
+/**
+ * Build a human-readable "version" tag for an already-installed skill:
+ * the requested ref plus a short SHA when both exist, or just one of
+ * them if that's all we have. Returns "" when neither is set (e.g.
+ * pure path sources with no git identity).
+ */
+function formatVersion(ref: string | null, sha: string | null): string {
+  const shortSha = sha ? sha.slice(0, 8) : null;
+  if (ref && shortSha && ref !== sha) return `${ref} @ ${shortSha}`;
+  if (shortSha) return shortSha;
+  if (ref) return ref;
+  return "";
 }

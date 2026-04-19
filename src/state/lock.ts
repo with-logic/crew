@@ -75,8 +75,8 @@ export function acquireStateLock(
       if (Date.now() >= deadline) {
         throw new CrewError(
           "state_locked",
-          `could not acquire ${stateFile}.lock within ${timeoutMs}ms`,
-          { lockPath: `${stateFile}.lock` },
+          `another crew process is holding the state lock (waited ${Math.round(timeoutMs / 1000)}s)`,
+          { lockPath: `${stateFile}.lock`, timeoutMs },
         );
       }
       Bun.sleepSync(pollMs);

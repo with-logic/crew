@@ -68,7 +68,10 @@ export function enableAutoupdate(input: EnableInput): void {
   );
   if (!runLaunchctl(["bootstrap", `gui/${process.getuid?.() ?? 0}`, p.autoupdatePlist])) {
     if (!runLaunchctl(["load", p.autoupdatePlist])) {
-      throw new CrewError("launchd_failure", "launchctl could not load the autoupdate agent");
+      throw new CrewError(
+        "launchd_failure",
+        "launchctl refused to load the autoupdate agent — check `log show --predicate 'subsystem == \"com.apple.xpc.launchd\"' --last 5m` for details",
+      );
     }
   }
 }

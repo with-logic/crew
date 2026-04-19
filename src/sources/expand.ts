@@ -33,7 +33,11 @@ export function expandSkills(rootDir: string): LoadedSkill[] {
     children.push(loadSkill(candidate));
   }
   if (children.length === 0) {
-    throw new CrewError("no_skills_found", `no valid skills at or below ${rootDir}`);
+    throw new CrewError(
+      "no_skills_found",
+      `no valid skills found at \`${rootDir}\` — expected a SKILL.md there, or subdirectories that each contain one`,
+      { path: rootDir },
+    );
   }
   return children;
 }
