@@ -36,7 +36,8 @@ import { readConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../core/types.ts";
-import { type BundleRow, installNewBundleChild, reexpandBundles } from "../install/bundle/index.ts";
+import { installNewTapChild } from "../install/install-new-tap-child.ts";
+import { reexpandTaps, type TapReexpandRow } from "../install/tap-reexpand.ts";
 import { type UpdateRow, updateOneEntry } from "../install/update-one.ts";
 import { garbageCollectStore } from "../maintenance/gc.ts";
 import { readState, upsertEntry, writeState } from "../state/load.ts";
@@ -51,7 +52,7 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   const names = ctx.positional;
 
   const rows: UpdateRow[] = [];
-  const bundleRows: BundleRow[] = [];
+  const tapReexpandRows: TapReexpandRow[] = [];
   let tapRows: readonly TapRefreshRow[] = [];
   let hardFailure = false;
 
@@ -63,17 +64,16 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
     const { entries: initialSelected, transitiveSources } = chooseEntries(current, names);
 
     // §10.1 step 1 (scoped): fetch only the taps that back the entries
-    // this run will actually touch. Uses the expanded set so a
-    // transitive dep's tap gets refreshed too. Per-tap failures become
-    // warnings, not hard errors.
+    // this run will actually touch. Per-tap failures become warnings,
+    // not hard errors.
     const tapsToRefresh = tapsToRefreshFor(current, config, names, initialSelected);
     tapRows = refreshTaps(tapsToRefresh, home);
 
-    // §10.1 step 2b: re-expand bundles before walking per-skill updates.
-    const reexpanded = reexpandBundles(current, config, home, names, (args) =>
-      installNewBundleChild(args, ctx.flags.force, home, ctx.cwd),
+    // §10.1 step 2b: re-expand taps before walking per-skill updates.
+    const reexpanded = reexpandTaps(current, config, home, names, (args) =>
+      installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
     );
-    bundleRows.push(...reexpanded.rows);
+    tapReexpandRows.push(...reexpanded.rows);
     for (const entry of reexpanded.added) {
       current = upsertEntry(current, entry);
     }
@@ -114,11 +114,12 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   garbageCollectStore(newState, home);
 
   const human = rows.map(formatRow);
-  for (const br of bundleRows) {
-    if (br.kind === "added") human.unshift(`${br.name} [${br.scope}]: added (bundle re-expansion)`);
-    else if (br.kind === "bundle_error")
-      human.unshift(`${br.name} [${br.scope}]: bundle error (${br.error?.code ?? "unknown"})`);
-    // `source_gone` bundle rows are reflected in the per-entry row loop.
+  for (const br of tapReexpandRows) {
+    if (br.kind === "added")
+      human.unshift(`${br.name} [${br.scope}]: added (tap \`${br.tap}\` re-expanded)`);
+    else if (br.kind === "tap_error")
+      human.unshift(`tap \`${br.tap}\` error (${br.error?.code ?? "unknown"})`);
+    // `source_gone` rows are reflected in the per-entry row loop.
   }
   // Tap fetch warnings go at the very top so users see them before the
   // per-skill rows. A refreshed tap is a silent success — we only
@@ -134,7 +135,7 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   return {
     exitCode: hardFailure ? 1 : 0,
     human,
-    json: { rows, bundle_rows: bundleRows, tap_rows: tapRows },
+    json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows },
   };
 }
 
@@ -145,8 +146,9 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
  * `crew update` with no args).
  *
  * Non-empty `names`: the taps backing every entry in the expanded
- * update set (direct names + dep closure), plus bundle-member taps
- * for any bundle `reexpandBundles` will touch. Other taps untouched.
+ * update set (direct names + dep closure), plus the tap itself if the
+ * user named it directly (`crew update <tap-name>`). Other taps
+ * untouched.
  */
 function tapsToRefreshFor(
   state: StateFile,
@@ -154,27 +156,16 @@ function tapsToRefreshFor(
   names: readonly string[],
   expandedSelection: readonly StateEntry[],
 ): TapConfig[] {
+  void state;
   if (names.length === 0) return [...config.taps];
   const wantedTapNames = new Set<string>();
-  const nameSet = new Set(names);
-  // Every entry in the expanded selection (named + transitive deps)
-  // contributes its tap — if it has one.
   for (const e of expandedSelection) {
-    if (e.source.type === "tap") wantedTapNames.add(e.source.tap);
+    wantedTapNames.add(e.source.tap);
   }
-  // Bundle-member taps: for every bundle targeted by the name filter
-  // (reexpandBundles' rule), add every member's tap.
-  for (const entry of state.installations) {
-    if (entry.bundle === undefined) continue;
-    const bundleRef = entry.bundle.ref;
-    const siblings = state.installations.filter((e) => e.bundle?.ref === bundleRef);
-    const siblingNames = new Set(siblings.map((s) => s.name));
-    const touchesMember = names.some((n) => siblingNames.has(n));
-    const refPassed = nameSet.has(bundleRef);
-    if (!(touchesMember || refPassed)) continue;
-    for (const sib of siblings) {
-      if (sib.source.type === "tap") wantedTapNames.add(sib.source.tap);
-    }
+  // If a positional names a configured tap directly, refresh it (the
+  // user wants `crew update <tap-name>` to also pull tap additions).
+  for (const n of names) {
+    if (config.taps.some((t) => t.name === n)) wantedTapNames.add(n);
   }
   return config.taps.filter((t) => wantedTapNames.has(t.name));
 }

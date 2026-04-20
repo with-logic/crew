@@ -239,7 +239,7 @@ describe("upsertEntry preserves other entries", () => {
     let state = readState(home);
     state = upsertEntry(state, {
       name: "a",
-      source: { type: "path", path: "/a" },
+      source: { tap: "core", path: "a" },
       ref: null,
       resolved_sha: null,
       content_hash: "sha256:a",
@@ -252,7 +252,7 @@ describe("upsertEntry preserves other entries", () => {
     });
     state = upsertEntry(state, {
       name: "b",
-      source: { type: "path", path: "/b" },
+      source: { tap: "core", path: "b" },
       ref: null,
       resolved_sha: null,
       content_hash: "sha256:b",
@@ -265,7 +265,7 @@ describe("upsertEntry preserves other entries", () => {
     });
     state = upsertEntry(state, {
       name: "a",
-      source: { type: "path", path: "/a" },
+      source: { tap: "core", path: "a" },
       ref: null,
       resolved_sha: null,
       content_hash: "sha256:a",

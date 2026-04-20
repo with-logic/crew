@@ -1,14 +1,17 @@
 /**
- * Bundle tagging (§9 step 5) and re-expansion on update (§10.1.1).
+ * Multi-skill install + tap re-expansion on update (§9 step 5, §10.1.1).
  *
- * Covers C-UPD-14..18. Uses local `file://` git repos so the tests run
- * without network access.
+ * Covers C-UPD-14..18 + auto-tap creation. After unification, every
+ * multi-skill install attributes children to a single tap (registered
+ * or auto-created); `crew update` re-expands every tap with state
+ * entries, picking up upstream additions.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
+import { readConfig } from "../../src/config/load.ts";
 import { readState } from "../../src/state/load.ts";
 import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
 import { codexAdapter } from "../../src/targets/codex.ts";
@@ -54,8 +57,8 @@ afterEach(() => {
   (geminiCliAdapter as { detect: () => boolean }).detect = originals.ge.detect;
 });
 
-/** Build a repo with N top-level skills, no root SKILL.md → multi-skill bundle. */
-function makeBundleRepo(names: readonly string[]): string {
+/** Build a repo with N top-level skills, no root SKILL.md → multi-skill install. */
+function makeMultiSkillRepo(names: readonly string[]): string {
   const repo = makeTempDir();
   makeGitRepo(repo);
   for (const n of names) {
@@ -65,23 +68,24 @@ function makeBundleRepo(names: readonly string[]): string {
   return repo;
 }
 
-describe("bundle tagging on install (§9 step 5)", () => {
-  test("C-UPD-14 multi-skill git source records bundle on every child", () => {
+describe("multi-skill install creates an auto tap (§16.5)", () => {
+  test("C-UPD-14 multi-skill git source attributes every child to a single auto tap", () => {
     const home = makeCrewHome();
-    const repo = makeBundleRepo(["alpha", "beta"]);
+    const repo = makeMultiSkillRepo(["alpha", "beta"]);
     const ref = `file://${repo}`;
     const code = runCli(["install", ref], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
     const state = readState(home);
     expect(state.installations).toHaveLength(2);
-    for (const e of state.installations) {
-      expect(e.bundle).toBeDefined();
-      expect(e.bundle!.ref).toBe(ref);
-      expect(e.bundle!.source.type).toBe("git");
-    }
+    const tapNames = new Set(state.installations.map((e) => e.source.tap));
+    expect(tapNames.size).toBe(1);
+    const tap = readConfig(home).taps.find((t) => t.name === [...tapNames][0]!)!;
+    expect(tap.kind).toBe("git");
+    expect(tap.registered).toBe(false);
+    expect(tap.url).toBe(ref);
   });
 
-  test("C-UPD-17 single-skill expansion does NOT record a bundle", () => {
+  test("single-skill expansion still attributes to a tap (auto-created)", () => {
     const home = makeCrewHome();
     const repo = makeTempDir();
     makeGitRepo(repo);
@@ -92,26 +96,27 @@ describe("bundle tagging on install (§9 step 5)", () => {
       streams: captureStreams().streams,
     });
     const state = readState(home);
-    expect(state.installations[0]!.bundle).toBeUndefined();
+    expect(state.installations[0]!.source.tap).toBeDefined();
   });
 
-  test("path-source multi-skill expansion is NOT a bundle (no auto-expand on update)", () => {
+  test("path-source multi-skill expansion creates a path-kind auto tap", () => {
     const home = makeCrewHome();
     const dir = makeTempDir();
     makeSkill(dir, "alpha", skillFrontmatter({ name: "alpha" }));
     makeSkill(dir, "beta", skillFrontmatter({ name: "beta" }));
     runCli(["install", dir], { home, streams: captureStreams().streams });
     const state = readState(home);
-    for (const e of state.installations) {
-      expect(e.bundle).toBeUndefined();
-    }
+    expect(state.installations).toHaveLength(2);
+    const tap = readConfig(home).taps.find((t) => t.name === state.installations[0]!.source.tap)!;
+    expect(tap.kind).toBe("path");
+    expect(tap.registered).toBe(false);
   });
 });
 
-describe("bundle re-expansion on update (§10.1.1)", () => {
+describe("tap re-expansion on update (§10.1.1)", () => {
   test("C-UPD-15 newly-added sibling is installed on next update", () => {
     const home = makeCrewHome();
-    const repo = makeBundleRepo(["alpha", "beta"]);
+    const repo = makeMultiSkillRepo(["alpha", "beta"]);
     const ref = `file://${repo}`;
     runCli(["install", ref], { home, streams: captureStreams().streams });
 
@@ -126,13 +131,14 @@ describe("bundle re-expansion on update (§10.1.1)", () => {
     const state = readState(home);
     const gamma = state.installations.find((e) => e.name === "gamma")!;
     expect(gamma).toBeDefined();
-    expect(gamma.bundle?.ref).toBe(ref);
+    // Same tap as the others.
+    expect(gamma.source.tap).toBe(state.installations.find((e) => e.name === "alpha")!.source.tap);
     expect(existsSync(join(ccRoot, "gamma", "SKILL.md"))).toBe(true);
   });
 
-  test("C-UPD-16 child removed from bundle upstream → source_gone, local kept", () => {
+  test("C-UPD-16 child removed from tap upstream → source_gone, local kept", () => {
     const home = makeCrewHome();
-    const repo = makeBundleRepo(["alpha", "beta"]);
+    const repo = makeMultiSkillRepo(["alpha", "beta"]);
     runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
 
     rmSync(join(repo, "beta"), { recursive: true });
@@ -142,90 +148,33 @@ describe("bundle re-expansion on update (§10.1.1)", () => {
     const code = runCli(["update"], { home, streams: c.streams });
     expect(code).toBe(0);
     expect(c.stdout()).toContain("source_gone");
-    // Local beta is preserved on disk and in state.
     expect(existsSync(join(ccRoot, "beta", "SKILL.md"))).toBe(true);
     expect(readState(home).installations.find((e) => e.name === "beta")).toBeDefined();
   });
 
-  test("bundle whose source is now unreachable reports per-member error; entries kept", () => {
+  test("tap whose source is now unreachable reports per-member error; entries kept", () => {
     const home = makeCrewHome();
-    const repo = makeBundleRepo(["alpha", "beta"]);
+    const repo = makeMultiSkillRepo(["alpha", "beta"]);
     runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
-    // Blow the repo away: re-parse works, but acquireGit fails.
     rmSync(repo, { recursive: true });
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
-    // Per-skill hard failure → exit 1. Bundle-level failure rows also fire.
     expect([0, 1]).toContain(code);
-    // Entries are still there (local installs preserved).
     expect(readState(home).installations).toHaveLength(2);
   });
 
-  test("crew update <name> only re-expands bundles whose members match", () => {
-    // Two bundles; updating by name should not re-walk the unrelated one.
+  test("crew update <name> only re-expands taps whose members match", () => {
     const home = makeCrewHome();
-    const repoA = makeBundleRepo(["a1", "a2"]);
-    const repoB = makeBundleRepo(["b1", "b2"]);
+    const repoA = makeMultiSkillRepo(["a1", "a2"]);
+    const repoB = makeMultiSkillRepo(["b1", "b2"]);
     runCli(["install", `file://${repoA}`], { home, streams: captureStreams().streams });
     runCli(["install", `file://${repoB}`], { home, streams: captureStreams().streams });
-    // Add a new skill to repoB only.
     makeSkill(repoB, "b3", skillFrontmatter({ name: "b3" }));
     commitAll(repoB, "add b3");
-    // Update naming only `a1` — b3 should NOT be picked up.
     runCli(["update", "a1"], { home, streams: captureStreams().streams });
     expect(readState(home).installations.find((e) => e.name === "b3")).toBeUndefined();
-    // Now update naming `b1` — b3 should be picked up.
     runCli(["update", "b1"], { home, streams: captureStreams().streams });
     expect(readState(home).installations.find((e) => e.name === "b3")).toBeDefined();
-  });
-
-  test("crew update <bundle-ref> re-expands that bundle by its ref", () => {
-    const home = makeCrewHome();
-    const repo = makeBundleRepo(["alpha", "beta"]);
-    const ref = `file://${repo}`;
-    runCli(["install", ref], { home, streams: captureStreams().streams });
-    makeSkill(repo, "gamma", skillFrontmatter({ name: "gamma" }));
-    commitAll(repo, "add gamma");
-    // Invoke update with the bundle ref itself. `chooseEntries` will
-    // fail on the `ref` not being an installed name, so use alpha instead;
-    // this variant is covered indirectly above. Keep test defensive.
-    const code = runCli(["update", "alpha"], { home, streams: captureStreams().streams });
-    expect(code).toBe(0);
-    expect(readState(home).installations.find((e) => e.name === "gamma")).toBeDefined();
-  });
-});
-
-describe("tap-source bundle re-expansion", () => {
-  test("tap bundle picks up new sibling on update", () => {
-    // Build a tap where `pack/` is a container with children `one` and `two`.
-    const home = makeCrewHome();
-    const tapRepo = makeTempDir();
-    makeGitRepo(tapRepo);
-    makeSkill(join(tapRepo, "pack"), "one", skillFrontmatter({ name: "one" }));
-    makeSkill(join(tapRepo, "pack"), "two", skillFrontmatter({ name: "two" }));
-    commitAll(tapRepo, "init");
-    runCli(["tap", "add", `file://${tapRepo}`, "mytap"], {
-      home,
-      streams: captureStreams().streams,
-    });
-    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
-    // Install the `pack` container by tap-qualified name; expansion gives
-    // us two children, both recorded with a tap-typed bundle.
-    runCli(["install", "mytap/pack"], { home, streams: captureStreams().streams });
-    {
-      const state = readState(home);
-      const one = state.installations.find((e) => e.name === "one")!;
-      expect(one.bundle?.source.type).toBe("tap");
-    }
-    // Upstream: add `three`.
-    makeSkill(join(tapRepo, "pack"), "three", skillFrontmatter({ name: "three" }));
-    commitAll(tapRepo, "add three");
-    const code = runCli(["update"], { home, streams: captureStreams().streams });
-    expect(code).toBe(0);
-    const state = readState(home);
-    const three = state.installations.find((e) => e.name === "three")!;
-    expect(three).toBeDefined();
-    expect(three.bundle?.source.type).toBe("tap");
   });
 });
 

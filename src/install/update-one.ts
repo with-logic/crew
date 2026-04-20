@@ -1,26 +1,27 @@
 /**
  * Per-skill update logic for `crew update` (§10.1).
  *
- * Given one state entry, re-resolve its source, decide whether the
- * install is up-to-date, pinned-and-untouched, customized, or due for
- * a reinstall, and in the last case run the install algorithm against
- * every currently-installed target.
+ * Given one state entry, look up its tap, acquire it, and either:
+ *   - report `up_to_date` if the resolved SHA / content hash hasn't moved;
+ *   - report `skipped` if the entry is pinned and not forced;
+ *   - re-stage and re-install if the SHA moved.
  *
- * This module knows nothing about tap refresh, bundle re-expansion, or
- * the overall update run's exit-code aggregation — those live in
- * `commands/update.ts`.
+ * Tap re-expansion (additions / source_gone) lives in `tap-reexpand.ts`;
+ * this module handles only the per-existing-entry update.
  */
 
 import { existsSync } from "node:fs";
-import type { CrewError } from "../core/errors.ts";
+import { join } from "node:path";
+import { CrewError } from "../core/errors.ts";
 import type { Config, StateEntry, StateFile } from "../core/types.ts";
-import { acquireSource } from "../sources/acquire/index.ts";
-import { expandSkills } from "../sources/expand.ts";
+import { hasSkillMd, loadSkill } from "../skill/load.ts";
+import { acquireTap } from "../sources/acquire/index.ts";
 import { stageIntoStore } from "../sources/store.ts";
 import { upsertEntry } from "../state/load.ts";
 import { cwdForEntry } from "../targets/adapter.ts";
 import { installSkillIntoTarget } from "../targets/install.ts";
 import { adapterByName } from "../targets/registry.ts";
+import { isDirectory } from "../util/fs.ts";
 import { nowIso } from "../util/time.ts";
 
 export interface PerTargetUpdate {
@@ -42,12 +43,7 @@ export interface UpdateRow {
   readonly name: string;
   readonly scope: string;
   readonly outcome: Outcome;
-  /**
-   * For `crew update <name>...`, the top-level names that transitively
-   * pulled this entry into the update set. Absent/empty when the entry
-   * was named on the command line directly (or when update had no
-   * arguments).
-   */
+  /** Top-level names whose dep closure pulled this entry in (when `crew update <name>...`). */
   readonly transitively_required_by?: readonly string[];
 }
 
@@ -78,10 +74,6 @@ export function updateOneEntry(
     };
   } catch (err) {
     const ce = err as CrewError;
-    // §10.1 upstream-deletion rule: "source resolved but skill no
-    // longer exists upstream" is a soft outcome. `acquireSource`
-    // surfaces this case as `no_skills_found` (git subpath missing) or
-    // `invalid_ref` (tap's named skill dir absent).
     const soft = ce.code === "no_skills_found" || ce.code === "invalid_ref";
     if (soft) {
       return {
@@ -113,9 +105,6 @@ function updateOne(
   force: boolean,
   fallbackCwd: string,
 ): Outcome {
-  // C-UPD-22: a project-scope entry whose recorded directory no longer
-  // exists is skipped as `missing_project_root` — we preserve the
-  // install and refuse to write anywhere else.
   const entryCwd = cwdForEntry(entry, fallbackCwd);
   if (entry.scope === "project" && entry.project_root && !existsSync(entry.project_root)) {
     return { kind: "missing_project_root", root: entry.project_root };
@@ -125,23 +114,41 @@ function updateOne(
     return { kind: "skipped", reason: "pinned to exact SHA" };
   }
 
-  const source = reconstructSource(entry);
-  const acquired = acquireSource(source, config, home);
+  // Look up the tap that owns this entry.
+  const tap = config.taps.find((t) => t.name === entry.source.tap);
+  if (!tap) {
+    // Tap was removed from config (manually); doctor --repair can fix.
+    throw new CrewError(
+      "source_unreachable",
+      `tap \`${entry.source.tap}\` is no longer in config — run \`crew doctor --repair\` to rebuild it from markers`,
+      { tap: entry.source.tap },
+    );
+  }
+  const acquired = acquireTap(tap, home);
   const newSha = acquired.resolvedSha;
 
   if (entry.pinned && !force && newSha !== null && newSha !== entry.resolved_sha) {
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
+  // Resolve the skill's directory inside the tap.
+  const skillDir = join(acquired.rootDir, entry.source.path);
+  if (!(isDirectory(skillDir) && hasSkillMd(skillDir))) {
+    // Skill no longer present in tap → source_gone (caught by outer try).
+    throw new CrewError(
+      "no_skills_found",
+      `\`${entry.name}\` is not in tap \`${tap.name}\` anymore`,
+    );
+  }
+
   if (newSha === entry.resolved_sha) {
     if (newSha !== null) return { kind: "up_to_date" };
-    const tentative = stageIntoStore(acquired.rootDir, entry.name, null, home);
+    const tentative = stageIntoStore(skillDir, entry.name, null, home);
     if (tentative.contentHash === entry.content_hash) return { kind: "up_to_date" };
   }
 
-  const skills = expandSkills(acquired.rootDir);
-  const skill = skills.find((s) => s.frontmatter.name === entry.name) ?? skills[0]!;
-  const staged = stageIntoStore(skill.path, entry.name, newSha, home);
+  const loaded = loadSkill(skillDir);
+  const staged = stageIntoStore(loaded.path, entry.name, newSha, home);
   const perTarget: PerTargetUpdate[] = [];
   for (const targetName of entry.targets) {
     const adapter = adapterByName(targetName);
@@ -153,7 +160,8 @@ function updateOne(
         cwd: entryCwd,
         storePath: staged.storePath,
         skillName: entry.name,
-        markerSource: entry.source,
+        tap,
+        tapRelativePath: entry.source.path,
         ref: entry.ref,
         resolvedSha: newSha,
         contentHash: staged.contentHash,
@@ -169,22 +177,6 @@ function updateOne(
     }
   }
   return { kind: "updated", new_sha: newSha ?? entry.resolved_sha ?? "", per_target: perTarget };
-}
-
-function reconstructSource(entry: StateEntry) {
-  switch (entry.source.type) {
-    case "tap":
-      return { type: "tap", tap: entry.source.tap, name: entry.name, ref: entry.ref } as const;
-    case "git":
-      return {
-        type: "git",
-        url: entry.source.url,
-        ref: entry.ref,
-        subpath: entry.source.subpath,
-      } as const;
-    case "path":
-      return { type: "path", path: entry.source.path } as const;
-  }
 }
 
 function rebuildStateEntry(

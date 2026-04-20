@@ -15,7 +15,16 @@ describe("readConfig", () => {
   test("missing file returns defaults", () => {
     const home = makeCrewHome();
     const c = readConfig(home);
-    expect(c.taps).toEqual([{ name: DEFAULT_TAP_NAME, url: DEFAULT_TAP_URL }]);
+    expect(c.taps).toEqual([
+      {
+        name: DEFAULT_TAP_NAME,
+        kind: "git",
+        registered: true,
+        url: DEFAULT_TAP_URL,
+        subpath: "",
+        path: "",
+      },
+    ]);
     expect(c.disabled_targets).toEqual([]);
     expect(c.forced_targets).toEqual([]);
     expect(c.autoupdate).toEqual({
@@ -73,7 +82,7 @@ describe("normalizeConfig", () => {
     // Both an all-slashes value (which collapses to empty) and a well-formed
     // value with stray slashes exercise the normalization path.
     const dropped = normalizeConfig({ taps: [{ name: "a", url: "x", subpath: "//" }] });
-    expect(dropped.taps[0]!.subpath).toBeUndefined();
+    expect(dropped.taps[0]!.subpath).toBe("");
     const kept = normalizeConfig({ taps: [{ name: "b", url: "x", subpath: "/skills/" }] });
     expect(kept.taps[0]!.subpath).toBe("skills");
   });

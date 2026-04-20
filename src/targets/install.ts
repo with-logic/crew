@@ -9,7 +9,7 @@
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { CrewError } from "../core/errors.ts";
-import type { Marker, MarkerSource, Scope } from "../core/types.ts";
+import type { Marker, Scope, TapConfig } from "../core/types.ts";
 import { CREW_INSTALLED_BY } from "../core/version.ts";
 import { hashDirectory } from "../hash/content.ts";
 import { copyTree } from "../util/copy.ts";
@@ -25,7 +25,10 @@ export interface InstallInput {
   readonly cwd: string;
   readonly storePath: string;
   readonly skillName: string;
-  readonly markerSource: MarkerSource;
+  /** Tap that owns this skill — written into the marker for self-description. */
+  readonly tap: TapConfig;
+  /** Skill's location relative to the tap root. */
+  readonly tapRelativePath: string;
   readonly ref: string | null;
   readonly resolvedSha: string | null;
   readonly contentHash: string;
@@ -92,7 +95,12 @@ export function installSkillIntoTarget(input: InstallInput): InstallOutcome {
   const marker: Marker = {
     schema_version: 1,
     name: input.skillName,
-    source: input.markerSource,
+    tap_name: input.tap.name,
+    tap_kind: input.tap.kind,
+    tap_url: input.tap.url,
+    tap_subpath: input.tap.subpath,
+    tap_path: input.tap.path,
+    path: input.tapRelativePath,
     ref: input.ref,
     resolved_sha: input.resolvedSha,
     content_hash: input.contentHash,

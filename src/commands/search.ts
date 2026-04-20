@@ -18,7 +18,7 @@ import { CrewError } from "../core/errors.ts";
 import { tapPath } from "../core/paths.ts";
 import { ensureClone } from "../git/repo.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
-import { tapRootDir } from "../sources/acquire/tap.ts";
+import { tapRootDir } from "../sources/acquire/index.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 import type { Styler } from "../util/term.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
@@ -39,20 +39,25 @@ export function searchCommand(ctx: CommandContext): CommandOutput {
   const hits: Hit[] = [];
   const warnings: string[] = [];
   for (const tap of config.taps) {
-    const tp = tapPath(tap.name, ctx.home);
-    try {
-      // Read-only path: clone once (first search after `crew tap add`
-      // elsewhere that didn't pre-clone); never fetch. Up-to-dateness is
-      // the responsibility of `crew update` / `crew tap update`.
-      ensureClone(tap.url, tp);
-    } catch (err) {
-      const ce = err as CrewError;
-      warnings.push(
-        `warning: tap \`${tap.name}\` isn't cloned yet and couldn't be reached (${ce.code ?? "source_unreachable"}) — skipping. run \`crew tap update ${tap.name}\` when you're back online.`,
-      );
-      continue;
+    let root: string;
+    if (tap.kind === "git") {
+      const tp = tapPath(tap.name, ctx.home);
+      try {
+        // Read-only path: clone once (first search after `crew tap add`
+        // elsewhere that didn't pre-clone); never fetch. Up-to-dateness is
+        // the responsibility of `crew update` / `crew tap update`.
+        ensureClone(tap.url, tp);
+      } catch (err) {
+        const ce = err as CrewError;
+        warnings.push(
+          `warning: tap \`${tap.name}\` isn't cloned yet and couldn't be reached (${ce.code ?? "source_unreachable"}) — skipping. run \`crew tap update ${tap.name}\` when you're back online.`,
+        );
+        continue;
+      }
+      root = tapRootDir(tp, tap);
+    } else {
+      root = tap.path;
     }
-    const root = tapRootDir(tp, tap);
     if (!isDirectory(root)) continue;
     for (const entry of listDir(root)) {
       const dir = join(root, entry);

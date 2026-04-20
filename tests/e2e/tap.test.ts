@@ -326,7 +326,7 @@ describe("crew tap", () => {
     expect(code).toBe(0);
     const tap = readConfig(home).taps.find((t) => t.name !== "core")!;
     // No `-skills` suffix because no subpath was present.
-    expect(tap.subpath).toBeUndefined();
+    expect(tap.subpath).toBe("");
     expect(tap.name.endsWith("-skills")).toBe(false);
   });
 
@@ -391,14 +391,28 @@ describe("crew tap", () => {
     expect(existsSync(tapPath("typo-tap", home))).toBe(false);
   });
 
-  test("`crew tap add <local-path>` is a usage error (not a git source)", () => {
-    // A relative/absolute local path parses as a `path` source, not a git
-    // source — taps must be git-backed so `crew update` can refresh them.
+  test("`crew tap add <local-path>` against a non-existent path fails", () => {
+    // Path-kind taps are now valid — but only if the directory exists.
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["tap", "add", "./not-a-git-thing"], { home, streams: c.streams });
+    const code = runCli(["tap", "add", "/definitely/does/not/exist/crew-x"], {
+      home,
+      streams: c.streams,
+    });
     expect(code).toBe(4);
-    expect(c.stderr()).toContain("isn't a git URL");
+    expect(c.stderr()).toContain("isn't a directory");
+  });
+
+  test("`crew tap add <existing-local-path>` creates a path-kind tap", () => {
+    const home = makeCrewHome();
+    const dir = makeTempDir("crew-path-tap-");
+    makeSkill(dir, "alpha", skillFrontmatter({ name: "alpha", description: "from a path tap" }));
+    const code = runCli(["tap", "add", dir, "local"], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+    const tap = readConfig(home).taps.find((t) => t.name === "local")!;
+    expect(tap.kind).toBe("path");
+    expect(tap.path).toBe(dir);
+    expect(tap.registered).toBe(true);
   });
 
   test("a tap with a @ref tail is rejected (taps track default branch)", () => {

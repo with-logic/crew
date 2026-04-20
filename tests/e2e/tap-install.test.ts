@@ -157,7 +157,7 @@ describe("tap source install", () => {
     // The `dep` from tap1 — same source — is the one recorded.
     const state = readState(home);
     const dep = state.installations.find((i) => i.name === "dep")!;
-    expect(dep.source.type).toBe("tap");
+    expect(dep.source.tap).toBe("tap1");
   });
 
   test("nonexistent tap name fails", () => {
@@ -267,7 +267,20 @@ describe("C-UPD-20: per-tap fetch failure doesn't abort update", () => {
       require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
     const cfg = readConfig(home);
     writeConfig(
-      { ...cfg, taps: [...cfg.taps, { name: "broken", url: `file://${brokenRepoPath}` }] },
+      {
+        ...cfg,
+        taps: [
+          ...cfg.taps,
+          {
+            name: "broken",
+            kind: "git" as const,
+            registered: true,
+            url: `file://${brokenRepoPath}`,
+            subpath: "",
+            path: "",
+          },
+        ],
+      },
       home,
     );
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });

@@ -11,18 +11,17 @@
  *      re-staging.
  *
  * A different-source install of the same name throws `name_conflict`
- * (never overridden by --force — per §13).
+ * (never overridden by --force — per §13). "Same source" now means
+ * "same tap name + same path inside the tap" — the URL/filesystem
+ * location lives on the tap row, not on the entry.
  */
 
 import { CrewError } from "../core/errors.ts";
 import type { ResolvedSkill, Scope, StateFile } from "../core/types.ts";
 
-/** A skill that was already installed at the same ref/SHA — no-op. */
 export interface AlreadyInstalled {
   readonly name: string;
-  /** Ref the existing install was installed from (or null for default). */
   readonly ref: string | null;
-  /** Full 40-char resolved SHA, or null for path sources. */
   readonly resolvedSha: string | null;
   readonly scope: Scope;
   readonly targets: readonly string[];
@@ -44,10 +43,6 @@ export function applyDuplicateRules(
   const alreadyInstalled: AlreadyInstalled[] = [];
   const promoteToExplicit: string[] = [];
 
-  // For project-scope installs, match by (name, scope, project_root).
-  // Two project installs of the same skill under different roots are
-  // independent entries, not a name conflict. For user scope
-  // `project_root` is undefined on both sides → comparison collapses.
   const incomingProjectRoot = scope === "project" ? cwd : null;
   for (const skill of resolved) {
     const existing = state.installations.find(
@@ -61,15 +56,16 @@ export function applyDuplicateRules(
       continue;
     }
 
-    const sameSource = markerSourcesEqual(existing.source, skill.markerSource);
+    const sameSource =
+      existing.source.tap === skill.tap.name && existing.source.path === skill.tapRelativePath;
     if (!sameSource) {
-      // Per §13: --force does NOT override name_conflict, so we throw
-      // the same message either way. The user has to remove the old
-      // install first, then install from the new source.
       throw new CrewError(
         "name_conflict",
         `a skill named \`${skill.name}\` is already installed from a different source — run \`crew uninstall ${skill.name}\` first, then install from the new source`,
-        { existing: existing.source, incoming: skill.markerSource },
+        {
+          existing: existing.source,
+          incoming: { tap: skill.tap.name, path: skill.tapRelativePath },
+        },
       );
     }
 
@@ -84,9 +80,6 @@ export function applyDuplicateRules(
         scope: existing.scope,
         targets: existing.targets,
       });
-      // §11.1: a previously dep-only entry named directly by the user
-      // must be promoted to `explicit: true`, even if the SHA is
-      // unchanged and no reinstall happens.
       if (skill.explicit && !existing.explicit) {
         promoteToExplicit.push(skill.name);
       }
@@ -96,14 +89,4 @@ export function applyDuplicateRules(
     toInstall.push(skill);
   }
   return { toInstall, alreadyInstalled, promoteToExplicit };
-}
-
-function markerSourcesEqual(
-  a: ResolvedSkill["markerSource"],
-  b: ResolvedSkill["markerSource"],
-): boolean {
-  if (a.type === "tap" && b.type === "tap") return a.tap === b.tap;
-  if (a.type === "git" && b.type === "git") return a.url === b.url;
-  if (a.type === "path" && b.type === "path") return a.path === b.path;
-  return false;
 }

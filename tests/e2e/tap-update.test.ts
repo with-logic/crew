@@ -148,7 +148,17 @@ describe("tap update + fetch policy", () => {
       require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
     const broken = {
       ...cfg,
-      taps: [...cfg.taps, { name: "tap-broken", url: "file:///does/not/exist/crew-broken" }],
+      taps: [
+        ...cfg.taps,
+        {
+          name: "tap-broken",
+          kind: "git" as const,
+          registered: true,
+          url: "file:///does/not/exist/crew-broken",
+          subpath: "",
+          path: "",
+        },
+      ],
     };
     writeConfig(broken, home);
     // The broken tap has no clone dir on disk; `ensureRepo` will try to
@@ -177,7 +187,17 @@ describe("tap update + fetch policy", () => {
     writeConfig(
       {
         ...cfg,
-        taps: [...cfg.taps, { name: "offline", url: "file:///crew-missing-tap-target" }],
+        taps: [
+          ...cfg.taps,
+          {
+            name: "offline",
+            kind: "git" as const,
+            registered: true,
+            url: "file:///crew-missing-tap-target",
+            subpath: "",
+            path: "",
+          },
+        ],
       },
       home,
     );
@@ -206,7 +226,17 @@ describe("tap update + fetch policy", () => {
     writeConfig(
       {
         ...cfg,
-        taps: [...cfg.taps, { name: "offline", url: "file:///crew-missing-install-target" }],
+        taps: [
+          ...cfg.taps,
+          {
+            name: "offline",
+            kind: "git" as const,
+            registered: true,
+            url: "file:///crew-missing-install-target",
+            subpath: "",
+            path: "",
+          },
+        ],
       },
       home,
     );

@@ -141,7 +141,7 @@ describe("install from local path", () => {
     );
     expect(marker.schema_version).toBe(1);
     expect(marker.name).toBe("demo");
-    expect(marker.source.type).toBe("path");
+    expect(marker.tap_kind).toBe("path");
     expect(marker.resolved_sha).toBe(null);
     expect(marker.content_hash).toMatch(/^sha256:/);
     expect(marker.installed_by).toMatch(/^crew\//);

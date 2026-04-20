@@ -100,20 +100,23 @@ describe("install: conflicting_dependencies", () => {
   });
 });
 
-describe("update: source_unreachable marks hard failure", () => {
-  test("bad git url after install moves → update fails", () => {
+describe("update: source_unreachable is a soft warning", () => {
+  test("upstream repo gone → tap-refresh warns; per-skill update reads from local clone", () => {
+    // Under tap unification, read-only operations read from the local
+    // tap clone. Even if the upstream URL becomes unreachable, the
+    // installed skill is still present locally, so update succeeds
+    // with `up-to-date`. The tap-refresh phase emits a warning.
     const home = makeCrewHome();
     const repo = makeTempDir();
     makeGitRepo(repo);
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
     commitAll(repo, "init");
     runCli(["install", `file://${repo}//demo`], { home, streams: captureStreams().streams });
-    // Delete the repo to break fetch.
     rmSync(repo, { recursive: true, force: true });
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
-    expect(code).toBe(1);
-    expect(c.stdout()).toContain("FAILED");
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("warning: couldn't refresh tap");
   });
 });
 
@@ -207,7 +210,7 @@ describe("name conflict cleanup in state", () => {
         installations: [
           {
             name: "stale",
-            source: { type: "path", path: "/gone" },
+            source: { tap: "core", path: "stale" },
             ref: null,
             resolved_sha: null,
             content_hash: "sha256:00",

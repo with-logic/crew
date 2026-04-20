@@ -20,7 +20,16 @@ export const DEFAULT_AUTOUPDATE_INTERVAL_SECONDS = 14400;
 /** The shape of the config when none exists. */
 export function defaultConfig(): Config {
   return {
-    taps: [{ name: DEFAULT_TAP_NAME, url: DEFAULT_TAP_URL }],
+    taps: [
+      {
+        name: DEFAULT_TAP_NAME,
+        kind: "git",
+        registered: true,
+        url: DEFAULT_TAP_URL,
+        subpath: "",
+        path: "",
+      },
+    ],
     disabled_targets: [],
     forced_targets: [],
     autoupdate: {

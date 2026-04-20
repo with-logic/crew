@@ -1,23 +1,20 @@
 /**
- * `crew tap {add,remove,list}` (§16).
+ * `crew tap {add,remove,list,update}` (§16).
  *
  * Add writes a new tap entry into config.yaml and performs the initial
- * clone. Remove deletes the local clone and removes the entry — with a
- * special rule for the default `core` tap which requires `--force`.
- * List prints every tap with its URL and last-fetched time (stat mtime
- * of the clone directory).
+ * clone (for git taps). Remove deletes the local clone and removes the
+ * entry — with a special rule for the default `core` tap which
+ * requires `--force`. List prints every tap with its kind, target, and
+ * last-fetched time. Update fetches one or every git-kind tap.
  *
- * A tap can optionally point at a subdirectory of the configured repo
- * (`crew tap add <url>//<subpath>`), useful for monorepos where skills
- * live under e.g. `skills/`. The subpath is stored in config but is
- * otherwise internal — users reference skills by tap name, never by
- * subpath.
+ * `crew tap add` against a URL/path that already backs an **auto** tap
+ * promotes it to registered (no re-clone). Against a registered tap
+ * with a matching target, it's an idempotent no-op. Against a
+ * different target with the same name, it's a usage error.
  *
- * Shorthand: `crew tap <git-url>` (no `add` keyword) is equivalent to
- * `crew tap add <git-url>`. We detect this by re-parsing the first
- * positional with `parseRef`: anything that comes back as a git source
- * is treated as an `add`. Plain words (subcommand names, typos) fall
- * through to subcommand dispatch.
+ * Shorthand: `crew tap <git-url-or-path> [<name>]` (no `add` keyword)
+ * is equivalent to `crew tap add <…> [<name>]`. Detected by re-parsing
+ * the first positional with `parseRef`.
  */
 
 import { statSync } from "node:fs";
@@ -25,11 +22,12 @@ import { DEFAULT_TAP_NAME } from "../../config/defaults.ts";
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
-import type { TapConfig } from "../../core/types.ts";
+import type { Source, TapConfig } from "../../core/types.ts";
 import { ensureClone } from "../../git/repo.ts";
+import { deriveAutoTapName } from "../../install/tap-naming.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { withStateLock } from "../../state/lock.ts";
-import { exists, rmrf } from "../../util/fs.ts";
+import { exists, isDirectory, rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { refreshTaps, type TapRefreshRow } from "./refresh.ts";
 
@@ -40,38 +38,50 @@ export function tapCommand(ctx: CommandContext): CommandOutput {
   if (sub === "remove") return tapRemove(ctx, rest);
   if (sub === "list") return tapList(ctx);
   if (sub === "update") return tapUpdate(ctx, rest);
-  // Shorthand: `crew tap <git-url> [<name>]` → `crew tap add <git-url> [<name>]`.
-  // Only dispatch to add when the first positional parses as a git
-  // source; plain words fall through to the usage error so typos of
-  // `list`/`remove`/`update` don't silently try to add them as taps.
-  if (sub && looksLikeGitSource(sub, ctx.cwd)) {
+  // Shorthand: `crew tap <ref> [<name>]` → `crew tap add <ref> [<name>]`.
+  // Only dispatch when the first positional parses as a git source or a
+  // path; bare words (subcommand typos) fall through to the usage error.
+  if (sub && looksLikeTapSource(sub, ctx.cwd)) {
     return tapAdd(ctx, ctx.positional);
   }
   throw new CrewError(
     "usage_error",
-    "`crew tap` takes one of: `<git-url> [<name>]`, `add <git-url> [<name>]`, `remove <name>`, `update [<name>]`, or `list`",
+    "`crew tap` takes one of: `<source> [<name>]`, `add <source> [<name>]`, `remove <name>`, `update [<name>]`, or `list`",
   );
 }
 
-/** True if `ref` parses as a git source (URL, `gh:`, `@owner/repo`, etc.). */
-function looksLikeGitSource(ref: string, cwd: string): boolean {
+/** True if `ref` parses as a git or path source (anything but a tap-name reference). */
+function looksLikeTapSource(ref: string, cwd: string): boolean {
   try {
-    return parseRef(ref, cwd).type === "git";
+    const t = parseRef(ref, cwd).type;
+    return t === "git" || t === "path";
   } catch {
     return false;
   }
+}
+
+/** Parsed source of a `tap add` argument: git or path. */
+interface TapAddTarget {
+  readonly kind: "git" | "path";
+  readonly url: string;
+  readonly subpath: string;
+  readonly path: string;
 }
 
 function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
   if (args.length < 1)
     throw new CrewError(
       "usage_error",
-      "`crew tap add` needs a git URL — e.g. `crew tap add https://github.com/acme/skills.git acme`",
+      "`crew tap add` needs a git URL or local path — e.g. `crew tap add https://github.com/acme/skills.git acme`",
     );
-  const rawUrl = args[0]!;
-  const { url, subpath } = splitUrlAndSubpath(rawUrl, ctx.cwd);
+  const rawArg = args[0]!;
+  const target = parseTapAddTarget(rawArg, ctx.cwd);
   const explicitName = args[1];
-  const name = explicitName ?? deriveTapName(url, subpath);
+  const derivedName =
+    target.kind === "git"
+      ? deriveAutoTapName(target.url, target.subpath)
+      : (target.path.split("/").filter(Boolean).pop() ?? "local");
+  const name = explicitName ?? derivedName;
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     throw new CrewError(
       "usage_error",
@@ -79,79 +89,117 @@ function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
       { name },
     );
   }
-  let alreadyMatched = false;
+  type Outcome = "added" | "no-op" | "promoted";
+  // Wrap in an object so TS doesn't narrow the literal type via the
+  // initial assignment — `withStateLock`'s callback assigns later but
+  // TS doesn't trace control flow into closures.
+  const out: { value: Outcome } = { value: "added" };
   withStateLock(() => {
     const config = readConfig(ctx.home);
-    const existing = config.taps.find((t) => t.name === name);
-    if (existing) {
-      if (sameTap(existing, url, subpath)) {
-        // Same name + same target — no-op. Makes `crew tap <url>` idempotent
-        // so scripts don't have to special-case "already added."
-        alreadyMatched = true;
+    // Same target already configured? Either no-op (registered) or promote (auto).
+    const sameTarget = config.taps.find((t) => sameTap(t, target));
+    if (sameTarget) {
+      if (
+        sameTarget.registered &&
+        (explicitName === undefined || explicitName === sameTarget.name)
+      ) {
+        out.value = "no-op";
         return;
       }
+      // Promote (and possibly rename).
+      const renamedName = explicitName ?? sameTarget.name;
+      const promoted: TapConfig = { ...sameTarget, registered: true, name: renamedName };
+      const updated = {
+        ...config,
+        taps: config.taps.map((t) => (t.name === sameTarget.name ? promoted : t)),
+      };
+      // Rename the clone dir on disk if the name changed.
+      if (renamedName !== sameTarget.name && target.kind === "git") {
+        const oldPath = tapPath(sameTarget.name, ctx.home);
+        const newPath = tapPath(renamedName, ctx.home);
+        if (exists(oldPath)) {
+          require("node:fs").renameSync(oldPath, newPath);
+        }
+      }
+      writeConfig(updated, ctx.home);
+      out.value = "promoted";
+      return;
+    }
+    // Same name, different target → conflict.
+    const sameName = config.taps.find((t) => t.name === name);
+    if (sameName) {
       throw new CrewError(
         "usage_error",
-        `tap \`${name}\` is already configured at \`${displayTarget(existing)}\` — to add this one under a different name, run \`crew tap add ${rawUrl} <tap-name>\``,
+        `tap \`${name}\` is already configured at \`${displayTarget(sameName)}\` — to add this one under a different name, run \`crew tap add ${rawArg} <tap-name>\``,
         {
           name,
-          existing: displayTarget(existing),
-          incoming: displayTarget(subpath === undefined ? { url } : { url, subpath }),
+          existing: displayTarget(sameName),
+          incoming: displayTargetOf(target),
         },
       );
     }
-    // Clone FIRST so a failed clone (bad URL, no network, no access)
-    // doesn't leave a half-added entry in config that would then show
-    // up in `crew tap list` as a tap the user never successfully added.
-    // If the clone partially materializes before failing, rm the
-    // directory so retry gets a clean slate.
-    const cloneDir = tapPath(name, ctx.home);
-    try {
-      // Initial clone only — no fetch needed since `git clone` already
-      // has the latest tip of the default branch.
-      ensureClone(url, cloneDir);
-    } catch (err) {
-      if (exists(cloneDir)) rmrf(cloneDir);
-      throw err;
+    // Brand-new tap. For git taps, clone first; for path taps, just verify the dir exists.
+    if (target.kind === "git") {
+      const cloneDir = tapPath(name, ctx.home);
+      try {
+        ensureClone(target.url, cloneDir);
+      } catch (err) {
+        if (exists(cloneDir)) rmrf(cloneDir);
+        throw err;
+      }
+    } else if (!isDirectory(target.path)) {
+      throw new CrewError(
+        "usage_error",
+        `\`${target.path}\` isn't a directory — \`crew tap add\` needs an existing local path`,
+        { path: target.path },
+      );
     }
-    const newTap: TapConfig = subpath === undefined ? { name, url } : { name, url, subpath };
-    const updated = { ...config, taps: [...config.taps, newTap] };
-    writeConfig(updated, ctx.home);
+    const newTap: TapConfig = {
+      name,
+      kind: target.kind,
+      registered: true,
+      url: target.url,
+      subpath: target.subpath,
+      path: target.path,
+    };
+    writeConfig({ ...config, taps: [...config.taps, newTap] }, ctx.home);
   }, ctx.home);
-  const target = displayTarget(subpath === undefined ? { url } : { url, subpath });
-  if (alreadyMatched) {
+  const targetStr = displayTargetOf(target);
+  if (out.value === "no-op") {
     return {
       exitCode: 0,
-      human: [`tap ${name} is already configured at ${target} — nothing to do`],
-      json: { name, url, ...(subpath === undefined ? {} : { subpath }), already: true },
+      human: [`tap ${name} is already configured at ${targetStr} — nothing to do`],
+      json: { name, ...payloadOf(target), already: true },
+    };
+  }
+  if (out.value === "promoted") {
+    return {
+      exitCode: 0,
+      human: [`promoted auto tap to registered: ${name} → ${targetStr}`],
+      json: { name, ...payloadOf(target), promoted: true },
     };
   }
   return {
     exitCode: 0,
-    human: [`added tap ${name} → ${target}`],
-    json: { name, url, ...(subpath === undefined ? {} : { subpath }) },
+    human: [`added tap ${name} → ${targetStr}`],
+    json: { name, ...payloadOf(target) },
   };
 }
 
-/** Parse `<url>` / `<url>//<subpath>` via the shared git-source parser. */
-function splitUrlAndSubpath(
-  raw: string,
-  cwd: string,
-): { url: string; subpath: string | undefined } {
-  const source = parseRef(raw, cwd);
-  if (source.type !== "git") {
-    // Non-git source (path, bare tap name) isn't a valid tap target.
-    // Reuse the git path so the user sees the same kind of error they'd
-    // get from `crew install` on the same input.
+/** Parse the first positional of `tap add` into a TapAddTarget. */
+function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {
+  const source: Source = parseRef(raw, cwd);
+  if (source.type === "tap") {
     throw new CrewError(
       "usage_error",
-      `\`${raw}\` isn't a git URL — \`crew tap add\` needs a git-shaped reference (https://..., git@..., gh:owner/repo, @owner/repo, etc.)`,
+      `\`${raw}\` looks like a tap reference, not a source — \`crew tap add\` takes a git URL or local path (e.g. \`gh:owner/repo\` or \`./my-skills\`)`,
       { raw },
     );
   }
-  // `ref` (tag/branch/SHA) is meaningless for a tap — taps always
-  // track the default branch. Reject it so the user doesn't expect
-  // it to pin the tap.
+  if (source.type === "path") {
+    return { kind: "path", url: "", subpath: "", path: source.path };
+  }
+  // Git: reject `@ref` (taps track default branch).
   if (source.ref !== null) {
     throw new CrewError(
       "usage_error",
@@ -159,19 +207,28 @@ function splitUrlAndSubpath(
       { raw, ref: source.ref },
     );
   }
-  return {
-    url: source.url,
-    subpath: source.subpath.length > 0 ? source.subpath : undefined,
-  };
+  return { kind: "git", url: source.url, subpath: source.subpath, path: "" };
 }
 
-function sameTap(a: TapConfig, url: string, subpath: string | undefined): boolean {
-  return a.url === url && (a.subpath ?? "") === (subpath ?? "");
+function sameTap(a: TapConfig, t: TapAddTarget): boolean {
+  if (a.kind !== t.kind) return false;
+  if (a.kind === "git") return a.url === t.url && a.subpath === t.subpath;
+  return a.path === t.path;
 }
 
-/** Format a tap's target for human display: `<url>` or `<url>//<subpath>`. */
-function displayTarget(t: Pick<TapConfig, "url" | "subpath">): string {
-  return t.subpath && t.subpath.length > 0 ? `${t.url}//${t.subpath}` : t.url;
+function displayTarget(t: TapConfig): string {
+  if (t.kind === "path") return t.path;
+  return t.subpath.length > 0 ? `${t.url}//${t.subpath}` : t.url;
+}
+
+function displayTargetOf(t: TapAddTarget): string {
+  if (t.kind === "path") return t.path;
+  return t.subpath.length > 0 ? `${t.url}//${t.subpath}` : t.url;
+}
+
+function payloadOf(t: TapAddTarget): Record<string, string> {
+  if (t.kind === "path") return { kind: "path", path: t.path };
+  return { kind: "git", url: t.url, ...(t.subpath.length > 0 ? { subpath: t.subpath } : {}) };
 }
 
 function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput {
@@ -183,7 +240,8 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
   const name = args[0]!;
   withStateLock(() => {
     const config = readConfig(ctx.home);
-    if (!config.taps.some((t) => t.name === name)) {
+    const tap = config.taps.find((t) => t.name === name);
+    if (!tap) {
       throw new CrewError(
         "usage_error",
         `no tap named \`${name}\` is configured — run \`crew tap list\` to see what's there`,
@@ -197,7 +255,8 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
       );
     const updated = { ...config, taps: config.taps.filter((t) => t.name !== name) };
     writeConfig(updated, ctx.home);
-    rmrf(tapPath(name, ctx.home));
+    if (tap.kind === "git") rmrf(tapPath(name, ctx.home));
+    // Path taps don't own the directory; never delete it.
   }, ctx.home);
   return {
     exitCode: 0,
@@ -207,15 +266,8 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
 }
 
 /**
- * `crew tap update [<name>]` — fetch + fast-forward one or every tap.
- *
- * This is the "refresh taps without touching installed skills" knob.
- * `crew update` still does both in one shot; this exists so users who
- * just want search/install to see fresh upstream state don't have to
- * churn through the per-skill update loop.
- *
- * Per-tap failures are reported in a rows table; exit code is 1 if
- * any tap failed, 0 otherwise.
+ * `crew tap update [<name>]` — fetch + fast-forward one or every git tap.
+ * Path taps are silently skipped (no upstream to fetch).
  */
 function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput {
   const config = readConfig(ctx.home);
@@ -226,7 +278,9 @@ function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput 
   const human = rows.map((r) =>
     r.kind === "refreshed"
       ? `${r.name}: refreshed (${r.url})`
-      : `${r.name}: FAILED (${r.error?.code ?? "unknown"}) — ${r.error?.message ?? ""}`,
+      : r.kind === "skipped"
+        ? `${r.name}: skipped (${r.reason ?? "path tap"})`
+        : `${r.name}: FAILED (${r.error?.code ?? "unknown"}) — ${r.error?.message ?? ""}`,
   );
   return {
     exitCode: anyFailed ? 1 : 0,
@@ -235,7 +289,7 @@ function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput 
   };
 }
 
-/** Resolve one-or-more tap names from the positional args; unknown names are usage errors. */
+/** Resolve one-or-more tap names from positional args; unknowns are usage errors. */
 function tapsMatching(all: readonly TapConfig[], names: readonly string[]): TapConfig[] {
   const out: TapConfig[] = [];
   for (const n of names) {
@@ -255,68 +309,27 @@ function tapsMatching(all: readonly TapConfig[], names: readonly string[]): TapC
 function tapList(ctx: CommandContext): CommandOutput {
   const config = readConfig(ctx.home);
   const rows = config.taps.map((t) => {
-    const p = tapPath(t.name, ctx.home);
     let lastFetched: string | null = null;
-    try {
-      lastFetched = new Date(statSync(p).mtimeMs).toISOString();
-    } catch {
-      lastFetched = null;
+    if (t.kind === "git") {
+      const p = tapPath(t.name, ctx.home);
+      try {
+        lastFetched = new Date(statSync(p).mtimeMs).toISOString();
+      } catch {
+        lastFetched = null;
+      }
     }
     return {
       name: t.name,
-      url: t.url,
-      ...(t.subpath && t.subpath.length > 0 ? { subpath: t.subpath } : {}),
+      kind: t.kind,
+      registered: t.registered,
+      target: displayTarget(t),
       last_fetched: lastFetched,
     };
   });
-  const human = rows.map(
-    (r) =>
-      `${r.name.padEnd(16)} ${displayTarget(r).padEnd(60)} last_fetched=${r.last_fetched ?? "-"}`,
-  );
+  const human = rows.map((r) => {
+    const flag = r.registered ? "registered" : "auto";
+    const fetched = r.kind === "git" ? `last_fetched=${r.last_fetched ?? "-"}` : "(path tap)";
+    return `${r.name.padEnd(16)} ${flag.padEnd(11)} ${r.target.padEnd(60)} ${fetched}`;
+  });
   return { exitCode: 0, human, json: { taps: rows } };
-}
-
-/**
- * Derive a default tap name from `(url, subpath)`.
- *
- * Root taps: last path segment of the URL (minus `.git`). So
- * `https://github.com/acme/skills.git` → `skills`.
- *
- * Subpath taps: `<last-repo-segment>-<last-subpath-segment>` to reduce
- * collisions when every monorepo's tap directory is called `skills`.
- * So `@with-logic/backend//skills` → `backend-skills`.
- *
- * The result is lowercased and any disallowed characters are replaced
- * with `-` so a repo named `MyOrg/MySkills` yields `myskills` rather
- * than failing validation. If sanitization leaves nothing valid, the
- * user must pass an explicit `<name>`.
- */
-function deriveTapName(url: string, subpath: string | undefined): string {
-  const repoTail = lastSegment(url);
-  const repoBase = repoTail.endsWith(".git") ? repoTail.slice(0, -4) : repoTail;
-  const raw = !subpath || subpath.length === 0 ? repoBase : `${repoBase}-${lastSegment(subpath)}`;
-  return sanitizeDerivedName(raw);
-}
-
-/** Lowercase, replace disallowed chars with `-`, collapse/trim `-`. */
-function sanitizeDerivedName(raw: string): string {
-  const lowered = raw
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/-+/g, "-");
-  // A tap name must start with a letter. Trim leading non-letters and
-  // any trailing `-`. If nothing usable is left, return the raw string
-  // so the downstream validator's error message quotes what the user
-  // would have seen derived.
-  const trimmed = lowered.replace(/^[^a-z]+/, "").replace(/-+$/, "");
-  return trimmed.length > 0 ? trimmed : raw;
-}
-
-/** Last path component of a URL or path, ignoring empty segments. */
-function lastSegment(s: string): string {
-  let tail = s;
-  const scheme = tail.indexOf("://");
-  if (scheme >= 0) tail = tail.slice(scheme + 3);
-  const parts = tail.split(/[/:]/).filter(Boolean);
-  return parts[parts.length - 1] ?? "tap";
 }

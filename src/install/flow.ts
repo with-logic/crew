@@ -13,6 +13,7 @@
  *      the CLI layer can format.
  */
 
+import { writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
 import type { Config, Scope, StateFile } from "../core/types.ts";
 import { readState, writeState } from "../state/load.ts";
@@ -47,11 +48,13 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
 
   const targets = computeTargetSet(config, options.restrictTargets);
 
-  // Resolve the install set — this stages everything into the store.
-  const { skills: resolvedAll, requiredBy } = resolveInstallSet(options.refs, config, {
-    cwd,
-    home,
-  });
+  // Resolve the install set — this stages everything into the store
+  // and may extend the config with auto-taps for new git URLs / paths.
+  const {
+    skills: resolvedAll,
+    requiredBy,
+    config: configWithAutoTaps,
+  } = resolveInstallSet(options.refs, config, { cwd, home });
 
   // Apply §5.4 — duplicate installs.
   const currentState = readState(home);
@@ -74,6 +77,11 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
   }
 
   const summary = withStateLock(() => {
+    // Persist any auto-taps the resolver created BEFORE we start
+    // writing state entries that reference them — otherwise a partial
+    // crash would leave dangling tap names in state.
+    if (configWithAutoTaps !== config) writeConfig(configWithAutoTaps, home);
+
     const freshState = readState(home);
     const result = performInstall(toInstall, targets, options.scope, cwd, freshState, {
       force: options.force,
@@ -82,10 +90,6 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       requiredBy,
       allResolved: resolvedAll,
     });
-    // Apply explicit promotions for skills that were `already installed`
-    // but are now being named directly. Scope to this install's
-    // project_root so we don't accidentally flip the explicit flag on
-    // the same-named entry in a different project.
     const promoted = promoteExplicit(
       result.newState,
       promoteToExplicit,

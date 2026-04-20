@@ -90,7 +90,8 @@ export function performInstall(
           cwd,
           storePath: skill.storePath,
           skillName: skill.name,
-          markerSource: skill.markerSource,
+          tap: skill.tap,
+          tapRelativePath: skill.tapRelativePath,
           ref: skill.ref,
           resolvedSha: skill.resolvedSha,
           contentHash: skill.contentHash,
@@ -156,9 +157,9 @@ function buildStateEntry(
   // we keep remembering (§11.1).
   const explicit = skill.explicit || (existing?.explicit ?? false);
   const required_by = [...(options.requiredBy.get(skill.name) ?? [])].sort();
-  const base: StateEntry = {
+  return {
     name: skill.name,
-    source: skill.markerSource,
+    source: { tap: skill.tap.name, path: skill.tapRelativePath },
     ref: skill.ref,
     resolved_sha: skill.resolvedSha,
     content_hash: skill.contentHash,
@@ -170,7 +171,6 @@ function buildStateEntry(
     required_by,
     ...(scope === "project" ? { project_root: cwd } : {}),
   };
-  return skill.bundle ? { ...base, bundle: skill.bundle } : base;
 }
 
 /**

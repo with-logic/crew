@@ -9,7 +9,12 @@
 /** Install scope — user-wide or project-local. */
 export type Scope = "user" | "project";
 
-/** Source kinds a skill can come from. */
+// -----------------------------------------------------------------------------
+// Reference parsing — what `parseRef` returns. Used at install time before
+// any tap attribution happens.
+// -----------------------------------------------------------------------------
+
+/** Source kinds a skill reference can parse to. */
 export type SourceKind = "path" | "git" | "tap";
 
 /** A resolved, absolute path reference. */
@@ -44,6 +49,10 @@ export interface TapSource {
 /** Discriminated union of every source a ref can parse to. */
 export type Source = PathSource | GitSource | TapSource;
 
+// -----------------------------------------------------------------------------
+// SKILL.md
+// -----------------------------------------------------------------------------
+
 /** Frontmatter fields crew cares about from SKILL.md. */
 export interface SkillFrontmatter {
   readonly name: string;
@@ -68,11 +77,29 @@ export interface LoadedSkill {
   readonly skillMd: string;
 }
 
+// -----------------------------------------------------------------------------
+// Marker (`.crew.json`)
+//
+// Self-describing — carries enough source info that `crew doctor --repair`
+// can rebuild a missing tap row from scratch.
+// -----------------------------------------------------------------------------
+
 /** The shape written into every `.crew.json` marker per §7.5. */
 export interface Marker {
   readonly schema_version: 1;
   readonly name: string;
-  readonly source: MarkerSource;
+  /** Tap that owned this skill at install time. May not exist in current config. */
+  readonly tap_name: string;
+  /** `git` (URL-backed clone) or `path` (local directory). */
+  readonly tap_kind: TapKind;
+  /** Clone URL for git taps; empty for path taps. */
+  readonly tap_url: string;
+  /** Subpath inside the git tap's repo; empty for none. */
+  readonly tap_subpath: string;
+  /** Absolute path to the path-kind tap's directory; empty for git taps. */
+  readonly tap_path: string;
+  /** Skill location relative to the tap's root. Empty when the tap is one skill. */
+  readonly path: string;
   readonly ref: string | null;
   readonly resolved_sha: string | null;
   readonly content_hash: string;
@@ -81,33 +108,29 @@ export interface Marker {
   readonly installed_by: string;
 }
 
-/** Source sub-record inside a marker. Shape is kinded for JSON. */
-export type MarkerSource =
-  | { readonly type: "tap"; readonly tap: string; readonly path: string }
-  | { readonly type: "git"; readonly url: string; readonly subpath: string }
-  | { readonly type: "path"; readonly path: string };
+// -----------------------------------------------------------------------------
+// state.json
+//
+// Per-entry `source` is just `{ tap, path }` — the URL or filesystem path
+// is held on the tap row in `config.yaml`. Renaming a tap or changing its
+// URL doesn't require rewriting state.
+// -----------------------------------------------------------------------------
 
 /**
- * Bundle record on a state entry that was installed via directory
- * expansion of a git or tap source (§9 step 5 + §10.1.1). Records the
- * original reference so `crew update` can re-expand the bundle and
- * pick up newly-added sibling skills.
- *
- * Path sources are intentionally excluded: a local directory isn't
- * published upstream, so auto-expanding new siblings on update is
- * surprising. If you add a new local skill, run `crew install` again.
+ * Where an installed skill came from, in state. References its owning tap by
+ * name; resolve via the `Config` to get URL/path/subpath.
  */
-export interface BundleRef {
-  /** The exact reference string the user typed. */
-  readonly ref: string;
-  /** The parsed source shape (so update doesn't need to re-parse `ref`). */
-  readonly source: Extract<MarkerSource, { type: "git" | "tap" }>;
+export interface StateSource {
+  /** Name of a tap currently in `config.yaml`. */
+  readonly tap: string;
+  /** Skill location relative to the tap's root. */
+  readonly path: string;
 }
 
 /** An entry in state.json per §11.1. */
 export interface StateEntry {
   readonly name: string;
-  readonly source: MarkerSource;
+  readonly source: StateSource;
   readonly ref: string | null;
   readonly resolved_sha: string | null;
   readonly content_hash: string;
@@ -119,8 +142,6 @@ export interface StateEntry {
   readonly explicit: boolean;
   /** Names of installed skills at this scope that depend on this one. */
   readonly required_by: readonly string[];
-  /** Present only on entries installed via directory expansion of a multi-skill source. */
-  readonly bundle?: BundleRef;
   /**
    * For `scope === "project"` entries: the absolute directory the skill
    * was installed from. Used by update/uninstall/doctor so these
@@ -136,17 +157,32 @@ export interface StateFile {
   readonly installations: readonly StateEntry[];
 }
 
+// -----------------------------------------------------------------------------
+// Tap config
+//
+// `kind` discriminates how the tap's contents get on disk:
+//   - `git`  → clone of `url` (optional `subpath` rooted inside the repo)
+//   - `path` → local directory at `path`
+//
+// `registered` distinguishes user-managed taps from auto taps that crew
+// created during install. Auto taps are GC'd when their last skill is
+// uninstalled; registered taps stick around.
+// -----------------------------------------------------------------------------
+
+export type TapKind = "git" | "path";
+
 /** A tap configured in config.yaml. */
 export interface TapConfig {
   readonly name: string;
+  readonly kind: TapKind;
+  /** True for user-added taps (`crew tap add`). False for crew-created auto taps. */
+  readonly registered: boolean;
+  /** For `kind: "git"`: the clone URL. Empty for `kind: "path"`. */
   readonly url: string;
-  /**
-   * Optional subdirectory inside the repo. When present, the tap is
-   * rooted at `<clone>/<subpath>` instead of the clone root; useful
-   * for monorepos where skills live under e.g. `skills/`. Missing or
-   * empty means "use the repo root" — users never need to care.
-   */
-  readonly subpath?: string;
+  /** For `kind: "git"`: optional subpath inside the repo. Empty for none / for path taps. */
+  readonly subpath: string;
+  /** For `kind: "path"`: absolute filesystem path to the tap directory. Empty for git taps. */
+  readonly path: string;
 }
 
 /** The parsed, normalized config.yaml. */
@@ -160,6 +196,10 @@ export interface Config {
   };
 }
 
+// -----------------------------------------------------------------------------
+// Install pipeline
+// -----------------------------------------------------------------------------
+
 /** A resolved skill ready to be installed: materialized contents and identity. */
 export interface ResolvedSkill {
   /** Absolute path to the content in the store. */
@@ -168,21 +208,21 @@ export interface ResolvedSkill {
   readonly name: string;
   /** Loaded frontmatter for dependency walking. */
   readonly frontmatter: SkillFrontmatter;
-  /** What the marker's `source` field should be. */
-  readonly markerSource: MarkerSource;
+  /** Tap that owns this skill (the marker carries the full tap descriptor). */
+  readonly tap: TapConfig;
+  /** Skill location relative to the tap's root. */
+  readonly tapRelativePath: string;
   /** The ref the user asked for. */
   readonly ref: string | null;
-  /** Full 40-char SHA, or null for path sources. */
+  /** Full 40-char SHA, or null for path-kind taps. */
   readonly resolvedSha: string | null;
   /** Whether the install counts as pinned (SHA or tag). */
   readonly pinned: boolean;
   /** Content hash of the store entry. */
   readonly contentHash: string;
   /**
-   * True if this skill was named on the command line (or via a bundle
-   * the user named). False if it's here only as a transitive dependency.
+   * True if this skill was named on the command line (or via a tap-name
+   * install). False if it's here only as a transitive dependency.
    */
   readonly explicit: boolean;
-  /** Bundle membership, if installed via directory expansion. */
-  readonly bundle?: BundleRef;
 }

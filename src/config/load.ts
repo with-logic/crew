@@ -7,21 +7,16 @@
  *   - Missing fields → filled from `defaultConfig()`.
  *   - The default `core` tap is always re-added if absent, unless explicitly
  *     removed via `crew tap remove core --force` which persists an empty-tap
- *     configuration.  We preserve exactly what's on disk: the `core` tap is
+ *     configuration. We preserve exactly what's on disk: the `core` tap is
  *     "always present unless explicitly removed."
  */
 
 import { CrewError } from "../core/errors.ts";
 import { crewHome, paths } from "../core/paths.ts";
-import type { Config, TapConfig } from "../core/types.ts";
+import type { Config, TapConfig, TapKind } from "../core/types.ts";
 import { exists, readText, writeText } from "../util/fs.ts";
 import { parseYaml, stringifyYaml, type YamlMap, type YamlValue } from "../yaml/parse.ts";
-import {
-  DEFAULT_AUTOUPDATE_INTERVAL_SECONDS,
-  DEFAULT_TAP_NAME,
-  DEFAULT_TAP_URL,
-  defaultConfig,
-} from "./defaults.ts";
+import { DEFAULT_AUTOUPDATE_INTERVAL_SECONDS, defaultConfig } from "./defaults.ts";
 
 /** Read and normalize the config, or return defaults if absent. */
 export function readConfig(home: string = crewHome()): Config {
@@ -57,91 +52,132 @@ export function normalizeConfig(parsed: YamlValue): Config {
   const taps: TapConfig[] = [];
   const rawTaps = map["taps"];
   if (rawTaps === undefined || rawTaps === null) {
-    taps.push({ name: DEFAULT_TAP_NAME, url: DEFAULT_TAP_URL });
+    taps.push(...defaultConfig().taps);
   } else {
     if (!Array.isArray(rawTaps)) {
-      throw new CrewError(
-        "config_invalid",
-        "config.yaml: `taps` must be a list of {name, url} entries",
-      );
+      throw new CrewError("config_invalid", "config.yaml: `taps` must be a list of tap entries");
     }
     for (const entry of rawTaps) {
-      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
-        throw new CrewError(
-          "config_invalid",
-          "config.yaml: each `taps` entry must be a mapping like `- name: foo\\n  url: https://...`",
-        );
-      }
-      const em = entry as YamlMap;
-      const name = em["name"];
-      const url = em["url"];
-      if (typeof name !== "string" || name.length === 0) {
-        throw new CrewError("config_invalid", "config.yaml: each tap needs a non-empty `name`");
-      }
-      if (typeof url !== "string" || url.length === 0) {
-        throw new CrewError(
-          "config_invalid",
-          "config.yaml: each tap needs a non-empty `url` (git clone URL)",
-        );
-      }
-      const rawSubpath = em["subpath"];
-      let subpath: string | undefined;
-      if (rawSubpath !== undefined && rawSubpath !== null) {
-        if (typeof rawSubpath !== "string") {
-          throw new CrewError(
-            "config_invalid",
-            "config.yaml: tap `subpath`, when present, must be a string (directory inside the repo)",
-          );
-        }
-        // Normalize away leading/trailing slashes so join() doesn't
-        // accidentally pick up an absolute or double-slashed path.
-        const trimmed = rawSubpath.replace(/^\/+|\/+$/g, "");
-        if (trimmed.length > 0) subpath = trimmed;
-      }
-      taps.push(subpath === undefined ? { name, url } : { name, url, subpath });
+      taps.push(parseTapEntry(entry));
     }
   }
 
   const disabled_targets = readStringList(map, "disabled_targets");
   const forced_targets = readStringList(map, "forced_targets");
-
-  const autoupdate = map["autoupdate"];
-  let enabled = false;
-  let interval_seconds = DEFAULT_AUTOUPDATE_INTERVAL_SECONDS;
-  if (autoupdate !== undefined && autoupdate !== null) {
-    if (typeof autoupdate !== "object" || Array.isArray(autoupdate)) {
-      throw new CrewError(
-        "config_invalid",
-        "config.yaml: `autoupdate` must be a mapping with `enabled` and `interval_seconds`",
-      );
-    }
-    const au = autoupdate as YamlMap;
-    if (au["enabled"] !== undefined && au["enabled"] !== null) {
-      if (typeof au["enabled"] !== "boolean") {
-        throw new CrewError(
-          "config_invalid",
-          "config.yaml: `autoupdate.enabled` must be `true` or `false`",
-        );
-      }
-      enabled = au["enabled"];
-    }
-    if (au["interval_seconds"] !== undefined && au["interval_seconds"] !== null) {
-      if (typeof au["interval_seconds"] !== "number" || au["interval_seconds"] <= 0) {
-        throw new CrewError(
-          "config_invalid",
-          "config.yaml: `autoupdate.interval_seconds` must be a positive number (seconds between autoupdate runs)",
-        );
-      }
-      interval_seconds = au["interval_seconds"];
-    }
-  }
+  const autoupdate = parseAutoupdate(map["autoupdate"]);
 
   return {
     taps,
     disabled_targets,
     forced_targets,
-    autoupdate: { enabled, interval_seconds },
+    autoupdate,
   };
+}
+
+/** Parse one entry under the top-level `taps:` list. */
+function parseTapEntry(entry: YamlValue): TapConfig {
+  if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+    throw new CrewError(
+      "config_invalid",
+      "config.yaml: each `taps` entry must be a mapping like `- name: foo\\n  kind: git\\n  url: https://...`",
+    );
+  }
+  const em = entry as YamlMap;
+  const name = em["name"];
+  if (typeof name !== "string" || name.length === 0) {
+    throw new CrewError("config_invalid", "config.yaml: each tap needs a non-empty `name`");
+  }
+  const kind = parseKind(em["kind"]);
+  const registered =
+    em["registered"] === undefined || em["registered"] === null
+      ? true // legacy/default: assume registered when not specified
+      : parseBool(em["registered"], "registered");
+  if (kind === "git") {
+    const url = em["url"];
+    if (typeof url !== "string" || url.length === 0) {
+      throw new CrewError(
+        "config_invalid",
+        `config.yaml: tap \`${name}\` (kind: git) needs a non-empty \`url\``,
+      );
+    }
+    const subpath = parseSubpath(em["subpath"]);
+    return { name, kind: "git", registered, url, subpath, path: "" };
+  }
+  // kind === "path"
+  const path = em["path"];
+  if (typeof path !== "string" || path.length === 0) {
+    throw new CrewError(
+      "config_invalid",
+      `config.yaml: tap \`${name}\` (kind: path) needs a non-empty \`path\``,
+    );
+  }
+  return { name, kind: "path", registered, url: "", subpath: "", path };
+}
+
+function parseKind(raw: YamlValue | undefined): TapKind {
+  if (raw === undefined || raw === null) return "git"; // legacy default
+  if (raw === "git" || raw === "path") return raw;
+  throw new CrewError(
+    "config_invalid",
+    "config.yaml: tap `kind`, when present, must be `git` or `path`",
+  );
+}
+
+function parseBool(raw: YamlValue | undefined, field: string): boolean {
+  if (typeof raw !== "boolean") {
+    throw new CrewError(
+      "config_invalid",
+      `config.yaml: tap \`${field}\` must be \`true\` or \`false\``,
+    );
+  }
+  return raw;
+}
+
+/** Subpath: optional string, normalized to no leading/trailing slashes; empty → empty string. */
+function parseSubpath(raw: YamlValue | undefined): string {
+  if (raw === undefined || raw === null) return "";
+  if (typeof raw !== "string") {
+    throw new CrewError(
+      "config_invalid",
+      "config.yaml: tap `subpath`, when present, must be a string (directory inside the repo)",
+    );
+  }
+  return raw.replace(/^\/+|\/+$/g, "");
+}
+
+function parseAutoupdate(raw: YamlValue | undefined): {
+  enabled: boolean;
+  interval_seconds: number;
+} {
+  let enabled = false;
+  let interval_seconds = DEFAULT_AUTOUPDATE_INTERVAL_SECONDS;
+  if (raw === undefined || raw === null) return { enabled, interval_seconds };
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw new CrewError(
+      "config_invalid",
+      "config.yaml: `autoupdate` must be a mapping with `enabled` and `interval_seconds`",
+    );
+  }
+  const au = raw as YamlMap;
+  if (au["enabled"] !== undefined && au["enabled"] !== null) {
+    if (typeof au["enabled"] !== "boolean") {
+      throw new CrewError(
+        "config_invalid",
+        "config.yaml: `autoupdate.enabled` must be `true` or `false`",
+      );
+    }
+    enabled = au["enabled"];
+  }
+  if (au["interval_seconds"] !== undefined && au["interval_seconds"] !== null) {
+    if (typeof au["interval_seconds"] !== "number" || au["interval_seconds"] <= 0) {
+      throw new CrewError(
+        "config_invalid",
+        "config.yaml: `autoupdate.interval_seconds` must be a positive number (seconds between autoupdate runs)",
+      );
+    }
+    interval_seconds = au["interval_seconds"];
+  }
+  return { enabled, interval_seconds };
 }
 
 function readStringList(map: YamlMap, key: string): string[] {
@@ -171,11 +207,7 @@ function readStringList(map: YamlMap, key: string): string[] {
 /** Write a config to disk as YAML. */
 export function writeConfig(config: Config, home: string = crewHome()): void {
   const obj: YamlValue = {
-    taps: config.taps.map((t) =>
-      t.subpath === undefined || t.subpath.length === 0
-        ? { name: t.name, url: t.url }
-        : { name: t.name, url: t.url, subpath: t.subpath },
-    ),
+    taps: config.taps.map((t) => serializeTap(t)),
     disabled_targets: [...config.disabled_targets],
     forced_targets: [...config.forced_targets],
     autoupdate: {
@@ -184,4 +216,22 @@ export function writeConfig(config: Config, home: string = crewHome()): void {
     },
   };
   writeText(paths(home).configFile, stringifyYaml(obj));
+}
+
+function serializeTap(t: TapConfig): YamlValue {
+  if (t.kind === "git") {
+    return {
+      name: t.name,
+      kind: "git",
+      registered: t.registered,
+      url: t.url,
+      ...(t.subpath.length > 0 ? { subpath: t.subpath } : {}),
+    };
+  }
+  return {
+    name: t.name,
+    kind: "path",
+    registered: t.registered,
+    path: t.path,
+  };
 }

@@ -12,7 +12,9 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { defaultStreams, writeError, writeSuccess } from "../../src/cli/output.ts";
+import { readConfig } from "../../src/config/load.ts";
 import { CrewError } from "../../src/core/errors.ts";
+import type { TapConfig } from "../../src/core/types.ts";
 import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";
 import { ensureRepo, resolveRef } from "../../src/git/repo.ts";
 import { parseRef } from "../../src/refs/parse.ts";
@@ -381,7 +383,8 @@ describe("targets/install — same-SHA early exit", () => {
       cwd: process.cwd(),
       storePath,
       skillName: "demo",
-      markerSource: entry.source,
+      tap: readConfig(home).taps.find((t: TapConfig) => t.name === entry.source.tap)!,
+      tapRelativePath: entry.source.path,
       ref: entry.ref,
       resolvedSha: entry.resolved_sha,
       contentHash: hashDirectory(storePath),
@@ -730,53 +733,20 @@ describe("git/classifyRef — abbreviated SHA (repo.ts:91-92)", () => {
   });
 });
 
-describe("update — tag moved and missing-skill branches", () => {
-  test("tag moved upstream is cleanly skipped (update.ts:139)", () => {
-    // Drive `updateOne` directly so we control the SHA mapping and
-    // bypass git caching quirks. The behavior under test is:
-    //   pinned=true, !force, newSha is different from entry SHA → skip.
-    // We simulate by writing a state entry pointing at a tag, installing,
-    // then invoking update with --force false.
+describe("update — pinned-to-SHA entries are skipped", () => {
+  test("entry pinned to an exact SHA is skipped on update", () => {
     const home = makeCrewHome();
     const repo = makeTempDir();
     makeGitRepo(repo);
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
-    commitAll(repo, "v1");
     const { runGit } = require("../../src/git/exec.ts") as typeof import("../../src/git/exec.ts");
-    runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", "v1"], {
-      cwd: repo,
+    runGit(["add", "-A"], { cwd: repo });
+    runGit(["commit", "--quiet", "-m", "v1"], { cwd: repo });
+    const head = runGit(["rev-parse", "HEAD"], { cwd: repo }).stdout.trim();
+    runCli(["install", `file://${repo}@${head}//demo`], {
+      home,
+      streams: captureStreams().streams,
     });
-    runCli(["install", `file://${repo}@v1//demo`], { home, streams: captureStreams().streams });
-
-    // Move v1 to a new commit and also move the remote tag reference
-    // in the crew cache so `git fetch --tags --prune` picks it up.
-    writeFileSync(join(repo, "demo", "MORE.md"), "more");
-    commitAll(repo, "v2");
-    runGit(["tag", "-d", "v1"], { cwd: repo });
-    runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", "v1"], {
-      cwd: repo,
-    });
-
-    // Force the crew cache of the repo to re-fetch tags with overwrite.
-    const cacheRoot = join(home, "cache", "git");
-    const walk = (dir: string): string[] => {
-      const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
-      const out: string[] = [];
-      for (const name of readdirSync(dir)) {
-        const p = join(dir, name);
-        if (statSync(p).isDirectory()) {
-          out.push(...walk(p));
-        }
-      }
-      if (require("node:fs").existsSync(join(dir, ".git"))) {
-        out.push(dir);
-      }
-      return out;
-    };
-    for (const clone of walk(cacheRoot)) {
-      runGit(["fetch", "--tags", "--force", "origin"], { cwd: clone });
-    }
-
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
     expect(code).toBe(0);
@@ -784,17 +754,19 @@ describe("update — tag moved and missing-skill branches", () => {
   });
 });
 
-describe("update — skill renamed upstream raises invalid_skill (update.ts:155)", () => {
-  test("upstream skill's name changes → update hard-fails", () => {
+describe("update — skill renamed upstream is treated as source_gone", () => {
+  test("upstream skill name changes → original reported source_gone, exit 0", () => {
+    // Under tap unification, a renamed skill looks like delete-and-add
+    // from the tap's perspective: the old name no longer matches a
+    // valid skill at that path → source_gone. The renamed skill (with
+    // a name mismatching its directory) fails validation and is
+    // silently ignored by tap re-expansion.
     const home = makeCrewHome();
     const repo = makeTempDir();
     makeGitRepo(repo);
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
     commitAll(repo, "v1");
     runCli(["install", `file://${repo}//demo`], { home, streams: captureStreams().streams });
-    // Rewrite the SKILL.md to declare a DIFFERENT name while keeping the
-    // directory named `demo`. The validator will reject it because
-    // name != parent dir name, bubbling as invalid_skill.
     require("node:fs").writeFileSync(
       join(repo, "demo", "SKILL.md"),
       `---\nname: different-name\ndescription: renamed\n---\n`,
@@ -802,7 +774,8 @@ describe("update — skill renamed upstream raises invalid_skill (update.ts:155)
     commitAll(repo, "rename");
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
-    expect(code).toBe(1);
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("source_gone");
   });
 });
 

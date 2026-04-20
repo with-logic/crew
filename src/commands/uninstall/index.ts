@@ -21,11 +21,14 @@
  * (`./core.ts`, `./state.ts`).
  */
 
+import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import type { StateFile } from "../../core/types.ts";
+import { tapPath } from "../../core/paths.ts";
+import type { Config, StateFile } from "../../core/types.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { ALL_ADAPTERS, adapterByName } from "../../targets/registry.ts";
+import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { findOrphan } from "./state.ts";
@@ -55,6 +58,9 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
       state = pruneOrphans(state, ctx, records);
     }
     writeState(state, ctx.home);
+    // Auto-tap GC: any auto tap with no remaining state entries is
+    // dropped from config and its clone deleted. Registered taps stay.
+    gcAutoTaps(state, ctx.home);
   }, ctx.home);
 
   const human: string[] = [];
@@ -115,4 +121,22 @@ function pruneOrphans(
     orphan = findOrphan(current);
   }
   return current;
+}
+
+/**
+ * Drop auto taps (registered: false) that no longer back any state
+ * entry. Their on-disk clone is deleted. Registered taps are NEVER
+ * gc'd by this — only the user's `crew tap remove` removes them.
+ */
+function gcAutoTaps(state: StateFile, home: string): void {
+  const config: Config = readConfig(home);
+  const inUse = new Set(state.installations.map((e) => e.source.tap));
+  const survivors = config.taps.filter((t) => t.registered || inUse.has(t.name));
+  if (survivors.length === config.taps.length) return; // nothing to gc
+  const removed = config.taps.filter((t) => !survivors.includes(t));
+  writeConfig({ ...config, taps: survivors }, home);
+  for (const tap of removed) {
+    if (tap.kind === "git") rmrf(tapPath(tap.name, home));
+    // Path taps own no clone dir; nothing to delete.
+  }
 }

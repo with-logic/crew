@@ -15,7 +15,7 @@ import { makeCrewHome } from "../helpers/env.ts";
 
 const sample: StateEntry = {
   name: "foo",
-  source: { type: "path", path: "/tmp/foo" },
+  source: { tap: "core", path: "foo" },
   ref: null,
   resolved_sha: null,
   content_hash: "sha256:abc",

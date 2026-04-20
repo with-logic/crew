@@ -320,7 +320,7 @@ describe("doctor warnings — orphan store", () => {
         installations: [
           {
             name: "ghost",
-            source: { type: "path", path: "/x" },
+            source: { tap: "core", path: "ghost" },
             ref: null,
             resolved_sha: null,
             content_hash: "sha256:00",
