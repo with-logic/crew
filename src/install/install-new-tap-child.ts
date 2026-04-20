@@ -64,6 +64,10 @@ export function installNewTapChild(
     targets: successfulTargets,
     pinned: false,
     explicit: true,
+    // Tap re-expansion only fires for whole-tap groups, so a child
+    // added this way is also whole-tap-tracked — future siblings
+    // should follow too.
+    tracks_tap: true,
     required_by: [],
     ...(args.scope === "project" && args.projectRoot ? { project_root: args.projectRoot } : {}),
   };

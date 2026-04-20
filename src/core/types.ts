@@ -143,6 +143,14 @@ export interface StateEntry {
   /** Names of installed skills at this scope that depend on this one. */
   readonly required_by: readonly string[];
   /**
+   * True when this entry came from a whole-tap install (`crew install
+   * <tap-url>` / `crew install <tap-name>`) and should be re-expanded
+   * by `crew update` — if the tap gains new skills upstream, they
+   * install automatically. False (or absent) when the user installed
+   * the skill individually; those don't pull in siblings on update.
+   */
+  readonly tracks_tap?: boolean;
+  /**
    * For `scope === "project"` entries: the absolute directory the skill
    * was installed from. Used by update/uninstall/doctor so these
    * operations work correctly regardless of the user's current cwd.
@@ -225,4 +233,11 @@ export interface ResolvedSkill {
    * install). False if it's here only as a transitive dependency.
    */
   readonly explicit: boolean;
+  /**
+   * True when this skill came from a whole-tap install (the user
+   * asked for the whole tap, not a single skill). Propagates to the
+   * state entry's `tracks_tap` so `crew update` knows whether to
+   * re-expand new siblings automatically.
+   */
+  readonly tracksTap: boolean;
 }

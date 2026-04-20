@@ -51,6 +51,8 @@ interface PendingItem {
   readonly requestedRef: string | null;
   readonly pinned: boolean;
   readonly explicit: boolean;
+  /** See `ResolvedSkill.tracksTap` / `StateEntry.tracks_tap`. */
+  readonly tracksTap: boolean;
 }
 
 /**
@@ -103,6 +105,7 @@ export function resolveInstallSet(
       pinned: item.pinned,
       contentHash: staged.contentHash,
       explicit: item.explicit,
+      tracksTap: item.tracksTap,
     });
 
     // Enqueue dependencies (if any).
@@ -136,7 +139,9 @@ function enqueueRoot(
     return enqueueTapRef(source, config, home, true);
   }
 
-  // Git URL or path: find or create the tap.
+  // Git URL or path: find or create the tap. This is always a
+  // whole-tap install — the user pointed at a folder (or repo) and
+  // said "install this". Future additions should follow.
   const attrib = attributeRef(source, config);
   const acquired = acquireTap(attrib.tap, home);
   const items = expandSkillsAsItems(
@@ -146,6 +151,7 @@ function enqueueRoot(
     acquired.resolvedSha,
     sourceRequestedRef(source),
     sourcePinned(source, acquired.resolvedSha),
+    true,
     true,
   );
   return { items, config: attrib.config };
@@ -171,7 +177,8 @@ function enqueueTapRef(
     // matches a tap and nothing else.
     const matched = config.taps.find((c) => c.name === source.name);
     if (matched) {
-      // Whole-tap install.
+      // Whole-tap install via name — every child should follow new
+      // siblings upstream.
       tap = matched;
       const acquired = acquireTap(tap, home);
       return {
@@ -183,6 +190,7 @@ function enqueueTapRef(
           source.ref,
           source.ref !== null,
           explicit,
+          true,
         ),
         config,
       };
@@ -200,7 +208,8 @@ function enqueueTapRef(
     tap = t;
     skillName = source.name;
   }
-  // Attribute to a single skill within the tap.
+  // Attribute to a single skill within the tap. Not a whole-tap
+  // install — don't track siblings.
   const acquired = acquireTap(tap, home);
   const skillDir = join(acquired.rootDir, skillName);
   const items = expandSkillsAsItems(
@@ -211,6 +220,7 @@ function enqueueTapRef(
     source.ref,
     source.ref !== null,
     explicit,
+    false,
   );
   return { items, config };
 }
@@ -224,6 +234,7 @@ function expandSkillsAsItems(
   requestedRef: string | null,
   pinned: boolean,
   explicit: boolean,
+  tracksTap: boolean,
 ): PendingItem[] {
   const loaded = expandSkills(dir);
   const items: PendingItem[] = [];
@@ -243,6 +254,7 @@ function expandSkillsAsItems(
       requestedRef,
       pinned,
       explicit,
+      tracksTap,
     });
   }
   return items;
@@ -277,6 +289,7 @@ function enqueueDep(
             requestedRef: null,
             pinned: parent.pinned,
             explicit: false,
+            tracksTap: false,
           },
         ],
         config,
@@ -291,7 +304,8 @@ function enqueueDep(
     return enqueued;
   }
 
-  // Git or path dep ref.
+  // Git or path dep ref. Not a whole-tap install — dep edges don't
+  // subscribe the user to every sibling of the dep's source.
   const attrib = attributeRef(source, config);
   const acquired = acquireTap(attrib.tap, home);
   const items = expandSkillsAsItems(
@@ -301,6 +315,7 @@ function enqueueDep(
     acquired.resolvedSha,
     sourceRequestedRef(source),
     sourcePinned(source, acquired.resolvedSha),
+    false,
     false,
   );
   return { items, config: attrib.config };

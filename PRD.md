@@ -697,22 +697,27 @@ should not be confused with a deliberate upstream deletion.
 
 ### 10.1.1 Tap re-expansion
 
-Crew tracks every git-kind tap (registered by `crew tap add` or auto-
-created by an install — see §16) for upstream growth. On every `crew
-update` run, for each git-kind tap that has at least one state entry
-(or a registered tap with zero entries when the user passed `--all`,
-not currently spec'd), crew:
+Crew picks up new skills added to a tap automatically — but only for
+**whole-tap** installs. If the user asked for the whole tap (`crew
+install <tap-url>` or `crew install <tap-name>`), their state entries
+are flagged `tracks_tap: true` and new siblings appear on the next
+`crew update`. If the user installed an individual skill (`crew install
+<tap>/<skill>` or a bare name that matched one skill), new siblings are
+**not** pulled in — the user asked for one thing, not the whole tap.
+
+On every `crew update` run, for each group of state entries sharing
+(tap, scope, project_root) where **at least one member** has
+`tracks_tap: true`, crew:
 
 1. Walks one level deep under the tap's resolved root (§9 step 5) and
    builds the current child set.
 2. For each child that is **not** already in state (a skill the
    maintainer added upstream since the user's last update): runs the
    install algorithm (§7.3) for every target in the current target
-   set, at the scope of the originating install, with `explicit: true`
-   and `source.tap` pointing at this tap. This is how
-   `crew install @with-logic/skills` + autoupdate picks up new skills
-   as the team adds them, with no follow-up `crew install` from the
-   user.
+   set, at the scope of the originating install, with `explicit: true`,
+   `tracks_tap: true`, and `source.tap` pointing at this tap. This is
+   how `crew install @with-logic/skills` + autoupdate picks up new
+   skills as the team adds them, with no follow-up `crew install`.
 3. For each skill in state attributed to this tap whose directory is
    **no longer present** under the resolved root: reports `source_gone`
    and leaves the local install untouched (per the upstream-deletion
@@ -720,6 +725,10 @@ not currently spec'd), crew:
 4. For each skill in state attributed to this tap whose directory is
    still present: proceeds with the normal per-skill update logic
    (step 3 of §10.1) — stage, re-resolve, reinstall if SHA moved.
+
+Groups whose members are all individual-skill installs (no
+`tracks_tap`) skip re-expansion entirely. Their per-skill updates
+still run in step 4 — the skill itself updates, just not its siblings.
 
 The behavior is the same regardless of whether the tap was registered
 manually (`crew tap add`) or created automatically by a multi-skill
@@ -884,6 +893,19 @@ at the same scope whose `dependencies` include this skill. Maintained
 by crew on every install and uninstall. A skill with `explicit: false`
 and empty `required_by` is an autoremovable orphan —
 `crew uninstall --prune` removes it.
+
+**`tracks_tap`** (boolean, optional; absent means false). True when
+this entry came from a whole-tap install (`crew install <tap-url>` or
+`crew install <tap-name>`). Drives tap re-expansion (§10.1.1): on
+`crew update`, the group of entries sharing `(source.tap, scope,
+project_root)` is re-walked and new siblings are installed iff any
+member has `tracks_tap: true`. A user who installed just one skill
+from a tap (`crew install <tap>/<skill>` or a bare skill name)
+doesn't opt into this; `tracks_tap` is absent on those entries, and
+the tap's later additions don't pull into their setup. Like
+`explicit`, `tracks_tap` never demotes: once a user installed the
+whole tap, a later `crew install <tap>/<one-skill>` doesn't flip it
+off.
 
 **Invariants:**
 
@@ -1276,7 +1298,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-12 | §10.1 | An update run whose only abnormalities are `source_gone` exits 0. |
 | C-UPD-13 | §10.1 | `crew update` never deletes a target's installed skill directory, its marker, or its state entry as a consequence of upstream changes. Removal is only ever performed by `crew uninstall`. |
 | C-UPD-14 | §16.5 | `crew install <git-url>` against a source with no matching configured tap creates an auto tap (`registered: false`) in `config.yaml`. Every resulting state entry's `source.tap` names that tap. |
-| C-UPD-15 | §10.1.1 | `crew update` re-walks every git-kind tap with at least one state entry and installs any child skill added to the tap upstream since the last update. |
+| C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). |
 | C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
 | C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`, its clone deleted. Registered taps are NOT garbage-collected by uninstall. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` on a tap with pending additions lists those additions without installing anything. |

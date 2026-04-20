@@ -81,6 +81,13 @@ export function reexpandTaps(
       continue;
     }
 
+    // Whole-tap tracking: only groups whose members asked for the
+    // whole tap (either by URL or by tap name) get re-expanded. A
+    // user who installed an individual skill from the tap doesn't
+    // suddenly acquire every sibling on update.
+    const tracksTap = members.some((m) => m.tracks_tap === true);
+    if (!tracksTap) continue;
+
     // Restrict by name filter — re-expand only if the user named a
     // member of this group, or named the tap itself.
     if (restrictNames.length > 0) {

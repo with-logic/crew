@@ -156,6 +156,10 @@ function buildStateEntry(
   // `explicit` never demotes: once a user explicitly wanted a skill,
   // we keep remembering (§11.1).
   const explicit = skill.explicit || (existing?.explicit ?? false);
+  // `tracks_tap` is one-way too: once a user asked for the whole tap,
+  // siblings keep following, even if a later `crew install <same>/<one>`
+  // would be individual on its own.
+  const tracksTap = skill.tracksTap || (existing?.tracks_tap ?? false);
   const required_by = [...(options.requiredBy.get(skill.name) ?? [])].sort();
   return {
     name: skill.name,
@@ -168,6 +172,7 @@ function buildStateEntry(
     targets: successfulTargets,
     pinned: skill.pinned,
     explicit,
+    ...(tracksTap ? { tracks_tap: true } : {}),
     required_by,
     ...(scope === "project" ? { project_root: cwd } : {}),
   };

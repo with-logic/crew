@@ -136,6 +136,35 @@ describe("tap re-expansion on update (§10.1.1)", () => {
     expect(existsSync(join(ccRoot, "gamma", "SKILL.md"))).toBe(true);
   });
 
+  test("C-UPD-15 single-skill installs do NOT auto-pull new siblings on update", () => {
+    // Counterpart to the whole-tap case: a user who installed just
+    // ONE skill from a tap hasn't opted into the tap's future skills.
+    // Adding a new sibling upstream should NOT appear on their
+    // machine after `crew update`.
+    const home = makeCrewHome();
+    const repo = makeMultiSkillRepo(["alpha", "beta"]);
+    // Add the tap explicitly, then install one skill by qualified name.
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    runCli(["install", "mytap/alpha"], { home, streams: captureStreams().streams });
+
+    // Upstream: the tap grows.
+    makeSkill(repo, "gamma", skillFrontmatter({ name: "gamma" }));
+    commitAll(repo, "add gamma");
+
+    const c = captureStreams();
+    const code = runCli(["update"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    // Gamma MUST NOT appear in state or in the update output as added.
+    const state = readState(home);
+    expect(state.installations.find((e) => e.name === "gamma")).toBeUndefined();
+    expect(c.stdout()).not.toContain("new skill");
+    // Beta also MUST NOT appear — the user only asked for alpha.
+    expect(state.installations.find((e) => e.name === "beta")).toBeUndefined();
+  });
+
   test("C-UPD-16 child removed from tap upstream → source_gone, local kept", () => {
     const home = makeCrewHome();
     const repo = makeMultiSkillRepo(["alpha", "beta"]);
