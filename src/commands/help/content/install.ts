@@ -5,7 +5,7 @@ export const installHelp: CommandHelp = {
   synopsis: "crew install <skill> [<skill>...]",
   summary: [
     "Install a skill and make it available in every agent coder on your machine.",
-    "crew installs the same skill into Claude Code, Codex, Gemini — whichever ones you have. One command, all your agents. You don't have to think about where the skill goes; crew figures out the right place for each tool.",
+    "crew installs the same skill into every supported agent coder you have — Claude Code, Codex, Cursor, Gemini, and more. One command, all your agents. You don't have to think about where the skill goes; crew figures out the right place for each tool.",
     "You can install by name (from a collection you've already added), by GitHub URL, from any git repo, or from a local folder — see REFERENCE FORMS below for the full list of shapes you can pass.",
     "Point at a folder full of skills and you get all of them at once. New ones added later show up automatically when you run `crew update`.",
   ],

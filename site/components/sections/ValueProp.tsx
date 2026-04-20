@@ -6,7 +6,7 @@ export function ValueProp() {
   return (
     <section className={styles.section}>
       <Container>
-        <p className={styles.label}>The whole idea, in one line</p>
+        <p className={styles.label}>What is Crew?</p>
         <h2 className={styles.title}>
           Crew turns <span className={styles.mark}>any&nbsp;git&nbsp;repo</span> into a registry of
           agent skills.

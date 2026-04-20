@@ -22,7 +22,7 @@ Examples of what triggers a PRD update:
 - A change to the reference grammar or resolution precedence.
 - A change to a default (tap URL, autoupdate interval, lock timeout, …).
 - A change to the hash algorithm or what it covers.
-- Adding, removing, or renaming a target adapter (the set in §7.2).
+- Adding, removing, or renaming an agent adapter (the set in §7.2).
 - A change that shifts any of the §18 conformance criteria.
 
 Examples of what does **not** need a PRD update:
@@ -92,7 +92,7 @@ src/
 ├── refs/                 # skill reference parser (§8)
 ├── sources/              # acquire path/git/tap, store staging, expand
 ├── install/              # install flow (resolve deps, perform installs)
-├── targets/              # adapter interface + claude-code/codex/gemini
+├── agents/               # adapter interface + per-agent adapters (claude-code/codex/…)
 ├── git/                  # git exec seam + high-level repo ops
 ├── hash/                 # content hashing (§12.1)
 ├── maintenance/          # store garbage collection
@@ -134,7 +134,7 @@ don't rely on implicit `index.ts` resolution because our tsconfig
 requires explicit `.ts` extensions.
 
 Conversely, a file whose name is a single multi-word concept
-(`tap-reexpand.ts`, `dep-resolution.ts`, `target-set.ts`) is fine —
+(`tap-reexpand.ts`, `dep-resolution.ts`, `agent-set.ts`) is fine —
 it's one name, not a group prefix.
 
 **3. Data and logic split into different files.** When a file is large
@@ -170,14 +170,14 @@ reclamation is built into the library. Timeout 30 s, maps to exit
 code 7 (`state_locked`). Read-only commands never take the lock.
 
 **3. Content-addressed store.** `src/sources/store.ts`. Every resolved
-skill lands at `~/.crew/store/<name>@<short-sha>/`. Target installs are
+skill lands at `~/.crew/store/<name>@<short-sha>/`. Agent installs are
 copies **from the store**, never from the source. This gives identical
-bytes across targets and makes reinstalls cheap.
+bytes across agents and makes reinstalls cheap.
 
-**4. Atomic install via rename.** `src/targets/install.ts`. Skills
+**4. Atomic install via rename.** `src/agents/install.ts`. Skills
 are staged into a sibling directory whose name cannot collide with a
 real skill (leading dot), then `renameSync` onto `dest` after removing
-the old `dest`. A crash mid-install never leaves a half-copied target.
+the old `dest`. A crash mid-install never leaves a half-copied install.
 
 **5. Testable subprocess boundary.** `src/git/exec.ts` and
 `src/autoupdate/launchd.ts` each expose a `setXRunner` seam. Real
@@ -530,11 +530,11 @@ start.
 |---|---|
 | Add a new command | `src/commands/<name>.ts` (or `src/commands/<name>/` for multi-file commands); register in `src/cli/dispatch.ts`; add help entry at `src/commands/help/content/<name>.ts` and register in `src/commands/help/content/index.ts` |
 | Add a new global flag | `src/cli/args.ts` (BOOLEAN_GLOBALS / VALUE_GLOBALS); thread through `CommandFlags` in `src/commands/types.ts` |
-| Add a new target adapter | new file in `src/targets/`; register in `src/targets/registry.ts` |
+| Add a new agent adapter | new file in `src/agents/`; register in `src/agents/registry.ts` |
 | Add a new error type | `src/core/errors.ts` (both `CrewErrorName` and `EXIT_CODES`); update PRD §13/§15 |
 | Change skill validation | `src/skill/validate.ts`; update PRD §9 step 4 and §18 C-SPEC |
 | Change the hash algorithm | `src/hash/content.ts`; **bump marker `schema_version`** and update PRD §12.1 |
-| Change the marker schema | `src/core/types.ts` (Marker); `src/targets/install.ts`; bump `schema_version`; update PRD §7.5 |
+| Change the marker schema | `src/core/types.ts` (Marker); `src/agents/install.ts`; bump `schema_version`; update PRD §7.5 |
 | Change the state schema | `src/core/types.ts` (StateFile); `src/state/load.ts`; update PRD §11.1 |
 
 Every entry above whose "Touch…" includes "update PRD" means the

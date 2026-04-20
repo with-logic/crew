@@ -16,8 +16,7 @@ export function Agents() {
             <>
               Any agent coder that reads the{" "}
               <a href="https://agentskills.io/specification">Agent Skills spec</a> is a valid
-              target. Crew auto-detects the ones you already have and quietly skips the rest. Adding
-              a new one is about fifty lines.
+              target. Crew auto-detects the ones you already have and quietly skips the rest.
             </>
           }
         />

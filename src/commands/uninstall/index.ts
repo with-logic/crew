@@ -1,13 +1,13 @@
 /**
  * `crew uninstall <name> [<name>...]` (§7.4).
  *
- * Removes each skill from every target listed in state, then updates
+ * Removes each skill from every agent listed in state, then updates
  * state.json. Fails with `not_installed_here` if no state entry exists,
  * unless `--force`.
  *
  * With `--agent <name>` (repeatable), removal is restricted to the
- * named targets only — other targets keep their installs. If the
- * `--agent` filter leaves the entry's `targets` array empty, the
+ * named agents only — other agents keep their installs. If the
+ * `--agent` filter leaves the entry's `agents` array empty, the
  * entry is removed entirely (same as a default full uninstall).
  *
  * With `--prune` (§7.4 step 5), after removing the named skills, the

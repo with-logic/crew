@@ -1,5 +1,5 @@
 /**
- * Determine the active set of target adapters for an install operation
+ * Determine the active set of agent adapters for an install operation
  * (§9 step 7).
  *
  *   1. Start with every adapter whose `detect()` returns true OR that
@@ -14,7 +14,7 @@ import { ALL_AGENTS, agentByName } from "../agents/registry.ts";
 import { CrewError } from "../core/errors.ts";
 import type { Config } from "../core/types.ts";
 
-/** Compute the active set of target adapters. */
+/** Compute the active set of agent adapters. */
 export function computeAgentSet(
   config: Config,
   restrictTo: readonly string[] = [],
@@ -24,7 +24,7 @@ export function computeAgentSet(
     const known = ALL_AGENTS.map((a) => a.name).join(", ");
     throw new CrewError(
       "no_agents",
-      `unknown target${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")} — known targets: ${known}`,
+      `unknown agent${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")} — known agents: ${known}`,
       { unknown },
     );
   }
@@ -48,7 +48,7 @@ export function computeAgentSet(
   if (active.length === 0) {
     throw new CrewError(
       "no_agents",
-      "no agent coders are active — install Claude Code, Codex CLI, or Gemini CLI, or run `crew agents enable <name>` to force one on",
+      "no agent coders are active — install one of the supported agents (`crew agents` lists them all) or run `crew agents enable <name>` to force one on",
     );
   }
   return active;
