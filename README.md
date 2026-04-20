@@ -3,7 +3,7 @@
   <h1>crew</h1>
 </div>
 
-**A package manager for teams to share [agent skills](https://agentskills.io/specification).**
+**Let your team easily share [agent skills](https://agentskills.io/specification).**
 
 Share skills across your team in a standard way. One command to install. The
 same skills on every laptop, in every coding agent. Updates arrive in the

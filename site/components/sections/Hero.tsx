@@ -10,8 +10,8 @@ export function Hero() {
         <div className={styles.grid}>
           <div>
             <h1 className={styles.title}>
-              <code className={styles.brandCode}>crew</code> is a package manager for{" "}
-              <span className={styles.accent}>teams to share</span> agent skills.
+              <code className={styles.brandCode}>crew</code> lets your team{" "}
+              <span className={styles.accent}>easily share</span> agent skills.
             </h1>
             <p className={styles.lede}>
               Share skills across your team in a standard way. One command to install. The same
