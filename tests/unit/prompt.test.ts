@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { defaultPrompt, type PromptIO, realIO } from "../../src/cli/prompt.ts";
+import { defaultChoicePrompt, defaultPrompt, type PromptIO, realIO } from "../../src/cli/prompt.ts";
 
 /** Make a fake PromptIO that replays fixed bytes and captures stderr. */
 function fakeIO(bytes: string, opts: { isTTY?: boolean; throwOnRead?: boolean } = {}) {
@@ -167,5 +167,37 @@ describe("defaultPrompt real IO seam", () => {
     } finally {
       Object.defineProperty(process.stdin, "isTTY", { value: orig, configurable: true });
     }
+  });
+});
+
+describe("defaultChoicePrompt", () => {
+  test("non-TTY returns abort without reading or writing", () => {
+    const { io, stderr } = fakeIO("", { isTTY: false });
+    expect(defaultChoicePrompt("pick? ", 3, io)).toBe("abort");
+    expect(stderr()).toBe("");
+  });
+
+  test("empty input picks choice 0 (the default)", () => {
+    expect(defaultChoicePrompt("", 3, fakeIO("\n").io)).toEqual({ kind: "choice", index: 0 });
+  });
+
+  test("`1` picks index 0; `3` picks index 2", () => {
+    expect(defaultChoicePrompt("", 3, fakeIO("1\n").io)).toEqual({ kind: "choice", index: 0 });
+    expect(defaultChoicePrompt("", 3, fakeIO("3\n").io)).toEqual({ kind: "choice", index: 2 });
+  });
+
+  test("out-of-range numbers abort", () => {
+    expect(defaultChoicePrompt("", 3, fakeIO("0\n").io)).toBe("abort");
+    expect(defaultChoicePrompt("", 3, fakeIO("4\n").io)).toBe("abort");
+    expect(defaultChoicePrompt("", 3, fakeIO("-1\n").io)).toBe("abort");
+  });
+
+  test("non-numeric input aborts", () => {
+    expect(defaultChoicePrompt("", 3, fakeIO("abc\n").io)).toBe("abort");
+    expect(defaultChoicePrompt("", 3, fakeIO("y\n").io)).toBe("abort");
+  });
+
+  test("EOF with no bytes aborts", () => {
+    expect(defaultChoicePrompt("", 3, fakeIO("").io)).toBe("abort");
   });
 });

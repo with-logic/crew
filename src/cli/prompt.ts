@@ -1,28 +1,34 @@
 /**
- * Synchronous interactive prompt (§16.4).
+ * Synchronous interactive prompts (§16.4).
  *
- * Prints a message to stderr and reads a single line from stdin. Used
- * by the tap-vs-skill collision prompt on `crew install`. Deliberately
- * synchronous to match the rest of the CLI flow.
+ * Two shapes:
+ *   - `confirm(msg)` — binary Y/n prompt. Returns "yes" | "no" | "abort".
+ *     Used by the tap-vs-skill collision prompt when exactly one other
+ *     tap hosts a same-named skill.
+ *   - `choice(msg, n)` — numbered-menu prompt accepting `1..n`. Returns
+ *     the chosen index (0-based) or "abort". Used when two or more
+ *     other taps host the same-named skill; a binary Y/n can't name
+ *     them all.
  *
- * Three outcomes:
- *   - `"yes"`   — user pressed enter or typed y/yes (case-insensitive).
- *   - `"no"`    — user typed n/no.
- *   - `"abort"` — stdin is not a TTY (scripts/CI), or EOF with no input.
- *
- * The "abort" case is important: we never want to silently install a
- * whole tap in a non-interactive context. The install command maps
- * `"abort"` to a `usage_error` directing the user to `--yes` or to
- * the qualified `<other-tap>/<name>` form.
+ * In both shapes, `"abort"` is returned when stdin is not a TTY
+ * (scripts/CI) or when the user's input is unparseable. The install
+ * command maps `"abort"` to a `usage_error` directing the user to
+ * `--yes` or to a qualified `<tap>/<skill>` form.
  */
 
 import { readSync } from "node:fs";
 
-/** Outcome of a confirmation prompt. */
+/** Outcome of a binary confirmation prompt. */
 export type ConfirmOutcome = "yes" | "no" | "abort";
 
-/** The shape commands use to prompt. Tests inject a stub. */
+/** Outcome of a numbered-menu prompt. */
+export type ChoiceOutcome = { kind: "choice"; index: number } | "abort";
+
+/** Binary confirm: tests inject a stub that returns a fixed answer. */
 export type PromptFn = (message: string) => ConfirmOutcome;
+
+/** Numbered menu: tests inject a stub that returns a fixed choice. */
+export type ChoicePromptFn = (message: string, choiceCount: number) => ChoiceOutcome;
 
 /** Injection seam — tests reassign these to stub stdin/stderr. */
 export interface PromptIO {
@@ -65,6 +71,28 @@ export function defaultPrompt(message: string, io: PromptIO = realIO): ConfirmOu
   // Any other input is treated as "no" — the user deliberately typed
   // something, we don't want to guess at what they meant.
   return "no";
+}
+
+/**
+ * Numbered-menu prompt: accepts `1..choiceCount`. Empty input returns
+ * choice 0 (the conventional default). Any other input returns
+ * `"abort"` — the command maps that to a `usage_error` with a hint at
+ * how to pick unambiguously (--yes or a qualified ref).
+ */
+export function defaultChoicePrompt(
+  message: string,
+  choiceCount: number,
+  io: PromptIO = realIO,
+): ChoiceOutcome {
+  if (!io.isTTY()) return "abort";
+  io.writeStderr(message);
+  const line = readLineSync(io);
+  if (line === null) return "abort";
+  const trimmed = line.trim();
+  if (trimmed === "") return { kind: "choice", index: 0 };
+  const n = Number.parseInt(trimmed, 10);
+  if (!Number.isInteger(n) || n < 1 || n > choiceCount) return "abort";
+  return { kind: "choice", index: n - 1 };
 }
 
 /**

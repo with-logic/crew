@@ -14,7 +14,12 @@ import { colorEnabled, makeStyler, type Styler, terminalWidth } from "../util/te
 import { parseArgs } from "./args.ts";
 import { dispatch } from "./dispatch.ts";
 import { defaultStreams, type OutputStreams, writeError, writeSuccess } from "./output.ts";
-import { defaultPrompt, type PromptFn } from "./prompt.ts";
+import {
+  type ChoicePromptFn,
+  defaultChoicePrompt,
+  defaultPrompt,
+  type PromptFn,
+} from "./prompt.ts";
 
 /** Options for `runCli` (useful to tests). */
 export interface RunCliOptions {
@@ -27,6 +32,8 @@ export interface RunCliOptions {
   readonly width?: number;
   /** Override the interactive prompt (default reads stdin / returns abort on non-TTY). */
   readonly prompt?: PromptFn;
+  /** Override the numbered-menu prompt (default reads stdin / returns abort on non-TTY). */
+  readonly promptChoice?: ChoicePromptFn;
   /**
    * Override whether stderr is treated as a TTY for the post-command
    * update notice (§10.4). Default reads `process.stderr.isTTY`. Tests
@@ -49,6 +56,7 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
   const style = options.style ?? makeStyler(options.streams === undefined && colorEnabled());
   const width = options.width ?? terminalWidth();
   const prompt = options.prompt ?? defaultPrompt;
+  const promptChoice = options.promptChoice ?? defaultChoicePrompt;
   const stderrIsTty =
     options.stderrIsTty ?? (options.streams === undefined ? Boolean(process.stderr.isTTY) : false);
 
@@ -70,6 +78,7 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
     style,
     width,
     prompt,
+    promptChoice,
   };
 
   let exitCode: number;
