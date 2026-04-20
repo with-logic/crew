@@ -81,7 +81,7 @@
   background: var(--paper);
   border: 1px solid var(--line-2);
   border-radius: 10px;
-  padding: 0.14em 0.24em 0.18em;
+  padding: 0.14em 0.24em 0.18em 0.18em;
   letter-spacing: -0.02em;
   color: var(--ink);
   display: inline-block;
