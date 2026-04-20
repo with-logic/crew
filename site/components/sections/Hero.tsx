@@ -11,7 +11,7 @@ export function Hero() {
           <div>
             <h1 className={styles.title}>
               <code className={styles.brandCode}>crew</code> lets your team{" "}
-              <span className={styles.accent}>share</span> agent skills.
+              <span className={styles.accent}>share agent skills</span>.
             </h1>
             <p className={styles.lede}>
               Easily discover and share skills across your team. One command to install. The same
