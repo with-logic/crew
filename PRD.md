@@ -385,6 +385,7 @@ Every adapter listed at [agentskills.io/clients](https://agentskills.io/clients)
 
 | Adapter | User-scope skills dir | Project-scope skills dir | Detection |
 |---|---|---|---|
+| `agent-skills` | `~/.agents/skills/` | `<project>/.agents/skills/` | `~/.agents/` exists |
 | `amp` | `~/.config/amp/skills/` | `<project>/.agents/skills/` | `amp` on PATH or `~/.config/amp/` exists |
 | `autohand` | `~/.autohand/skills/` | `<project>/.autohand/skills/` | `autohand` on PATH or `~/.autohand/` exists |
 | `claude-code` | `~/.claude/skills/` | `<project>/.claude/skills/` | `claude` on PATH or `~/.claude/` exists |
@@ -413,11 +414,13 @@ Clients that exist on [agentskills.io/clients](https://agentskills.io/clients) b
 
 Adding a new adapter later requires updating this table, adding a file under `src/agents/`, registering it in `src/agents/registry.ts`, and adding tests.
 
+**`agent-skills` adapter.** The `agent-skills` row covers any spec-compliant agent crew doesn't ship a dedicated adapter for. It detects as soon as `~/.agents/` is present on the filesystem — any spec-compliant tool's install creates that directory, which is enough signal to know a tool that reads `~/.agents/skills/` is on the machine. When `agent-skills` is active alongside known adapters that share the same path (Codex, Cursor, Gemini CLI, etc.), path-sharing (below) deduplicates the write — only one physical copy exists, and the marker lists every active adapter that owns it.
+
 **Detection.** Each adapter uses a best-effort signal: the tool's CLI binary on `PATH`, or the tool's user-scope configuration directory (`~/.<tool>/` or `~/.config/<tool>/`). Either signal makes the adapter "detected." A user may force-enable or force-disable any adapter through `forced_agents` / `disabled_agents` in `config.yaml`.
 
 **Install path shape.** Each agent has a base directory for skills (user scope and project scope). A skill named `python-testing` is installed by writing its files under `<base>/python-testing/`. The directory name equals the skill's `name` (spec-guaranteed to match lowercase alphanumerics and hyphens).
 
-**Path sharing.** Most adapters resolve to the same filesystem path: `~/.agents/skills/` (user) and `<project>/.agents/skills/` (project) is the emerging cross-tool convention, read by Codex, Cursor, Command Code, Gemini CLI, GitHub Copilot, Goose, OpenCode, and pi. Crew writes bytes there once and reports the install to the user under each detected adapter's name, even though only one physical copy exists. The rule: **when a tool reads `~/.agents/skills/`, crew's adapter points there** — one install serves every such tool at once. Adapters whose tools don't support the cross-tool path (Amp user-scope, Autohand, Claude Code, Factory, Junie, Kiro, Mistral Vibe, Nanobot, Roo Code) keep their tool-specific paths.
+**Path sharing.** Most adapters resolve to the same filesystem path: `~/.agents/skills/` (user) and `<project>/.agents/skills/` (project) is the emerging cross-tool convention, read by Codex, Cursor, Command Code, Gemini CLI, GitHub Copilot, Goose, OpenCode, pi, and `agent-skills`. Crew writes bytes there once and reports the install to the user under each detected adapter's name, even though only one physical copy exists. The rule: **when a tool reads `~/.agents/skills/`, crew's adapter points there** — one install serves every such tool at once. Adapters whose tools don't support the cross-tool path (Amp user-scope, Autohand, Claude Code, Factory, Junie, Kiro, Mistral Vibe, Nanobot, Roo Code) keep their tool-specific paths.
 
 The install algorithm (§7.3) dedupes writes by resolved path; the marker (§7.5) records which adapters own the install.
 
@@ -1248,7 +1251,9 @@ Crew ships with a registered default tap named `core` at a URL specified by the 
 
 When the positional argument to `crew install` matches a configured tap name (registered or auto), crew installs every skill the tap currently exposes — the same outcome as if the user had typed the tap's underlying URL/path. State entries are recorded with `source.tap = <tap-name>` and `explicit = true`.
 
-When a positional matches **both** a configured tap name AND an installable skill in some other tap (i.e. there's a `<other-tap>/<name>` resolution available), crew prompts the user interactively:
+When a positional matches **both** a configured tap name AND an installable skill in one or more other taps, crew prompts the user interactively. Two prompt shapes, depending on how many other taps hold the same-named skill:
+
+**Exactly one other tap** — binary prompt. Tap wins on enter (`Y`).
 
 ```
 `python-testing` matches both a tap and a skill (from other-tap).
@@ -1257,7 +1262,17 @@ When a positional matches **both** a configured tap name AND an installable skil
 Choice [Y/n]:
 ```
 
-Tap wins on enter (`Y`). The user can pass `--yes` to skip the prompt. When stdin is not a TTY (scripts, CI), the prompt is suppressed and crew aborts with a `usage_error` instructing the user to pass `--yes` or to qualify the skill as `<other-tap>/<name>`. This avoids silently installing a whole tap when a script just wanted a skill, while still letting the interactive case stay one-keystroke fast.
+**Two or more other taps** — numbered menu. Choice 1 (the tap) is the default; empty input selects it.
+
+```
+`python-testing` matches a tap and skills in 2 other taps.
+  [1] install tap `python-testing` (3 skills)
+  [2] install skill `other-a/python-testing`
+  [3] install skill `other-b/python-testing`
+Choice [1-3, default 1]:
+```
+
+The user can pass `--yes` to skip the prompt (always installs the tap). When stdin is not a TTY (scripts, CI), the prompt is suppressed and crew aborts with a `usage_error` instructing the user to pass `--yes` or to qualify the skill as `<tap>/<name>` — and in the multi-tap case lists every qualified candidate. This avoids silently installing a whole tap when a script just wanted a skill, while still letting the interactive case stay one-keystroke fast.
 
 When a positional matches a tap name but no other tap holds a same-named skill, no prompt — the tap installs silently.
 
@@ -1518,7 +1533,8 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-16 | §16.3 | `crew tap update` fetches + fast-forwards every configured tap. `crew tap update <name>...` restricts to the named taps. Unknown names produce `usage_error`. It does not touch installed skills. |
 | C-TAP-17 | §16.6 | `crew search`, `crew info`, `crew list`, and `crew install` for bare-name or `<tap>/<skill>` references do not issue a `git fetch`. They read from local tap clones only. A missing clone is materialized on first read; an unreachable tap at that moment warns and is skipped. |
 | C-TAP-18 | §16.4 | `crew install <tap-name>` (where `<tap-name>` matches a configured tap, registered or auto) installs every skill the tap currently exposes. Each resulting state entry has `source.tap = <tap-name>` and `explicit = true`. |
-| C-TAP-19 | §16.4 | When `<positional>` matches both a tap name and a skill name (in some other tap), `crew install <positional>` prompts the user with `[Y/n]` (tap wins on enter). `--yes` skips the prompt and installs the tap. In a non-TTY environment, the command aborts with `usage_error` instructing the user to pass `--yes` or qualify the skill as `<other-tap>/<name>`. |
+| C-TAP-19 | §16.4 | When `<positional>` matches both a tap name and a skill name in exactly one other tap, `crew install <positional>` prompts with `[Y/n]` (tap wins on enter). `--yes` skips the prompt and installs the tap. In a non-TTY environment, the command aborts with `usage_error` instructing the user to pass `--yes` or qualify the skill as `<other-tap>/<name>`. |
+| C-TAP-19b | §16.4 | When `<positional>` matches both a tap name and a skill name in two or more other taps, `crew install <positional>` prompts with a numbered menu listing the tap (as choice 1, the default) and each qualified skill. Empty input or `1` picks the tap; `2..N` pick the corresponding qualified skill. `--yes` skips the prompt and installs the tap. Non-TTY aborts with `usage_error` listing every qualified candidate. |
 | C-TAP-20 | §16.5 | `crew install <git-url>` against a URL not matching any configured tap creates a new auto tap (kind: git, registered: false), choosing a unique derived name (suffixing `-2`, `-3`, ... if a name collision exists with a different URL). |
 | C-TAP-21 | §16.5 | `crew install <local-path>` creates an auto tap with `kind: path`, `registered: false`, `path: <abs-path>`. `crew tap update` skips path-kind taps; `crew search` walks them when reachable. |
 | C-TAP-22 | §16.5 | Running `crew tap add <url>` against a URL that already backs an auto tap promotes it (`registered` flips to `true`) without re-cloning, and applies any user-supplied `<name>` argument. |
@@ -1577,6 +1593,8 @@ Implementations and test suites refer to criteria by ID.
 | C-AGENT-04 | §7.1 | `crew agents enable <name>` forces a agent active even if `detect()` returns false. |
 | C-AGENT-05 | §9 step 7 | When no agent is active (none detected and none forced), install fails with `no_agents`, exit 4. |
 | C-AGENT-06 | §7.3 | An adapter never modifies files outside `{base}/<name>/`. |
+| C-AGENT-07 | §7.2 | The `agent-skills` adapter's `detect()` returns true iff `~/.agents/` exists on the filesystem. |
+| C-AGENT-08 | §7.2 | When `agent-skills` is the only active adapter, `crew install` writes to `~/.agents/skills/<name>/` (user scope) or `<project>/.agents/skills/<name>/` (project scope) and the install summary reports the adapter as `agent-skills`. |
 
 #### C-CONC: Concurrency (§14)
 

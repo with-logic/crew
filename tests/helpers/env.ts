@@ -61,7 +61,11 @@ const ADAPTER_ORIGINALS = new Map<string, AdapterMut>();
  */
 export function neutralizeAdaptersExcept(keep: readonly string[]): void {
   const keepSet = new Set(keep);
-  const inert = mkdtempSync(join(tmpdir(), "crew-inert-adapters-"));
+  // The inert destination is scoped to the current CREW_HOME so each
+  // test (which allocates a fresh home via `makeCrewHome()`) gets its
+  // own marker namespace. Without this scoping, doctor/list walks over
+  // a single shared inert dir and sees markers from prior tests,
+  // causing cross-test leakage in exactly the checks we care about.
   for (const a of ALL_AGENTS) {
     // Capture every adapter's real implementation before any
     // mutation, so `withOriginalAdapter` can restore any of them
@@ -74,8 +78,9 @@ export function neutralizeAdaptersExcept(keep: readonly string[]): void {
       });
     }
     if (keepSet.has(a.name)) continue;
-    (a as AdapterMut).userPath = () => join(inert, a.name);
-    (a as AdapterMut).projectPath = () => join(inert, a.name);
+    (a as AdapterMut).userPath = () =>
+      join(process.env["CREW_HOME"] ?? tmpdir(), "inert-adapters", a.name);
+    (a as AdapterMut).projectPath = (cwd: string) => join(cwd, ".inert-adapters", a.name);
     (a as AdapterMut).detect = () => false;
   }
 }

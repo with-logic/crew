@@ -754,29 +754,37 @@ describe("update — pinned-to-SHA entries are skipped", () => {
   });
 });
 
+// Two installs + two git commits via real subprocesses — slower on CI
+// runners than the bun default 5s timeout. Give it room.
+const RENAME_TIMEOUT_MS = 30_000;
+
 describe("update — skill renamed upstream is treated as source_gone", () => {
-  test("upstream skill name changes → original reported source_gone, exit 0", () => {
-    // Under tap unification, a renamed skill looks like delete-and-add
-    // from the tap's perspective: the old name no longer matches a
-    // valid skill at that path → source_gone. The renamed skill (with
-    // a name mismatching its directory) fails validation and is
-    // silently ignored by tap re-expansion.
-    const home = makeCrewHome();
-    const repo = makeTempDir();
-    makeGitRepo(repo);
-    makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
-    commitAll(repo, "v1");
-    runCli(["install", `file://${repo}//demo`], { home, streams: captureStreams().streams });
-    require("node:fs").writeFileSync(
-      join(repo, "demo", "SKILL.md"),
-      `---\nname: different-name\ndescription: renamed\n---\n`,
-    );
-    commitAll(repo, "rename");
-    const c = captureStreams();
-    const code = runCli(["update"], { home, streams: c.streams });
-    expect(code).toBe(0);
-    expect(c.stdout()).toContain("removed upstream");
-  });
+  test(
+    "upstream skill name changes → original reported source_gone, exit 0",
+    () => {
+      // Under tap unification, a renamed skill looks like delete-and-add
+      // from the tap's perspective: the old name no longer matches a
+      // valid skill at that path → source_gone. The renamed skill (with
+      // a name mismatching its directory) fails validation and is
+      // silently ignored by tap re-expansion.
+      const home = makeCrewHome();
+      const repo = makeTempDir();
+      makeGitRepo(repo);
+      makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
+      commitAll(repo, "v1");
+      runCli(["install", `file://${repo}//demo`], { home, streams: captureStreams().streams });
+      require("node:fs").writeFileSync(
+        join(repo, "demo", "SKILL.md"),
+        `---\nname: different-name\ndescription: renamed\n---\n`,
+      );
+      commitAll(repo, "rename");
+      const c = captureStreams();
+      const code = runCli(["update"], { home, streams: c.streams });
+      expect(code).toBe(0);
+      expect(c.stdout()).toContain("removed upstream");
+    },
+    RENAME_TIMEOUT_MS,
+  );
 });
 
 describe("install/flow — name_conflict across every source kind", () => {

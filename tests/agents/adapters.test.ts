@@ -41,6 +41,12 @@ interface AdapterExpectation {
 
 const EXPECTATIONS: readonly AdapterExpectation[] = [
   {
+    name: "agent-skills",
+    userSuffix: ".agents/skills",
+    projectSuffix: ".agents/skills",
+    detectFixtures: [".agents"],
+  },
+  {
     name: "amp",
     userSuffix: ".config/amp/skills",
     projectSuffix: ".agents/skills",

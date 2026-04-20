@@ -6,7 +6,7 @@
  * human or JSON, sets exit code, writes to stdout/stderr).
  */
 
-import type { PromptFn } from "../cli/prompt.ts";
+import type { ChoicePromptFn, PromptFn } from "../cli/prompt.ts";
 import type { Scope } from "../core/types.ts";
 import type { Styler } from "../util/term.ts";
 
@@ -29,11 +29,18 @@ export interface CommandContext {
   /** Terminal width for human output wrapping/truncation. */
   readonly width: number;
   /**
-   * Interactive confirm prompt. Default implementation reads stdin;
-   * tests inject a stub that returns a fixed answer. Commands that
-   * never prompt can ignore this field.
+   * Interactive confirm prompt (binary Y/n). Default implementation
+   * reads stdin; tests inject a stub that returns a fixed answer.
+   * Commands that never prompt can ignore this field.
    */
   readonly prompt: PromptFn;
+  /**
+   * Interactive numbered-menu prompt (1..N). Used when the choice
+   * can't be expressed as a binary Y/n — e.g. picking among three or
+   * more skills that share a bare name. Tests inject a stub that
+   * returns a fixed index.
+   */
+  readonly promptChoice: ChoicePromptFn;
 }
 
 /** Global flags as parsed by the CLI. */

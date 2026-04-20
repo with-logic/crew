@@ -280,6 +280,124 @@ describe("C-TAP-19 tap/skill collision prompt", () => {
   });
 });
 
+describe("C-TAP-19b tap/skill collision — numbered menu for 2+ other taps", () => {
+  /**
+   * Build three taps such that `colliding` is a tap name AND a skill
+   * inside two other taps ("helpers-a" and "helpers-b"). Returns the
+   * paths for assertions.
+   */
+  function buildMultiCollision(home: string): void {
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const tapRepo = buildTapRepo("crew-mcol-tap-", ["inner"]);
+    const otherA = buildTapRepo("crew-mcol-a-", ["colliding"]);
+    const otherB = buildTapRepo("crew-mcol-b-", ["colliding"]);
+    runCli(["tap", "add", `file://${tapRepo}`, "colliding"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    runCli(["tap", "add", `file://${otherA}`, "helpers-a"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    runCli(["tap", "add", `file://${otherB}`, "helpers-b"], {
+      home,
+      streams: captureStreams().streams,
+    });
+  }
+
+  test("default (choice 0) installs the tap", () => {
+    const home = makeCrewHome();
+    buildMultiCollision(home);
+    const code = runCli(["install", "colliding"], {
+      home,
+      streams: captureStreams().streams,
+      promptChoice: () => ({ kind: "choice", index: 0 }),
+    });
+    expect(code).toBe(0);
+    const state = readState(home);
+    expect(state.installations.map((e) => e.name).sort()).toEqual(["inner"]);
+    expect(state.installations[0]!.source.tap).toBe("colliding");
+  });
+
+  test("choice 1 installs the skill from the first other tap", () => {
+    const home = makeCrewHome();
+    buildMultiCollision(home);
+    const code = runCli(["install", "colliding"], {
+      home,
+      streams: captureStreams().streams,
+      promptChoice: () => ({ kind: "choice", index: 1 }),
+    });
+    expect(code).toBe(0);
+    const state = readState(home);
+    expect(state.installations[0]!.source.tap).toBe("helpers-a");
+  });
+
+  test("choice 2 installs the skill from the second other tap", () => {
+    const home = makeCrewHome();
+    buildMultiCollision(home);
+    const code = runCli(["install", "colliding"], {
+      home,
+      streams: captureStreams().streams,
+      promptChoice: () => ({ kind: "choice", index: 2 }),
+    });
+    expect(code).toBe(0);
+    const state = readState(home);
+    expect(state.installations[0]!.source.tap).toBe("helpers-b");
+  });
+
+  test("prompt message lists the tap and every qualified alternative", () => {
+    const home = makeCrewHome();
+    buildMultiCollision(home);
+    let seen = "";
+    runCli(["install", "colliding"], {
+      home,
+      streams: captureStreams().streams,
+      promptChoice: (message) => {
+        seen = message;
+        return { kind: "choice", index: 0 };
+      },
+    });
+    expect(seen).toContain("2 other taps");
+    expect(seen).toContain("[1] install tap `colliding`");
+    expect(seen).toContain("[2] install skill `helpers-a/colliding`");
+    expect(seen).toContain("[3] install skill `helpers-b/colliding`");
+    expect(seen).toContain("Choice [1-3, default 1]:");
+  });
+
+  test("--yes skips the menu and installs the tap", () => {
+    const home = makeCrewHome();
+    buildMultiCollision(home);
+    let calls = 0;
+    const code = runCli(["install", "colliding", "--yes"], {
+      home,
+      streams: captureStreams().streams,
+      promptChoice: () => {
+        calls++;
+        return { kind: "choice", index: 0 };
+      },
+    });
+    expect(code).toBe(0);
+    expect(calls).toBe(0);
+    const state = readState(home);
+    expect(state.installations[0]!.source.tap).toBe("colliding");
+  });
+
+  test("non-TTY (abort) is a usage_error listing every qualified candidate", () => {
+    const home = makeCrewHome();
+    buildMultiCollision(home);
+    const c = captureStreams();
+    const code = runCli(["install", "colliding"], {
+      home,
+      streams: c.streams,
+      promptChoice: () => "abort",
+    });
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("--yes");
+    expect(c.stderr()).toContain("helpers-a/colliding");
+    expect(c.stderr()).toContain("helpers-b/colliding");
+  });
+});
+
 describe("C-TAP-20 auto-tap creation on `crew install <git-url>`", () => {
   test("creates a kind:git, registered:false tap", () => {
     const home = makeCrewHome();
