@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://crew.logic.inc"),
   title: "crew — a package manager for agent skills",
   description:
-    "Find great skills. Install them with one command into every coding agent on your machine. Publish your own as easily as pushing to GitHub.",
+    "Find great skills. Install them with one command into every coding agent on your machine. Share your own as easily as pushing to GitHub.",
   openGraph: {
     title: "crew — a package manager for agent skills",
     description:
