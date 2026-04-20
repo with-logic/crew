@@ -1,0 +1,58 @@
+.code {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.65;
+  background: var(--term-bg);
+  color: var(--term-ink);
+  border-radius: 8px;
+  padding: 20px 22px;
+  overflow-x: auto;
+  white-space: pre;
+  border: 1px solid #000;
+  margin: 0;
+}
+
+.light {
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.cmt {
+  color: var(--term-mute);
+}
+.light .cmt {
+  color: var(--mute);
+}
+
+.p {
+  color: var(--term-prompt);
+}
+.light .p {
+  color: var(--mute);
+}
+
+.ok {
+  color: var(--term-ok);
+}
+.light .ok {
+  color: oklch(0.5 0.12 150);
+}
+
+.warn {
+  color: var(--term-warn);
+}
+
+.acc {
+  color: var(--term-accent);
+}
+.light .acc {
+  color: var(--accent-ink);
+}
+
+.key {
+  color: var(--term-key);
+}
+.light .key {
+  color: oklch(0.5 0.12 250);
+}

@@ -1,0 +1,19 @@
+.wrap {
+  text-align: center;
+  padding: 48px 0;
+}
+
+.title {
+  font-size: 48px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 0 0 24px;
+  line-height: 1.05;
+}
+
+.ctaRow {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}

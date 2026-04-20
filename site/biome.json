@@ -1,0 +1,50 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
+  "extends": ["../biome.json"],
+  "files": {
+    "includes": ["**/*.{ts,tsx,js,jsx,json,mjs}", "!.next", "!out", "!node_modules"]
+  },
+  "linter": {
+    "rules": {
+      "style": {
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "strictCase": false,
+            "requireAscii": true,
+            "filenameCases": ["camelCase", "PascalCase", "kebab-case"]
+          }
+        }
+      },
+      "correctness": {
+        "noUndeclaredDependencies": {
+          "level": "error",
+          "options": { "devDependencies": true }
+        },
+        "useImportExtensions": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "app/**/page.tsx",
+        "app/**/layout.tsx",
+        "app/**/not-found.tsx",
+        "app/**/error.tsx",
+        "app/**/loading.tsx",
+        "app/**/template.tsx",
+        "app/**/default.tsx",
+        "next.config.*",
+        "types/**/*.d.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
+    }
+  ]
+}

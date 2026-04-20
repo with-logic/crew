@@ -1,0 +1,16 @@
+.mark {
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  display: inline-block;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  position: relative;
+}
+
+.mark::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  background: var(--bg);
+}

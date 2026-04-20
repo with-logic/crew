@@ -1,0 +1,158 @@
+.hero {
+  padding: 56px 0 88px;
+  position: relative;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 64px;
+  align-items: start;
+}
+
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  margin: 0 0 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px 7px 12px;
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+  border-radius: 999px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.sq {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.sep {
+  color: var(--mute);
+  opacity: 0.5;
+  margin: 0 2px;
+}
+
+.os {
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 76px;
+  line-height: 1;
+  letter-spacing: -0.038em;
+  margin: 0 0 28px;
+  text-wrap: balance;
+}
+
+.accent {
+  color: var(--accent-ink);
+}
+
+.lede {
+  font-size: 20px;
+  color: var(--ink-2);
+  max-width: 540px;
+  margin: 0 0 40px;
+  line-height: 1.5;
+}
+
+.ctaRow {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.meta {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--mute);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 36px;
+}
+
+.meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  display: inline-block;
+}
+
+/* Terminal body styling */
+.line {
+  display: flex;
+  gap: 12px;
+}
+
+.prompt {
+  color: var(--mute);
+  user-select: none;
+}
+
+.cmd {
+  color: var(--ink);
+}
+
+.out {
+  color: var(--ink-2);
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.dim {
+  color: var(--mute);
+}
+
+.acc {
+  color: var(--accent-ink);
+}
+
+.caret {
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  background: var(--ink);
+  animation: blink 1.05s steps(2) infinite;
+  align-self: center;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .title {
+    font-size: 48px;
+  }
+}

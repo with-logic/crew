@@ -1,0 +1,27 @@
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 22px 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--mute);
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.label {
+  color: var(--ink-2);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.trail {
+  color: var(--mute);
+}
+
+.trail a {
+  color: var(--ink-2);
+}

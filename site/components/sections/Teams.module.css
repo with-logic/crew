@@ -1,0 +1,40 @@
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.card {
+  padding: 32px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.title {
+  font-size: 24px;
+  letter-spacing: -0.015em;
+  margin: 0 0 12px;
+  line-height: 1.15;
+  font-weight: 600;
+  text-wrap: balance;
+  max-width: 16ch;
+}
+
+.body {
+  color: var(--ink-2);
+  font-size: 15px;
+  margin: 0;
+  line-height: 1.55;
+}
+
+.codeWrap {
+  margin-top: 40px;
+}
+
+@media (max-width: 860px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

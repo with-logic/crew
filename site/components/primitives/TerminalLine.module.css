@@ -1,0 +1,25 @@
+.line {
+  display: flex;
+  gap: 12px;
+}
+
+.prompt {
+  color: var(--mute);
+  user-select: none;
+}
+
+.content {
+  color: var(--ink-2);
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.muted {
+  color: var(--mute);
+}
