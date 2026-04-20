@@ -1,0 +1,112 @@
+.pipeline {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 48px;
+  align-items: stretch;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 20px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.n {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--mute);
+  padding-top: 2px;
+}
+
+.title {
+  font-size: 17px;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+}
+
+.body {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 15px;
+}
+
+.diagram {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 28px;
+  position: sticky;
+  top: 80px;
+  align-self: start;
+}
+
+.dTitle {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mute);
+  margin-bottom: 20px;
+}
+
+.dRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px dashed var(--line-2);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.dRow:last-of-type {
+  border-bottom: 0;
+}
+
+.dName {
+  color: var(--ink);
+  font-weight: 600;
+  width: 110px;
+}
+
+.dPath {
+  color: var(--mute);
+  font-size: 12px;
+  flex: 1;
+}
+
+.dStatus {
+  color: var(--ok);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dNote {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--mute);
+  line-height: 1.6;
+}
+
+.dEmph {
+  color: var(--ink);
+}
+
+@media (max-width: 860px) {
+  .pipeline {
+    grid-template-columns: 1fr;
+  }
+}

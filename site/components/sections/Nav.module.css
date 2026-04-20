@@ -1,0 +1,101 @@
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in oklab, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  height: var(--nav-h);
+  padding: 0 var(--wrap-pad);
+  max-width: var(--wrap-max);
+  margin: 0 auto;
+}
+
+.version {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--mute);
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.links {
+  display: flex;
+  gap: 24px;
+  font-size: 14px;
+  color: var(--ink-2);
+  margin-left: 12px;
+}
+
+.links a {
+  text-decoration: none;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.links a:hover {
+  color: var(--ink);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.osPill {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 10px 5px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  color: var(--ink-2);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+}
+
+.osPill:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.gh {
+  color: var(--ink);
+}
+
+.cta {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 6px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  text-decoration: none;
+  background: #fff;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cta:hover {
+  border-color: var(--ink);
+}
+
+.ctaArrow {
+  color: var(--mute);
+}
+
+@media (max-width: 860px) {
+  .links,
+  .osPill {
+    display: none;
+  }
+}

@@ -1,0 +1,98 @@
+.section {
+  padding: 80px 0 88px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(
+      1000px 300px at 15% 0%,
+      color-mix(in oklab, var(--accent) 10%, transparent),
+      transparent 60%
+    ),
+    var(--bg);
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin: 0 0 28px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.label::before {
+  content: "";
+  width: 32px;
+  height: 1px;
+  background: var(--mute);
+}
+
+.title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 64px;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  margin: 0;
+  max-width: 980px;
+  text-wrap: balance;
+}
+
+.mark {
+  background: linear-gradient(
+    180deg,
+    transparent 62%,
+    color-mix(in oklab, var(--accent) 40%, transparent) 62%,
+    color-mix(in oklab, var(--accent) 40%, transparent) 94%,
+    transparent 94%
+  );
+  padding: 0 4px;
+}
+
+.sub {
+  margin: 28px 0 0;
+  font-size: 18px;
+  color: var(--ink-2);
+  max-width: 720px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.sub::before {
+  content: "→";
+  font-family: var(--font-mono);
+  color: var(--accent-ink);
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+.codePaper {
+  font-family: var(--font-mono);
+  background: #fff;
+  border: 1px solid var(--line);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 32px;
+}
+
+.chips strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+@media (max-width: 860px) {
+  .title {
+    font-size: 40px;
+  }
+}

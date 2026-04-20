@@ -1,0 +1,15 @@
+.section {
+  padding: 96px 0;
+}
+
+.tight {
+  padding: 64px 0;
+}
+
+.ruleTop {
+  border-top: 1px solid var(--line);
+}
+
+.ruleBottom {
+  border-bottom: 1px solid var(--line);
+}

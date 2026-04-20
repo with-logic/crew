@@ -1,0 +1,41 @@
+/*
+ * Design tokens — the single source of truth for color, type, spacing,
+ * and radii. Every component reads these via `var(--foo)`. To retheme
+ * the whole site, edit this file.
+ */
+
+:root {
+  /* Ink & paper */
+  --bg: #faf8f5;
+  --ink: #17161a;
+  --ink-2: #3a3740;
+  --mute: #6e6a74;
+  --line: #e7e2d9;
+  --line-2: #d5cfc3;
+  --paper: #f2ede3;
+
+  /* Accent + semantic */
+  --accent: oklch(0.68 0.15 58);
+  --accent-ink: oklch(0.38 0.09 55);
+  --ok: oklch(0.6 0.12 150);
+  --warn: oklch(0.62 0.16 25);
+
+  /* Terminal palette */
+  --term-bg: #17161a;
+  --term-ink: #ece6d8;
+  --term-mute: #8a8478;
+  --term-ok: oklch(0.78 0.15 150);
+  --term-warn: oklch(0.78 0.17 60);
+  --term-accent: oklch(0.82 0.13 60);
+  --term-key: oklch(0.82 0.12 250);
+  --term-prompt: #d0c7b0;
+
+  /* Typography */
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Layout */
+  --wrap-max: 1160px;
+  --wrap-pad: 32px;
+  --nav-h: 56px;
+}

@@ -1,0 +1,18 @@
+.callouts {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.cText {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14.5px;
+}
+
+@media (max-width: 860px) {
+  .callouts {
+    grid-template-columns: 1fr;
+  }
+}
