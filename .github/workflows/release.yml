@@ -61,6 +61,11 @@ jobs:
       # Safety gate: never ship a build that can't pass the full check.
       - name: Typecheck, lint, test
         run: bun run check
+        env:
+          # See ci.yml for why this is needed on Linux runners.
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: "protocol.file.allow"
+          GIT_CONFIG_VALUE_0: "always"
 
       - name: Verify package version matches tag
         run: |

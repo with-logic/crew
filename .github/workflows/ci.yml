@@ -29,3 +29,13 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Typecheck, lint, test (with coverage)
         run: bun run check
+        env:
+          # The test suite builds local git repos and clones them via
+          # `file://` URLs. Git ≥2.38 disables the `file` protocol by
+          # default (CVE-2022-39253 mitigation); the tests are safe
+          # because every repo is freshly-created under `os.tmpdir()`,
+          # so we re-enable it here. macOS dev machines ship older
+          # git defaults and don't hit this.
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: "protocol.file.allow"
+          GIT_CONFIG_VALUE_0: "always"
