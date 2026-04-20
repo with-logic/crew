@@ -5,9 +5,8 @@
 
 **Let your team easily share [agent skills](https://agentskills.io/specification).**
 
-Share skills across your team in a standard way. One command to install. The
-same skills on every laptop, in every coding agent. Updates arrive in the
-background.
+Easily share skills across your team. One command to install. The same
+skills on every laptop, in every coding agent. Updated automatically.
 
 ```
 crew tap add @acme/skills
@@ -42,11 +41,10 @@ without thinking about it.
 
 ## What is Crew?
 
-Share skills across your team in a standard way that keeps them up to date
-with zero effort. One command to install. The same skills on every laptop,
-in every coding agent. Updates arrive in the background. Changes ship through
-pull requests. Nothing leaves your network — crew, the CLI, and every skill
-you install are all open source under MIT.
+Easily share skills across your team. One command to install. The same skills
+on every laptop, in every coding agent. Updated automatically. Changes ship
+through pull requests. Nothing leaves your network — crew, the CLI, and every
+skill you install are all open source under MIT.
 
 - **private by default** · your git credentials, your repo
 - **no hosted registry** · git is the backend

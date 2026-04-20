@@ -21,11 +21,11 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://crew.logic.inc"),
   title: "crew — let your team easily share agent skills",
   description:
-    "Share skills across your team in a standard way that keeps them up to date with zero effort. One command to install. The same skills on every laptop, in every coding agent.",
+    "Easily share skills across your team. One command to install. The same skills on every laptop, in every coding agent. Updated automatically.",
   openGraph: {
     title: "crew — let your team easily share agent skills",
     description:
-      "Share skills across your team in a standard way. One command to install. The same skills on every laptop, in every coding agent. Updates arrive in the background.",
+      "Easily share skills across your team. One command to install. The same skills on every laptop, in every coding agent. Updated automatically.",
     type: "website",
     url: "https://crew.logic.inc",
   },
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "crew — let your team easily share agent skills",
     description:
-      "Share skills across your team in a standard way. One command to install. The same skills on every laptop, in every coding agent.",
+      "Easily share skills across your team. One command to install. The same skills on every laptop, in every coding agent.",
   },
 };
 
