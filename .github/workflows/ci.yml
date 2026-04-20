@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs for the same ref when a new push arrives.
+# Saves CI minutes on fast follow-ups.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    # Ubuntu is plenty for `bun run check` — launchctl is stubbed to a
+    # no-op on non-Darwin so the test suite runs green here without
+    # shelling out to a macOS-only binary. macOS runners are 10x the
+    # cost; we use them only in the release workflow.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Typecheck, lint, test (with coverage)
+        run: bun run check

@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  # Cut a release by pushing a tag like `v0.3.0`.
+  push:
+    tags:
+      - "v*.*.*"
+  # Or kick it off from the Actions tab with a one-off version input.
+  # Useful when you want a release without pushing a tag first — this
+  # flow creates the tag on the default branch before building.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.3.0 — no `v` prefix)"
+        required: true
+        type: string
+
+permissions:
+  contents: write # Required to create releases and push tags.
+
+jobs:
+  build-and-release:
+    # Bun cross-compiles cleanly, so a Linux runner builds both macOS
+    # binaries and saves on GitHub minutes (Ubuntu is 10x cheaper than
+    # macOS).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            tag="${GITHUB_REF_NAME}"
+            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          # Need full history so git describe / release notes work.
+          fetch-depth: 0
+
+      - name: Create tag (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.ver.outputs.tag }}"
+          git push origin "${{ steps.ver.outputs.tag }}"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Safety gate: never ship a build that can't pass the full check.
+      - name: Typecheck, lint, test
+        run: bun run check
+
+      - name: Verify package version matches tag
+        run: |
+          pkg_version="$(bun -e 'console.log(require("./package.json").version)')"
+          if [ "$pkg_version" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::error::package.json version ($pkg_version) does not match release tag version (${{ steps.ver.outputs.version }})"
+            exit 1
+          fi
+
+      - name: Build macOS arm64
+        run: |
+          bun build --compile --minify --sourcemap \
+            --target=bun-darwin-arm64 \
+            src/index.ts --outfile dist/crew-macos-arm64
+
+      - name: Build macOS x64
+        run: |
+          bun build --compile --minify --sourcemap \
+            --target=bun-darwin-x64 \
+            src/index.ts --outfile dist/crew-macos-x64
+
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum crew-macos-arm64 crew-macos-x64 > SHA256SUMS
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            dist/crew-macos-arm64
+            dist/crew-macos-x64
+            dist/SHA256SUMS
