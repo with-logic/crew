@@ -31,6 +31,7 @@ import { ALL_ADAPTERS, adapterByName } from "../../targets/registry.ts";
 import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
+import { renderUninstall } from "./render.ts";
 import { findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
@@ -63,22 +64,7 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
     gcAutoTaps(state, ctx.home);
   }, ctx.home);
 
-  const human: string[] = [];
-  for (const r of records) {
-    const prefix = r.pruned ? `${r.name} (pruned)` : r.name;
-    if (r.failures.length > 0) {
-      human.push(
-        `${prefix}: FAILED (${r.failures.map((f) => `${f.target}:${f.error.code}`).join(", ")})`,
-      );
-    } else if (r.partial) {
-      human.push(
-        `${prefix}: removed from ${r.removedFrom.join(", ") || "(nothing)"} (kept elsewhere)`,
-      );
-    } else {
-      human.push(`${prefix}: removed from ${r.removedFrom.join(", ") || "(nothing)"}`);
-    }
-  }
-  return { exitCode, human, json: { records } };
+  return { exitCode, human: renderUninstall(records, ctx.style), json: { records } };
 }
 
 /**

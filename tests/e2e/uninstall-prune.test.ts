@@ -127,8 +127,9 @@ describe("uninstall --prune", () => {
     const state = readState(home);
     expect(state.installations.find((e) => e.name === "bar")).toBeUndefined();
     expect(state.installations.find((e) => e.name === "foo")).toBeUndefined();
-    // The removal of `bar` is reported with a (pruned) marker.
-    expect(c.stdout()).toContain("bar (pruned)");
+    // The removal of `bar` is reported in a dedicated pruned section.
+    expect(c.stdout()).toContain("Pruned");
+    expect(c.stdout()).toContain("bar");
   });
 
   test("C-UNINST-07 --prune never removes explicit skills", () => {

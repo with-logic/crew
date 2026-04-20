@@ -133,7 +133,9 @@ describe("uninstall per-target failure", () => {
     const c = captureStreams();
     const code = runCli(["uninstall", "demo"], { home, streams: c.streams });
     expect(code).toBe(1);
-    expect(c.stdout()).toContain("FAILED");
+    // New output surfaces per-target failures with a human remedy line.
+    expect(c.stdout()).toContain("failure");
+    expect(c.stdout()).toContain("tampered");
   });
 });
 
