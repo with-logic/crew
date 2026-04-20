@@ -72,18 +72,28 @@ describe("cache clean", () => {
     expect(code).toBe(0);
   });
 
-  test("cache clean removes unreferenced store entries", () => {
+  test("cache clean removes unreferenced store entries and reports what it freed", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     runCli(["install", join(src, "demo")], { home, streams: captureStreams().streams });
-    // Manually create an orphan store entry.
+    // Manually create an orphan store entry with measurable content.
     mkdirSync(join(home, "store", "ghost@00000000"), { recursive: true });
-    writeFileSync(join(home, "store", "ghost@00000000", "file.txt"), "x");
+    writeFileSync(join(home, "store", "ghost@00000000", "file.txt"), "x".repeat(4096));
     const c = captureStreams();
     const code = runCli(["cache", "clean"], { home, streams: c.streams });
     expect(code).toBe(0);
     expect(existsSync(join(home, "store", "ghost@00000000"))).toBe(false);
+    // Output names what was cleaned.
+    expect(c.stdout()).toContain("Cache cleaned");
+    expect(c.stdout()).toContain("orphan");
+  });
+
+  test("cache clean on a fresh home says nothing to clean", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+    runCli(["cache", "clean"], { home, streams: c.streams });
+    expect(c.stdout()).toContain("Nothing to clean");
   });
 
   test("unknown cache subcommand errors", () => {
