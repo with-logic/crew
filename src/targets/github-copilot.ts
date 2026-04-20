@@ -1,10 +1,15 @@
 /**
  * GitHub Copilot adapter.
  *
- * The GitHub Copilot CLI (`@github/copilot`) stores skills under
- * `~/.copilot/skills/` at user scope and `<project>/.github/skills/`
- * at project scope (the `.github/` location is also what the hosted
- * Copilot coding agent picks up from a repo).
+ * Copilot reads skills from three locations per scope:
+ *
+ *   user:    ~/.copilot/skills, ~/.claude/skills, ~/.agents/skills
+ *   project: .github/skills, .claude/skills, .agents/skills
+ *
+ * We write to the `.agents/skills/` variant so one install serves
+ * Copilot, Codex, and any other adapter that shares the same path
+ * (§7.2 path sharing). Detection still uses the Copilot-specific
+ * `~/.copilot/` config dir or the `copilot` CLI on PATH.
  */
 
 import { join } from "node:path";
@@ -18,9 +23,9 @@ export const githubCopilotAdapter: TargetAdapter = {
     return isDirectory(join(userHome(), ".copilot")) || isOnPath("copilot");
   },
   userPath(): string {
-    return join(userHome(), ".copilot", "skills");
+    return join(userHome(), ".agents", "skills");
   },
   projectPath(cwd: string): string {
-    return join(cwd, ".github", "skills");
+    return join(cwd, ".agents", "skills");
   },
 };

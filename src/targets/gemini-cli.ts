@@ -1,9 +1,12 @@
 /**
  * Gemini CLI adapter.
  *
- * Gemini CLI stores skills under `~/.gemini/skills/` at user scope and
- * `<project>/.gemini/skills/` at project scope. The `gemini` binary is
- * the detection signal when no user dir exists.
+ * Gemini CLI reads skills from `~/.gemini/skills/` and the cross-tool
+ * `~/.agents/skills/` alias (which takes precedence per Gemini's
+ * docs), with the same two at project scope. We write to
+ * `.agents/skills/` so one install serves Gemini plus every other
+ * adapter that shares the path (§7.2 path sharing). Detection still
+ * uses the Gemini-specific config dir or the `gemini` binary.
  */
 
 import { join } from "node:path";
@@ -17,9 +20,9 @@ export const geminiCliAdapter: TargetAdapter = {
     return isDirectory(join(userHome(), ".gemini")) || isOnPath("gemini");
   },
   userPath(): string {
-    return join(userHome(), ".gemini", "skills");
+    return join(userHome(), ".agents", "skills");
   },
   projectPath(cwd: string): string {
-    return join(cwd, ".gemini", "skills");
+    return join(cwd, ".agents", "skills");
   },
 };

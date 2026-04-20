@@ -1,10 +1,14 @@
 /**
  * Command Code adapter.
  *
- * Command Code stores skills under `~/.commandcode/skills/` at user
- * scope and `<project>/.commandcode/skills/` at project scope. The
- * `command-code` (or shorter `cmd`) binary on PATH is the detection
- * signal when no user config dir exists.
+ * Command Code reads skills from `~/.commandcode/skills/` and
+ * `~/.agents/skills/` (user), plus `.commandcode/skills/` and
+ * `.agents/skills/` (project). We write to `.agents/skills/` so one
+ * install serves Command Code plus every other adapter that shares
+ * the path (§7.2 path sharing). On name conflicts, Command Code
+ * prefers its own-branded path over `.agents/`, but crew installs
+ * always land at the shared path so this doesn't create a conflict
+ * unless a user hand-populates `~/.commandcode/skills/`.
  */
 
 import { join } from "node:path";
@@ -20,9 +24,9 @@ export const commandCodeAdapter: TargetAdapter = {
     );
   },
   userPath(): string {
-    return join(userHome(), ".commandcode", "skills");
+    return join(userHome(), ".agents", "skills");
   },
   projectPath(cwd: string): string {
-    return join(cwd, ".commandcode", "skills");
+    return join(cwd, ".agents", "skills");
   },
 };

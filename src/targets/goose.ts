@@ -1,10 +1,12 @@
 /**
  * Goose adapter.
  *
- * Block's Goose stores user-scope skills under
- * `~/.config/goose/skills/` (matching Goose's other configuration at
- * `~/.config/goose/`) and project-scope skills under
- * `<project>/.goose/skills/`.
+ * Block's Goose docs recommend `~/.agents/skills/` (user) and
+ * `.agents/skills/` (project) as the standard layout, with
+ * `.goose/skills/` and `.claude/skills/` kept for backward compat.
+ * We write to `.agents/skills/` so one install serves Goose plus
+ * every other adapter that shares the path (§7.2 path sharing).
+ * Detection still uses the Goose-specific config dir or binary.
  */
 
 import { join } from "node:path";
@@ -18,9 +20,9 @@ export const gooseAdapter: TargetAdapter = {
     return isDirectory(join(userHome(), ".config", "goose")) || isOnPath("goose");
   },
   userPath(): string {
-    return join(userHome(), ".config", "goose", "skills");
+    return join(userHome(), ".agents", "skills");
   },
   projectPath(cwd: string): string {
-    return join(cwd, ".goose", "skills");
+    return join(cwd, ".agents", "skills");
   },
 };

@@ -1,10 +1,13 @@
 /**
  * Cursor adapter.
  *
- * Cursor stores skills under `~/.cursor/skills/` at user scope and
- * `<project>/.cursor/skills/` at project scope. Detection accepts any
- * of: `cursor-agent` on PATH, `~/.cursor/` exists, or the Cursor.app
- * bundle is installed under `/Applications/`.
+ * Cursor reads skills from `~/.agents/skills/`, `~/.cursor/skills/`,
+ * `~/.claude/skills/`, and `~/.codex/skills/` at user scope, and the
+ * same four `.foo/skills/` variants at project scope. We write to
+ * `.agents/skills/` so one install serves Cursor plus every other
+ * adapter that shares the path (§7.2 path sharing). Detection still
+ * uses the Cursor-specific signals: `cursor-agent` on PATH,
+ * `~/.cursor/` exists, or the Cursor.app bundle under `/Applications/`.
  */
 
 import { join } from "node:path";
@@ -22,9 +25,9 @@ export const cursorAdapter: TargetAdapter = {
     );
   },
   userPath(): string {
-    return join(userHome(), ".cursor", "skills");
+    return join(userHome(), ".agents", "skills");
   },
   projectPath(cwd: string): string {
-    return join(cwd, ".cursor", "skills");
+    return join(cwd, ".agents", "skills");
   },
 };

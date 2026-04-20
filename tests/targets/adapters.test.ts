@@ -66,14 +66,14 @@ const EXPECTATIONS: readonly AdapterExpectation[] = [
   },
   {
     name: "command-code",
-    userSuffix: ".commandcode/skills",
-    projectSuffix: ".commandcode/skills",
+    userSuffix: ".agents/skills",
+    projectSuffix: ".agents/skills",
     detectFixtures: [".commandcode"],
   },
   {
     name: "cursor",
-    userSuffix: ".cursor/skills",
-    projectSuffix: ".cursor/skills",
+    userSuffix: ".agents/skills",
+    projectSuffix: ".agents/skills",
     detectFixtures: [".cursor"],
   },
   {
@@ -84,20 +84,20 @@ const EXPECTATIONS: readonly AdapterExpectation[] = [
   },
   {
     name: "gemini-cli",
-    userSuffix: ".gemini/skills",
-    projectSuffix: ".gemini/skills",
+    userSuffix: ".agents/skills",
+    projectSuffix: ".agents/skills",
     detectFixtures: [".gemini"],
   },
   {
     name: "github-copilot",
-    userSuffix: ".copilot/skills",
-    projectSuffix: ".github/skills",
+    userSuffix: ".agents/skills",
+    projectSuffix: ".agents/skills",
     detectFixtures: [".copilot"],
   },
   {
     name: "goose",
-    userSuffix: ".config/goose/skills",
-    projectSuffix: ".goose/skills",
+    userSuffix: ".agents/skills",
+    projectSuffix: ".agents/skills",
     detectFixtures: [".config/goose"],
   },
   {
@@ -126,14 +126,14 @@ const EXPECTATIONS: readonly AdapterExpectation[] = [
   },
   {
     name: "opencode",
-    userSuffix: ".config/opencode/skills",
-    projectSuffix: ".opencode/skills",
+    userSuffix: ".agents/skills",
+    projectSuffix: ".agents/skills",
     detectFixtures: [".config/opencode"],
   },
   {
     name: "pi",
-    userSuffix: ".pi/agent/skills",
-    projectSuffix: ".pi/skills",
+    userSuffix: ".agents/skills",
+    projectSuffix: ".agents/skills",
     detectFixtures: [".pi"],
   },
   {

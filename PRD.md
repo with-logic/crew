@@ -387,18 +387,18 @@ Every adapter listed at [agentskills.io/clients](https://agentskills.io/clients)
 | `autohand` | `~/.autohand/skills/` | `<project>/.autohand/skills/` | `autohand` on PATH or `~/.autohand/` exists |
 | `claude-code` | `~/.claude/skills/` | `<project>/.claude/skills/` | `claude` on PATH or `~/.claude/` exists |
 | `codex` | `~/.agents/skills/` | `<project>/.agents/skills/` | `codex` on PATH or `~/.codex/` exists |
-| `command-code` | `~/.commandcode/skills/` | `<project>/.commandcode/skills/` | `command-code` or `cmd` on PATH or `~/.commandcode/` exists |
-| `cursor` | `~/.cursor/skills/` | `<project>/.cursor/skills/` | `cursor-agent` on PATH or `~/.cursor/` exists or `/Applications/Cursor.app` exists |
+| `command-code` | `~/.agents/skills/` | `<project>/.agents/skills/` | `command-code` or `cmd` on PATH or `~/.commandcode/` exists |
+| `cursor` | `~/.agents/skills/` | `<project>/.agents/skills/` | `cursor-agent` on PATH or `~/.cursor/` exists or `/Applications/Cursor.app` exists |
 | `factory` | `~/.factory/skills/` | `<project>/.factory/skills/` | `droid` on PATH or `~/.factory/` exists |
-| `gemini-cli` | `~/.gemini/skills/` | `<project>/.gemini/skills/` | `gemini` on PATH or `~/.gemini/` exists |
-| `github-copilot` | `~/.copilot/skills/` | `<project>/.github/skills/` | `copilot` on PATH or `~/.copilot/` exists |
-| `goose` | `~/.config/goose/skills/` | `<project>/.goose/skills/` | `goose` on PATH or `~/.config/goose/` exists |
+| `gemini-cli` | `~/.agents/skills/` | `<project>/.agents/skills/` | `gemini` on PATH or `~/.gemini/` exists |
+| `github-copilot` | `~/.agents/skills/` | `<project>/.agents/skills/` | `copilot` on PATH or `~/.copilot/` exists |
+| `goose` | `~/.agents/skills/` | `<project>/.agents/skills/` | `goose` on PATH or `~/.config/goose/` exists |
 | `junie` | `~/.junie/skills/` | `<project>/.junie/skills/` | `~/.junie/` exists (JetBrains IDE plugin, no PATH bin) |
 | `kiro` | `~/.kiro/skills/` | `<project>/.kiro/skills/` | `kiro` on PATH or `~/.kiro/` exists |
 | `mistral-vibe` | `~/.vibe/skills/` | `<project>/.vibe/skills/` | `vibe` on PATH or `~/.vibe/` exists |
 | `nanobot` | `~/.nanobot/workspace/skills/` | — (project scope not supported) | `nanobot` on PATH or `~/.nanobot/` exists |
-| `opencode` | `~/.config/opencode/skills/` | `<project>/.opencode/skills/` | `opencode` on PATH or `~/.config/opencode/` exists |
-| `pi` | `~/.pi/agent/skills/` | `<project>/.pi/skills/` | `pi` on PATH or `~/.pi/` exists |
+| `opencode` | `~/.agents/skills/` | `<project>/.agents/skills/` | `opencode` on PATH or `~/.config/opencode/` exists |
+| `pi` | `~/.agents/skills/` | `<project>/.agents/skills/` | `pi` on PATH or `~/.pi/` exists |
 | `roo-code` | `~/.roo/skills/` | `<project>/.roo/skills/` | `~/.roo/` exists (VS Code extension, no PATH bin) |
 
 Clients that exist on [agentskills.io/clients](https://agentskills.io/clients) but are intentionally excluded from v1:
@@ -415,7 +415,9 @@ Adding a new adapter later requires updating this table, adding a file under `sr
 
 **Install path shape.** Each target has a base directory for skills (user scope and project scope). A skill named `python-testing` is installed by writing its files under `<base>/python-testing/`. The directory name equals the skill's `name` (spec-guaranteed to match lowercase alphanumerics and hyphens).
 
-**Path sharing.** Several adapters resolve to the same filesystem path. Most notably `~/.agents/skills/` is a cross-tool convention read by Codex, Gemini CLI, OpenCode, VT Code, and others; crew writes bytes there once and reports the install to the user as "installed for codex, gemini-cli" (the adapter names) even though only one physical copy exists. The install algorithm (§7.3) dedupes writes by resolved path; the marker (§7.5) records which adapters own the install.
+**Path sharing.** Most adapters resolve to the same filesystem path: `~/.agents/skills/` (user) and `<project>/.agents/skills/` (project) is the emerging cross-tool convention, read by Codex, Cursor, Command Code, Gemini CLI, GitHub Copilot, Goose, OpenCode, and pi. Crew writes bytes there once and reports the install to the user under each detected adapter's name, even though only one physical copy exists. The rule: **when a tool reads `~/.agents/skills/`, crew's adapter points there** — one install serves every such tool at once. Adapters whose tools don't support the cross-tool path (Amp user-scope, Autohand, Claude Code, Factory, Junie, Kiro, Mistral Vibe, Nanobot, Roo Code) keep their tool-specific paths.
+
+The install algorithm (§7.3) dedupes writes by resolved path; the marker (§7.5) records which adapters own the install.
 
 If a user runs `crew uninstall --target <name>` against an adapter that shares its path with another active adapter, only the adapter name is removed from the marker and state — the bytes stay until the last adapter leaves.
 
