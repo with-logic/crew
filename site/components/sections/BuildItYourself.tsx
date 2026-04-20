@@ -8,13 +8,15 @@ interface Props {
   readonly prompt: string;
 }
 
+const PRD_URL = "https://github.com/with-logic/crew/blob/main/PRD.md";
+
 /**
- * "Build it yourself" (Software-as-a-Prompt) callout.
+ * "From Scratch" (Software-as-a-Prompt) callout.
  *
  * The thesis: the PRD is the source code. Hand the PRD (+ a short
  * preamble) to an agent coder and you get back a working `crew`.
- * Click-to-copy button inlines the whole payload; no fetches, no
- * external links required.
+ * The copy button inlines the whole payload — no fetches, no external
+ * links required.
  */
 export function BuildItYourself({ prompt }: Props) {
   const [copied, setCopied] = useState(false);
@@ -35,33 +37,34 @@ export function BuildItYourself({ prompt }: Props) {
 
   return (
     <aside className={styles.saap} aria-labelledby="saap-heading">
-      <div className={styles.header}>
+      <div className={styles.tagRow}>
         <span className={styles.tag}>Software-as-a-Prompt</span>
-        <h3 id="saap-heading" className={styles.heading}>
-          Or build it yourself.
-        </h3>
       </div>
+
+      <h3 id="saap-heading" className={styles.heading}>
+        From Scratch
+      </h3>
 
       <p className={styles.copy}>
-        The PRD is the source code. Paste it into any agent coder —{" "}
-        <span className={styles.mono}>Claude Code</span>, <span className={styles.mono}>Codex</span>
-        , <span className={styles.mono}>Cursor</span>, pick your agent, pick your stack — and you'll
-        get a working <span className={styles.mono}>crew</span>-compliant binary out the other side.
-        Ours is written in TypeScript. Yours could be in Go, Rust, Swift, or whatever you're in the
-        mood for today.
+        Crew was built by agents deriving source code from a thorough spec. You can do the same
+        thing. If you don't want to install our version of <span className={styles.mono}>crew</span>
+        , you can use your own agents and tokens to build your own from scratch. Here's the{" "}
+        <a href={PRD_URL} target="_blank" rel="noreferrer">
+          PRD
+        </a>
+        . As a convenience, here's a one-click agent prompt, with the PRD embedded, that you can
+        give to your agent of choice. You should get back a working{" "}
+        <span className={styles.mono}>crew</span>-compliant binary out the other side. Ours is
+        written in TypeScript. Yours could be in Go, Rust, Swift, or whatever you're in the mood for
+        today.
       </p>
 
-      <div className={styles.actionRow}>
+      <div className={styles.buttonRow}>
         <button type="button" className={styles.button} onClick={onCopy}>
           <ClipboardGlyph />
-          {copied ? "copied" : `Copy the whole PRD to your clipboard (${kb} KB)`}
+          {copied ? "Copied" : `Copy the whole PRD to your clipboard (${kb} KB)`}
         </button>
-        <span className={styles.hint}>Then paste it into your agent and follow the preamble.</span>
       </div>
-
-      <p className={styles.footnote}>
-        Half joking, half serious. If you ship one, we'd love to see it.
-      </p>
     </aside>
   );
 }
