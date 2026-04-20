@@ -13,6 +13,7 @@ import { colorEnabled, makeStyler, type Styler, terminalWidth } from "../util/te
 import { parseArgs } from "./args.ts";
 import { dispatch } from "./dispatch.ts";
 import { defaultStreams, type OutputStreams, writeError, writeSuccess } from "./output.ts";
+import { defaultPrompt, type PromptFn } from "./prompt.ts";
 
 /** Options for `runCli` (useful to tests). */
 export interface RunCliOptions {
@@ -23,6 +24,8 @@ export interface RunCliOptions {
   readonly style?: Styler;
   /** Override terminal width (default reads process.stdout.columns). */
   readonly width?: number;
+  /** Override the interactive prompt (default reads stdin / returns abort on non-TTY). */
+  readonly prompt?: PromptFn;
 }
 
 /** Run the CLI with the given argv. Returns an exit code. */
@@ -35,6 +38,7 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
   // color codes in captured buffers are almost never what you want.
   const style = options.style ?? makeStyler(options.streams === undefined && colorEnabled());
   const width = options.width ?? terminalWidth();
+  const prompt = options.prompt ?? defaultPrompt;
 
   let parsed: ReturnType<typeof parseArgs>;
   try {
@@ -53,6 +57,7 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
     home,
     style,
     width,
+    prompt,
   };
 
   try {

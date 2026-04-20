@@ -85,6 +85,30 @@ describe("doctor", () => {
     expect(readState(home).installations.length).toBeGreaterThanOrEqual(1);
   });
 
+  test("--repair reconstructs a missing tap from markers", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
+    runCli(["install", join(src, "demo")], { home, streams: captureStreams().streams });
+    // Nuke state AND config so --repair has to rebuild the tap row
+    // from the marker on disk, exercising the reconstruction branch.
+    const fs = require("node:fs") as typeof import("node:fs");
+    fs.rmSync(join(home, "state.json"));
+    fs.rmSync(join(home, "config.yaml"));
+    const code = runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+    const state = readState(home);
+    expect(state.installations.length).toBeGreaterThanOrEqual(1);
+    // The reconstructed tap must be in config, as kind:path matching the
+    // skill source directory and flagged as auto (registered: false).
+    const { readConfig } =
+      require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
+    const cfg = readConfig(home);
+    const pathTap = cfg.taps.find((t) => t.kind === "path" && t.path === join(src, "demo"));
+    expect(pathTap).toBeDefined();
+    expect(pathTap!.registered).toBe(false);
+  });
+
   test("--json output", () => {
     const home = makeCrewHome();
     const c = captureStreams();

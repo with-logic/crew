@@ -14,14 +14,13 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { Config, StateEntry, StateFile } from "../core/types.ts";
-import { hasSkillMd, loadSkill } from "../skill/load.ts";
+import { loadSkill } from "../skill/load.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
 import { stageIntoStore } from "../sources/store.ts";
 import { upsertEntry } from "../state/load.ts";
 import { cwdForEntry } from "../targets/adapter.ts";
 import { installSkillIntoTarget } from "../targets/install.ts";
 import { adapterByName } from "../targets/registry.ts";
-import { isDirectory } from "../util/fs.ts";
 import { nowIso } from "../util/time.ts";
 
 export interface PerTargetUpdate {
@@ -131,15 +130,11 @@ function updateOne(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
-  // Resolve the skill's directory inside the tap.
+  // Resolve the skill's directory inside the tap. Tap re-expansion
+  // runs before the per-entry loop and already marks missing skills
+  // as `source_gone`, so by the time we're here the dir is guaranteed
+  // to exist.
   const skillDir = join(acquired.rootDir, entry.source.path);
-  if (!(isDirectory(skillDir) && hasSkillMd(skillDir))) {
-    // Skill no longer present in tap → source_gone (caught by outer try).
-    throw new CrewError(
-      "no_skills_found",
-      `\`${entry.name}\` is not in tap \`${tap.name}\` anymore`,
-    );
-  }
 
   if (newSha === entry.resolved_sha) {
     if (newSha !== null) return { kind: "up_to_date" };

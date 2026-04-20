@@ -5,7 +5,7 @@ export const autoupdateHelp: CommandHelp = {
   synopsis: "crew autoupdate {enable|disable|status}",
   summary: [
     "Manage a background launchd agent that runs `crew update --quiet` on a schedule.",
-    "Once enabled, any bundle you've installed (e.g. `@your-org/skills`) automatically picks up new sibling skills as the team adds them upstream.",
+    "Once enabled, any tap you've installed a skill from (e.g. `@your-org/skills`) automatically picks up new skills as the team adds them upstream.",
     "The agent shows up in System Settings → General → Login Items as `Crew Skill Autoupdate`.",
   ],
   flags: [

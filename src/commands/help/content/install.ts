@@ -6,7 +6,8 @@ export const installHelp: CommandHelp = {
   summary: [
     "Install one or more skills into every detected agent coder.",
     "A <ref> is a skill name, a local path, a git URL, or a host shorthand. See REFERENCE FORMS below for every shape crew accepts.",
-    "Install from a directory with no root SKILL.md and crew walks one level deep, installing every skill it finds — that's a 'bundle', and `crew update` will pick up new siblings added later.",
+    "Install from a directory (path or git URL) with no root SKILL.md and crew walks one level deep, installing every skill it finds and attributing them to a single tap — `crew update` picks up new skills added upstream.",
+    "A bare name that matches a configured tap installs every skill the tap exposes — same outcome as `crew install <tap-url>`.",
   ],
   flags: [
     {
@@ -33,7 +34,12 @@ export const installHelp: CommandHelp = {
     {
       command: "crew install @with-logic/skills",
       description:
-        "Install every skill in a GitHub repo (bundle). New siblings are picked up on next update.",
+        "Install every skill in a GitHub repo. crew creates an auto tap for the URL; new skills are picked up on next update.",
+    },
+    {
+      command: "crew install team-skills",
+      description:
+        "Install every skill in a configured tap named `team-skills` (same as `crew install <team-skills-url>`).",
     },
     {
       command: "crew install gh:acme/skills@v1.2.0//python/testing",
@@ -97,7 +103,7 @@ export const installHelp: CommandHelp = {
             "@acme/skills@v1.0.0                      Works with leading-@ too.",
           ],
         },
-        "A git source pointing at a directory with no root SKILL.md is a bundle — crew walks one level deep and installs every skill it finds, and `crew update` picks up new siblings added upstream. Path sources never auto-expand on update; rerun `crew install` to catch new local siblings.",
+        "A git or path source pointing at a directory with no root SKILL.md installs every skill it contains (one level deep), attributing them all to a single tap. If no tap already backs the URL/path, crew creates an auto tap. `crew update` re-expands that tap to pick up new skills added upstream.",
       ],
     },
   ],

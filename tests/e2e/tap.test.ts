@@ -124,6 +124,16 @@ describe("crew tap", () => {
     expect(code).toBe(4);
   });
 
+  test("tap add with a bare-name source is a usage error (not a source)", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+    // `my-skills` parses as a tap reference, not a git URL or path —
+    // `crew tap add` requires a source.
+    const code = runCli(["tap", "add", "my-skills"], { home, streams: c.streams });
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("not a source");
+  });
+
   test("tap add with invalid name fails", () => {
     const home = makeCrewHome();
     const code = runCli(["tap", "add", "file:///tmp/x", "Bad-Name"], {

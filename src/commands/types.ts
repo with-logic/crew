@@ -6,6 +6,7 @@
  * human or JSON, sets exit code, writes to stdout/stderr).
  */
 
+import type { PromptFn } from "../cli/prompt.ts";
 import type { Scope } from "../core/types.ts";
 import type { Styler } from "../util/term.ts";
 
@@ -27,6 +28,12 @@ export interface CommandContext {
   readonly style: Styler;
   /** Terminal width for human output wrapping/truncation. */
   readonly width: number;
+  /**
+   * Interactive confirm prompt. Default implementation reads stdin;
+   * tests inject a stub that returns a fixed answer. Commands that
+   * never prompt can ignore this field.
+   */
+  readonly prompt: PromptFn;
 }
 
 /** Global flags as parsed by the CLI. */

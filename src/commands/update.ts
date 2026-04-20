@@ -7,10 +7,10 @@
  * `--force`), re-stage into the store and re-run the install algorithm
  * against every currently-installed (target, scope) pair.
  *
- * Bundle re-expansion (§10.1.1) runs first: for every distinct bundle
- * in state (filtered by `names` if given), re-resolve the original
- * reference, install newly-added children, and mark removed children
- * as `source_gone`. This is how `crew install @org/skills` + autoupdate
+ * Tap re-expansion (§10.1.1) runs first: for every distinct tap that
+ * backs any state entry (filtered by `names` if given), re-walk the
+ * tap and install newly-added skills, mark removed skills as
+ * `source_gone`. This is how `crew install @org/skills` + autoupdate
  * pulls in new team skills.
  *
  * Dependency closure (§10.1 step 2): `crew update <name>...` expands
@@ -23,8 +23,8 @@
  *
  * Fetch scope (§16.4): `crew update` with no args refreshes every
  * configured tap. `crew update <name>...` refreshes only the taps
- * that back the named entries (after dep-closure expansion) and
- * bundle members — other taps are left untouched.
+ * that back the named entries (after dep-closure expansion) — other
+ * taps are left untouched.
  *
  * Error isolation: a failure on one skill is recorded against that
  * skill only; processing continues. Exit code follows §10.1:
@@ -80,8 +80,8 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
     const sourceGone = reexpanded.sourceGone;
 
     // Re-read the (possibly expanded) target set against the post-
-    // bundle-re-expansion state. In practice the set is stable — bundle
-    // re-expansion can add children, but those come in as explicit
+    // tap-re-expansion state. In practice the set is stable — tap
+    // re-expansion can add skills, but those come in as explicit
     // top-level entries and aren't part of the dep closure.
     const { entries: targetEntries } = chooseEntries(current, names);
     for (const entry of targetEntries) {

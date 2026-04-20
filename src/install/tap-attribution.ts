@@ -77,8 +77,11 @@ function findOrCreatePathTap(source: PathSource, config: Config): TapAttribution
 function uniqueAutoName(base: string, config: Config): string {
   const existingNames = new Set(config.taps.map((t) => t.name));
   if (!existingNames.has(base)) return base;
-  for (let i = 2; ; i++) {
-    const candidate = `${base}-${i}`;
-    if (!existingNames.has(candidate)) return candidate;
+  let i = 2;
+  let candidate = `${base}-${i}`;
+  while (existingNames.has(candidate)) {
+    i++;
+    candidate = `${base}-${i}`;
   }
+  return candidate;
 }

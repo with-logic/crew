@@ -134,7 +134,7 @@ don't rely on implicit `index.ts` resolution because our tsconfig
 requires explicit `.ts` extensions.
 
 Conversely, a file whose name is a single multi-word concept
-(`bundle-update.ts`, `dep-resolution.ts`, `target-set.ts`) is fine —
+(`tap-reexpand.ts`, `dep-resolution.ts`, `target-set.ts`) is fine —
 it's one name, not a group prefix.
 
 **3. Data and logic split into different files.** When a file is large

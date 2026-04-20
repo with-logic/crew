@@ -1480,7 +1480,7 @@ crew update
 - Exit code: 1 (at least one hard failure).
 - `a` and `c` reflect their latest SHAs. `b` is unchanged on disk and in state.
 
-#### Example 6: Bundle auto-expansion
+#### Example 6: Tap re-expansion on update
 
 **Setup.** A GitHub repo `github.com/with-logic/skills` has no root
 `SKILL.md`. Its top level contains two skill directories, `alpha/` and

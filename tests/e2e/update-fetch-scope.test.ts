@@ -103,20 +103,18 @@ describe("crew update fetch scope", () => {
     expect(headSha(tapPath("tap-b", home))).not.toBe(shaBBefore);
   });
 
-  test("C-UPD-23 targeted update fetches the tap backing a bundle member", () => {
+  test("C-UPD-23 targeted update fetches the tap backing a named skill", () => {
     const home = makeCrewHome();
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
-    // Bundle tap: two skills at the tap root (triggers bundle expansion
-    // if the user installs by tap ref — but we install individual skills
-    // here by bare name to keep the example tight). For this test we
-    // target one member by name; the filter must pull its tap in too.
-    const bundleRepo = buildTap("crew-scope-bundle-", [
+    // Multi-skill tap: two skills at the tap root. We install only one
+    // by bare name; the update filter must still pull its tap in.
+    const namedRepo = buildTap("crew-scope-named-", [
       { name: "one", desc: "a test skill" },
       { name: "two", desc: "a test skill" },
     ]);
     // Unrelated tap that must NOT be refreshed.
     const otherRepo = buildTap("crew-scope-other-", [{ name: "other", desc: "a test skill" }]);
-    runCli(["tap", "add", `file://${bundleRepo}`, "bundle-tap"], {
+    runCli(["tap", "add", `file://${namedRepo}`, "named-tap"], {
       home,
       streams: captureStreams().streams,
     });
@@ -128,11 +126,11 @@ describe("crew update fetch scope", () => {
 
     // Advance both upstreams.
     makeSkill(
-      bundleRepo,
-      "fresh-bundle-skill",
-      skillFrontmatter({ name: "fresh-bundle-skill", description: "a new skill" }),
+      namedRepo,
+      "fresh-skill",
+      skillFrontmatter({ name: "fresh-skill", description: "a new skill" }),
     );
-    commitAll(bundleRepo, "add fresh");
+    commitAll(namedRepo, "add fresh");
     makeSkill(
       otherRepo,
       "fresh-other",
@@ -140,12 +138,12 @@ describe("crew update fetch scope", () => {
     );
     commitAll(otherRepo, "add fresh-other");
 
-    const shaBundleBefore = headSha(tapPath("bundle-tap", home));
+    const shaNamedBefore = headSha(tapPath("named-tap", home));
     const shaOtherBefore = headSha(tapPath("other-tap", home));
 
     runCli(["update", "one"], { home, streams: captureStreams().streams });
     // Targeted tap advanced; unrelated tap is unchanged.
-    expect(headSha(tapPath("bundle-tap", home))).not.toBe(shaBundleBefore);
+    expect(headSha(tapPath("named-tap", home))).not.toBe(shaNamedBefore);
     expect(headSha(tapPath("other-tap", home))).toBe(shaOtherBefore);
   });
 });

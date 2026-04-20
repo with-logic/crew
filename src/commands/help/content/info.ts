@@ -16,7 +16,11 @@ export const infoHelp: CommandHelp = {
     },
     {
       command: "crew info @with-logic/skills",
-      description: "Preview every skill in a bundle.",
+      description: "Preview every skill in a tap (by URL).",
+    },
+    {
+      command: "crew info team-skills",
+      description: "Preview every skill in a configured tap (by name).",
     },
   ],
   seeAlso: ["list", "search", "install"],

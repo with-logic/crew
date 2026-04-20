@@ -7,6 +7,8 @@
 
 import { readConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
+import type { Config } from "../core/types.ts";
+import { countSkills, detectCollision } from "../install/collision-check.ts";
 import { runInstall } from "../install/flow.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
@@ -18,8 +20,9 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     );
   }
   const config = readConfig(ctx.home);
+  const refs = resolveCollisions(ctx, config);
   const result = runInstall(config, {
-    refs: ctx.positional,
+    refs,
     scope: ctx.flags.scope,
     force: ctx.flags.force,
     dryRun: ctx.flags.dryRun,
@@ -74,6 +77,67 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       dry_run: ctx.flags.dryRun,
     },
   };
+}
+
+/**
+ * Walk each positional and resolve the tap-vs-skill collision case
+ * described in §16.4. A positional matching both a tap name AND a
+ * same-named skill in another tap triggers a prompt; --yes or non-TTY
+ * short-circuit per the spec. Returns the (possibly-rewritten) refs
+ * the install flow should run with.
+ *
+ * Non-bare positionals (paths, git URLs, `<tap>/<skill>`) are passed
+ * through unchanged.
+ */
+function resolveCollisions(ctx: CommandContext, config: Config): string[] {
+  const refs: string[] = [];
+  for (const raw of ctx.positional) {
+    const trimmed = raw.trim();
+    // Only bare names — no slash, no URL-ish characters — can collide.
+    // `<tap>/<skill>`, git URLs, and path refs are unambiguous by grammar.
+    if (!isBareName(trimmed)) {
+      refs.push(raw);
+      continue;
+    }
+    const collision = detectCollision(trimmed, config, ctx.home);
+    if (!collision) {
+      refs.push(raw);
+      continue;
+    }
+    const other = collision.otherTaps[0]!;
+    const qualified = `${other.name}/${trimmed}`;
+    if (ctx.flags.yes) {
+      refs.push(raw);
+      continue;
+    }
+    const count = countSkills(collision.tap, ctx.home);
+    const skillsLine = count === null ? "" : ` (${count} skill${count === 1 ? "" : "s"})`;
+    const message =
+      `\`${trimmed}\` matches both a tap and a skill (from ${other.name}).\n` +
+      `  [Y] install tap \`${trimmed}\`${skillsLine}\n` +
+      `  [n] install skill \`${qualified}\`\n` +
+      `Choice [Y/n]: `;
+    const answer = ctx.prompt(message);
+    if (answer === "abort") {
+      throw new CrewError(
+        "usage_error",
+        `\`${trimmed}\` is both a tap name and a skill name (in ${other.name}) — pass --yes to install the tap, or qualify the skill as \`${qualified}\``,
+        { name: trimmed, tap: collision.tap.name, otherTap: other.name },
+      );
+    }
+    if (answer === "no") {
+      refs.push(qualified);
+      continue;
+    }
+    refs.push(raw);
+  }
+  return refs;
+}
+
+const BARE_NAME = /^[a-z0-9][a-z0-9-]*$/i;
+
+function isBareName(s: string): boolean {
+  return BARE_NAME.test(s);
 }
 
 /**

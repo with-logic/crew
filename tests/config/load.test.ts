@@ -109,4 +109,37 @@ describe("normalizeConfig", () => {
     const c = normalizeConfig({ disabled_targets: [] });
     expect(c.taps[0]!.name).toBe(DEFAULT_TAP_NAME);
   });
+
+  test("kind must be `git` or `path` when present", () => {
+    expect(() => normalizeConfig({ taps: [{ name: "a", kind: "zip", url: "x" }] })).toThrow(
+      CrewError,
+    );
+  });
+
+  test("registered, when present, must be a boolean", () => {
+    expect(() => normalizeConfig({ taps: [{ name: "a", url: "x", registered: "yes" }] })).toThrow(
+      CrewError,
+    );
+  });
+
+  test("kind: path tap parses successfully", () => {
+    const c = normalizeConfig({
+      taps: [{ name: "local", kind: "path", path: "/tmp/skills", registered: true }],
+    });
+    expect(c.taps[0]).toEqual({
+      name: "local",
+      kind: "path",
+      registered: true,
+      url: "",
+      subpath: "",
+      path: "/tmp/skills",
+    });
+  });
+
+  test("kind: path requires a non-empty `path`", () => {
+    expect(() => normalizeConfig({ taps: [{ name: "a", kind: "path" }] })).toThrow(CrewError);
+    expect(() => normalizeConfig({ taps: [{ name: "a", kind: "path", path: "" }] })).toThrow(
+      CrewError,
+    );
+  });
 });

@@ -193,7 +193,7 @@ function rebuildRequiredBy(
 ): StateFile {
   const touched = new Set(resolved.map((s) => s.name));
   // The roots of this install (skills the user named directly, plus
-  // every child of a multi-skill bundle per §9 step 5). Any existing
+  // every skill of a multi-skill tap install per §9 step 5). Any existing
   // `required_by` edge FROM one of these roots is considered stale and
   // replaced with this install's freshly-resolved edges.
   const roots = new Set(resolved.filter((s) => s.explicit).map((s) => s.name));

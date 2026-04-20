@@ -6,9 +6,9 @@ export const updateHelp: CommandHelp = {
   summary: [
     "Re-resolve each installed skill's ref and reinstall if the upstream SHA has moved.",
     "Pinned installs (exact SHA or tag) are skipped unless `--force`. Customized installs are skipped silently — your edits are preserved.",
-    "Bundles are re-expanded: new siblings upstream get installed; siblings that disappeared upstream are reported as `source_gone` and left in place locally.",
+    "Taps are re-expanded: new skills added upstream get installed; skills that disappeared upstream are reported as `source_gone` and left in place locally.",
     "Dependency closure: `crew update <name>...` also updates every skill transitively required by a named one. This keeps a skill and the libraries it relies on in sync. Transitive entries are marked `(required by <name>)` in the output.",
-    "Fetch scope: without args, every configured tap is fetched. With `<name>...`, only the taps and ad-hoc git caches that back those skills (plus their dep closure and any bundle they're part of) are fetched — other taps are left untouched.",
+    "Fetch scope: without args, every configured tap is fetched. With `<name>...`, only the taps that back those skills (plus their dep closure) are fetched — other taps are left untouched.",
   ],
   flags: [
     {
@@ -21,7 +21,7 @@ export const updateHelp: CommandHelp = {
     { command: "crew update", description: "Update every unpinned skill in state." },
     {
       command: "crew update python-testing",
-      description: "Update a single skill by name; bundles containing it are also re-expanded.",
+      description: "Update a single skill by name; the tap it belongs to is also re-expanded.",
     },
     {
       command: "crew update --force python-testing",

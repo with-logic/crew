@@ -10,8 +10,7 @@
  *   - the (possibly extended) `Config` reflecting any auto-taps the
  *     resolution created — the caller persists it under the state lock.
  *
- * The unification commit lives in §16.5: every install attributes its
- * skills to exactly one tap. Bundle-as-a-distinct-concept is gone.
+ * Every install attributes its skills to exactly one tap (§16.5).
  */
 
 import { join } from "node:path";

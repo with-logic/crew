@@ -4,9 +4,10 @@ export const tapHelp: CommandHelp = {
   name: "tap",
   synopsis: "crew tap [add|remove|list|update] [args...]",
   summary: [
-    "Taps are git-managed directories filled with skills. The default tap `core` is always present unless you explicitly remove it.",
-    "After adding a tap you can install any skill in it by bare name (e.g. `crew install python-testing`) without naming the tap.",
-    "`crew tap <git-url> [<name>]` is a shorthand for `crew tap add <git-url> [<name>]` — when the first argument looks like a git source, the `add` keyword is optional.",
+    "Taps are directories filled with skills. They come in two kinds: **git** (a cloned repo, optionally with a subpath) and **path** (a local directory). The default tap `core` is always present unless you explicitly remove it.",
+    "After adding a tap you can install any skill in it by bare name (e.g. `crew install python-testing`), or install every skill at once with `crew install <tap-name>`.",
+    "`crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` — when the first argument looks like a git source or local path, the `add` keyword is optional.",
+    "Registered vs auto: taps you add explicitly are `registered`. Taps crew creates under the hood when you `crew install <new-url>` are `auto` — functionally identical but garbage-collected when their last skill is uninstalled. Rerun `crew tap add <same-url>` to promote an auto tap to registered.",
     "Read-only commands (`crew search`, `crew info`, `crew install`) never hit the network — they read your local tap clones. Run `crew tap update` (or `crew update`) when you want to pick up upstream changes.",
   ],
   flags: [
@@ -25,6 +26,11 @@ export const tapHelp: CommandHelp = {
     {
       command: "crew tap add https://github.com/acme/skills.git acme",
       description: "Long form; same effect, with an explicit tap name.",
+    },
+    {
+      command: "crew tap add ./my-skills local-skills",
+      description:
+        "Add a local path as a tap — no cloning; crew reads skills directly from the directory.",
     },
     {
       command: "crew tap @with-logic/backend//skills",
@@ -95,6 +101,7 @@ export const tapHelp: CommandHelp = {
     "Adding a tap is non-destructive — it just clones into `~/.crew/taps/<name>/` and indexes the skills inside. No confirmation is needed.",
     "Re-adding the same tap (same name, same URL, same subpath) is a no-op. Re-adding with the same name but a different URL or subpath is rejected — pick a different name.",
     "Ambiguous bare names (a skill in two different taps) produce `ambiguous_reference` — qualify with `<tap>/<skill>` to pick one.",
+    "Tap/skill collisions: when a bare name matches both a tap AND a skill in another tap, `crew install` prompts `[Y/n]` (tap wins on enter). Pass `--yes` in scripts, or qualify the skill as `<other-tap>/<name>` to pick the skill unambiguously.",
     "`crew tap update` is the lightweight sibling of `crew update`: it refreshes the tap clones you use for search/install but leaves installed skills alone. Use `crew update` when you also want installed skills rolled forward.",
     "If `crew search` shows a tap as \"not cloned yet and couldn't be reached,\" run `crew tap update <name>` once you're back online.",
   ],

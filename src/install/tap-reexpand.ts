@@ -19,10 +19,9 @@
 
 import { join } from "node:path";
 import type { CrewError } from "../core/errors.ts";
-import { tapPath } from "../core/paths.ts";
 import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
-import { acquireTap, tapRootDir } from "../sources/acquire/index.ts";
+import { acquireTap } from "../sources/acquire/index.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 
 /** One re-expansion outcome row. */
@@ -175,10 +174,4 @@ export function reexpandTaps(
   }
 
   return { added, sourceGone, rows };
-}
-
-/** Convenience: tapRoot for a state entry's tap. */
-export function tapRootFor(tap: TapConfig, home: string): string {
-  if (tap.kind === "path") return tap.path;
-  return tapRootDir(tapPath(tap.name, home), tap);
 }

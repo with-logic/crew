@@ -76,6 +76,21 @@ describe("crew search output", () => {
     expect(c.stdout()).toContain("Found 1 skill matching");
   });
 
+  test("search walks path-kind taps too", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const root = makeTempDir("crew-search-path-");
+    makeSkill(root, "findme", skillFrontmatter({ name: "findme", description: "in a path tap" }));
+    runCli(["tap", "add", root, "localtap"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    const c = captureStreams();
+    const code = runCli(["search", "findme"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("findme");
+  });
+
   test("empty result set prints a no-match line (still exit 0)", () => {
     const home = makeCrewHome();
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });

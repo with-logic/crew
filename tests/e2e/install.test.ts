@@ -551,6 +551,85 @@ describe("list, info, targets", () => {
     expect(capture.stdout()).toContain("description");
   });
 
+  test("info on path ref that backs a configured tap", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
+    // Install once to create an auto-tap for the path.
+    runCli(["install", skill], { home, streams: captureStreams().streams });
+    // Now `info <same-path>` should find the auto-tap in config instead
+    // of attributing ephemerally (exercises the matched-ref branch).
+    const capture = captureStreams();
+    const code = runCli(["info", skill], { home, streams: capture.streams });
+    expect(code).toBe(0);
+    expect(capture.stdout()).toContain("description");
+  });
+
+  test("info <tap-name> lists every skill in that tap", () => {
+    const home = makeCrewHome();
+    // Install via path to create an auto path-tap.
+    const src = makeTempDir();
+    const skill = makeSkill(src, "widget", skillFrontmatter({ name: "widget" }));
+    runCli(["install", skill], { home, streams: captureStreams().streams });
+    // The auto tap's name is derived from the basename — "widget".
+    const capture = captureStreams();
+    const code = runCli(["info", "widget"], { home, streams: capture.streams });
+    expect(code).toBe(0);
+    // Either matched the installed state entry OR walked the tap — both
+    // must mention the skill name.
+    expect(capture.stdout()).toContain("widget");
+  });
+
+  test("info `<tap>/<skill>` walks the named tap", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "widget", skillFrontmatter({ name: "widget", description: "a widget" }));
+    // Add a path tap explicitly.
+    runCli(["tap", "add", src, "localtap"], { home, streams: captureStreams().streams });
+    const capture = captureStreams();
+    const code = runCli(["info", "localtap/widget"], { home, streams: capture.streams });
+    expect(code).toBe(0);
+    expect(capture.stdout()).toContain("widget");
+  });
+
+  test("info `<unknown-tap>/<skill>` is invalid_ref", () => {
+    const home = makeCrewHome();
+    const capture = captureStreams();
+    const code = runCli(["info", "nope/widget"], { home, streams: capture.streams });
+    expect(code).toBe(4);
+    expect(capture.stderr()).toContain("nope");
+  });
+
+  test("info on a bare name that matches a tap (not a state entry)", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "inside", skillFrontmatter({ name: "inside" }));
+    runCli(["tap", "add", src, "mytap"], { home, streams: captureStreams().streams });
+    const capture = captureStreams();
+    const code = runCli(["info", "mytap"], { home, streams: capture.streams });
+    expect(code).toBe(0);
+    expect(capture.stdout()).toContain("inside");
+  });
+
+  test("info with no args is a usage error", () => {
+    const home = makeCrewHome();
+    const capture = captureStreams();
+    const code = runCli(["info"], { home, streams: capture.streams });
+    expect(code).toBe(4);
+    expect(capture.stderr()).toContain("one skill name or reference");
+  });
+
+  test("info on a bare skill name via cross-tap search (not installed)", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "lonely", skillFrontmatter({ name: "lonely", description: "solo skill" }));
+    runCli(["tap", "add", src, "solo"], { home, streams: captureStreams().streams });
+    const capture = captureStreams();
+    const code = runCli(["info", "lonely"], { home, streams: capture.streams });
+    expect(code).toBe(0);
+    expect(capture.stdout()).toContain("lonely");
+  });
+
   test("targets list output", () => {
     const home = makeCrewHome();
     const capture = captureStreams();

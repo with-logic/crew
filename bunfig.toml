@@ -1,19 +1,14 @@
 # Bun configuration for crew.
 #
 # We aim for 100% line AND function coverage (bun applies the single
-# `coverageThreshold` to both). Currently relaxed to 0.85 during the
-# tap/bundle unification landing — uncovered branches:
-#   - tap auto-promote on `crew tap add` against an existing auto-tap
-#   - `crew info <git-url>` ephemeral attribution path
-#   - `crew update` hard-error and tap-not-in-config branches
-#   - Path-kind tap config validation errors
-# Each has a matching TODO test case to write. Once back to 100%,
-# restore the threshold to 1.0.
+# `coverageThreshold` to both). This is enforced locally and in CI —
+# there is no "coverage is nice to have" mode. See CLAUDE.md "Testing
+# philosophy" for the rationale and for guidance on debugging drops.
 #
 # Debugging dropped coverage: the `lcov` reporter pinpoints the exact
 # uncovered lines more reliably than `text`. Convert to HTML with e.g.
 # `genhtml coverage/lcov.info -o coverage/html` for a browsable view.
 [test]
 coverage = true
-coverageThreshold = 0.75
+coverageThreshold = 1.0
 coverageReporter = ["text", "lcov"]
