@@ -22,6 +22,7 @@ export default function Page() {
     <>
       <Nav />
       <main>
+        <BottomCTA />
         <Hero />
         <AgentsStrip />
         <Install />
@@ -37,7 +38,6 @@ export default function Page() {
         <SkillMdExample />
         <Faq />
         <Agents />
-        <BottomCTA />
       </main>
       <Footer />
     </>
