@@ -85,10 +85,12 @@
   letter-spacing: -0.02em;
   color: var(--ink);
   display: inline-block;
-  /* `cap` unit: 1 cap = the font's cap height. Nudging down by 0.1 cap
-     lifts the pill so its vertical center lines up with the heading's
-     cap-height midpoint. */
-  transform: translateY(-0.1em);
+  /* translateY: nudge UP by 0.1em so the pill's vertical center lines
+     up with the heading's cap-height midpoint.
+     translateX: nudge LEFT a smidgen so the word doesn't look
+     right-weighted — monospace `c` has less visual mass than `w`,
+     and the pill's own border makes that imbalance more obvious. */
+  transform: translate(-0.08em, -0.1em);
   margin-right: 0.06em;
 }
 
