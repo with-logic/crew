@@ -9,7 +9,7 @@ export function BottomCTA() {
     <Section tight ruleTop>
       <Container>
         <div className={styles.wrap}>
-          <Eyebrow centered>Teach every agent on your machine</Eyebrow>
+          <Eyebrow centered>Share agent skills across your team</Eyebrow>
           <h2 className={styles.title}>$ crew install &lt;skill&gt;</h2>
           <div className={styles.ctaRow}>
             <Button href="#install">Install crew</Button>

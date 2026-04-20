@@ -11,23 +11,24 @@ const CELLS: readonly {
 }[] = [
   {
     num: "01",
-    subtitle: "share with peers",
-    title: "Publish a skill.",
+    subtitle: "share with your team",
+    title: "One command. Same skills on every laptop.",
     body: (
       <>
-        Any git repo with a <code>SKILL.md</code> at the root is installable. Push to GitHub, send
-        the link — <code>crew install @you/skill</code> and your friend has it.
+        Onboard a new hire in two minutes. Roll out a workflow change to the whole team in one PR.
+        Keep everyone's agents in sync without anyone having to think about it.
       </>
     ),
   },
   {
     num: "02",
-    subtitle: "share with your team",
-    title: "Your skills repo is your registry.",
+    subtitle: "share with peers",
+    title: "Publish a skill.",
     body: (
       <>
-        Point crew at a shared repo — a <em>tap</em> — and everyone on the team pulls the same
-        skills, reviewed in PRs, versioned in git. Onboarding is one command.
+        Any git repo with a <code>SKILL.md</code> at the root is installable. Push to GitHub, send
+        the link — <code>crew install @you/skill</code> and your friend has it. Skills install their
+        dependencies, so one link can onboard a whole workflow.
       </>
     ),
   },
@@ -51,8 +52,8 @@ export function Problem() {
         <SectionHead
           number="01"
           label="Why crew"
-          title="Great skills exist. You should have all of them."
-          description="Right now, the best prompts and agent playbooks either sit on one person's machine or get copy-pasted through gists and Slack messages that nobody keeps current. Crew gives them a home, a way to be shared, and kept up to date. Anyone can publish. Anyone can install."
+          title="The best skills on your team are trapped on other engineers' computers."
+          description="Right now, the prompts and agent playbooks that actually work sit on one person's machine or get copy-pasted through gists and Slack messages nobody keeps current. Crew gives your team a shared shelf — a private git repo everyone installs from, reviews in PRs, and keeps in sync without thinking about it."
         />
         <div className={styles.grid}>
           {CELLS.map((c) => (
