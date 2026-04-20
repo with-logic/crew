@@ -298,10 +298,10 @@ Gemini CLI · GitHub Copilot · Goose · Junie · Kiro · Mistral Vibe · Nanobo
 OpenCode · pi · Roo Code
 
 Don't see yours? If it reads the spec path (`~/.agents/skills/`), the
-`agent-skills` fallback adapter already covers it — crew installs there when
-no tool-specific adapter detects. If it reads a tool-specific path, writing
-the adapter usually takes an afternoon — see
-[§7.1](./PRD.md#71-adapter-operations) in the PRD.
+`agent-skills` adapter already covers it — crew detects it whenever
+`~/.agents/` exists and writes there alongside any tool-specific adapters.
+If it reads a tool-specific path, writing the adapter usually takes an
+afternoon — see [§7.1](./PRD.md#71-adapter-operations) in the PRD.
 
 ## FAQ
 

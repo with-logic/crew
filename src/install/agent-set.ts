@@ -10,7 +10,6 @@
  */
 
 import type { AgentAdapter } from "../agents/adapter.ts";
-import { AGENT_SKILLS_NAME, isFallbackDetected } from "../agents/fallback.ts";
 import { ALL_AGENTS, agentByName } from "../agents/registry.ts";
 import { CrewError } from "../core/errors.ts";
 import type { Config } from "../core/types.ts";
@@ -33,9 +32,7 @@ export function computeAgentSet(
   let active: AgentAdapter[] = [];
   for (const adapter of ALL_AGENTS) {
     const forced = config.forced_agents.includes(adapter.name);
-    // §7.2 fallback — agent-skills is detected iff nobody else is.
-    const detected =
-      adapter.name === AGENT_SKILLS_NAME ? isFallbackDetected(ALL_AGENTS) : adapter.detect();
+    const detected = adapter.detect();
     if (!(forced || detected)) {
       continue;
     }

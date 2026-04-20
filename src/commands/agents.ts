@@ -6,7 +6,6 @@
  * enable/disable subcommands toggle config flags.
  */
 
-import { AGENT_SKILLS_NAME, isFallbackDetected } from "../agents/fallback.ts";
 import { ALL_AGENTS, agentByName } from "../agents/registry.ts";
 import { readConfig, writeConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
@@ -39,8 +38,7 @@ function list(ctx: CommandContext): CommandOutput {
   const config = readConfig(ctx.home);
   const rows: AgentRow[] = ALL_AGENTS.map((a) => ({
     name: a.name,
-    // §7.2 fallback — agent-skills is detected iff nobody else is.
-    detected: a.name === AGENT_SKILLS_NAME ? isFallbackDetected(ALL_AGENTS) : a.detect(),
+    detected: a.detect(),
     forced: config.forced_agents.includes(a.name),
     disabled: config.disabled_agents.includes(a.name),
   }));
