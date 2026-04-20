@@ -9,7 +9,7 @@
  * to see the notice opt in explicitly via `stderrIsTty: true`.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
@@ -23,6 +23,17 @@ import {
 } from "../../src/self-update/download.ts";
 import { resetReleaseFetcher, setReleaseFetcher } from "../../src/self-update/github.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
+
+// Force darwin for the happy-path tests — `runSelfUpdate`'s platform
+// guard rejects non-macOS hosts. Without this override every test in
+// this file would fail on a Linux CI runner.
+const originalPlatform = process.platform;
+beforeAll(() => {
+  Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+});
+afterAll(() => {
+  Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
+});
 
 afterEach(() => {
   resetReleaseFetcher();

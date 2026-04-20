@@ -7,7 +7,7 @@
  * refreshed, error shapes on failure).
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { paths } from "../../src/core/paths.ts";
@@ -22,6 +22,19 @@ import {
 import { resetReleaseFetcher, setReleaseFetcher } from "../../src/self-update/github.ts";
 import { runSelfUpdate, runSelfUpdateCheck } from "../../src/self-update/upgrade.ts";
 import { makeCrewHome } from "../helpers/env.ts";
+
+// Force `process.platform === "darwin"` for the duration of this file.
+// `runSelfUpdate`'s platform guard rejects non-macOS hosts (§10.3), so
+// every happy-path test here would fail on a Linux CI runner without
+// this override. The dedicated "platform guard" test below still
+// flips it back to "linux" for that one case.
+const originalPlatform = process.platform;
+beforeAll(() => {
+  Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+});
+afterAll(() => {
+  Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
+});
 
 afterEach(() => {
   resetReleaseFetcher();
@@ -153,7 +166,9 @@ describe("runSelfUpdateCheck", () => {
 
 describe("platform guard", () => {
   test("non-darwin raises self_update_unavailable before touching the network", () => {
-    const originalPlatform = process.platform;
+    // Inside this file, `beforeAll` has stamped platform = "darwin".
+    // Flip to linux for this test alone and restore to darwin after,
+    // keeping the file-level invariant intact for any later tests.
     Object.defineProperty(process, "platform", { value: "linux", configurable: true });
     let fetcherCalled = false;
     setReleaseFetcher(() => {
@@ -164,7 +179,7 @@ describe("platform guard", () => {
       expect(() => runSelfUpdateCheck(makeCrewHome())).toThrow(/crew ships macOS binaries only/);
       expect(fetcherCalled).toBe(false);
     } finally {
-      Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
+      Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
     }
   });
 });
