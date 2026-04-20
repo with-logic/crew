@@ -14,6 +14,7 @@ import { infoCommand } from "../commands/info/index.ts";
 import { installCommand } from "../commands/install/index.ts";
 import { listCommand } from "../commands/list.ts";
 import { searchCommand } from "../commands/search.ts";
+import { selfUpdateCommand } from "../commands/self-update.ts";
 import { tapCommand } from "../commands/tap/index.ts";
 import type { CommandContext, CommandOutput } from "../commands/types.ts";
 import { uninstallCommand } from "../commands/uninstall/index.ts";
@@ -34,6 +35,7 @@ export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   autoupdate: autoupdateCommand,
   doctor: doctorCommand,
   cache: cacheCommand,
+  "self-update": selfUpdateCommand,
   help: helpCommand,
   version: versionCommand,
 };

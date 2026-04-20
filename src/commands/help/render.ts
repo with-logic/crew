@@ -42,7 +42,10 @@ export function overview(): CommandOutput {
     lines.push("");
   }
   lines.push("ENVIRONMENT");
-  lines.push("  CREW_HOME        Where crew stores its data. Defaults to ~/.crew.");
+  lines.push("  CREW_HOME             Where crew stores its data. Defaults to ~/.crew.");
+  lines.push(
+    "  CREW_NO_UPDATE_CHECK  Set to 1 to silence the new-version notice (also off on CI).",
+  );
   lines.push("");
   lines.push("Run `crew help <command>` for details and examples on any command.");
   lines.push("About Agent Skills: https://agentskills.io/specification");

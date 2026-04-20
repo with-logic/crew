@@ -119,6 +119,10 @@ const REMEDIES: Partial<Record<CrewErrorName, string>> = {
     "another `crew` process is holding the lock. wait a few seconds and try again; if it's really stuck, run `crew doctor --repair`.",
   launchd_failure:
     "launchctl couldn't load/unload the autoupdate agent. `crew autoupdate status` shows details; `crew autoupdate disable` then `enable` is a safe reset.",
+  self_update_unavailable:
+    "couldn't reach the release feed, or the requested version doesn't exist. check your network, then try `crew self-update --check`.",
+  self_update_failed:
+    "crew downloaded the new binary but couldn't swap it in — usually the install directory isn't writable. re-run from a shell that can write to that directory, or reinstall via the installer script.",
   usage_error: "run `crew help` for an overview, or `crew help <command>` for details.",
   unknown_skill: "not installed under any scope. run `crew list` to see what crew is tracking.",
 };

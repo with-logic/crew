@@ -35,10 +35,13 @@ const STRING_GLOBALS = ["scope", "from-git"] as const;
 const BOOLEAN_SUB: Record<string, readonly string[]> = {
   doctor: ["verify", "repair"],
   uninstall: ["prune"],
+  "self-update": ["check"],
 };
 /** Subcommand-specific string flags. */
 const STRING_SUB: Record<string, readonly string[]> = {
   autoupdate: ["interval"],
+  // `--version <tag>` pins a specific release (e.g. `v0.4.0`).
+  "self-update": ["version"],
 };
 /** Flags that should always be collected into a list. */
 const ARRAY_GLOBALS = ["agent"] as const;

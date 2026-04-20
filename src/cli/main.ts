@@ -9,6 +9,7 @@
 import type { CommandContext } from "../commands/types.ts";
 import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
+import { maybeEmitUpdateNotice } from "../self-update/notice.ts";
 import { colorEnabled, makeStyler, type Styler, terminalWidth } from "../util/term.ts";
 import { parseArgs } from "./args.ts";
 import { dispatch } from "./dispatch.ts";
@@ -26,6 +27,15 @@ export interface RunCliOptions {
   readonly width?: number;
   /** Override the interactive prompt (default reads stdin / returns abort on non-TTY). */
   readonly prompt?: PromptFn;
+  /**
+   * Override whether stderr is treated as a TTY for the post-command
+   * update notice (§10.4). Default reads `process.stderr.isTTY`. Tests
+   * set this to `true` when they want to see the notice, `false` to
+   * suppress it. When a `streams` override is in play and the caller
+   * doesn't set this, we default to `false` — captured streams are
+   * almost never actual terminals.
+   */
+  readonly stderrIsTty?: boolean;
 }
 
 /** Run the CLI with the given argv. Returns an exit code. */
@@ -39,6 +49,8 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
   const style = options.style ?? makeStyler(options.streams === undefined && colorEnabled());
   const width = options.width ?? terminalWidth();
   const prompt = options.prompt ?? defaultPrompt;
+  const stderrIsTty =
+    options.stderrIsTty ?? (options.streams === undefined ? Boolean(process.stderr.isTTY) : false);
 
   let parsed: ReturnType<typeof parseArgs>;
   try {
@@ -60,26 +72,43 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
     prompt,
   };
 
+  let exitCode: number;
   try {
     const output = dispatch(parsed.command, ctx);
     writeSuccess(output, parsed.flags.json, parsed.flags.quiet, streams);
-    return output.exitCode;
+    exitCode = output.exitCode;
   } catch (err) {
     if (err instanceof CrewError) {
       writeError(err, parsed.flags.json, streams);
-      return err.exitCode;
+      exitCode = err.exitCode;
+    } else {
+      // Unexpected runtime error — wrap it in a usage error so the user
+      // gets a formatted message and exit 4, rather than a raw stack trace.
+      const message = (err as Error).message ?? String(err);
+      writeError(
+        new CrewError(
+          "usage_error",
+          `crew hit an unexpected error: ${message} — please report this at https://github.com/logic-app/crew/issues with steps to reproduce`,
+        ),
+        parsed.flags.json,
+        streams,
+      );
+      exitCode = 4;
     }
-    // Unexpected runtime error — wrap it in a usage error so the user
-    // gets a formatted message and exit 4, rather than a raw stack trace.
-    const message = (err as Error).message ?? String(err);
-    writeError(
-      new CrewError(
-        "usage_error",
-        `crew hit an unexpected error: ${message} — please report this at https://github.com/logic-app/crew/issues with steps to reproduce`,
-      ),
-      parsed.flags.json,
-      streams,
-    );
-    return 4;
   }
+
+  // §10.4 update-available notice. Runs on every command path (success
+  // or failure) so users see it regardless of what they just tried.
+  // The function has its own suppression rules — we call it
+  // unconditionally and let it decide.
+  maybeEmitUpdateNotice({
+    command: parsed.command,
+    home,
+    json: parsed.flags.json,
+    quiet: parsed.flags.quiet,
+    streams,
+    stderrIsTty,
+  });
+
+  return exitCode;
 }

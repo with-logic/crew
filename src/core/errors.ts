@@ -26,6 +26,8 @@ export type CrewErrorName =
   | "config_invalid"
   | "state_locked"
   | "launchd_failure"
+  | "self_update_unavailable"
+  | "self_update_failed"
   | "usage_error"
   | "unknown_skill";
 
@@ -52,6 +54,8 @@ export const EXIT_CODES: Record<CrewErrorName, number> = {
   config_invalid: 4,
   state_locked: 7,
   launchd_failure: 8,
+  self_update_unavailable: 5,
+  self_update_failed: 8,
   usage_error: 4,
   unknown_skill: 4,
 };
