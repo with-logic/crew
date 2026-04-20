@@ -316,15 +316,37 @@ All paths inside `~/.crew/` are owned by crew. External tools should not write h
 # Default tap is always present unless explicitly removed.
 taps:
   - name: core
+    kind: git
+    registered: true
     url: https://github.com/crew-sh/core.git
   - name: acme
+    kind: git
+    registered: true
     url: https://github.com/acme/crew-skills.git
-  # `subpath` is optional. When present, the tap points at that
-  # directory inside the repo instead of the repo root — useful for
-  # monorepos where skills live in e.g. `skills/`.
+  # `subpath` is optional on git-kind taps. When present, the tap
+  # points at that directory inside the repo instead of the repo root
+  # — useful for monorepos where skills live in e.g. `skills/`.
   - name: backend-skills
+    kind: git
+    registered: true
     url: https://github.com/with-logic/backend.git
     subpath: skills
+  # Auto-taps are created implicitly when the user runs `crew install`
+  # against a source crew hasn't seen before. They behave like
+  # registered taps for update/search purposes, but are garbage-
+  # collected when their last skill is uninstalled. Marked by
+  # `registered: false`.
+  - name: some-team-skills
+    kind: git
+    registered: false
+    url: https://github.com/some-team/skills.git
+  # Path-kind taps are local directories. No fetching; `tap update`
+  # skips them. Usually auto; can be registered via `crew tap add`
+  # pointing at a local path.
+  - name: my-local-skills
+    kind: path
+    registered: false
+    path: /Users/steve/code/my-skills
 
 # Targets the user has force-disabled. Any target not listed here is auto-detected.
 disabled_targets: []
@@ -435,11 +457,11 @@ Written into every crew-installed skill directory. JSON, UTF-8, trailing newline
 {
   "schema_version": 1,
   "name": "python-testing",
-  "source": {
-    "type": "tap",
-    "tap": "core",
-    "path": "python-testing"
-  },
+  "tap_name": "core",
+  "tap_kind": "git",
+  "tap_url": "https://github.com/crew-sh/core.git",
+  "tap_subpath": "",
+  "path": "python-testing",
   "ref": "main",
   "resolved_sha": "a1b2c3d4e5f6789abcdef0123456789abcdef012",
   "content_hash": "sha256:9f8e7d6c5b4a39281706f5e4d3c2b1a0f9e8d7c6b5a4938271605f4e3d2c1b0a",
@@ -453,16 +475,20 @@ Written into every crew-installed skill directory. JSON, UTF-8, trailing newline
 
 - `schema_version` — integer, currently `1`. Bumped when the marker schema changes incompatibly.
 - `name` — the skill's `name` from `SKILL.md` frontmatter.
-- `source` — one of:
-  - `{"type": "tap", "tap": "<tap-name>", "path": "<relative-path-in-tap>"}`
-  - `{"type": "git", "url": "<clone-url>", "subpath": "<subpath-or-empty>"}`
-  - `{"type": "path", "path": "<absolute-path-at-install-time>"}`
+- `tap_name` — the configured tap that owns this skill at install time. May not exist in `config.yaml` later (user removed it manually); doctor uses the rest of the marker to rebuild a tap entry.
+- `tap_kind` — `git` or `path`. Determines how `doctor --repair` reconstructs the tap.
+- `tap_url` — for `tap_kind: git`, the clone URL. Empty string for `tap_kind: path`.
+- `tap_subpath` — for `tap_kind: git`, an optional directory inside the repo (empty string when none). Empty string for `tap_kind: path`.
+- `tap_path` — for `tap_kind: path`, the absolute filesystem path to the tap. Empty string for `tap_kind: git`.
+- `path` — the skill's location relative to the tap's root (after subpath is applied for git taps). Empty string when the tap itself is one skill (root SKILL.md).
 - `ref` — the ref the user asked for (`main`, `v1.2.0`, a SHA, or `null` if the default branch was used and no ref was specified).
-- `resolved_sha` — the full 40-char commit SHA the install came from, or `null` for path sources that were never in git.
+- `resolved_sha` — the full 40-char commit SHA the install came from, or `null` for path-kind taps.
 - `content_hash` — the hash per §12.1, prefixed `sha256:`.
 - `scope` — `user` or `project`.
 - `installed_at` — RFC 3339 UTC timestamp.
 - `installed_by` — free-form string identifying the implementation. Informational only.
+
+The marker is intentionally self-describing: `state.json` references taps by name only, but the marker carries the full source description so `doctor --repair` can rebuild a missing tap from scratch.
 
 Agents ignore unknown files in skill directories per the spec, so `.crew.json` is invisible to them.
 
@@ -580,10 +606,12 @@ shift which form applies.
 Given one or more skill references on the command line, `crew install` proceeds as follows. Every step is mandatory.
 
 1. **Parse each reference** per §8 into a structured source.
-2. **Acquire the source contents.**
-   - Path source: read from disk at the given path.
-   - Git source: shallow-clone into `~/.crew/cache/git/<host>/<owner>/<repo>@<ref>/` if absent, else `git fetch` and reset to the ref. Resolve the ref to a full commit SHA. Check out the subpath (or the repo root).
-   - Tap source: the tap's clone is at `~/.crew/taps/<tap-name>/`. If absent, clone it (§16). Read the skill directory at the tap-relative path.
+2. **Acquire the source contents** by attributing the install to a tap (§16):
+   - Bare-name reference (`foo`) or qualified reference (`<tap>/foo`): use the named (or matching) registered/auto tap. Clone its repo if absent; never fetches per the network policy in §16.6.
+   - Tap-name reference (`<tap-name>` with no slash) where `<tap-name>` matches a configured tap: install the entire tap (every skill it currently exposes).
+   - Git URL or shorthand (`@org/repo`, `gh:org/repo`, etc.): if any configured tap already points at the same URL+subpath, use it; otherwise create an auto tap (§16.5) and use it. The new tap is cloned and refreshed.
+   - Path reference (`./foo`, `/abs/foo`): if any configured tap already points at the same path, use it; otherwise create a path-kind auto tap and use it.
+   In all cases, the resolved `state.installations[i].source` is `{ tap: <tap-name>, path: <skill-relative-path-inside-tap> }`. The URL/path of the tap itself lives in `config.yaml`.
 3. **Resolve refs to SHAs.** For git sources and tap sources, the ref (tag, branch, or `HEAD`) is resolved to a full commit SHA. This SHA is what's recorded in state and markers, even if the user specified a tag or branch.
 4. **Validate each candidate skill** against the Agent Skills specification:
    - `SKILL.md` exists at the expected location.
@@ -594,13 +622,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Every other spec rule from the Agent Skills specification.
    Invalid skills abort with `invalid_skill` (§13) before any files are written.
 5. **Expand directories.** If the resolved source location has a `SKILL.md` at its root, it is one skill. If not, crew walks **exactly one directory level deep** under the resolved location and adds every subdirectory containing a `SKILL.md` to the install set. Deeper nesting is ignored. A directory with no valid children and no root `SKILL.md` aborts with `no_skills_found`.
-   - **Bundle tagging.** When directory expansion produces more than
-     one child skill, every child is tagged with the same `bundle`
-     record (§11.1): `{ ref: <user's original reference string>,
-     source: <parsed source> }`. A single-skill expansion (root
-     `SKILL.md` present) is not a bundle and does not set this field.
-     The bundle record is what enables `crew update` to re-expand the
-     source and pick up skills added upstream (§10.1.1).
+   - Multi-skill expansions are how the user gets every skill in a tap installed at once. Each child becomes an independent state entry attributed to the same tap (`source.tap`); upstream additions to that tap are picked up automatically by `crew update` (§10.1.1).
 6. **Resolve dependencies.** For each skill in the install set, read `metadata.crew.dependencies` and add each to the install set. Continue recursively until no new dependencies appear. Cycles are allowed and terminate naturally (a skill already in the set is not re-added).
    - **Bare-name resolution precedence:** (1) a sibling directory at the same source and ref (for sources where "sibling" is meaningful — git sources with a parent directory and path sources in a parent directory); (2) the tap the parent skill was installed from, if any; (3) search across all configured taps. An unqualified name matching multiple taps aborts with `ambiguous_dependency` naming the candidates.
    - **Conflict detection:** if two skills in the install set have the same `name` but resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
@@ -633,18 +655,18 @@ Exit code: 0 if every skill succeeded in at least one target; 1 if any skill fai
 
 With no arguments, updates every installed skill. With arguments, updates only the named skills.
 
-1. Fetch upstream for the taps this run will actually touch. With no args, that is every configured tap. With `<name>...`, it is the subset of taps that host the named entries — plus any taps hosting entries pulled in by step 2's dependency closure, and bundle-member taps for any bundle being re-expanded. Taps that fail to fetch produce a warning but do not abort the run.
+1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<name>...`, it is the subset of taps that host the named entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run.
 2. Build the list of skills to consider:
    - `crew update` with no args → every entry in `state.json`.
    - `crew update <name>...` → the named entries, **plus their transitive dependency closure**. Concretely: for each name, take its state entry's direct deps (from its SKILL.md `metadata.crew.dependencies`, resolved against `required_by` in state), then their deps, and so on. A dep that isn't in state — one that was never installed — is not added; crew does not install new skills during update. Entries pulled in this way appear in the results alongside the named ones, marked `transitively_required_by: [<name>...]` in JSON output so callers can tell them apart. An unknown top-level name (`<name>` not in state) is an error per argument.
-2b. **Re-expand bundles** per §10.1.1. Any newly-added child skill is
-   added to the list of skills to consider as a fresh install; any
-   child skill that has disappeared from the bundle is reported with
-   `source_gone` (per the upstream-deletion rule above) and left in
-   place. Only bundles reachable from the current update scope are
-   re-expanded — on `crew update <name>`, a bundle is re-expanded only
-   if `<name>` is one of its members or the bundle `ref` itself is
-   passed as `<name>`.
+2b. **Re-expand taps** per §10.1.1. For every git-kind tap with at
+   least one state entry attributed to it (filtered by the same name-
+   filter rule as step 2 — `crew update <name>` only touches taps that
+   host a named entry or one of its transitive deps), walk the tap one
+   level deep. Any newly-added child skill is added to the list of
+   skills to consider as a fresh install; any child skill that has
+   disappeared from the tap upstream is reported with `source_gone`
+   (per the upstream-deletion rule above) and left in place.
 3. For each skill:
    a. Skip if the skill is pinned to an exact SHA, unless `--force`.
    b. If pinned to a tag, re-resolve the tag: if the tag moved and `--force` is given, proceed; otherwise skip.
@@ -673,44 +695,44 @@ tap's clone URL 404s, or a git repo is gone. Those produce
 not." The distinction matters because a transient network failure
 should not be confused with a deliberate upstream deletion.
 
-### 10.1.1 Bundle re-expansion
+### 10.1.1 Tap re-expansion
 
-A **bundle** is the expansion record produced when the user installs a
-source that has no root `SKILL.md` and so is walked one level deep
-(§9 step 5). The source's own `ref` — the string the user typed —
-becomes the `bundle.ref` on every resulting state entry (§11.1).
+Crew tracks every git-kind tap (registered by `crew tap add` or auto-
+created by an install — see §16) for upstream growth. On every `crew
+update` run, for each git-kind tap that has at least one state entry
+(or a registered tap with zero entries when the user passed `--all`,
+not currently spec'd), crew:
 
-On every `crew update` run, for each distinct `bundle` present in
-state, crew:
-
-1. Re-parses `bundle.ref` as a skill reference and re-acquires the
-   source per §9 steps 1–2. Failures here produce a per-bundle
-   `source_unreachable` or `ref_not_found` outcome; all members of the
-   bundle are left in place.
-2. Walks one level deep under the resolved location (§9 step 5) and
+1. Walks one level deep under the tap's resolved root (§9 step 5) and
    builds the current child set.
-3. For each child that is **not** already in state (a skill added to
-   the bundle upstream since the user's last update): runs the install
-   algorithm (§7.3) for every target in the current target set, at the
-   scope the bundle was originally installed to, with `explicit: true`
-   and `bundle` set to the same bundle record. This is how
+2. For each child that is **not** already in state (a skill the
+   maintainer added upstream since the user's last update): runs the
+   install algorithm (§7.3) for every target in the current target
+   set, at the scope of the originating install, with `explicit: true`
+   and `source.tap` pointing at this tap. This is how
    `crew install @with-logic/skills` + autoupdate picks up new skills
-   as the team adds them.
-4. For each skill in state with this bundle whose directory is **no
-   longer present** under the resolved location: reports `source_gone`
+   as the team adds them, with no follow-up `crew install` from the
+   user.
+3. For each skill in state attributed to this tap whose directory is
+   **no longer present** under the resolved root: reports `source_gone`
    and leaves the local install untouched (per the upstream-deletion
    rule in §10.1). Removal is always explicit.
-5. For each skill in state with this bundle whose directory is still
-   present: proceeds with the normal per-skill update logic (step 3
-   of §10.1) — stage, re-resolve, reinstall if SHA moved.
+4. For each skill in state attributed to this tap whose directory is
+   still present: proceeds with the normal per-skill update logic
+   (step 3 of §10.1) — stage, re-resolve, reinstall if SHA moved.
+
+The behavior is the same regardless of whether the tap was registered
+manually (`crew tap add`) or created automatically by a multi-skill
+install — they're stored identically in `config.yaml` and re-expanded
+identically here.
 
 **Autoupdate.** The background agent (§10.2) runs `crew update`, so
-bundle re-expansion is automatic. This is the expected flow: a user
-runs `crew install @with-logic/skills` once and enables autoupdate;
-as the team adds skills to the repo, they appear in the user's agents
-on the next autoupdate tick without further action.
+tap re-expansion is automatic. The expected flow: a user runs
+`crew install @with-logic/skills` once (creating an auto-tap) and
+enables autoupdate; as the team adds skills, they appear in the
+user's agents on the next autoupdate tick without further action.
 
-**`--dry-run` on update** reports bundle additions and deletions
+**`--dry-run` on update** reports tap additions and deletions
 separately from per-skill updates so users can preview what
 autoupdate would do.
 
@@ -777,11 +799,7 @@ UTF-8 JSON with a trailing newline. Single top-level object.
   "installations": [
     {
       "name": "python-testing",
-      "source": {
-        "type": "tap",
-        "tap": "core",
-        "path": "python-testing"
-      },
+      "source": { "tap": "core", "path": "python-testing" },
       "ref": "main",
       "resolved_sha": "a1b2c3d4e5f6789abcdef0123456789abcdef012",
       "content_hash": "sha256:9f8e7d...",
@@ -794,7 +812,7 @@ UTF-8 JSON with a trailing newline. Single top-level object.
     },
     {
       "name": "team-conventions",
-      "source": { "type": "git", "url": "https://github.com/acme/skills.git", "subpath": "team" },
+      "source": { "tap": "acme-team", "path": "team-conventions" },
       "ref": null,
       "resolved_sha": "b2c3d4e5f6789abcdef0123456789abcdef01234",
       "content_hash": "sha256:...",
@@ -809,6 +827,8 @@ UTF-8 JSON with a trailing newline. Single top-level object.
   ]
 }
 ```
+
+Every entry's `source` is `{ tap, path }`: the name of a configured tap (registered or auto, see §16) and the skill's directory path inside that tap. The URL or filesystem location is held in `config.yaml` on the tap row, not duplicated here, so renaming a tap or changing its URL doesn't require rewriting state.
 
 One entry per (skill, scope, project_root) triple: the same skill can be installed at user scope, at project scope under `~/work/product-x`, and at project scope under `~/work/product-y` — that's three independent entries. `targets` is the list of target adapter names this skill is currently installed into.
 
@@ -830,46 +850,25 @@ the local install is preserved and the user is informed they can
 gone.
 
 **`explicit`** (boolean). True if the user asked for this skill by name
-on a `crew install` command, either directly or via a bundle reference
-(§10.1.1) the user named. False if the skill was pulled in solely as a
-transitive dependency of another install. A skill first installed as a
-dependency and later named directly by the user is promoted to
-`explicit: true` on that later install.
+on a `crew install` command, either directly (`crew install foo`) or
+as a member of a multi-skill source the user named — including
+`crew install <tap-name>` (which installs every skill in the tap;
+each is `explicit: true`) and `crew install <git-url>` against a
+multi-skill repo (same outcome via an auto-tap, see §16). False only
+when the skill was pulled in solely as a transitive dependency of
+another install. A skill first installed as a dependency and later
+named directly is promoted to `explicit: true` on that later install.
 
 **`required_by`** (array of strings). Names of other installed skills
 at the same scope whose `dependencies` include this skill. Maintained
-by crew on every install and uninstall. A skill with both
-`explicit: false`, an empty `required_by`, and no `bundle` is an
-autoremovable orphan — `crew uninstall --prune` removes it.
-
-**`bundle`** (object, optional). Present only on entries installed via
-directory expansion (§9 step 5) from a git or tap source — i.e. the
-user ran `crew install @with-logic/skills` and the source had no root
-`SKILL.md`, so crew walked one level deep and installed every child.
-Records what the user asked for so update can re-expand the bundle.
-
-```json
-"bundle": {
-  "ref": "@with-logic/skills",
-  "source": { "type": "git", "url": "https://github.com/with-logic/skills.git", "subpath": "" }
-}
-```
-
-- `ref` — the exact reference string the user typed on the command
-  line. Used verbatim by `crew update` to re-resolve the bundle.
-- `source` — the parsed source of the bundle (same shape as the
-  top-level `source` field). Recorded so update can re-resolve even
-  if the shorthand format of `ref` evolves across crew versions.
-
-Every skill installed from the same bundle invocation shares the same
-`bundle` value. A skill can belong to at most one bundle at a given
-(scope). A skill installed directly by name has no `bundle`. A skill
-installed as a dependency has no `bundle` (dependencies belong to
-their parent skill, not to the bundle that pulled in the parent).
+by crew on every install and uninstall. A skill with `explicit: false`
+and empty `required_by` is an autoremovable orphan —
+`crew uninstall --prune` removes it.
 
 **Invariants:**
 
 - Every entry in `state.json` should correspond to a `.crew.json` marker in every listed target. `crew doctor` detects and reports drift.
+- Every entry's `source.tap` MUST name a tap currently configured in `config.yaml`. `crew doctor --repair` recovers a missing tap by recreating it as an auto-tap from marker contents.
 - `pinned` is true if the ref was an exact SHA or a tag. Otherwise false.
 - Every name appearing in any entry's `required_by` is itself an installed skill at the same scope. `crew doctor` detects and reports dangling `required_by` names.
 - `project_root` is present iff `scope === "project"`. User-scope entries MUST NOT carry a `project_root`; project-scope entries MUST.
@@ -996,9 +995,20 @@ Crew mutates state from multiple entry points (interactive commands, autoupdate)
 
 ## 16. Taps
 
-### 16.1 Tap repository structure
+### 16.1 What a tap is
 
-A tap is any git-managed directory whose immediate children are skills (each containing a `SKILL.md`). By default, the tap directory is the root of the configured repo; a tap may optionally point at a subdirectory of the repo via `subpath` (see §6.1 and §16.3), which is useful for monorepos where skills live under a path like `skills/`. Nested organization below the tap directory is permitted but only its immediate children are indexed by `crew search`. Example:
+A **tap** is any directory whose immediate children are skills (each containing a `SKILL.md`). It can be a git-managed directory (a clone of a git repo, optionally rooted at a subdirectory via `subpath`) or a local filesystem directory. Every tap has a unique short name in `config.yaml`. Every installed skill belongs to exactly one tap, recorded as `state.installations[i].source.tap`.
+
+Taps come in two flavors that differ only in lifecycle, not in structure or behavior:
+
+- **Registered taps** are added by the user (`crew tap add`) and persist until explicitly removed. They appear in `crew tap list` with `kind: registered`. The default `core` tap is registered.
+- **Auto taps** are created implicitly when `crew install` resolves a source crew hasn't seen before (e.g. `crew install @with-logic/skills`). They behave identically to registered taps for `crew update`, `crew search`, and `crew install` — but they are garbage-collected when their last skill is uninstalled. They appear in `crew tap list` with `kind: auto`.
+
+A user can promote an auto tap to registered by running `crew tap add` against the same URL: it idempotently re-points the existing entry, flips `registered: true`, and applies any `<name>` the user supplies.
+
+Both kinds can be either git-backed or path-backed. Path-backed taps don't fetch (there's no upstream); `crew tap update` skips them.
+
+A tap directory may contain non-skill files and subdirectories — only immediate children with a valid `SKILL.md` are recognized. Example tap:
 
 ```
 acme-skills/
@@ -1011,35 +1021,68 @@ acme-skills/
     └── contributing.md  # not a skill, ignored
 ```
 
-A directory is considered a skill if it contains a `SKILL.md` whose frontmatter passes spec validation. All others are ignored by `crew search` but can still be installed if the user names them directly by path.
-
 ### 16.2 Default tap
 
-Crew ships with a default tap named `core` at a URL specified by the implementation's build. The default tap is always listed first in `crew tap list` and cannot be removed via `crew tap remove core` unless `--force` is used.
+Crew ships with a registered default tap named `core` at a URL specified by the implementation's build. The default tap is always listed first in `crew tap list` and cannot be removed via `crew tap remove core` unless `--force` is used.
 
 ### 16.3 Tap management
 
-- `crew tap add <url> [name]` clones the repo into `~/.crew/taps/<name>/`. `<url>` may carry a `//<subpath>` tail (the same `//` syntax git-shaped references use, per §8.2) to point the tap at a directory inside the repo instead of the root — e.g. `crew tap add @with-logic/backend//skills`. If `name` is omitted, it is derived from the URL: for root taps, the final path component (minus `.git`); for subpath taps, `<last-repo-segment>-<last-subpath-segment>` (so `@with-logic/backend//skills` → `backend-skills`). No confirmation is required — adding a tap only affects what crew searches and doesn't modify anything outside `~/.crew/`.
-- Adding a tap with a `name` + `url` (+ `subpath`) triplet that already exists is a no-op (exit 0). Adding the same name with a different URL or subpath is a `usage_error` — the user must pick a different name.
-- `crew tap add` is transactional with respect to config: the initial clone runs **before** the tap is recorded in `config.yaml`. If the clone fails (bad URL, typo, network failure, no access), the tap is not added — neither `crew tap list` nor `~/.crew/config.yaml` shows it, and any partially-materialized clone directory is removed. Retry with a corrected URL starts clean.
-- `crew tap <url> [name]` is a shorthand for `crew tap add <url> [name]`. When the first positional argument to `crew tap` is a recognized reference (a git URL, `gh:`, `@owner/repo`, or any shape that parses as a git source per §8.2), crew treats it as `add`. Positionals that aren't git-shaped fall through to subcommand dispatch; unknown subcommands produce `usage_error`.
-- Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`) — the subpath is entirely internal to the tap's configuration and never appears in skill references.
-- `crew tap remove <name>` deletes the local clone and removes the tap from config.
-- `crew tap list` prints each tap's name, URL, and last-fetched timestamp.
-- `crew tap update [<name>...]` fetches upstream for every configured tap (or only the named ones) and fast-forwards each tap's working tree. It does **not** touch installed skills — it is the "refresh taps only" knob; contrast with `crew update`, which refreshes taps **and** updates installed skills. Per-tap failures are reported per-row and do not abort the run; exit code is 1 if any tap failed, 0 otherwise.
+- `crew tap add <url-or-path> [<name>]` registers a tap.
+  - `<url-or-path>` is either a git URL (with optional `//<subpath>` tail using the same syntax as §8.2 git refs — e.g. `crew tap add @with-logic/backend//skills`) or a filesystem path.
+  - If `<name>` is omitted, it is derived: for root git taps, the final URL path component (minus `.git`); for subpath git taps, `<last-repo-segment>-<last-subpath-segment>` (so `@with-logic/backend//skills` → `backend-skills`); for path taps, the basename of the directory.
+  - For git taps, the initial clone runs **before** the tap is written to config. If the clone fails (bad URL, typo, network failure, no access), the tap is not added — neither `crew tap list` nor `config.yaml` shows it, and any partially-materialized clone directory is removed.
+  - If the named tap already exists with a matching URL/path/subpath, the call is an idempotent no-op (exit 0). If an existing tap of the same name has a different URL/path/subpath, the call is a `usage_error` — the user must pick a different name.
+  - If the URL/path matches an existing **auto** tap, `crew tap add` promotes it: `registered` flips to `true`, and the `<name>` argument (if supplied) renames the tap. No re-clone.
+- `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Unknown subcommands and bare words that don't parse as a source produce `usage_error`.
+- Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`). The subpath, URL, or path is entirely internal — it never appears in skill references.
+- `crew tap remove <name>` deletes the local clone and removes the tap from config. Auto taps are also removed automatically when their last associated state entry is uninstalled (see §16.5).
+- `crew tap list` prints each tap's name, kind (`registered` / `auto`), source (URL`//subpath` or path), and last-fetched timestamp (for git-kind taps only). `--json` emits the structured shape.
+- `crew tap update [<name>...]` fetches upstream for every git-kind tap (or only the named ones) and fast-forwards each tap's working tree. Path-kind taps are skipped silently. Per-tap failures are reported per-row and do not abort the run; exit code is 1 if any tap failed, 0 otherwise. It does **not** touch installed skills — contrast with `crew update`, which refreshes taps and updates installed skills.
 
-### 16.4 Search and network policy
+### 16.4 `crew install <tap-name>`
 
-`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured tap. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. `--json` emits a structured `{ hits, warnings }` object.
+When the positional argument to `crew install` matches a configured tap name (registered or auto), crew installs every skill the tap currently exposes — the same outcome as if the user had typed the tap's underlying URL/path. State entries are recorded with `source.tap = <tap-name>` and `explicit = true`.
 
-**Network policy.** Read-only commands (`crew search`, `crew info`, `crew list`, `crew install <bare-name>` and `<tap>/<skill>` forms, bundle re-expansion during `crew update`) MUST NOT contact the network. They read from local tap clones as-of the last `crew update` / `crew tap update`. A tap that has never been cloned is materialized on demand on first use; if that initial clone fails (offline, bad URL), the command warns on stderr and skips that tap — it does not fail the whole run.
+When a positional matches **both** a configured tap name AND an installable skill in some other tap (i.e. there's a `<other-tap>/<name>` resolution available), crew prompts the user interactively:
+
+```
+`python-testing` matches both a tap and a skill (from other-tap).
+  [Y] install tap `python-testing` (3 skills)
+  [n] install skill `other-tap/python-testing`
+Choice [Y/n]:
+```
+
+Tap wins on enter (`Y`). The user can pass `--yes` to skip the prompt. When stdin is not a TTY (scripts, CI), the prompt is suppressed and crew aborts with a `usage_error` instructing the user to pass `--yes` or to qualify the skill as `<other-tap>/<name>`. This avoids silently installing a whole tap when a script just wanted a skill, while still letting the interactive case stay one-keystroke fast.
+
+When a positional matches a tap name but no other tap holds a same-named skill, no prompt — the tap installs silently.
+
+### 16.5 Auto-tap creation and lifecycle
+
+When `crew install` is given a reference that resolves to a source not currently backed by any configured tap (e.g. a brand-new git URL like `crew install @with-logic/skills`), crew:
+
+1. Derives a name with the same algorithm as `crew tap add`.
+2. If the derived name is already in use by a tap with a different URL/path/subpath, suffixes the name with `-2`, `-3`, etc. until unique. (Registered-tap-add never silently suffixes — only auto-tap creation does.)
+3. Writes a new tap row with `registered: false` and the appropriate `kind`/`url`/`path`/`subpath` fields.
+4. Acquires the source under the new tap name and proceeds with the install.
+
+Auto taps are functionally indistinguishable from registered taps for `crew update`, `crew tap update`, `crew search`, and `crew install <tap-name>` purposes. The only differences are:
+
+- They appear with `kind: auto` in `crew tap list`.
+- They are garbage-collected by `crew uninstall` when their last associated state entry is removed: the tap row is dropped from `config.yaml` and the local clone is deleted. (Registered taps are not garbage-collected.)
+- A user can convert an auto tap to registered by running `crew tap add <url-or-path>` against the same source — this idempotent promotion preserves the existing clone and installed skills.
+
+### 16.6 Search and network policy
+
+`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured git-kind tap (registered or auto). Path-kind taps are searched too if their root is reachable. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. `--json` emits a structured `{ hits, warnings }` object.
+
+**Network policy.** Read-only commands (`crew search`, `crew info`, `crew list`, `crew install <bare-name>` and `<tap>/<skill>` forms, tap re-expansion during `crew update` for unrelated taps) MUST NOT contact the network. They read from local tap clones as-of the last `crew update` / `crew tap update`. A tap that has never been cloned is materialized on demand on first use; if that initial clone fails (offline, bad URL), the command warns on stderr and skips that tap — it does not fail the whole run.
 
 The only commands that actively fetch from upstream are:
 
-- `crew update` (§10.1 step 1). Without args: every configured tap. With `<name>...`: only the taps and git caches that back the named entries (and any bundle being re-expanded because one of its members was named). Taps hosting unrelated skills are not touched.
-- `crew tap update` — every configured tap, or the named subset.
-- `crew tap add` — initial clone of the freshly-added tap.
-- `crew install <git-url>` — the specific ad-hoc URL the user named. Not other configured taps.
+- `crew update` (§10.1 step 1). Without args: every configured git-kind tap. With `<name>...`: only the taps that back the named entries (after the dependency closure of §10.1 step 2 expands them). Taps hosting only unrelated skills are not touched.
+- `crew tap update` — every git-kind tap, or the named subset.
+- `crew tap add` — initial clone of the freshly-added git tap.
+- `crew install <git-url>` and `crew install <tap-name>` against an out-of-date tap — fetches that tap's URL.
 
 ## 17. Implementation latitude
 
@@ -1212,13 +1255,13 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-11 | §10.1 | When an installed skill's upstream source resolves but the skill's directory or tap entry no longer exists, `crew update` reports `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
 | C-UPD-12 | §10.1 | An update run whose only abnormalities are `source_gone` exits 0. |
 | C-UPD-13 | §10.1 | `crew update` never deletes a target's installed skill directory, its marker, or its state entry as a consequence of upstream changes. Removal is only ever performed by `crew uninstall`. |
-| C-UPD-14 | §10.1.1 | `crew install <dir-source>` on a source with no root `SKILL.md` records a `bundle` object on every resulting state entry whose `ref` is the user's original reference string and `source` is its parsed source. |
-| C-UPD-15 | §10.1.1 | `crew update` re-resolves every distinct bundle in state and installs any child skill that was added to the bundle upstream since the last update. |
-| C-UPD-16 | §10.1.1 | A child skill removed from a bundle upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
-| C-UPD-17 | §10.1.1 | A single-skill expansion (resolved source has a root `SKILL.md`) does NOT record a `bundle` field. |
-| C-UPD-18 | §10.1.1 | `crew update --dry-run` on a bundle with pending additions lists those additions without installing anything. |
+| C-UPD-14 | §16.5 | `crew install <git-url>` against a source with no matching configured tap creates an auto tap (`registered: false`) in `config.yaml`. Every resulting state entry's `source.tap` names that tap. |
+| C-UPD-15 | §10.1.1 | `crew update` re-walks every git-kind tap with at least one state entry and installs any child skill added to the tap upstream since the last update. |
+| C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
+| C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`, its clone deleted. Registered taps are NOT garbage-collected by uninstall. |
+| C-UPD-18 | §10.1.1 | `crew update --dry-run` on a tap with pending additions lists those additions without installing anything. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
-| C-UPD-23 | §10.1 / §16.4 | `crew update <name>...` restricts fetching to taps and ad-hoc git caches that back the named entries (and members of any bundle targeted by the name filter). Taps hosting only unrelated skills are NOT fetched. |
+| C-UPD-23 | §10.1 / §16.6 | `crew update <name>...` restricts fetching to taps that back the named entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
 | C-UPD-24 | §10.1 | `crew update <name>...` includes each named entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the named ones, marked as transitively required in `--json` output. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background agent from its launchd-assigned cwd. |
@@ -1263,7 +1306,12 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-14 | §16.3 | Adding a tap whose `(name, url, subpath)` already exists is a no-op (exit 0). Adding the same name with a different URL or subpath is `usage_error`. |
 | C-TAP-15 | §16.3 | `crew tap add` is transactional: if the clone fails, the tap is NOT recorded in `config.yaml` and does NOT appear in `crew tap list`. Any partially-materialized clone directory is removed. |
 | C-TAP-16 | §16.3 | `crew tap update` fetches + fast-forwards every configured tap. `crew tap update <name>...` restricts to the named taps. Unknown names produce `usage_error`. It does not touch installed skills. |
-| C-TAP-17 | §16.4 | `crew search`, `crew info`, `crew list`, and `crew install` for bare-name or `<tap>/<skill>` references do not issue a `git fetch`. They read from local tap clones only. A missing clone is materialized on first read; an unreachable tap at that moment warns and is skipped. |
+| C-TAP-17 | §16.6 | `crew search`, `crew info`, `crew list`, and `crew install` for bare-name or `<tap>/<skill>` references do not issue a `git fetch`. They read from local tap clones only. A missing clone is materialized on first read; an unreachable tap at that moment warns and is skipped. |
+| C-TAP-18 | §16.4 | `crew install <tap-name>` (where `<tap-name>` matches a configured tap, registered or auto) installs every skill the tap currently exposes. Each resulting state entry has `source.tap = <tap-name>` and `explicit = true`. |
+| C-TAP-19 | §16.4 | When `<positional>` matches both a tap name and a skill name (in some other tap), `crew install <positional>` prompts the user with `[Y/n]` (tap wins on enter). `--yes` skips the prompt and installs the tap. In a non-TTY environment, the command aborts with `usage_error` instructing the user to pass `--yes` or qualify the skill as `<other-tap>/<name>`. |
+| C-TAP-20 | §16.5 | `crew install <git-url>` against a URL not matching any configured tap creates a new auto tap (kind: git, registered: false), choosing a unique derived name (suffixing `-2`, `-3`, ... if a name collision exists with a different URL). |
+| C-TAP-21 | §16.5 | `crew install <local-path>` creates an auto tap with `kind: path`, `registered: false`, `path: <abs-path>`. `crew tap update` skips path-kind taps; `crew search` walks them when reachable. |
+| C-TAP-22 | §16.5 | Running `crew tap add <url>` against a URL that already backs an auto tap promotes it (`registered` flips to `true`) without re-cloning, and applies any user-supplied `<name>` argument. |
 
 #### C-STATE: State and markers (§11)
 
@@ -1445,9 +1493,8 @@ crew install @with-logic/skills
 
 **Expected observable outcome.**
 - Exit 0.
-- Two skills installed: `alpha` and `beta`.
-- Each state entry has a `bundle` object with `ref: "@with-logic/skills"` and the parsed git source.
-- Each entry has `explicit: true` (both were installed via a reference the user typed).
+- An auto tap named `skills` is created (or `skills-2`, etc., if name is taken) with `kind: git`, `registered: false`, `url: https://github.com/with-logic/skills.git`.
+- Two skills installed: `alpha` and `beta`. Each state entry has `source.tap = "skills"` (the new auto tap), `explicit: true`, and `path` set to its directory inside the tap.
 
 **Setup continues.** The `with-logic/skills` repo maintainers add a
 third directory `gamma/` with a valid `SKILL.md` and push to the
@@ -1461,7 +1508,7 @@ crew update
 **Expected observable outcome.**
 - Exit 0.
 - `gamma` is installed into every target `alpha` and `beta` were installed into, at the same scope.
-- `gamma`'s state entry has the same `bundle` record as `alpha` and `beta`.
+- `gamma`'s state entry has `source.tap = "skills"` (the same auto tap as `alpha` and `beta`).
 - `alpha` and `beta` are reported as updated or up-to-date per normal §10.1 logic.
 
 **Setup continues.** The maintainers later delete `beta/` from the repo.
