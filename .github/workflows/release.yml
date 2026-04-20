@@ -56,19 +56,48 @@ jobs:
             exit 0
           fi
 
-          # `push: main` path — release only when package.json version
-          # is newer than any existing tag.
-          pkg_version="$(node -e 'console.log(require("./package.json").version)')"
-          candidate_tag="v$pkg_version"
-          if git rev-parse -q --verify "refs/tags/$candidate_tag" >/dev/null 2>&1; then
-            echo "Tag $candidate_tag already exists — nothing to release."
+          # `push: main` path — release only when the version in
+          # package.json *changed in this push*. This is what
+          # distinguishes a release-PR merge (version bumped) from
+          # every other push to main (version unchanged). We never
+          # auto-release a version that happened to already be sitting
+          # in package.json — that'd mean the first push to `main`
+          # after adding this workflow ships whatever version was
+          # checked in, with no PR approval.
+          before_sha="${{ github.event.before }}"
+          after_sha="${{ github.event.after }}"
+
+          # First push after repo creation has `before` = all zeros;
+          # treat that as "no prior state" and do not release.
+          if [[ "$before_sha" == "0000000000000000000000000000000000000000" || -z "$before_sha" ]]; then
+            echo "First push on main has no prior version to compare; skipping release."
             echo "should_release=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "Version $pkg_version is new; releasing as $candidate_tag."
+          new_version="$(node -e 'console.log(require("./package.json").version)')"
+          old_version="$(git show "$before_sha:package.json" 2>/dev/null | node -e 'let s=""; process.stdin.on("data",d=>s+=d); process.stdin.on("end",()=>{try{console.log(JSON.parse(s).version||"")}catch{console.log("")}})' || true)"
+
+          if [ "$old_version" = "$new_version" ]; then
+            echo "package.json version unchanged ($new_version); nothing to release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$new_version" ]; then
+            echo "::error::could not read version from package.json"
+            exit 1
+          fi
+
+          candidate_tag="v$new_version"
+          if git rev-parse -q --verify "refs/tags/$candidate_tag" >/dev/null 2>&1; then
+            echo "::error::version advanced to $new_version but tag $candidate_tag already exists; aborting"
+            exit 1
+          fi
+
+          echo "Version advanced $old_version -> $new_version; releasing as $candidate_tag."
           echo "should_release=true" >> "$GITHUB_OUTPUT"
-          echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
+          echo "version=$new_version" >> "$GITHUB_OUTPUT"
           echo "tag=$candidate_tag" >> "$GITHUB_OUTPUT"
 
   build-and-release:
