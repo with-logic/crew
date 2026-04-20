@@ -1,3 +1,7 @@
+<p>
+  <img src="assets/logo.png" alt="" width="96" height="96" align="left" />
+</p>
+
 # crew
 
 A package manager for [Agent Skills](https://agentskills.io/specification).

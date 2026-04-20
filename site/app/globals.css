@@ -40,3 +40,12 @@ hr {
 code {
   font-family: var(--font-mono);
 }
+
+/*
+ * When a nav anchor (#install, #how, #agents, …) is hit, stop scroll
+ * a little past the top of the section so the sticky nav doesn't
+ * overlap the section head. 56px nav + 16px breathing room.
+ */
+[id] {
+  scroll-margin-top: calc(var(--nav-h, 56px) + 16px);
+}

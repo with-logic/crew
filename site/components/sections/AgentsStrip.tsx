@@ -1,3 +1,4 @@
+import { AGENTS } from "../../lib/agents";
 import { Chip } from "../primitives/Chip";
 import { Container } from "../primitives/Container";
 import styles from "./AgentsStrip.module.css";
@@ -5,6 +6,7 @@ import styles from "./AgentsStrip.module.css";
 const FEATURED_AGENTS = ["claude-code", "codex", "cursor", "gemini-cli", "goose"] as const;
 
 export function AgentsStrip() {
+  const remaining = AGENTS.length - FEATURED_AGENTS.length;
   return (
     <Container>
       <div className={styles.strip}>
@@ -14,10 +16,9 @@ export function AgentsStrip() {
             {name}
           </Chip>
         ))}
-        <span className={styles.trail}>
-          &mdash; and every agent whose skill layout follows the{" "}
-          <a href="https://agentskills.io/specification">Agent Skills spec</a>.
-        </span>
+        <a className={styles.more} href="#agents">
+          and {remaining} others →
+        </a>
       </div>
     </Container>
   );

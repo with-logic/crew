@@ -21,7 +21,7 @@ export function Hero() {
             </h1>
             <p className={styles.lede}>
               Find great skills. Install them with one command into every coding agent on your
-              machine. Publish your own as easily as pushing to GitHub.
+              machine. Share your own as easily as pushing to GitHub.
             </p>
             <div className={styles.ctaRow}>
               <Button href="#install">Install crew →</Button>
@@ -31,15 +31,6 @@ export function Hero() {
               <Button href="#commands" variant="ghost">
                 Command reference
               </Button>
-            </div>
-            <div className={styles.meta}>
-              <span>
-                <span className={styles.dot} />
-                Open source · MIT
-              </span>
-              <span>macOS · Apple Silicon &amp; Intel</span>
-              <span>Single binary</span>
-              <span>Zero config</span>
             </div>
           </div>
           <HeroTerminal />

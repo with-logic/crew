@@ -1,0 +1,99 @@
+.saap {
+  margin: 56px auto 0;
+  max-width: 820px;
+  padding: 36px 28px 32px;
+  background: var(--paper);
+  border: 1px dashed var(--line-2);
+  border-radius: 10px;
+  text-align: center;
+}
+
+/* "Software-as-a-Prompt" pill sits on its own line, centered. Small,
+   subtle — signals "this is a secondary path" without hierarchy
+   competition against the install card above. */
+.tagRow {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+  padding: 4px 11px;
+  border-radius: 999px;
+}
+
+.heading {
+  font-family: var(--font-sans);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 18px;
+  color: var(--ink);
+}
+
+.copy {
+  margin: 0 auto 24px;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 680px;
+  text-align: center;
+}
+
+.copy a {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--accent) 45%, transparent);
+  text-underline-offset: 2px;
+}
+
+.copy a:hover {
+  text-decoration-color: var(--accent-ink);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--ink);
+}
+
+.buttonRow {
+  display: flex;
+  justify-content: center;
+}
+
+/* Clean outlined button on the page background — reads as a clickable
+   surface within the dashed paper card, no color competition with the
+   accent pill above. */
+.button {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 10px 18px;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  transition:
+    transform 0.08s ease,
+    border-color 0.12s ease;
+}
+
+.button:hover {
+  border-color: var(--ink);
+}
+
+.button:active {
+  transform: scale(0.98);
+}

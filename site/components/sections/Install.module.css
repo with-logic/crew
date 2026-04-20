@@ -1,14 +1,67 @@
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
+/* Override the default Section padding (96px top/bottom). This is the
+   first content section after the hero + agents strip — it should
+   feel close to the hero, not floating in whitespace. */
+.section {
+  padding: 40px 0 72px;
 }
 
-/* Requirements pill: centered, pill-shaped, Apple glyph + one line. */
+/*
+ * Install-section header: relative-positioned so the `§ 02 Installation`
+ * meta label can float to the left without pushing the centered title
+ * off-axis. Everything is center-aligned on the section's own midline.
+ */
+.head {
+  position: relative;
+  text-align: center;
+  margin-bottom: 20px;
+  min-height: 48px;
+}
+
+.num {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--mute);
+}
+
+.num strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 40px;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  margin: 0;
+  color: var(--ink);
+}
+
+/* On narrow viewports, stack the meta above the title instead of
+   floating it — there's no room for a side-positioned label. */
+@media (max-width: 860px) {
+  .num {
+    position: static;
+    display: block;
+    margin-bottom: 12px;
+  }
+}
+
+/* The curl install card is single-column. Wider is better — gives
+   the full command room to breathe. */
+.card {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
 .reqRow {
   display: flex;
   justify-content: center;
-  margin-top: 28px;
+  margin-top: 20px;
 }
 
 .reqPill {
@@ -30,10 +83,8 @@
   color: var(--ink);
 }
 
-/* Longer explanation of what gets installed / how to uninstall. Dim
-   copy under the requirements pill. */
 .footnote {
-  margin: 28px auto 0;
+  margin: 20px auto 0;
   max-width: 720px;
   text-align: center;
   color: var(--mute);
@@ -47,10 +98,4 @@
   padding: 1px 6px;
   border-radius: 3px;
   font-size: 0.9em;
-}
-
-@media (max-width: 860px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
 }
