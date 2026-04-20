@@ -188,7 +188,7 @@ function readStringList(map: YamlMap, key: string): string[] {
   if (!Array.isArray(raw)) {
     throw new CrewError(
       "config_invalid",
-      `config.yaml: \`${key}\` must be a list of target names (or omitted)`,
+      `config.yaml: \`${key}\` must be a list of agent names (or omitted)`,
     );
   }
   const result: string[] = [];
@@ -196,7 +196,7 @@ function readStringList(map: YamlMap, key: string): string[] {
     if (typeof item !== "string" || item.length === 0) {
       throw new CrewError(
         "config_invalid",
-        `config.yaml: each entry in \`${key}\` must be a non-empty target name (e.g. \`claude-code\`)`,
+        `config.yaml: each entry in \`${key}\` must be a non-empty agent name (e.g. \`claude-code\`)`,
       );
     }
     result.push(item);

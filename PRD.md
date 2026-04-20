@@ -442,7 +442,7 @@ Install takes a staged skill directory in the store, a skill name, a scope, and 
       i. Create a temporary staging directory as a sibling of `dest` with a name that cannot collide with a valid skill name (e.g. beginning with a `.` or containing a dot — the exact name is unspecified, but it MUST be atomically rename-able into `dest`).
       ii. Copy every file from the source into the staging directory, preserving relative paths. Do not copy any `.crew.json` from the source (only crew writes markers).
       iii. Compute the content hash of the staging directory per §12.1.
-      iv. Write a `.crew.json` marker into the staging directory per §7.5. The marker's `adapters` field is the **union** of (a) any `adapters` list present in a prior marker at `dest`, and (b) the adapter names in this group. This preserves ownership by adapters that installed into the same path on an earlier run and aren't part of the current operation.
+      iv. Write a `.crew.json` marker into the staging directory per §7.5. The marker's `agents` field is the **union** of (a) any `agents` list present in a prior marker at `dest`, and (b) the agent names in this group. This preserves ownership by agents that installed into the same path on an earlier run and aren't part of the current operation.
       v. If `dest` exists, remove it.
       vi. Rename the staging directory to `dest`.
 4. **Never modify files outside `dest`.** Adapters must not edit shared configuration files the agent tool may use (such as global `AGENTS.md`, settings JSON, etc.). If a agent tool's documented convention requires modifying a shared file, that is out of scope for v1.
@@ -460,15 +460,15 @@ run.
 
 Like install, uninstall is path-centric: group the agent set by `dest` (§7.3 step 2), then run the loop once per distinct path.
 
-For each `(dest, adapters_in_group)`:
+For each `(dest, agents_in_group)`:
 
 1. Read the marker at `dest/.crew.json`. If absent, abort with error `not_installed_here` unless `--force`.
 2. If present, verify the marker's `name` matches the skill being uninstalled. Mismatch → `inconsistent_marker` error unless `--force`.
-3. Remove `adapters_in_group` from the marker's `adapters` field. If the resulting set is empty, remove `dest` and its contents. Otherwise, rewrite the marker with the reduced `adapters` list — the bytes stay because another adapter still owns them.
+3. Remove `agents_in_group` from the marker's `agents` field. If the resulting set is empty, remove `dest` and its contents. Otherwise, rewrite the marker with the reduced `agents` list — the bytes stay because another agent still owns them.
 
 **Then update `state.json` (§11.1):**
 
-4. Remove the just-removed agent names from the entry's `targets`
+4. Remove the just-removed agent names from the entry's `agents`
    array. If the array is now empty, remove the entry entirely, AND
    for every other entry whose `required_by` listed this skill, remove
    the name from that list. If the array still has agents, the entry
@@ -498,7 +498,7 @@ Written into every crew-installed skill directory. JSON, UTF-8, trailing newline
 {
   "schema_version": 1,
   "name": "python-testing",
-  "adapters": ["codex", "gemini-cli"],
+  "agents": ["codex", "gemini-cli"],
   "tap_name": "core",
   "tap_kind": "git",
   "tap_url": "https://github.com/with-logic/crew-skills.git",
@@ -517,7 +517,7 @@ Written into every crew-installed skill directory. JSON, UTF-8, trailing newline
 
 - `schema_version` — integer, currently `1`. Bumped when the marker schema changes incompatibly.
 - `name` — the skill's `name` from `SKILL.md` frontmatter.
-- `adapters` — the list of agent adapter names (§7.2) that own this install. Most installs are owned by a single adapter, but when N adapters resolve to the same `dest` (path-sharing, §7.2) all N are recorded here. Always non-empty; alphabetically sorted.
+- `agents` — the list of agent names (§7.2) that own this install. Most installs are owned by a single agent, but when N agents resolve to the same `dest` (path-sharing, §7.2) all N are recorded here. Always non-empty; alphabetically sorted.
 - `tap_name` — the configured tap that owns this skill at install time. May not exist in `config.yaml` later (user removed it manually); doctor uses the rest of the marker to rebuild a tap entry.
 - `tap_kind` — `git` or `path`. Determines how `doctor --repair` reconstructs the tap.
 - `tap_url` — for `tap_kind: git`, the clone URL. Empty string for `tap_kind: path`.
@@ -1020,7 +1020,7 @@ UTF-8 JSON with a trailing newline. Single top-level object.
 
 Every entry's `source` is `{ tap, path }`: the name of a configured tap (registered or auto, see §16) and the skill's directory path inside that tap. The URL or filesystem location is held in `config.yaml` on the tap row, not duplicated here, so renaming a tap or changing its URL doesn't require rewriting state.
 
-One entry per (skill, scope, project_root) triple: the same skill can be installed at user scope, at project scope under `~/work/product-x`, and at project scope under `~/work/product-y` — that's three independent entries. `targets` is the list of agent adapter names this skill is currently installed into.
+One entry per (skill, scope, project_root) triple: the same skill can be installed at user scope, at project scope under `~/work/product-x`, and at project scope under `~/work/product-y` — that's three independent entries. `agents` is the list of agent names this skill is currently installed into.
 
 **`project_root`** (string). Present iff `scope === "project"`. The
 absolute path to the directory the skill was installed from (the
@@ -1491,11 +1491,11 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-13 | §7.4 | `--prune` does not cascade through a partial (`--agent`) uninstall that leaves the entry alive. Pruning only triggers when the entry was fully removed. |
 | C-UNINST-14 | §7.4 | `--agent <name>` naming an agent the skill isn't installed in is a silent per-agent no-op; it never causes `not_installed_here` on its own. |
 | C-UNINST-15 | §11.1 | `crew uninstall --scope project <name>` removes the install at the entry's recorded `project_root`, NOT the user's current working directory. Run from any cwd, it finds and removes the correct files. |
-| C-UNINST-16 | §7.4 | When two adapters share a `dest` (e.g. `codex` + `gemini-cli` both at `~/.agents/skills/<name>/`), `crew uninstall --agent codex <name>` removes `codex` from the marker's `adapters` list but leaves the bytes on disk; `gemini-cli` continues to work. |
+| C-UNINST-16 | §7.4 | When two agents share a `dest` (e.g. `codex` + `gemini-cli` both at `~/.agents/skills/<name>/`), `crew uninstall --agent codex <name>` removes `codex` from the marker's `agents` list but leaves the bytes on disk; `gemini-cli` continues to work. |
 | C-UNINST-17 | §7.4 | After `crew uninstall --agent codex <name>` in a path-shared install, the marker at `dest` contains every remaining owning adapter and no others. |
 | C-SHARE-01 | §7.2, §7.3 | When `codex` and `gemini-cli` are both active, `crew install <name>` writes bytes to `~/.agents/skills/<name>/` exactly once, and the per-agent summary reports both adapter names as installed. |
-| C-SHARE-02 | §7.5 | The `adapters` field in `.crew.json` is non-empty, alphabetically sorted, and lists every adapter currently owning the install. |
-| C-SHARE-03 | §7.3 | Installing into a path already owned by adapter X with adapter Y active (and not X) results in a marker whose `adapters` contains both X and Y, preserving X's ownership. |
+| C-SHARE-02 | §7.5 | The `agents` field in `.crew.json` is non-empty, alphabetically sorted, and lists every agent currently owning the install. |
+| C-SHARE-03 | §7.3 | Installing into a path already owned by agent X with agent Y active (and not X) results in a marker whose `agents` contains both X and Y, preserving X's ownership. |
 
 #### C-TAP: Taps (§16)
 
@@ -1631,7 +1631,7 @@ crew install ./my-skill
 - Stdout contains a line indicating `my-skill` was installed into `claude-code`.
 - The file `{claude-code-base}/my-skill/SKILL.md` exists and is byte-for-byte identical to the source.
 - The file `{claude-code-base}/my-skill/.crew.json` exists, is valid JSON, and has `name: "my-skill"`, `source.type: "path"`, `resolved_sha: null`, and a non-empty `content_hash` prefixed `sha256:`.
-- `~/.crew/state.json` contains an entry with `name: "my-skill"` listing `claude-code` in `targets`.
+- `~/.crew/state.json` contains an entry with `name: "my-skill"` listing `claude-code` in `agents`.
 
 #### Example 2: Install from GitHub pinned to a tag, with subpath
 

@@ -150,7 +150,7 @@ describe("targets subcommands", () => {
     expect(parsed.agents.find((t: { name: string }) => t.name === "claude-code").forced).toBe(true);
   });
 
-  test("unknown target errors", () => {
+  test("unknown agent errors", () => {
     const home = makeCrewHome();
     const code = runCli(["agents", "enable", "no-such"], {
       home,
@@ -159,7 +159,7 @@ describe("targets subcommands", () => {
     expect(code).toBe(4);
   });
 
-  test("unknown targets subcommand is a usage error pointing at help", () => {
+  test("unknown agents subcommand is a usage error pointing at help", () => {
     const home = makeCrewHome();
     const c = captureStreams();
     const code = runCli(["agents", "frob"], { home, streams: c.streams });

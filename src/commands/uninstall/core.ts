@@ -28,9 +28,9 @@ export interface UninstallRecord {
 
 /**
  * Remove one named skill. If `agentFilter` is null, removes from every
- * target the skill is on (full uninstall). If non-null, removes only
- * from the named targets; the state entry survives with a reduced
- * `targets` list if any remain.
+ * agent the skill is on (full uninstall). If non-null, removes only
+ * from the named agents; the state entry survives with a reduced
+ * `agents` list if any remain.
  */
 export function removeOne(
   state: StateFile,
@@ -58,7 +58,7 @@ export function removeOne(
     return { updatedState: state, rec };
   }
   // Per-entry processing: each (skill, scope) pair potentially touches
-  // a different subset of targets.
+  // a different subset of agents.
   let nextState = state;
   let anySurvives = false;
   for (const entry of entries) {
