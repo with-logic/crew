@@ -191,13 +191,13 @@ describe("autoupdate commands", () => {
     expect(c.stdout()).toContain("last ran");
   });
 
-  test("unknown autoupdate subcommand shows the help page", () => {
+  test("unknown autoupdate subcommand is a usage error pointing at help", () => {
     const crewHome = makeCrewHome();
     const c = captureStreams();
     const code = runCli(["autoupdate", "frob"], { home: crewHome, streams: c.streams });
-    expect(code).toBe(0);
-    expect(c.stdout()).toContain("crew autoupdate");
-    expect(c.stdout()).toContain("USAGE");
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("frob");
+    expect(c.stderr()).toContain("crew help autoupdate");
   });
 
   test("bare `crew autoupdate` shows the help page", () => {

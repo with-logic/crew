@@ -104,26 +104,25 @@ describe("crew tap", () => {
     expect(readConfig(home).taps.some((t) => t.name === "shortcut-tap")).toBe(true);
   });
 
-  test("C-TAP-11 `crew tap <unknown-word>` shows the tap help page", () => {
-    // Not a subcommand and not a git source — crew prints the help page
-    // instead of erroring, so the user can see what commands are available.
+  test("C-TAP-11 `crew tap <unknown-word>` is a usage error pointing at help", () => {
+    // Not a subcommand and not a git source — crew errors with a
+    // message that names the bad input and points at `crew help tap`.
     const home = makeCrewHome();
     const c = captureStreams();
     const code = runCli(["tap", "listt"], { home, streams: c.streams });
-    expect(code).toBe(0);
-    expect(c.stdout()).toContain("crew tap");
-    expect(c.stdout()).toContain("USAGE");
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("listt");
+    expect(c.stderr()).toContain("crew help tap");
   });
 
-  test("`crew tap <unparseable>` falls through to the help page", () => {
+  test("`crew tap <unparseable>` errors with a help pointer", () => {
     // Input that makes `parseRef` throw — covers the catch branch of
-    // the shorthand's `looksLikeGitSource` guard. Now renders help,
-    // not a usage error.
+    // the shorthand's `looksLikeGitSource` guard.
     const home = makeCrewHome();
     const c = captureStreams();
     const code = runCli(["tap", "NotAValidName"], { home, streams: c.streams });
-    expect(code).toBe(0);
-    expect(c.stdout()).toContain("crew tap");
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("crew help tap");
   });
 
   test("tap add with a bare-name source is a usage error (not a source)", () => {
@@ -245,12 +244,13 @@ describe("crew tap", () => {
     expect(parsed.taps[0].name).toBe("core");
   });
 
-  test("unknown tap subcommand falls through to the help page", () => {
+  test("unknown tap subcommand is a usage error pointing at help", () => {
     const home = makeCrewHome();
     const c = captureStreams();
     const code = runCli(["tap", "frob"], { home, streams: c.streams });
-    expect(code).toBe(0);
-    expect(c.stdout()).toContain("USAGE");
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("frob");
+    expect(c.stderr()).toContain("crew help tap");
   });
 
   test("bare `crew tap` shows the help page", () => {

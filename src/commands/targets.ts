@@ -12,7 +12,6 @@ import { withStateLock } from "../state/lock.ts";
 import { ALL_ADAPTERS, adapterByName } from "../targets/registry.ts";
 import { columns } from "../util/format.ts";
 import type { Styler } from "../util/term.ts";
-import { showCommandHelp } from "./help/index.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function targetsCommand(ctx: CommandContext): CommandOutput {
@@ -20,8 +19,12 @@ export function targetsCommand(ctx: CommandContext): CommandOutput {
   if (!sub) return list(ctx);
   if (sub === "enable") return toggle(ctx, ctx.positional.slice(1), "enable");
   if (sub === "disable") return toggle(ctx, ctx.positional.slice(1), "disable");
-  // Unknown subcommand — show the help page rather than erroring.
-  return showCommandHelp("targets");
+  // Unknown subcommand — a typo, most likely. Error with a hint.
+  throw new CrewError(
+    "usage_error",
+    `\`crew targets\` has no subcommand named \`${sub}\` — run \`crew help targets\` to see what's available`,
+    { sub },
+  );
 }
 
 interface TargetRow {

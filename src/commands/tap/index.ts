@@ -34,14 +34,21 @@ export function tapCommand(ctx: CommandContext): CommandOutput {
   if (sub === "list") return tapList(ctx);
   if (sub === "update") return tapUpdate(ctx, rest);
   // Shorthand: `crew tap <ref> [<name>]` → `crew tap add <ref> [<name>]`.
-  // Only dispatch when the first positional parses as a git source or a
-  // path; bare words (subcommand typos) fall through to the help page.
+  // Only dispatch when the first positional parses as a git source or
+  // a path; bare words fall through to the error/help below.
   if (sub && looksLikeTapSource(sub, ctx.cwd)) {
     return tapAdd(ctx, ctx.positional);
   }
-  // No subcommand, or one we don't recognize — show the user what the
-  // command can do instead of an error.
-  return showCommandHelp("tap");
+  // Bare `crew tap` with no arguments shows the help page — the user
+  // is asking "what can I do here?". An unknown subcommand is a real
+  // mistake (typo) and gets a short usage_error with a pointer to
+  // help.
+  if (!sub) return showCommandHelp("tap");
+  throw new CrewError(
+    "usage_error",
+    `\`crew tap\` has no subcommand named \`${sub}\` — run \`crew help tap\` to see what's available`,
+    { sub },
+  );
 }
 
 /** True if `ref` parses as a git or path source (anything but a tap-name reference). */

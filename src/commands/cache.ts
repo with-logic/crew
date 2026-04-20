@@ -7,6 +7,7 @@
  */
 
 import { statSync } from "node:fs";
+import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
 import { garbageCollectStore } from "../maintenance/gc.ts";
 import { readState } from "../state/load.ts";
@@ -20,8 +21,14 @@ import type { CommandContext, CommandOutput } from "./types.ts";
 export function cacheCommand(ctx: CommandContext): CommandOutput {
   const sub = ctx.positional[0];
   if (sub !== "clean") {
-    // No subcommand or an unknown one — show the help page.
-    return showCommandHelp("cache");
+    // Bare `crew cache` shows the help page. An unknown subcommand is
+    // a user typo — error out with a hint.
+    if (!sub) return showCommandHelp("cache");
+    throw new CrewError(
+      "usage_error",
+      `\`crew cache\` has no subcommand named \`${sub}\` — run \`crew help cache\` to see what's available`,
+      { sub },
+    );
   }
   let removedStore: string[] = [];
   let freedBytes = 0;

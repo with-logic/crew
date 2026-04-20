@@ -27,9 +27,14 @@ export function autoupdateCommand(ctx: CommandContext): CommandOutput {
   if (sub === "enable") return enable(ctx);
   if (sub === "disable") return disable(ctx);
   if (sub === "status") return status(ctx);
-  // No subcommand or an unknown one — show the help page rather than
-  // barking a usage error.
-  return showCommandHelp("autoupdate");
+  // Bare `crew autoupdate` shows the help page. An unknown subcommand
+  // is a user typo — error out with a hint.
+  if (!sub) return showCommandHelp("autoupdate");
+  throw new CrewError(
+    "usage_error",
+    `\`crew autoupdate\` has no subcommand named \`${sub}\` — run \`crew help autoupdate\` to see what's available`,
+    { sub },
+  );
 }
 
 function enable(ctx: CommandContext): CommandOutput {

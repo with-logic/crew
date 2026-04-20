@@ -96,13 +96,13 @@ describe("cache clean", () => {
     expect(c.stdout()).toContain("Nothing to clean");
   });
 
-  test("unknown cache subcommand shows the help page", () => {
+  test("unknown cache subcommand is a usage error pointing at help", () => {
     const home = makeCrewHome();
     const c = captureStreams();
     const code = runCli(["cache", "list"], { home, streams: c.streams });
-    expect(code).toBe(0);
-    expect(c.stdout()).toContain("crew cache");
-    expect(c.stdout()).toContain("USAGE");
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("list");
+    expect(c.stderr()).toContain("crew help cache");
   });
 
   test("bare `crew cache` shows the help page", () => {
@@ -161,13 +161,13 @@ describe("targets subcommands", () => {
     expect(code).toBe(4);
   });
 
-  test("unknown targets subcommand shows the help page", () => {
+  test("unknown targets subcommand is a usage error pointing at help", () => {
     const home = makeCrewHome();
     const c = captureStreams();
     const code = runCli(["targets", "frob"], { home, streams: c.streams });
-    expect(code).toBe(0);
-    expect(c.stdout()).toContain("crew targets");
-    expect(c.stdout()).toContain("USAGE");
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("frob");
+    expect(c.stderr()).toContain("crew help targets");
   });
 });
 
