@@ -532,6 +532,30 @@ describe("list, info, targets", () => {
     expect(capture.stdout()).toContain("demo");
   });
 
+  test("list shows explicit agent names when a skill is only in some of them", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "partial", skillFrontmatter({ name: "partial" }));
+    runCli(["install", "--target", "claude-code", join(src, "partial")], {
+      home,
+      streams: captureStreams().streams,
+    });
+    const capture = captureStreams();
+    runCli(["list"], { home, streams: capture.streams });
+    expect(capture.stdout()).toContain("partial");
+    // Partial install shows just the target name, not "all agents".
+    expect(capture.stdout()).toContain("claude-code");
+    expect(capture.stdout()).not.toContain("all agents");
+  });
+
+  test("list with no installs shows a welcoming empty state", () => {
+    const home = makeCrewHome();
+    const capture = captureStreams();
+    const code = runCli(["list"], { home, streams: capture.streams });
+    expect(code).toBe(0);
+    expect(capture.stdout()).toContain("don't have any skills installed");
+  });
+
   test("info on installed name", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
