@@ -14,8 +14,8 @@ export function Hero() {
               <span className={styles.accent}>easily share</span> agent skills.
             </h1>
             <p className={styles.lede}>
-              Easily share skills across your team. One command to install. The same skills on
-              every laptop, in every coding agent. Updated automatically.
+              Easily share skills across your team. One command to install. The same skills on every
+              laptop, in every coding agent. Updated automatically.
             </p>
             <div className={styles.ctaRow}>
               <Button href="#how" variant="ghost">
