@@ -24,7 +24,7 @@ export interface AlreadyInstalled {
   readonly ref: string | null;
   readonly resolvedSha: string | null;
   readonly scope: Scope;
-  readonly targets: readonly string[];
+  readonly agents: readonly string[];
 }
 
 export interface DuplicateAnalysis {
@@ -38,8 +38,8 @@ export function applyDuplicateRules(
   state: StateFile,
   scope: Scope,
   cwd: string,
-  options: { readonly activeTargets: readonly string[]; readonly force: boolean } = {
-    activeTargets: [],
+  options: { readonly activeAgents: readonly string[]; readonly force: boolean } = {
+    activeAgents: [],
     force: false,
   },
 ): DuplicateAnalysis {
@@ -77,7 +77,7 @@ export function applyDuplicateRules(
     // any adapter the existing entry doesn't, the install still has
     // work to do (attach ownership to those adapters), even if the
     // bytes are identical. Similarly with --force.
-    const newAdapters = options.activeTargets.filter((a) => !existing.targets.includes(a));
+    const newAdapters = options.activeAgents.filter((a) => !existing.agents.includes(a));
     const adaptersChanged = newAdapters.length > 0;
 
     if (
@@ -91,7 +91,7 @@ export function applyDuplicateRules(
         ref: existing.ref,
         resolvedSha: existing.resolved_sha,
         scope: existing.scope,
-        targets: existing.targets,
+        agents: existing.agents,
       });
       if (skill.explicit && !existing.explicit) {
         promoteToExplicit.push(skill.name);

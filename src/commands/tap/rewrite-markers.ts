@@ -14,9 +14,9 @@
  */
 
 import { join } from "node:path";
+import { listInstalledForAgent } from "../../agents/list.ts";
+import { ALL_AGENTS } from "../../agents/registry.ts";
 import type { Marker, StateEntry } from "../../core/types.ts";
-import { listInstalledForTarget } from "../../targets/list.ts";
-import { ALL_ADAPTERS } from "../../targets/registry.ts";
 import { writeJson } from "../../util/json.ts";
 
 export function rewriteMarkerTapName(
@@ -30,12 +30,12 @@ export function rewriteMarkerTapName(
   for (const e of stateEntries) {
     if (e.scope === "project" && e.project_root) projectRoots.add(e.project_root);
   }
-  for (const adapter of ALL_ADAPTERS) {
-    for (const rec of listInstalledForTarget(adapter, "user", cwd)) {
+  for (const adapter of ALL_AGENTS) {
+    for (const rec of listInstalledForAgent(adapter, "user", cwd)) {
       maybeRewrite(rec.installDir, rec.marker, oldName, newName);
     }
     for (const root of projectRoots) {
-      for (const rec of listInstalledForTarget(adapter, "project", root)) {
+      for (const rec of listInstalledForAgent(adapter, "project", root)) {
         maybeRewrite(rec.installDir, rec.marker, oldName, newName);
       }
     }

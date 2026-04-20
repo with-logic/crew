@@ -46,14 +46,14 @@ export function repairState(markers: readonly MarkerEntry[], home: string): void
 
     // Orphaned state entries: entries whose target markers are missing
     // — remove. With path sharing (§7.2), one physical marker can
-    // cover multiple adapters via `marker.adapters`, so we consider any
-    // of `entry.targets` "backed" if it's listed on any live marker.
+    // cover multiple adapters via `marker.agents`, so we consider any
+    // of `entry.agents` "backed" if it's listed on any live marker.
     const keep = current.installations.filter((entry) =>
       markers.some(
         (m) =>
           m.record.marker.name === entry.name &&
           m.record.scope === entry.scope &&
-          entry.targets.some((t) => m.record.marker.adapters.includes(t)),
+          entry.agents.some((t) => m.record.marker.agents.includes(t)),
       ),
     );
     current = { schema_version: 1, installations: keep };
@@ -67,15 +67,13 @@ export function repairState(markers: readonly MarkerEntry[], home: string): void
         (e) => e.name === marker.name && e.scope === m.record.scope,
       );
       if (existing) {
-        const missing = marker.adapters.filter((a) => !existing.targets.includes(a));
+        const missing = marker.agents.filter((a) => !existing.agents.includes(a));
         if (missing.length > 0) {
-          const merged = [...new Set([...existing.targets, ...missing])].sort();
+          const merged = [...new Set([...existing.agents, ...missing])].sort();
           current = {
             schema_version: 1,
             installations: current.installations.map((e) =>
-              e.name === existing.name && e.scope === existing.scope
-                ? { ...e, targets: merged }
-                : e,
+              e.name === existing.name && e.scope === existing.scope ? { ...e, agents: merged } : e,
             ),
           };
         }
@@ -91,7 +89,7 @@ export function repairState(markers: readonly MarkerEntry[], home: string): void
         content_hash: marker.content_hash,
         scope: marker.scope,
         installed_at: marker.installed_at,
-        targets: [...marker.adapters].sort(),
+        agents: [...marker.agents].sort(),
         pinned,
         explicit: true,
         ...(marker.scope === "project" && m.projectRoot ? { project_root: m.projectRoot } : {}),

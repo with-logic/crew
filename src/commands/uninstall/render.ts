@@ -58,15 +58,15 @@ function renderRecord(r: UninstallRecord, style: Styler): string[] {
   const tag = r.partial ? style.dim("(kept elsewhere)") : "";
   const header = [style.bold(r.name), tag].filter((s) => s.length > 0).join(" ");
   lines.push(`  ${header}`);
-  for (const target of r.removedFrom) {
-    lines.push(`    ${style.symbol("ok")} ${target}`);
+  for (const agent of r.removedFrom) {
+    lines.push(`    ${style.symbol("ok")} ${agent}`);
   }
-  for (const target of r.absentFrom) {
-    lines.push(`    ${style.symbol("muted")} ${target} ${style.dim("(wasn't there)")}`);
+  for (const agent of r.absentFrom) {
+    lines.push(`    ${style.symbol("muted")} ${agent} ${style.dim("(wasn't there)")}`);
   }
   for (const fail of r.failures) {
     const remedy = FAIL_REMEDIES[fail.error.code] ?? fail.error.code.replace(/_/g, " ");
-    lines.push(`    ${style.symbol("fail")} ${fail.target}  ${style.red(remedy)}`);
+    lines.push(`    ${style.symbol("fail")} ${fail.agent}  ${style.red(remedy)}`);
   }
   if (r.removedFrom.length === 0 && r.absentFrom.length === 0 && r.failures.length === 0) {
     lines.push(`    ${style.dim("nothing to remove")}`);

@@ -10,7 +10,7 @@ import { join } from "node:path";
 import type { Marker, Scope } from "../core/types.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 import { tryReadJson } from "../util/json.ts";
-import { baseFor, type InstalledSkillRecord, type TargetAdapter } from "./adapter.ts";
+import { type AgentAdapter, baseFor, type InstalledSkillRecord } from "./adapter.ts";
 
 /**
  * List every crew-installed skill for one adapter at one scope. The
@@ -18,8 +18,8 @@ import { baseFor, type InstalledSkillRecord, type TargetAdapter } from "./adapte
  * adapter, so path-shared installs show up for every owner but a
  * marker owned solely by adapter X won't appear when walking adapter Y.
  */
-export function listInstalledForTarget(
-  adapter: TargetAdapter,
+export function listInstalledForAgent(
+  adapter: AgentAdapter,
   scope: Scope,
   cwd: string,
 ): InstalledSkillRecord[] {
@@ -37,7 +37,7 @@ export function listInstalledForTarget(
     if (!marker) {
       continue;
     }
-    if (!marker.adapters?.includes(adapter.name)) {
+    if (!marker.agents?.includes(adapter.name)) {
       continue;
     }
     records.push({ adapter: adapter.name, scope, installDir, marker });

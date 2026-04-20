@@ -8,11 +8,11 @@
  */
 
 import { existsSync } from "node:fs";
+import { ALL_AGENTS } from "../../agents/registry.ts";
 import { isAutoupdateLoaded } from "../../autoupdate/launchd.ts";
 import { paths } from "../../core/paths.ts";
 import type { Config, StateEntry } from "../../core/types.ts";
 import { hashDirectory } from "../../hash/content.ts";
-import { ALL_ADAPTERS } from "../../targets/registry.ts";
 import { isDirectory, listDir } from "../../util/fs.ts";
 import type { MarkerEntry } from "./markers.ts";
 
@@ -33,12 +33,12 @@ export function checkStateMarkerDrift(
 ): Finding[] {
   const findings: Finding[] = [];
   for (const entry of stateEntries) {
-    for (const targetName of entry.targets) {
+    for (const targetName of entry.agents) {
       const match = markers.find(
         (m) =>
           m.record.marker.name === entry.name &&
           m.record.scope === entry.scope &&
-          m.record.marker.adapters.includes(targetName),
+          m.record.marker.agents.includes(targetName),
       );
       if (!match) {
         findings.push({
@@ -50,10 +50,10 @@ export function checkStateMarkerDrift(
     }
   }
   for (const m of markers) {
-    const ownedByAny = m.record.marker.adapters.some((a) =>
+    const ownedByAny = m.record.marker.agents.some((a) =>
       stateEntries.some(
         (e) =>
-          e.name === m.record.marker.name && e.scope === m.record.scope && e.targets.includes(a),
+          e.name === m.record.marker.name && e.scope === m.record.scope && e.agents.includes(a),
       ),
     );
     if (!ownedByAny) {
@@ -88,19 +88,19 @@ export function checkContentHashDrift(markers: MarkerEntry[]): Finding[] {
 }
 
 /** Check 4: target detection drift. */
-export function checkTargetDetection(
+export function checkAgentDetection(
   stateEntries: readonly StateEntry[],
   config: Config,
 ): Finding[] {
   const findings: Finding[] = [];
-  for (const adapter of ALL_ADAPTERS) {
-    if (!(adapter.detect() || config.forced_targets.includes(adapter.name))) {
-      const orphans = stateEntries.filter((e) => e.targets.includes(adapter.name));
+  for (const adapter of ALL_AGENTS) {
+    if (!(adapter.detect() || config.forced_agents.includes(adapter.name))) {
+      const orphans = stateEntries.filter((e) => e.agents.includes(adapter.name));
       if (orphans.length > 0) {
         findings.push({
           level: "warn",
-          code: "target_missing",
-          message: `target ${adapter.name} is not detected but is still listed by ${orphans.length} state entry(ies)`,
+          code: "agent_missing",
+          message: `agent ${adapter.name} is not detected but is still listed by ${orphans.length} state entry(ies)`,
         });
       }
     }

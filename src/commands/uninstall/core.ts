@@ -7,27 +7,27 @@
  * the loop over positional args and optional pruning.
  */
 
+import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
+import { uninstallSkillFromAgents } from "../../agents/install.ts";
+import { agentByName } from "../../agents/registry.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
-import { baseFor, cwdForEntry, type TargetAdapter } from "../../targets/adapter.ts";
-import { uninstallSkillFromTarget } from "../../targets/install.ts";
-import { adapterByName } from "../../targets/registry.ts";
 import type { CommandContext } from "../types.ts";
-import { dropScopedEntryAndUpdateRequiredBy, reduceEntryTargets } from "./state.ts";
+import { dropScopedEntryAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
 
 export interface UninstallRecord {
   name: string;
   removedFrom: string[];
   absentFrom: string[];
-  failures: { target: string; error: { code: string; message: string } }[];
+  failures: { agent: string; error: { code: string; message: string } }[];
   /** True if the removal was driven by `--prune`, not by a direct command-line arg. */
   pruned?: boolean;
-  /** True if the state entry still survives after this call (partial --target removal). */
+  /** True if the state entry still survives after this call (partial --agent removal). */
   partial?: boolean;
 }
 
 /**
- * Remove one named skill. If `targetFilter` is null, removes from every
+ * Remove one named skill. If `agentFilter` is null, removes from every
  * target the skill is on (full uninstall). If non-null, removes only
  * from the named targets; the state entry survives with a reduced
  * `targets` list if any remain.
@@ -37,7 +37,7 @@ export function removeOne(
   name: string,
   ctx: CommandContext,
   pruned: boolean,
-  targetFilter: readonly string[] | null,
+  agentFilter: readonly string[] | null,
 ): { updatedState: StateFile; rec: UninstallRecord } {
   const entries = state.installations.filter((e) => e.name === name);
   const rec: UninstallRecord = {
@@ -62,13 +62,13 @@ export function removeOne(
   let nextState = state;
   let anySurvives = false;
   for (const entry of entries) {
-    const targetsToRemove = targetFilter
-      ? entry.targets.filter((t) => targetFilter.includes(t))
-      : entry.targets;
-    removeFromTargets(entry, targetsToRemove, name, ctx, rec);
-    const remainingTargets = entry.targets.filter((t) => !targetsToRemove.includes(t));
-    if (remainingTargets.length > 0) {
-      nextState = reduceEntryTargets(nextState, name, entry.scope, remainingTargets);
+    const agentsToRemove = agentFilter
+      ? entry.agents.filter((t) => agentFilter.includes(t))
+      : entry.agents;
+    removeFromAgents(entry, agentsToRemove, name, ctx, rec);
+    const remainingAgents = entry.agents.filter((t) => !agentsToRemove.includes(t));
+    if (remainingAgents.length > 0) {
+      nextState = reduceEntryAgents(nextState, name, entry.scope, remainingAgents);
       anySurvives = true;
     } else {
       nextState = dropScopedEntryAndUpdateRequiredBy(nextState, name, entry.scope);
@@ -84,9 +84,9 @@ export function removeOne(
  * §7.2): one call per `dest`, detaching every adapter in the group at
  * once. The per-adapter outcome is derived from the group outcome.
  */
-function removeFromTargets(
+function removeFromAgents(
   entry: StateEntry,
-  targetsToRemove: readonly string[],
+  agentsToRemove: readonly string[],
   name: string,
   ctx: CommandContext,
   rec: UninstallRecord,
@@ -94,15 +94,15 @@ function removeFromTargets(
   // For project-scope entries, the authoritative install location is
   // the entry's recorded `project_root` — NOT `ctx.cwd`.
   const entryCwd = cwdForEntry(entry, ctx.cwd);
-  const groups = new Map<string, TargetAdapter[]>();
-  for (const targetName of targetsToRemove) {
+  const groups = new Map<string, AgentAdapter[]>();
+  for (const targetName of agentsToRemove) {
     // An unknown target name in state shouldn't happen in normal use
     // but may if state was written by a future crew; skip it
     // silently rather than aborting the whole uninstall. Similarly,
     // adapters that don't support the entry's scope (empty base)
-    // wouldn't be in state.targets to begin with, so we don't need
+    // wouldn't be in state.agents to begin with, so we don't need
     // a runtime branch for them.
-    const adapter = adapterByName(targetName);
+    const adapter = agentByName(targetName);
     if (!adapter) continue;
     const base = baseFor(adapter, entry.scope, entryCwd);
     const dest = `${base}/${name}`;
@@ -112,8 +112,8 @@ function removeFromTargets(
   }
   for (const group of groups.values()) {
     try {
-      const outcome = uninstallSkillFromTarget({
-        adapters: group,
+      const outcome = uninstallSkillFromAgents({
+        agents: group,
         scope: entry.scope,
         cwd: entryCwd,
         skillName: name,
@@ -131,7 +131,7 @@ function removeFromTargets(
       const ce = err as CrewError;
       for (const a of group) {
         rec.failures.push({
-          target: a.name,
+          agent: a.name,
           error: { code: ce.code ?? "usage_error", message: ce.message },
         });
       }

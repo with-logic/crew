@@ -47,17 +47,17 @@ Crew installs skills by copying files into each agent tool's expected directory.
 
 **Tap.** A git repository that functions as a registry of skills. Crew clones each configured tap locally and searches within it. A tap may contain many skills organized as subdirectories.
 
-**Target.** An agent coder that crew installs skills into (Claude Code, Codex CLI, Gemini CLI, etc.). Each target has an adapter (§7) that knows where that tool stores skills.
+**Agent.** An agent coder that crew installs skills into (Claude Code, Codex CLI, Gemini CLI, etc.). Each agent has an adapter (§7) that knows where that tool stores skills.
 
 **Scope.** Either `user` (global to the user) or `project` (local to the current working directory). Affects which directory the adapter writes into.
 
 **Skill reference.** A string identifying where to find a skill. Accepted forms are specified in §8.
 
-**Store.** Crew's internal content-addressed cache of skill contents at `~/.crew/store/`. Targets are populated by copying from the store.
+**Store.** Crew's internal content-addressed cache of skill contents at `~/.crew/store/`. Agents are populated by copying from the store.
 
 **State.** The ledger at `~/.crew/state.json` recording every installed skill.
 
-**Marker.** A file named `.crew.json` written inside each installed skill directory (at the target location), recording what crew installed there.
+**Marker.** A file named `.crew.json` written inside each installed skill directory (at the agent location), recording what crew installed there.
 
 ## 4. Skill format
 
@@ -97,7 +97,7 @@ Every command below is mandatory. Exit codes are defined in §15.
 
 ```
 crew install <ref> [<ref>...]     Install one or more skills.
-crew uninstall <name> [<name>...] Remove installed skills from all targets.
+crew uninstall <name> [<name>...] Remove installed skills from every agent.
 crew update [<name>...]           Update all installed skills, or only those named.
 crew list                         List installed skills.
 crew search <query>               Search across configured taps.
@@ -108,9 +108,9 @@ crew tap <git-url> [<name>]       Shorthand for `crew tap add`.
 crew tap remove <name>            Remove a registry.
 crew tap list                     List configured registries.
 
-crew targets                      List detected agent coders and their status.
-crew targets enable <name>        Force-enable an otherwise-undetected target.
-crew targets disable <name>       Skip this target on all install/update operations.
+crew agents                      List detected agents and their status.
+crew agents enable <name>        Force-enable an otherwise-undetected agent.
+crew agents disable <name>       Skip this agent on all install/update operations.
 
 crew autoupdate enable [--interval <dur>]   Install the launchd agent (default 4h).
 crew autoupdate disable                      Remove the launchd agent.
@@ -128,9 +128,9 @@ crew version                       Print version and exit.
 Accepted on any command where they apply:
 
 - `--scope {user,project}` — default `user`.
-- `--target <name>` (repeatable) — restrict the operation to the named targets.
+- `--agent <name>` (repeatable) — restrict the operation to the named agents.
 - `--dry-run` — describe what would happen without changing anything.
-- `--json` — emit machine-readable output. Required on `list`, `search`, `info`, `targets`, `autoupdate status`. Optional on all other commands; when provided, humans-readable output is suppressed and a structured result is emitted.
+- `--json` — emit machine-readable output. Required on `list`, `search`, `info`, `agents`, `autoupdate status`. Optional on all other commands; when provided, humans-readable output is suppressed and a structured result is emitted.
 - `--quiet` — suppress non-error output. Error output still goes to stderr.
 - `--verbose` — emit progress details to stderr.
 - `--yes` — answer "yes" to any confirmation prompt.
@@ -190,7 +190,7 @@ shape of help output; wording is left to each implementation.
    exactly one group with a one-line description. Groups are
    implementation choice, but a reasonable grouping is:
    "Managing skills" (install, uninstall, update, list, info),
-   "Discovery" (search, tap), "Agents & automation" (targets,
+   "Discovery" (search, tap), "Agents & automation" (agents,
    autoupdate), "Housekeeping" (doctor, cache), "Meta" (help,
    version).
 4. A pointer to per-command help (e.g. "Run `crew help <command>`").
@@ -250,7 +250,7 @@ DESCRIPTION
 
 FLAGS
   --scope {user,project}   Install globally (default) or under cwd.
-  --target <name>          Restrict to named target(s). Repeatable.
+  --agent <name>          Restrict to named agent(s). Repeatable.
   --dry-run                Show what would be installed.
   --force                  Overwrite a customized destination.
 
@@ -348,11 +348,11 @@ taps:
     registered: false
     path: /Users/steve/code/my-skills
 
-# Targets the user has force-disabled. Any target not listed here is auto-detected.
-disabled_targets: []
+# Agents the user has force-disabled. Any agent not listed here is auto-detected.
+disabled_agents: []
 
-# Targets the user has force-enabled even if auto-detection fails.
-forced_targets: []
+# Agents the user has force-enabled even if auto-detection fails.
+forced_agents: []
 
 # Autoupdate configuration. Managed by `crew autoupdate` subcommands but user-editable.
 autoupdate:
@@ -362,22 +362,22 @@ autoupdate:
 
 Missing fields take their defaults. An unparseable `config.yaml` causes crew to fail with exit code 4 on any command that reads it.
 
-## 7. Target adapters
+## 7. Agent adapters
 
-Each supported agent coder is handled by a **target adapter**. An adapter is identified by a short stable name (lowercase, hyphen-separated) and exposes the operations in §7.1. Implementations ship one adapter per target; adding a new target means adding one adapter and registering it.
+Each supported agent is handled by a **agent adapter**. An adapter is identified by a short stable name (lowercase, hyphen-separated) and exposes the operations in §7.1. Implementations ship one adapter per agent; adding a new agent means adding one adapter and registering it.
 
 ### 7.1 Adapter operations
 
 Every adapter must provide:
 
-- `detect() → bool` — returns true if the target is installed on this machine.
+- `detect() → bool` — returns true if the agent is installed on this machine.
 - `user_path() → absolute path` — directory where skills live at user scope.
 - `project_path(cwd) → absolute path` — directory where skills live at project scope.
-- `install(source_dir, skill_name, scope) → void` — copies the staged skill into the target and writes the marker.
-- `uninstall(skill_name, scope) → void` — removes the skill directory from the target (leaves peer directories alone).
-- `list_installed(scope) → list of marker records` — reads every `.crew.json` marker under the target's path and returns them.
+- `install(source_dir, skill_name, scope) → void` — copies the staged skill into the agent and writes the marker.
+- `uninstall(skill_name, scope) → void` — removes the skill directory from the agent (leaves peer directories alone).
+- `list_installed(scope) → list of marker records` — reads every `.crew.json` marker under the agent's path and returns them.
 
-### 7.2 Targets in v1
+### 7.2 Agents in v1
 
 Every adapter listed at [agentskills.io/clients](https://agentskills.io/clients) that (a) is installable on macOS as a local app or CLI and (b) reads skills from a filesystem location ships as a crew adapter. The full set:
 
@@ -406,28 +406,28 @@ Clients that exist on [agentskills.io/clients](https://agentskills.io/clients) b
 - **Cloud-only products** (no local filesystem to install into): Claude (claude.ai web), Mux, Qodo, OpenHands, Letta, Ona, Databricks Genie Code, Snowflake Cortex Code, Agentman, Google AI Edge Gallery, Spring AI, TRAE, Workshop (cloud).
 - **Platform-specific**: Firebender (Android IDE).
 - **Reused-path clients**: Piebald reads `~/.claude/skills/`, so the `claude-code` adapter already covers it. VT Code reads only `~/.agents/skills/`, so the `codex` adapter (same path) already covers it.
-- **Re-fanout tools that would create a write-loop**: Laravel Boost installs INTO other targets' skill dirs; adding it as a crew target would mean crew writes into the Boost output dir and Boost then fans it out again.
+- **Re-fanout tools that would create a write-loop**: Laravel Boost installs INTO other agents' skill dirs; adding it as a crew agent would mean crew writes into the Boost output dir and Boost then fans it out again.
 - **Docs-unverified at implementation time**: Emdash (docs JS-rendered, paths unconfirmed).
 
-Adding a new adapter later requires updating this table, adding a file under `src/targets/`, registering it in `src/targets/registry.ts`, and adding tests.
+Adding a new adapter later requires updating this table, adding a file under `src/agents/`, registering it in `src/agents/registry.ts`, and adding tests.
 
-**Detection.** Each adapter uses a best-effort signal: the tool's CLI binary on `PATH`, or the tool's user-scope configuration directory (`~/.<tool>/` or `~/.config/<tool>/`). Either signal makes the adapter "detected." A user may force-enable or force-disable any adapter through `forced_targets` / `disabled_targets` in `config.yaml`.
+**Detection.** Each adapter uses a best-effort signal: the tool's CLI binary on `PATH`, or the tool's user-scope configuration directory (`~/.<tool>/` or `~/.config/<tool>/`). Either signal makes the adapter "detected." A user may force-enable or force-disable any adapter through `forced_agents` / `disabled_agents` in `config.yaml`.
 
-**Install path shape.** Each target has a base directory for skills (user scope and project scope). A skill named `python-testing` is installed by writing its files under `<base>/python-testing/`. The directory name equals the skill's `name` (spec-guaranteed to match lowercase alphanumerics and hyphens).
+**Install path shape.** Each agent has a base directory for skills (user scope and project scope). A skill named `python-testing` is installed by writing its files under `<base>/python-testing/`. The directory name equals the skill's `name` (spec-guaranteed to match lowercase alphanumerics and hyphens).
 
 **Path sharing.** Most adapters resolve to the same filesystem path: `~/.agents/skills/` (user) and `<project>/.agents/skills/` (project) is the emerging cross-tool convention, read by Codex, Cursor, Command Code, Gemini CLI, GitHub Copilot, Goose, OpenCode, and pi. Crew writes bytes there once and reports the install to the user under each detected adapter's name, even though only one physical copy exists. The rule: **when a tool reads `~/.agents/skills/`, crew's adapter points there** — one install serves every such tool at once. Adapters whose tools don't support the cross-tool path (Amp user-scope, Autohand, Claude Code, Factory, Junie, Kiro, Mistral Vibe, Nanobot, Roo Code) keep their tool-specific paths.
 
 The install algorithm (§7.3) dedupes writes by resolved path; the marker (§7.5) records which adapters own the install.
 
-If a user runs `crew uninstall --target <name>` against an adapter that shares its path with another active adapter, only the adapter name is removed from the marker and state — the bytes stay until the last adapter leaves.
+If a user runs `crew uninstall --agent <name>` against an adapter that shares its path with another active adapter, only the adapter name is removed from the marker and state — the bytes stay until the last adapter leaves.
 
-A project-scope install for an adapter whose table entry is `—` (currently only `nanobot`) is a silent per-target no-op.
+A project-scope install for an adapter whose table entry is `—` (currently only `nanobot`) is a silent per-agent no-op.
 
 ### 7.3 Install algorithm
 
 Install takes a staged skill directory in the store, a skill name, a scope, and the full set of active adapters for the operation. Because two or more adapters may resolve to the same filesystem path (§7.2, path sharing), the algorithm is path-centric: it runs once per **distinct** `dest`, and the marker it writes records every adapter that owns that path.
 
-1. For each active adapter `a`, let `a.base` = `a.user_path()` if scope is user, else `a.project_path(cwd)`. Adapters whose project-scope path is unsupported are dropped at this step with a per-target "not applicable" outcome.
+1. For each active adapter `a`, let `a.base` = `a.user_path()` if scope is user, else `a.project_path(cwd)`. Adapters whose project-scope path is unsupported are dropped at this step with a per-agent "not applicable" outcome.
 2. Group adapters by `dest = a.base/<skill-name>/`. Each group is one physical install.
 3. For each group `(dest, adapters)`:
    a. Ensure `dirname(dest)` exists (create with `0755` if missing).
@@ -443,20 +443,20 @@ Install takes a staged skill directory in the store, a skill name, a scope, and 
       iv. Write a `.crew.json` marker into the staging directory per §7.5. The marker's `adapters` field is the **union** of (a) any `adapters` list present in a prior marker at `dest`, and (b) the adapter names in this group. This preserves ownership by adapters that installed into the same path on an earlier run and aren't part of the current operation.
       v. If `dest` exists, remove it.
       vi. Rename the staging directory to `dest`.
-4. **Never modify files outside `dest`.** Adapters must not edit shared configuration files the target tool may use (such as global `AGENTS.md`, settings JSON, etc.). If a target tool's documented convention requires modifying a shared file, that is out of scope for v1.
+4. **Never modify files outside `dest`.** Adapters must not edit shared configuration files the agent tool may use (such as global `AGENTS.md`, settings JSON, etc.). If a agent tool's documented convention requires modifying a shared file, that is out of scope for v1.
 
-**Per-target reporting.** Even when N adapters share one `dest`, the user-facing summary lists all N adapter names as installed (or up-to-date, or failed). The install summary returned to callers is keyed by adapter name, not by `dest`.
+**Per-agent reporting.** Even when N adapters share one `dest`, the user-facing summary lists all N adapter names as installed (or up-to-date, or failed). The install summary returned to callers is keyed by adapter name, not by `dest`.
 
 ### 7.4 Uninstall algorithm
 
-**Target set.** The default is to remove the skill from every target
-it's recorded against in state. `--target <name>` (repeatable,
-§5.2) restricts removal to the named targets only — other targets
-keep the install. A `--target` that names a target the skill isn't in
-at the current scope is a silent per-target no-op; it never aborts the
+**Agent set.** The default is to remove the skill from every agent
+it's recorded against in state. `--agent <name>` (repeatable,
+§5.2) restricts removal to the named agents only — other agents
+keep the install. A `--agent` that names an agent the skill isn't in
+at the current scope is a silent per-agent no-op; it never aborts the
 run.
 
-Like install, uninstall is path-centric: group the target set by `dest` (§7.3 step 2), then run the loop once per distinct path.
+Like install, uninstall is path-centric: group the agent set by `dest` (§7.3 step 2), then run the loop once per distinct path.
 
 For each `(dest, adapters_in_group)`:
 
@@ -466,11 +466,11 @@ For each `(dest, adapters_in_group)`:
 
 **Then update `state.json` (§11.1):**
 
-4. Remove the just-removed target names from the entry's `targets`
+4. Remove the just-removed agent names from the entry's `targets`
    array. If the array is now empty, remove the entry entirely, AND
    for every other entry whose `required_by` listed this skill, remove
-   the name from that list. If the array still has targets, the entry
-   survives with a reduced target list and its `required_by` is left
+   the name from that list. If the array still has agents, the entry
+   survives with a reduced agent list and its `required_by` is left
    alone (the skill isn't truly gone — it's still installed elsewhere).
 5. **If `--prune` was passed AND the entry was fully removed in step 4**,
    walk the remaining state entries at the same scope. Any entry with
@@ -479,7 +479,7 @@ For each `(dest, adapters_in_group)`:
    orphans. Continue until a full pass finds none. Orphans that abort
    on a safety check (`customized`, `untracked_directory`) are skipped
    and reported, not forced; the user can rerun with `--force --prune`
-   to override. A partial `--target` removal that leaves the entry
+   to override. A partial `--agent` removal that leaves the entry
    alive does NOT trigger pruning — the skill is still installed, so
    its dependencies are still required.
 
@@ -515,7 +515,7 @@ Written into every crew-installed skill directory. JSON, UTF-8, trailing newline
 
 - `schema_version` — integer, currently `1`. Bumped when the marker schema changes incompatibly.
 - `name` — the skill's `name` from `SKILL.md` frontmatter.
-- `adapters` — the list of target adapter names (§7.2) that own this install. Most installs are owned by a single adapter, but when N adapters resolve to the same `dest` (path-sharing, §7.2) all N are recorded here. Always non-empty; alphabetically sorted.
+- `adapters` — the list of agent adapter names (§7.2) that own this install. Most installs are owned by a single adapter, but when N adapters resolve to the same `dest` (path-sharing, §7.2) all N are recorded here. Always non-empty; alphabetically sorted.
 - `tap_name` — the configured tap that owns this skill at install time. May not exist in `config.yaml` later (user removed it manually); doctor uses the rest of the marker to rebuild a tap entry.
 - `tap_kind` — `git` or `path`. Determines how `doctor --repair` reconstructs the tap.
 - `tap_url` — for `tap_kind: git`, the clone URL. Empty string for `tap_kind: path`.
@@ -667,10 +667,10 @@ Given one or more skill references on the command line, `crew install` proceeds 
 6. **Resolve dependencies.** For each skill in the install set, read `metadata.crew.dependencies` and add each to the install set. Continue recursively until no new dependencies appear. Cycles are allowed and terminate naturally (a skill already in the set is not re-added).
    - **Bare-name resolution precedence:** (1) a sibling directory at the same source and ref (for sources where "sibling" is meaningful — git sources with a parent directory and path sources in a parent directory); (2) the tap the parent skill was installed from, if any; (3) search across all configured taps. An unqualified name matching multiple taps aborts with `ambiguous_dependency` naming the candidates.
    - **Conflict detection:** if two skills in the install set have the same `name` but resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
-7. **Determine target set.** Start with every target whose `detect()` returns true or that appears in `forced_targets`. Remove any listed in `disabled_targets`. Apply `--target` restrictions if given. If this produces the empty set, abort with `no_targets`.
+7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
 8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. If the store entry already exists and its content hash matches, reuse it.
-9. **Install into each target.** For each skill × each target in the target set × the scope, run the install algorithm from §7.3. Record per-target results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, target) pair does not stop others.
-10. **Update state.** For each successfully installed (skill, target) pair, add or replace the entry in `state.json` per §11.1. Do this under the state lock (§14).
+9. **Install into each agent.** For each skill × each agent in the agent set × the scope, run the install algorithm from §7.3. Record per-agent results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, agent) pair does not stop others.
+10. **Update state.** For each successfully installed (skill, agent) pair, add or replace the entry in `state.json` per §11.1. Do this under the state lock (§14).
     - Skills named directly on the command line (the "roots") are
       recorded with `explicit: true`. Skills pulled in only via
       `metadata.crew.dependencies` are recorded with `explicit: false`.
@@ -686,9 +686,9 @@ Given one or more skill references on the command line, `crew install` proceeds 
       `metadata.crew.dependencies` directly names `X`. Transitive
       relationships are not stored — they are derivable by walking the
       graph. `required_by` is symmetric to `dependencies` at one hop.
-11. **Print summary.** Human-readable: one line per skill reporting which targets it succeeded, was skipped, or failed in. `--json` mode emits the structured equivalent (§15).
+11. **Print summary.** Human-readable: one line per skill reporting which agents it succeeded, was skipped, or failed in. `--json` mode emits the structured equivalent (§15).
 
-Exit code: 0 if every skill succeeded in at least one target; 1 if any skill failed in every target; 2 if nothing was attempted (empty install set after expansion when the user explicitly asked for something). Other exit codes per §15.
+Exit code: 0 if every skill succeeded in at least one agent; 1 if any skill failed in every agent; 2 if nothing was attempted (empty install set after expansion when the user explicitly asked for something). Other exit codes per §15.
 
 ## 10. Update and autoupdate
 
@@ -713,7 +713,7 @@ With no arguments, updates every installed skill. With arguments, updates only t
    b. If pinned to a tag, re-resolve the tag: if the tag moved and `--force` is given, proceed; otherwise skip.
    c. Otherwise (tap source, branch, or default branch), re-resolve the ref to a SHA.
    d. If the new SHA equals the installed `resolved_sha`, the skill is up-to-date; record as such and continue.
-   e. Otherwise, stage the new commit into the store and run the install algorithm (§7.3) for every (target, scope) pair this skill is recorded against. Pre-flight safety checks apply as always: a customized install is skipped (not overwritten) unless `--force`.
+   e. Otherwise, stage the new commit into the store and run the install algorithm (§7.3) for every (agent, scope) pair this skill is recorded against. Pre-flight safety checks apply as always: a customized install is skipped (not overwritten) unless `--force`.
 4. Garbage-collect the store: any `store/<name>@<short-sha>/` entry no longer referenced by any `state.json` entry or marker is deleted.
 5. Print summary (human or JSON).
 
@@ -754,7 +754,7 @@ On every `crew update` run, for each group of state entries sharing
    builds the current child set.
 2. For each child that is **not** already in state (a skill the
    maintainer added upstream since the user's last update): runs the
-   install algorithm (§7.3) for every target in the current target
+   install algorithm (§7.3) for every agent in the current agent
    set, at the scope of the originating install, with `explicit: true`,
    `tracks_tap: true`, and `source.tap` pointing at this tap. This is
    how `crew install @with-logic/skills` + autoupdate picks up new
@@ -875,7 +875,7 @@ UTF-8 JSON with a trailing newline. Single top-level object.
       "content_hash": "sha256:9f8e7d...",
       "scope": "user",
       "installed_at": "2026-04-18T12:00:00Z",
-      "targets": ["claude-code", "codex", "gemini-cli"],
+      "agents": ["claude-code", "codex", "gemini-cli"],
       "pinned": false,
       "explicit": true,
       "required_by": []
@@ -889,7 +889,7 @@ UTF-8 JSON with a trailing newline. Single top-level object.
       "scope": "project",
       "project_root": "/Users/alice/work/product-x",
       "installed_at": "2026-04-19T10:15:00Z",
-      "targets": ["claude-code"],
+      "agents": ["claude-code"],
       "pinned": false,
       "explicit": true,
       "required_by": []
@@ -900,7 +900,7 @@ UTF-8 JSON with a trailing newline. Single top-level object.
 
 Every entry's `source` is `{ tap, path }`: the name of a configured tap (registered or auto, see §16) and the skill's directory path inside that tap. The URL or filesystem location is held in `config.yaml` on the tap row, not duplicated here, so renaming a tap or changing its URL doesn't require rewriting state.
 
-One entry per (skill, scope, project_root) triple: the same skill can be installed at user scope, at project scope under `~/work/product-x`, and at project scope under `~/work/product-y` — that's three independent entries. `targets` is the list of target adapter names this skill is currently installed into.
+One entry per (skill, scope, project_root) triple: the same skill can be installed at user scope, at project scope under `~/work/product-x`, and at project scope under `~/work/product-y` — that's three independent entries. `targets` is the list of agent adapter names this skill is currently installed into.
 
 **`project_root`** (string). Present iff `scope === "project"`. The
 absolute path to the directory the skill was installed from (the
@@ -950,7 +950,7 @@ off.
 
 **Invariants:**
 
-- Every entry in `state.json` should correspond to a `.crew.json` marker in every listed target. `crew doctor` detects and reports drift.
+- Every entry in `state.json` should correspond to a `.crew.json` marker in every listed agent. `crew doctor` detects and reports drift.
 - Every entry's `source.tap` MUST name a tap currently configured in `config.yaml`. `crew doctor --repair` recovers a missing tap by recreating it as an auto-tap from marker contents.
 - `pinned` is true if the ref was an exact SHA or a tag. Otherwise false.
 - Every name appearing in any entry's `required_by` is itself an installed skill at the same scope. `crew doctor` detects and reports dangling `required_by` names.
@@ -960,10 +960,10 @@ off.
 
 `crew doctor` performs these checks and reports each finding:
 
-1. Every `state.json` entry has a matching `.crew.json` marker in every listed target.
+1. Every `state.json` entry has a matching `.crew.json` marker in every listed agent.
 2. Every `.crew.json` marker on disk corresponds to a `state.json` entry.
 3. For each marker, the on-disk content hash matches the marker's `content_hash`. A mismatch means the user customized a crew-managed skill.
-4. Every target listed in state still passes `detect()` (or is in `forced_targets`).
+4. Every agent listed in state still passes `detect()` (or is in `forced_agents`).
 5. No `store/` entry is orphaned (not referenced by any state entry).
 6. `config.yaml` parses.
 7. If autoupdate is enabled in config, the launchd agent is actually loaded.
@@ -973,12 +973,12 @@ off.
 
 `--repair` attempts to fix:
 
-- Orphaned state entries (no corresponding marker and target missing): remove from state.
+- Orphaned state entries (no corresponding marker and agent missing): remove from state.
 - Orphaned markers (marker present, no state entry): re-add to state.
 - Orphan store entries: delete them.
 - Autoupdate drift (config says enabled but agent not loaded, or vice versa): reconcile to the config's value.
 
-`--repair` never overwrites user-customized skills or touches anything outside `~/.crew/` and the target skill directories it already manages.
+`--repair` never overwrites user-customized skills or touches anything outside `~/.crew/` and the agent skill directories it already manages.
 
 ## 12. Hashing
 
@@ -1021,8 +1021,8 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `untracked_directory` | 6 | Destination exists without a crew marker. |
 | `customized` | 6 | Destination has a marker but content hash differs. |
 | `inconsistent_marker` | 6 | Marker exists with an unexpected `name`. |
-| `not_installed_here` | 6 | Uninstall target has no marker. |
-| `no_targets` | 4 | No agent tools detected or all disabled. |
+| `not_installed_here` | 6 | Uninstall agent has no marker. |
+| `no_agents` | 4 | No agent tools detected or all disabled. |
 | `config_invalid` | 4 | `config.yaml` did not parse. |
 | `state_locked` | 7 | Could not acquire `state.json.lock` within timeout. |
 | `launchd_failure` | 8 | Autoupdate enable/disable couldn't load/unload the agent. |
@@ -1058,7 +1058,7 @@ bar here is craft, not compliance.
 
 Crew mutates state from multiple entry points (interactive commands, autoupdate). To prevent races:
 
-1. Every command that writes `state.json` or installs into a target acquires an advisory lock on `~/.crew/state.json.lock` (using `flock(2)` or an equivalent macOS file-lock primitive) before making changes. Read-only commands do not take the lock.
+1. Every command that writes `state.json` or installs into an agent acquires an advisory lock on `~/.crew/state.json.lock` (using `flock(2)` or an equivalent macOS file-lock primitive) before making changes. Read-only commands do not take the lock.
 2. Lock timeout: 30 seconds. If not acquired, exit with `state_locked` (§13).
 3. The lock is held for the full duration of file-modifying operations and released on exit, including crashes (OS-level file locks release on fd close).
 4. Git clone/fetch against a single repo is serialized under the state lock. This is not the most parallel design but is simple and adequate for a desktop tool.
@@ -1067,10 +1067,10 @@ Crew mutates state from multiple entry points (interactive commands, autoupdate)
 
 | Code | Meaning |
 |---|---|
-| 0 | Success, or partial success where every requested skill succeeded in at least one target. |
+| 0 | Success, or partial success where every requested skill succeeded in at least one agent. |
 | 1 | General failure; used when `crew update` has any skill hard-fail. |
 | 2 | Nothing was attempted (e.g. install command with only already-installed skills, or empty directory expansion where user asked for a specific thing). |
-| 4 | User error: invalid arguments, invalid skill, unresolvable references, no targets available, config invalid. |
+| 4 | User error: invalid arguments, invalid skill, unresolvable references, no agents available, config invalid. |
 | 5 | Network / source failure: could not reach git, ref does not exist. |
 | 6 | Safety-check abort: untracked directory, customized skill, bad marker. |
 | 7 | Could not acquire state lock. |
@@ -1116,7 +1116,7 @@ Crew ships with a registered default tap named `core` at a URL specified by the 
   - For git taps, the initial clone runs **before** the tap is written to config. If the clone fails (bad URL, typo, network failure, no access), the tap is not added — neither `crew tap list` nor `config.yaml` shows it, and any partially-materialized clone directory is removed.
   - If the named tap already exists with a matching URL/path/subpath, the call is an idempotent no-op (exit 0). If an existing tap of the same name has a different URL/path/subpath, the call is a `usage_error` — the user must pick a different name.
   - If the URL/path matches an existing **auto** tap, `crew tap add` promotes it: `registered` flips to `true`, and the `<name>` argument (if supplied) renames the tap. No re-clone.
-- `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Bare `crew tap` (no positional at all) prints the command's help page (same as `crew help tap`) with exit 0. Any other input — an unknown subcommand, or a word that doesn't parse as a source — is a `usage_error` whose message names the offending input and points at `crew help tap`. Other commands that take subcommands (`crew cache`, `crew autoupdate`) behave the same way; `crew targets` lists agents when bare and errors on an unknown subcommand.
+- `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Bare `crew tap` (no positional at all) prints the command's help page (same as `crew help tap`) with exit 0. Any other input — an unknown subcommand, or a word that doesn't parse as a source — is a `usage_error` whose message names the offending input and points at `crew help tap`. Other commands that take subcommands (`crew cache`, `crew autoupdate`) behave the same way; `crew agents` lists agents when bare and errors on an unknown subcommand.
 - Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`). The subpath, URL, or path is entirely internal — it never appears in skill references.
 - `crew tap remove <name>` deletes the local clone and removes the tap from config. Auto taps are also removed automatically when their last associated state entry is uninstalled (see §16.5).
 - `crew tap list` prints each tap's name, kind (`registered` / `auto`), source (URL`//subpath` or path), and last-fetched timestamp (for git-kind taps only). `--json` emits the structured shape.
@@ -1255,13 +1255,13 @@ Implementations and test suites refer to criteria by ID.
 | C-SPEC-10 | §9 | `name` that does not match the parent directory name fails validation. |
 | C-SPEC-11 | §9 | `compatibility`, if present and longer than 500 characters, fails validation. |
 | C-SPEC-12 | §9 | Validation errors name the offending field in the human-readable message. |
-| C-SPEC-13 | §9 | No file is written to any target when validation fails. |
+| C-SPEC-13 | §9 | No file is written to any agent when validation fails. |
 
 #### C-INST: Install (§9)
 
 | ID | Reference | Assertion |
 |---|---|---|
-| C-INST-01 | §9 | `crew install ./local-skill` installs from a local path into every detected target. |
+| C-INST-01 | §9 | `crew install ./local-skill` installs from a local path into every detected agent. |
 | C-INST-02 | §9 | `crew install gh:owner/repo` installs from a GitHub URL with no prior `crew tap add`. |
 | C-INST-03 | §9, §7.3 | After install, `SKILL.md` and every other file in the source appear under `{base}/<name>/`, preserving relative paths. |
 | C-INST-04 | §7.5 | A `.crew.json` marker is written into the installed skill directory with the fields listed in §7.5. |
@@ -1276,8 +1276,8 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-13 | §5.4 | Installing a skill with the same `name` from a different source produces `name_conflict`, exit 4, without `--force`. |
 | C-INST-14 | §5.4 | `--force` on a `name_conflict` is NOT honored (the spec forbids `--force` overriding name conflicts). |
 | C-INST-15 | §9 | `--dry-run` on install produces a summary of what would happen and writes no files. |
-| C-INST-16 | §9 | `--target <skill>` restricts the operation to the named target(s). |
-| C-INST-17 | §9 | `--scope project` writes to the target's project-scope path instead of the user-scope path. |
+| C-INST-16 | §9 | `--agent <skill>` restricts the operation to the named agent(s). |
+| C-INST-17 | §9 | `--scope project` writes to the agent's project-scope path instead of the user-scope path. |
 | C-INST-18 | §11.1 | A project-scope install records `project_root` in the state entry equal to the user's working directory at install time. User-scope installs do NOT have a `project_root`. |
 | C-INST-19 | §9 | `state.json` may contain multiple project-scope entries for the same skill name, each with a different `project_root` — they're independent installs, not duplicates. |
 
@@ -1337,7 +1337,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-10 | §10.1 | `crew update` exits 1 when any skill had a hard failure (network, fetch, validation). |
 | C-UPD-11 | §10.1 | When an installed skill's upstream source resolves but the skill's directory or tap entry no longer exists, `crew update` reports `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
 | C-UPD-12 | §10.1 | An update run whose only abnormalities are `source_gone` exits 0. |
-| C-UPD-13 | §10.1 | `crew update` never deletes a target's installed skill directory, its marker, or its state entry as a consequence of upstream changes. Removal is only ever performed by `crew uninstall`. |
+| C-UPD-13 | §10.1 | `crew update` never deletes a agent's installed skill directory, its marker, or its state entry as a consequence of upstream changes. Removal is only ever performed by `crew uninstall`. |
 | C-UPD-14 | §16.5 | `crew install <git-url>` against a source with no matching configured tap creates an auto tap (`registered: false`) in `config.yaml`. Every resulting state entry's `source.tap` names that tap. |
 | C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). |
 | C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
@@ -1354,24 +1354,24 @@ Implementations and test suites refer to criteria by ID.
 
 | ID | Reference | Assertion |
 |---|---|---|
-| C-UNINST-01 | §7.4 | `crew uninstall <name>` removes the skill directory from every target the skill was installed in. |
+| C-UNINST-01 | §7.4 | `crew uninstall <name>` removes the skill directory from every agent the skill was installed in. |
 | C-UNINST-02 | §7.4 | Uninstall updates `state.json` to no longer list the skill. |
-| C-UNINST-03 | §7.4 | Uninstall does not touch sibling skill directories in the same target. |
+| C-UNINST-03 | §7.4 | Uninstall does not touch sibling skill directories in the same agent. |
 | C-UNINST-04 | §7.4 | `crew uninstall` on a skill that is not installed produces `not_installed_here`, exit 6, without `--force`. |
 | C-UNINST-05 | §7.4 | `crew uninstall <name>` without `--prune` does NOT remove that skill's transitive dependencies, even if they are no longer required by anything else. |
 | C-UNINST-06 | §7.4 | `crew uninstall <name> --prune` removes the named skill, then recursively removes any remaining skill with `explicit: false` and an empty `required_by` at the same scope. |
 | C-UNINST-07 | §7.4 | `--prune` never removes a skill with `explicit: true`, even if no other skill depends on it. |
 | C-UNINST-08 | §11.1 | After `crew uninstall`, every remaining state entry's `required_by` no longer names the uninstalled skill. |
 | C-UNINST-09 | §11.1 | A skill first installed as a dependency (`explicit: false`) and then later installed directly (`crew install <name>`) has `explicit: true` after the second install. |
-| C-UNINST-10 | §7.4 | `crew uninstall --target <name> <skill>` removes the skill only from the named target(s); other targets keep their installs. |
-| C-UNINST-11 | §7.4 | After a partial `--target` uninstall, the state entry survives with a reduced `targets` list; `required_by` on other entries is unchanged. |
-| C-UNINST-12 | §7.4 | When `--target` removal empties the `targets` list, the entry is removed entirely and `required_by` on other entries is scrubbed — as with a full uninstall. |
-| C-UNINST-13 | §7.4 | `--prune` does not cascade through a partial (`--target`) uninstall that leaves the entry alive. Pruning only triggers when the entry was fully removed. |
-| C-UNINST-14 | §7.4 | `--target <name>` naming a target the skill isn't installed in is a silent per-target no-op; it never causes `not_installed_here` on its own. |
+| C-UNINST-10 | §7.4 | `crew uninstall --agent <name> <skill>` removes the skill only from the named agent(s); other agents keep their installs. |
+| C-UNINST-11 | §7.4 | After a partial `--agent` uninstall, the state entry survives with a reduced `agents` list; `required_by` on other entries is unchanged. |
+| C-UNINST-12 | §7.4 | When `--agent` removal empties the `agents` list, the entry is removed entirely and `required_by` on other entries is scrubbed — as with a full uninstall. |
+| C-UNINST-13 | §7.4 | `--prune` does not cascade through a partial (`--agent`) uninstall that leaves the entry alive. Pruning only triggers when the entry was fully removed. |
+| C-UNINST-14 | §7.4 | `--agent <name>` naming an agent the skill isn't installed in is a silent per-agent no-op; it never causes `not_installed_here` on its own. |
 | C-UNINST-15 | §11.1 | `crew uninstall --scope project <name>` removes the install at the entry's recorded `project_root`, NOT the user's current working directory. Run from any cwd, it finds and removes the correct files. |
-| C-UNINST-16 | §7.4 | When two adapters share a `dest` (e.g. `codex` + `gemini-cli` both at `~/.agents/skills/<name>/`), `crew uninstall --target codex <name>` removes `codex` from the marker's `adapters` list but leaves the bytes on disk; `gemini-cli` continues to work. |
-| C-UNINST-17 | §7.4 | After `crew uninstall --target codex <name>` in a path-shared install, the marker at `dest` contains every remaining owning adapter and no others. |
-| C-SHARE-01 | §7.2, §7.3 | When `codex` and `gemini-cli` are both active, `crew install <name>` writes bytes to `~/.agents/skills/<name>/` exactly once, and the per-target summary reports both adapter names as installed. |
+| C-UNINST-16 | §7.4 | When two adapters share a `dest` (e.g. `codex` + `gemini-cli` both at `~/.agents/skills/<name>/`), `crew uninstall --agent codex <name>` removes `codex` from the marker's `adapters` list but leaves the bytes on disk; `gemini-cli` continues to work. |
+| C-UNINST-17 | §7.4 | After `crew uninstall --agent codex <name>` in a path-shared install, the marker at `dest` contains every remaining owning adapter and no others. |
+| C-SHARE-01 | §7.2, §7.3 | When `codex` and `gemini-cli` are both active, `crew install <name>` writes bytes to `~/.agents/skills/<name>/` exactly once, and the per-agent summary reports both adapter names as installed. |
 | C-SHARE-02 | §7.5 | The `adapters` field in `.crew.json` is non-empty, alphabetically sorted, and lists every adapter currently owning the install. |
 | C-SHARE-03 | §7.3 | Installing into a path already owned by adapter X with adapter Y active (and not X) results in a marker whose `adapters` contains both X and Y, preserving X's ownership. |
 
@@ -1431,16 +1431,16 @@ Implementations and test suites refer to criteria by ID.
 | C-AUTO-09 | §10.2 | `crew autoupdate enable` writes an attribution bundle at `~/.crew/Crew.app/Contents/Info.plist` with `CFBundleIdentifier = sh.crew.autoupdater` and `CFBundleDisplayName = "Crew Skill Autoupdate"`. |
 | C-AUTO-10 | §10.2 | The plist carries an `AssociatedBundleIdentifiers` array containing `sh.crew.autoupdater`. |
 
-#### C-TARGET: Targets (§7)
+#### C-AGENT: Agents (§7)
 
 | ID | Reference | Assertion |
 |---|---|---|
-| C-TARGET-01 | §7.2 | Every adapter listed in the §7.2 table is registered and listed by `crew targets`. |
-| C-TARGET-02 | §7.2 | `crew targets` lists every adapter with its detection status. |
-| C-TARGET-03 | §7.1 | `crew targets disable <name>` causes subsequent installs to skip that target. |
-| C-TARGET-04 | §7.1 | `crew targets enable <name>` forces a target active even if `detect()` returns false. |
-| C-TARGET-05 | §9 step 7 | When no target is active (none detected and none forced), install fails with `no_targets`, exit 4. |
-| C-TARGET-06 | §7.3 | An adapter never modifies files outside `{base}/<name>/`. |
+| C-AGENT-01 | §7.2 | Every adapter listed in the §7.2 table is registered and listed by `crew agents`. |
+| C-AGENT-02 | §7.2 | `crew agents` lists every adapter with its detection status. |
+| C-AGENT-03 | §7.1 | `crew agents disable <name>` causes subsequent installs to skip that agent. |
+| C-AGENT-04 | §7.1 | `crew agents enable <name>` forces a agent active even if `detect()` returns false. |
+| C-AGENT-05 | §9 step 7 | When no agent is active (none detected and none forced), install fails with `no_agents`, exit 4. |
+| C-AGENT-06 | §7.3 | An adapter never modifies files outside `{base}/<name>/`. |
 
 #### C-CONC: Concurrency (§14)
 
@@ -1448,7 +1448,7 @@ Implementations and test suites refer to criteria by ID.
 |---|---|---|
 | C-CONC-01 | §14 | A second `crew` process attempting a state-mutating command while another holds the lock waits up to 30 seconds. |
 | C-CONC-02 | §14 | If the lock is not acquired within the timeout, the second process exits with `state_locked`, exit 7. |
-| C-CONC-03 | §14 | Read-only commands (`list`, `info`, `search`, `targets`, `tap list`, `help`, `version`) do NOT take the state lock. |
+| C-CONC-03 | §14 | Read-only commands (`list`, `info`, `search`, `agents`, `tap list`, `help`, `version`) do NOT take the state lock. |
 | C-CONC-04 | §14 | The lock is released when the holding process exits for any reason (including crash). |
 
 #### C-CLI: CLI contract (§5)
@@ -1459,7 +1459,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-02 | §5.5 | `crew help` (and `crew` with no arguments) prints the overview on stdout and exits 0. |
 | C-CLI-03 | §5.5 | `crew help <command>` prints per-command help on stdout and exits 0. |
 | C-CLI-04 | §5.1 | `crew version` prints a version string and exits 0. |
-| C-CLI-05 | §5.2 | `--json` on `list`, `search`, `info`, `targets`, `autoupdate status` produces valid JSON on stdout and no human-readable noise. |
+| C-CLI-05 | §5.2 | `--json` on `list`, `search`, `info`, `agents`, `autoupdate status` produces valid JSON on stdout and no human-readable noise. |
 | C-CLI-06 | §5.2 | `--quiet` suppresses non-error stdout. Error output still reaches stderr. |
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
@@ -1508,7 +1508,7 @@ crew install gh:acme/skills@v1.0.0//python/testing
 
 **Expected observable outcome.**
 - Exit 0.
-- The skill `testing` is installed into every detected target.
+- The skill `testing` is installed into every detected agent.
 - The marker's `source.type` is `"git"`, `source.url` is `"https://github.com/acme/skills.git"`, `source.subpath` is `"python/testing"`.
 - The marker's `ref` is `"v1.0.0"`, `resolved_sha` is the 40-character SHA the tag points at.
 - `state.json` entry has `pinned: true` (tag counts as pinned).
@@ -1595,7 +1595,7 @@ crew update
 
 **Expected observable outcome.**
 - Exit 0.
-- `gamma` is installed into every target `alpha` and `beta` were installed into, at the same scope.
+- `gamma` is installed into every agent `alpha` and `beta` were installed into, at the same scope.
 - `gamma`'s state entry has `source.tap = "skills"` (the same auto tap as `alpha` and `beta`).
 - `alpha` and `beta` are reported as updated or up-to-date per normal §10.1 logic.
 
@@ -1609,7 +1609,7 @@ crew update
 **Expected observable outcome.**
 - Exit 0 (upstream deletion is a soft outcome).
 - `beta` is reported as `source_gone`.
-- `{target-base}/beta/` is still present on disk, unchanged.
+- `{agent-base}/beta/` is still present on disk, unchanged.
 - `state.json` still contains the `beta` entry.
 - The user removes it explicitly with `crew uninstall beta` when they decide to.
 
@@ -1621,7 +1621,7 @@ A conformance test suite, packaged separately from this specification, is the au
 
 Writing out the criteria surfaced a few small holes in the spec. Resolving them:
 
-1. **Exit code for `crew install` with a mix of successes and failures.** §9 says "exit 0 if every skill succeeded in at least one target; 1 if any skill failed in every target." This leaves ambiguous the case where some root-listed skills succeeded in ≥1 target and others failed in every target. Resolution: exit 1 if any root-listed skill has zero successful targets; exit 0 otherwise. Criteria C-INST-* should be read accordingly.
+1. **Exit code for `crew install` with a mix of successes and failures.** §9 says "exit 0 if every skill succeeded in at least one agent; 1 if any skill failed in every agent." This leaves ambiguous the case where some root-listed skills succeeded in ≥1 agent and others failed in every agent. Resolution: exit 1 if any root-listed skill has zero successful agents; exit 0 otherwise. Criteria C-INST-* should be read accordingly.
 2. **Content hash of the empty directory.** Sensible per §12.1: with no tuples, the accumulator sees no input and the hash is `sha256:` followed by the SHA-256 of the empty byte string (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`). Criterion C-HASH-01 fixes this.
 3. **Order of dependencies in install.** §9 step 6 says dependencies are resolved, but not installed order. Resolution: dependencies are installed before dependents (topological order). Cycles are permitted by C-DEP-08 — when breaking a cycle, pick any valid order; the outcome is the same.
 
@@ -1631,5 +1631,5 @@ These resolutions are normative and should be folded into the main spec in the n
 
 1. **Default tap URL and name.** The `core` tap name is fixed in this spec; the URL is implementation-set, though configured in `config.yaml` which is bundled with the app. Once the default tap repo exists, the URL should be added to this document and to the shipped `config.yaml` default.
 3. **Project-scope lockfile.** A `crew.lock` at a project's root that `crew install` in that directory restores exactly (npm/bundler style) is an obvious follow-on but out of scope for v1.
-4. **Per-target content overlays.** Some skills might want slightly different instructions per target. This spec keeps skills target-agnostic; overlays can be revisited if demand appears.
+4. **Per-agent content overlays.** Some skills might want slightly different instructions per agent. This spec keeps skills agent-agnostic; overlays can be revisited if demand appears.
 5. **Renaming on name conflict.** Currently a hard error. An opt-in `--rename-on-conflict` mode could be added later without breaking anything here.

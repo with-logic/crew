@@ -40,7 +40,7 @@ export type InstallNewChild = (args: {
   readonly tapRelativePath: string;
   readonly scope: Scope;
   readonly tap: TapConfig;
-  readonly targets: readonly string[];
+  readonly agents: readonly string[];
   readonly resolvedSha: string | null;
   readonly projectRoot: string | null;
 }) => StateEntry | null;
@@ -158,7 +158,7 @@ export function reexpandTaps(
 
     // ADDITIONS: children upstream not in state.
     const memberNames = new Set(members.map((m) => m.name));
-    const aggregateTargets = [...new Set(members.flatMap((m) => m.targets))];
+    const aggregateTargets = [...new Set(members.flatMap((m) => m.agents))];
     for (const childName of childNames) {
       if (memberNames.has(childName)) continue;
       const skillDir = childByName.get(childName)!;
@@ -169,7 +169,7 @@ export function reexpandTaps(
         tapRelativePath,
         scope: first.scope,
         tap,
-        targets: aggregateTargets,
+        agents: aggregateTargets,
         resolvedSha: acquired.resolvedSha,
         projectRoot,
       });

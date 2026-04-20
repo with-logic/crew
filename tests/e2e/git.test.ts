@@ -6,11 +6,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { readState } from "../../src/state/load.ts";
-import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
-import { codexAdapter } from "../../src/targets/codex.ts";
-import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
   commitAll,

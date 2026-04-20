@@ -39,7 +39,7 @@ export interface CommandContext {
 /** Global flags as parsed by the CLI. */
 export interface CommandFlags {
   readonly scope: Scope;
-  readonly target: readonly string[];
+  readonly agent: readonly string[];
   readonly dryRun: boolean;
   readonly json: boolean;
   readonly quiet: boolean;

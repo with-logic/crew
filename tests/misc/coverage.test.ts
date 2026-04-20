@@ -12,14 +12,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
+import { isOnPath } from "../../src/agents/path.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { CrewError, fail } from "../../src/core/errors.ts";
 import { runGit } from "../../src/git/exec.ts";
 import { classifyRef, initRepo } from "../../src/git/repo.ts";
-import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
-import { codexAdapter } from "../../src/targets/codex.ts";
-import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
-import { isOnPath } from "../../src/targets/path.ts";
 import { copyTree } from "../../src/util/copy.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
@@ -142,19 +142,17 @@ describe("help command", () => {
 describe("targets subcommands", () => {
   test("targets enable/disable cycle", () => {
     const home = makeCrewHome();
-    runCli(["targets", "disable", "claude-code"], { home, streams: captureStreams().streams });
-    runCli(["targets", "enable", "claude-code"], { home, streams: captureStreams().streams });
+    runCli(["agents", "disable", "claude-code"], { home, streams: captureStreams().streams });
+    runCli(["agents", "enable", "claude-code"], { home, streams: captureStreams().streams });
     const c = captureStreams();
-    runCli(["targets", "--json"], { home, streams: c.streams });
+    runCli(["agents", "--json"], { home, streams: c.streams });
     const parsed = JSON.parse(c.stdout());
-    expect(parsed.targets.find((t: { name: string }) => t.name === "claude-code").forced).toBe(
-      true,
-    );
+    expect(parsed.agents.find((t: { name: string }) => t.name === "claude-code").forced).toBe(true);
   });
 
   test("unknown target errors", () => {
     const home = makeCrewHome();
-    const code = runCli(["targets", "enable", "no-such"], {
+    const code = runCli(["agents", "enable", "no-such"], {
       home,
       streams: captureStreams().streams,
     });
@@ -164,10 +162,10 @@ describe("targets subcommands", () => {
   test("unknown targets subcommand is a usage error pointing at help", () => {
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["targets", "frob"], { home, streams: c.streams });
+    const code = runCli(["agents", "frob"], { home, streams: c.streams });
     expect(code).toBe(4);
     expect(c.stderr()).toContain("frob");
-    expect(c.stderr()).toContain("crew help targets");
+    expect(c.stderr()).toContain("crew help agents");
   });
 });
 
@@ -366,7 +364,7 @@ describe("flags parser", () => {
 
   test("--flag requiring value but missing", () => {
     const home = makeCrewHome();
-    const code = runCli(["install", "--target"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--agent"], { home, streams: captureStreams().streams });
     expect(code).toBe(4);
   });
 
@@ -386,7 +384,7 @@ describe("flags parser", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const code = runCli(["install", "--target", "claude-code", "--target", "codex", skill], {
+    const code = runCli(["install", "--agent", "claude-code", "--agent", "codex", skill], {
       home,
       streams: captureStreams().streams,
     });
@@ -461,8 +459,8 @@ describe("error output non-json mode", () => {
   test("targets enable/disable with no name surfaces a friendly usage hint", () => {
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["targets", "enable"], { home, streams: c.streams });
+    const code = runCli(["agents", "enable"], { home, streams: c.streams });
     expect(code).toBe(4);
-    expect(c.stderr()).toContain("crew targets enable");
+    expect(c.stderr()).toContain("crew agents enable");
   });
 });

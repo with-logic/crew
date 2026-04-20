@@ -11,10 +11,10 @@
 
 import { join } from "node:path";
 import { isDirectory } from "../util/fs.ts";
-import type { TargetAdapter } from "./adapter.ts";
+import type { AgentAdapter } from "./adapter.ts";
 import { isOnPath, userHome } from "./path.ts";
 
-export const gooseAdapter: TargetAdapter = {
+export const gooseAdapter: AgentAdapter = {
   name: "goose",
   detect(): boolean {
     return isDirectory(join(userHome(), ".config", "goose")) || isOnPath("goose");

@@ -21,7 +21,7 @@ const sample: StateEntry = {
   content_hash: "sha256:abc",
   scope: "user",
   installed_at: "2026-04-18T12:00:00Z",
-  targets: ["claude-code"],
+  agents: ["claude-code"],
   pinned: false,
   explicit: true,
   required_by: [],
@@ -49,9 +49,9 @@ describe("state load/write", () => {
 
   test("upsertEntry replaces by (name, scope)", () => {
     const base = { schema_version: 1 as const, installations: [sample] };
-    const s = upsertEntry(base, { ...sample, targets: ["codex"] });
+    const s = upsertEntry(base, { ...sample, agents: ["codex"] });
     expect(s.installations).toHaveLength(1);
-    expect(s.installations[0]!.targets).toEqual(["codex"]);
+    expect(s.installations[0]!.agents).toEqual(["codex"]);
   });
 
   test("removeByName removes all entries with name", () => {

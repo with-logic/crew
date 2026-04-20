@@ -5,14 +5,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
+import { uninstallSkillFromAgents } from "../../src/agents/install.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";
 import { readState, upsertEntry, writeState } from "../../src/state/load.ts";
-import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
-import { codexAdapter } from "../../src/targets/codex.ts";
-import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
-import { uninstallSkillFromTarget } from "../../src/targets/install.ts";
 import { parseYaml, stringifyYaml } from "../../src/yaml/parse.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
@@ -128,7 +128,7 @@ describe("update: target that's no longer registered", () => {
         ...state,
         installations: state.installations.map((e) => ({
           ...e,
-          targets: [...e.targets, "bogus-target"],
+          agents: [...e.agents, "bogus-target"],
         })),
       },
       home,
@@ -195,7 +195,7 @@ describe("uninstall edges via direct function call", () => {
         JSON.stringify({
           schema_version: 1,
           name: n,
-          adapters: ["claude-code"],
+          agents: ["claude-code"],
           source: { type: "path", path: "/x" },
           ref: null,
           resolved_sha: null,
@@ -207,8 +207,8 @@ describe("uninstall edges via direct function call", () => {
       );
       require("node:fs").writeFileSync(join(base, n, "SKILL.md"), "x");
     }
-    const res = uninstallSkillFromTarget({
-      adapters: [claudeCodeAdapter],
+    const res = uninstallSkillFromAgents({
+      agents: [claudeCodeAdapter],
       scope: "project",
       cwd: proj,
       skillName: "demo",
@@ -246,7 +246,7 @@ describe("upsertEntry preserves other entries", () => {
       content_hash: "sha256:a",
       scope: "user",
       installed_at: "2026-04-18T00:00:00Z",
-      targets: ["claude-code"],
+      agents: ["claude-code"],
       pinned: false,
       explicit: true,
       required_by: [],
@@ -259,7 +259,7 @@ describe("upsertEntry preserves other entries", () => {
       content_hash: "sha256:b",
       scope: "user",
       installed_at: "2026-04-18T00:00:00Z",
-      targets: ["claude-code"],
+      agents: ["claude-code"],
       pinned: false,
       explicit: true,
       required_by: [],
@@ -272,14 +272,14 @@ describe("upsertEntry preserves other entries", () => {
       content_hash: "sha256:a",
       scope: "user",
       installed_at: "2026-04-18T00:00:00Z",
-      targets: ["codex"],
+      agents: ["codex"],
       pinned: false,
       explicit: true,
       required_by: [],
     });
     expect(state.installations).toHaveLength(2);
     const a = state.installations.find((i) => i.name === "a")!;
-    expect(a.targets).toEqual(["codex"]);
+    expect(a.agents).toEqual(["codex"]);
   });
 });
 
@@ -334,7 +334,7 @@ describe("install --force on inconsistent_marker", () => {
     );
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const code = runCli(["install", "--force", "--target", "claude-code", skill], {
+    const code = runCli(["install", "--force", "--agent", "claude-code", skill], {
       home,
       streams: captureStreams().streams,
     });

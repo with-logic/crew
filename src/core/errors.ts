@@ -22,7 +22,7 @@ export type CrewErrorName =
   | "customized"
   | "inconsistent_marker"
   | "not_installed_here"
-  | "no_targets"
+  | "no_agents"
   | "config_invalid"
   | "state_locked"
   | "launchd_failure"
@@ -48,7 +48,7 @@ export const EXIT_CODES: Record<CrewErrorName, number> = {
   customized: 6,
   inconsistent_marker: 6,
   not_installed_here: 6,
-  no_targets: 4,
+  no_agents: 4,
   config_invalid: 4,
   state_locked: 7,
   launchd_failure: 8,

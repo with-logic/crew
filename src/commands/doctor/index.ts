@@ -11,12 +11,12 @@ import { crewHome } from "../../core/paths.ts";
 import { readState } from "../../state/load.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import {
+  checkAgentDetection,
   checkAutoupdateDrift,
   checkContentHashDrift,
   checkOrphanStoreEntries,
   checkProjectRoots,
   checkStateMarkerDrift,
-  checkTargetDetection,
   type Finding,
 } from "./checks.ts";
 import { buildMarkerIndex } from "./markers.ts";
@@ -44,7 +44,7 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
 
   findings.push(...checkStateMarkerDrift(stateEntries, markers));
   if (verify) findings.push(...checkContentHashDrift(markers));
-  if (config) findings.push(...checkTargetDetection(stateEntries, config));
+  if (config) findings.push(...checkAgentDetection(stateEntries, config));
   findings.push(...checkOrphanStoreEntries(stateEntries, home));
   findings.push(...checkProjectRoots(stateEntries));
   if (config) findings.push(...checkAutoupdateDrift(config));

@@ -9,6 +9,8 @@
  */
 
 import { join } from "node:path";
+import { baseFor, cwdForEntry } from "../../agents/adapter.ts";
+import { agentByName } from "../../agents/registry.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateEntry } from "../../core/types.ts";
@@ -19,8 +21,6 @@ import { hasSkillMd, loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
 import { expandSkills } from "../../sources/expand.ts";
 import { readState } from "../../state/load.ts";
-import { baseFor, cwdForEntry } from "../../targets/adapter.ts";
-import { adapterByName } from "../../targets/registry.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import type { InstalledInfo, SkillInfo } from "./render.ts";
 import { renderInstalled, renderSkills } from "./render.ts";
@@ -116,8 +116,8 @@ function loadDescriptionFromAny(
   fallbackCwd: string,
 ): string | null {
   for (const entry of entries) {
-    for (const target of entry.targets) {
-      const adapter = adapterByName(target);
+    for (const target of entry.agents) {
+      const adapter = agentByName(target);
       if (!adapter) continue;
       const cwd = cwdForEntry(entry, fallbackCwd);
       const installDir = join(baseFor(adapter, entry.scope, cwd), entry.name);

@@ -16,7 +16,7 @@ const CODE_LABELS: Record<string, string> = {
   marker_without_state: "there's an install on disk crew doesn't remember",
   customized: "local edits detected (won't be overwritten)",
   orphan_store_entry: "a cached skill is no longer referenced",
-  target_missing: "an agent in your state isn't detected anymore",
+  agent_missing: "an agent in your state isn't detected anymore",
   missing_project_root: "a project folder is missing",
   autoupdate_not_loaded: "autoupdate is enabled but the background agent isn't loaded",
   autoupdate_unexpectedly_loaded: "autoupdate is off but the background agent is still loaded",
@@ -28,7 +28,7 @@ const CODE_GROUPS: Record<string, string> = {
   marker_without_state: "State",
   customized: "State",
   orphan_store_entry: "Storage",
-  target_missing: "Agents",
+  agent_missing: "Agents",
   missing_project_root: "State",
   autoupdate_not_loaded: "Autoupdate",
   autoupdate_unexpectedly_loaded: "Autoupdate",
@@ -134,6 +134,6 @@ function isRepairable(findings: readonly Finding[]): boolean {
   // Most codes are mechanical drift that `--repair` reconciles. The
   // exceptions are ones that need user attention: customizations,
   // undetected agents, and an unparseable config.
-  const notRepairable = new Set(["customized", "target_missing", "config_invalid"]);
+  const notRepairable = new Set(["customized", "agent_missing", "config_invalid"]);
   return findings.some((f) => !notRepairable.has(f.code));
 }

@@ -25,8 +25,8 @@ describe("readConfig", () => {
         path: "",
       },
     ]);
-    expect(c.disabled_targets).toEqual([]);
-    expect(c.forced_targets).toEqual([]);
+    expect(c.disabled_agents).toEqual([]);
+    expect(c.forced_agents).toEqual([]);
     expect(c.autoupdate).toEqual({
       enabled: false,
       interval_seconds: DEFAULT_AUTOUPDATE_INTERVAL_SECONDS,
@@ -43,10 +43,10 @@ describe("readConfig", () => {
   test("round-trip writeConfig + readConfig", () => {
     const home = makeCrewHome();
     const c = defaultConfig();
-    writeConfig({ ...c, disabled_targets: ["codex"], forced_targets: ["claude-code"] }, home);
+    writeConfig({ ...c, disabled_agents: ["codex"], forced_agents: ["claude-code"] }, home);
     const read = readConfig(home);
-    expect(read.disabled_targets).toEqual(["codex"]);
-    expect(read.forced_targets).toEqual(["claude-code"]);
+    expect(read.disabled_agents).toEqual(["codex"]);
+    expect(read.forced_agents).toEqual(["claude-code"]);
   });
 });
 
@@ -87,9 +87,9 @@ describe("normalizeConfig", () => {
     expect(kept.taps[0]!.subpath).toBe("skills");
   });
 
-  test("disabled_targets must be a list of strings", () => {
-    expect(() => normalizeConfig({ disabled_targets: "foo" })).toThrow(CrewError);
-    expect(() => normalizeConfig({ disabled_targets: [42] })).toThrow(CrewError);
+  test("disabled_agents must be a list of strings", () => {
+    expect(() => normalizeConfig({ disabled_agents: "foo" })).toThrow(CrewError);
+    expect(() => normalizeConfig({ disabled_agents: [42] })).toThrow(CrewError);
   });
 
   test("autoupdate must be a mapping", () => {
@@ -106,7 +106,7 @@ describe("normalizeConfig", () => {
   });
 
   test("missing taps returns default tap", () => {
-    const c = normalizeConfig({ disabled_targets: [] });
+    const c = normalizeConfig({ disabled_agents: [] });
     expect(c.taps[0]!.name).toBe(DEFAULT_TAP_NAME);
   });
 

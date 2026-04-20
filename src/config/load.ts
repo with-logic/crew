@@ -62,14 +62,14 @@ export function normalizeConfig(parsed: YamlValue): Config {
     }
   }
 
-  const disabled_targets = readStringList(map, "disabled_targets");
-  const forced_targets = readStringList(map, "forced_targets");
+  const disabled_agents = readStringList(map, "disabled_agents");
+  const forced_agents = readStringList(map, "forced_agents");
   const autoupdate = parseAutoupdate(map["autoupdate"]);
 
   return {
     taps,
-    disabled_targets,
-    forced_targets,
+    disabled_agents,
+    forced_agents,
     autoupdate,
   };
 }
@@ -208,8 +208,8 @@ function readStringList(map: YamlMap, key: string): string[] {
 export function writeConfig(config: Config, home: string = crewHome()): void {
   const obj: YamlValue = {
     taps: config.taps.map((t) => serializeTap(t)),
-    disabled_targets: [...config.disabled_targets],
-    forced_targets: [...config.forced_targets],
+    disabled_agents: [...config.disabled_agents],
+    forced_agents: [...config.forced_agents],
     autoupdate: {
       enabled: config.autoupdate.enabled,
       interval_seconds: config.autoupdate.interval_seconds,

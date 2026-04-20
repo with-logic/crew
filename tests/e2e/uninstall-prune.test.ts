@@ -8,11 +8,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { readState } from "../../src/state/load.ts";
-import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
-import { codexAdapter } from "../../src/targets/codex.ts";
-import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -200,7 +200,7 @@ describe("uninstall --target", () => {
     expect(existsSync(join(geRoot, "demo", "SKILL.md"))).toBe(true);
 
     const c = captureStreams();
-    const code = runCli(["uninstall", "--target", "codex", "demo"], { home, streams: c.streams });
+    const code = runCli(["uninstall", "--agent", "codex", "demo"], { home, streams: c.streams });
     expect(code).toBe(0);
     // Codex removed, others kept.
     expect(existsSync(join(ccRoot, "demo", "SKILL.md"))).toBe(true);
@@ -213,26 +213,26 @@ describe("uninstall --target", () => {
   test("C-UNINST-11 state entry survives with reduced targets", () => {
     const home = makeCrewHome();
     expect(installOne(home).code).toBe(0);
-    runCli(["uninstall", "--target", "codex", "demo"], { home, streams: captureStreams().streams });
+    runCli(["uninstall", "--agent", "codex", "demo"], { home, streams: captureStreams().streams });
     const state = readState(home);
     const demo = state.installations.find((e) => e.name === "demo")!;
     expect(demo).toBeDefined();
-    expect(demo.targets).toEqual(["claude-code", "gemini-cli"]);
+    expect(demo.agents).toEqual(["claude-code", "gemini-cli"]);
   });
 
   test("C-UNINST-12 removing the last target drops the entry entirely", () => {
     const home = makeCrewHome();
     expect(installOne(home).code).toBe(0);
     // Remove from every target in two steps.
-    runCli(["uninstall", "--target", "codex", "--target", "gemini-cli", "demo"], {
+    runCli(["uninstall", "--agent", "codex", "--agent", "gemini-cli", "demo"], {
       home,
       streams: captureStreams().streams,
     });
     {
       const state = readState(home);
-      expect(state.installations.find((e) => e.name === "demo")!.targets).toEqual(["claude-code"]);
+      expect(state.installations.find((e) => e.name === "demo")!.agents).toEqual(["claude-code"]);
     }
-    runCli(["uninstall", "--target", "claude-code", "demo"], {
+    runCli(["uninstall", "--agent", "claude-code", "demo"], {
       home,
       streams: captureStreams().streams,
     });
@@ -250,7 +250,7 @@ describe("uninstall --target", () => {
 
     // Partial uninstall of foo with --prune. foo's entry survives (still
     // in claude-code + gemini-cli), so bar is NOT orphaned.
-    runCli(["uninstall", "--prune", "--target", "codex", "foo"], {
+    runCli(["uninstall", "--prune", "--agent", "codex", "foo"], {
       home,
       streams: captureStreams().streams,
     });
@@ -265,12 +265,12 @@ describe("uninstall --target", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", "--target", "codex", skill], {
+    runCli(["install", "--agent", "codex", skill], {
       home,
       streams: captureStreams().streams,
     });
     const c = captureStreams();
-    const code = runCli(["uninstall", "--target", "claude-code", "demo"], {
+    const code = runCli(["uninstall", "--agent", "claude-code", "demo"], {
       home,
       streams: c.streams,
     });
@@ -279,20 +279,20 @@ describe("uninstall --target", () => {
     expect(existsSync(join(coRoot, "demo", "SKILL.md"))).toBe(true);
     // State entry is unchanged (still lists codex only).
     const state = readState(home);
-    expect(state.installations.find((e) => e.name === "demo")!.targets).toEqual(["codex"]);
+    expect(state.installations.find((e) => e.name === "demo")!.agents).toEqual(["codex"]);
   });
 
   test("unknown --target produces a usage error with the known list", () => {
     const home = makeCrewHome();
     expect(installOne(home).code).toBe(0);
     const c = captureStreams();
-    const code = runCli(["uninstall", "--target", "atari-basic", "demo"], {
+    const code = runCli(["uninstall", "--agent", "atari-basic", "demo"], {
       home,
       streams: c.streams,
     });
     expect(code).toBe(4);
     expect(c.stderr()).toContain("atari-basic");
-    expect(c.stderr()).toContain("known targets");
+    expect(c.stderr()).toContain("known agents");
   });
 
   test("full --prune removal still cascades normally", () => {

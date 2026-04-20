@@ -14,9 +14,9 @@
  * user at `crew info` for more detail.
  */
 
+import { ALL_AGENTS } from "../agents/registry.ts";
 import type { StateEntry } from "../core/types.ts";
 import { readState } from "../state/load.ts";
-import { ALL_ADAPTERS } from "../targets/registry.ts";
 import { columns, shortenHome } from "../util/format.ts";
 import type { Styler } from "../util/term.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
@@ -54,7 +54,7 @@ function renderList(entries: readonly StateEntry[], style: Styler): string[] {
   lines.push(style.bold(`Installed skills (${grouped.size})`));
   lines.push("");
 
-  const adapterCount = ALL_ADAPTERS.length;
+  const adapterCount = ALL_AGENTS.length;
   const rowCells: string[][] = [];
   for (const [, group] of grouped) {
     const user = group.find((e) => e.scope === "user");
@@ -112,9 +112,9 @@ function formatVersion(e: StateEntry): string {
 }
 
 function formatAgents(e: StateEntry, adapterCount: number, style: Styler): string {
-  if (e.targets.length === 0) return style.dim("(no agents)");
-  if (e.targets.length === adapterCount) return "all agents";
-  return e.targets.join(", ");
+  if (e.agents.length === 0) return style.dim("(no agents)");
+  if (e.agents.length === adapterCount) return "all agents";
+  return e.agents.join(", ");
 }
 
 function formatTags(e: StateEntry, style: Styler): string {

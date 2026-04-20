@@ -89,13 +89,13 @@ export interface Marker {
   readonly schema_version: 1;
   readonly name: string;
   /**
-   * Target adapter names that own this install (§7.2 path sharing).
-   * Non-empty; alphabetically sorted. When N adapters resolve to the
+   * Agent names that own this install (§7.2 path sharing).
+   * Non-empty; alphabetically sorted. When N agents resolve to the
    * same `dest`, all N names are recorded here so `crew uninstall
-   * --target X` can remove X's ownership without deleting bytes that
-   * other adapters still need.
+   * --agent X` can remove X's ownership without deleting bytes that
+   * other agents still need.
    */
-  readonly adapters: readonly string[];
+  readonly agents: readonly string[];
   /** Tap that owned this skill at install time. May not exist in current config. */
   readonly tap_name: string;
   /** `git` (URL-backed clone) or `path` (local directory). */
@@ -144,7 +144,7 @@ export interface StateEntry {
   readonly content_hash: string;
   readonly scope: Scope;
   readonly installed_at: string;
-  readonly targets: readonly string[];
+  readonly agents: readonly string[];
   readonly pinned: boolean;
   /** True if the user asked for this skill by name. False for dep-only installs. */
   readonly explicit: boolean;
@@ -204,8 +204,8 @@ export interface TapConfig {
 /** The parsed, normalized config.yaml. */
 export interface Config {
   readonly taps: readonly TapConfig[];
-  readonly disabled_targets: readonly string[];
-  readonly forced_targets: readonly string[];
+  readonly disabled_agents: readonly string[];
+  readonly forced_agents: readonly string[];
   readonly autoupdate: {
     readonly enabled: boolean;
     readonly interval_seconds: number;

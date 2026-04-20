@@ -6,11 +6,11 @@
  * fresh state entry on success. Per-target failures are non-fatal.
  */
 
+import { type AgentAdapter, baseFor } from "../agents/adapter.ts";
+import { installSkillIntoAgents } from "../agents/install.ts";
+import { agentByName } from "../agents/registry.ts";
 import type { Scope, StateEntry, TapConfig } from "../core/types.ts";
 import { stageIntoStore } from "../sources/store.ts";
-import { baseFor, type TargetAdapter } from "../targets/adapter.ts";
-import { installSkillIntoTarget } from "../targets/install.ts";
-import { adapterByName } from "../targets/registry.ts";
 import { nowIso } from "../util/time.ts";
 
 export function installNewTapChild(
@@ -20,7 +20,7 @@ export function installNewTapChild(
     readonly tapRelativePath: string;
     readonly scope: Scope;
     readonly tap: TapConfig;
-    readonly targets: readonly string[];
+    readonly agents: readonly string[];
     readonly resolvedSha: string | null;
     readonly projectRoot: string | null;
   },
@@ -33,9 +33,9 @@ export function installNewTapChild(
   const successfulTargets: string[] = [];
   // Group adapters by resolved install path (path sharing, §7.2) so
   // shared-path targets install once but both get marked successful.
-  const groups = new Map<string, TargetAdapter[]>();
-  for (const targetName of args.targets) {
-    const adapter = adapterByName(targetName);
+  const groups = new Map<string, AgentAdapter[]>();
+  for (const targetName of args.agents) {
+    const adapter = agentByName(targetName);
     if (!adapter) continue;
     const base = baseFor(adapter, args.scope, childCwd);
     if (base === "") continue;
@@ -46,8 +46,8 @@ export function installNewTapChild(
   }
   for (const group of groups.values()) {
     try {
-      installSkillIntoTarget({
-        adapters: group,
+      installSkillIntoAgents({
+        agents: group,
         scope: args.scope,
         cwd: childCwd,
         storePath: staged.storePath,
@@ -73,7 +73,7 @@ export function installNewTapChild(
     content_hash: staged.contentHash,
     scope: args.scope,
     installed_at: nowIso(),
-    targets: successfulTargets,
+    agents: successfulTargets,
     pinned: false,
     explicit: true,
     // Tap re-expansion only fires for whole-tap groups, so a child

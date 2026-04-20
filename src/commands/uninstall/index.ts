@@ -5,15 +5,15 @@
  * state.json. Fails with `not_installed_here` if no state entry exists,
  * unless `--force`.
  *
- * With `--target <name>` (repeatable), removal is restricted to the
+ * With `--agent <name>` (repeatable), removal is restricted to the
  * named targets only — other targets keep their installs. If the
- * `--target` filter leaves the entry's `targets` array empty, the
+ * `--agent` filter leaves the entry's `targets` array empty, the
  * entry is removed entirely (same as a default full uninstall).
  *
  * With `--prune` (§7.4 step 5), after removing the named skills, the
  * command recursively uninstalls any remaining skill that was only
  * installed as a transitive dependency (`explicit: false`, empty
- * `required_by`). A partial `--target` removal that leaves the entry
+ * `required_by`). A partial `--agent` removal that leaves the entry
  * alive does NOT trigger pruning — the skill is still installed, so
  * its dependencies are still required.
  *
@@ -21,13 +21,13 @@
  * (`./core.ts`, `./state.ts`).
  */
 
+import { ALL_AGENTS, agentByName } from "../../agents/registry.ts";
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
 import type { Config, StateFile } from "../../core/types.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
-import { ALL_ADAPTERS, adapterByName } from "../../targets/registry.ts";
 import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
@@ -42,7 +42,7 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
     );
   }
   const prune = Boolean(ctx.flags.extras["prune"]);
-  const targetFilter = validateTargetFilter(ctx.flags.target);
+  const agentFilter = validateAgentFilter(ctx.flags.agent);
 
   const records: UninstallRecord[] = [];
   let exitCode = 0;
@@ -50,7 +50,7 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
   withStateLock(() => {
     let state = readState(ctx.home);
     for (const name of ctx.positional) {
-      const { updatedState, rec } = removeOne(state, name, ctx, false, targetFilter);
+      const { updatedState, rec } = removeOne(state, name, ctx, false, agentFilter);
       state = updatedState;
       records.push(rec);
       if (rec.failures.length > 0) exitCode = 1;
@@ -68,29 +68,29 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
 }
 
 /**
- * Validate `--target` against the adapter registry. An unknown target is
+ * Validate `--agent` against the adapter registry. An unknown agent is
  * a user error — we tell them what's known so they can fix the typo.
- * An empty filter (no `--target` passed) means "remove from every target
+ * An empty filter (no `--agent` passed) means "remove from every agent
  * this skill is currently installed in."
  */
-function validateTargetFilter(targets: readonly string[]): readonly string[] | null {
-  if (targets.length === 0) return null;
-  const unknown = targets.filter((n) => !adapterByName(n));
+function validateAgentFilter(agents: readonly string[]): readonly string[] | null {
+  if (agents.length === 0) return null;
+  const unknown = agents.filter((n) => !agentByName(n));
   if (unknown.length > 0) {
-    const known = ALL_ADAPTERS.map((a) => a.name).join(", ");
+    const known = ALL_AGENTS.map((a) => a.name).join(", ");
     throw new CrewError(
       "usage_error",
-      `unknown target${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")} — known targets: ${known}`,
+      `unknown agent${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")} — known agents: ${known}`,
       { unknown },
     );
   }
-  return targets;
+  return agents;
 }
 
 /**
  * Recursively remove any skill that is now an autoremovable orphan:
  * `explicit: false` AND empty `required_by`. Runs until a full pass
- * finds no new orphans. Prune never respects `--target` filters —
+ * finds no new orphans. Prune never respects `--agent` filters —
  * when we auto-remove a dep, we remove it fully.
  */
 function pruneOrphans(

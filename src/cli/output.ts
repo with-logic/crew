@@ -111,8 +111,8 @@ const REMEDIES: Partial<Record<CrewErrorName, string>> = {
     "the destination's .crew.json doesn't match the skill being installed. investigate before forcing; `--force` will overwrite.",
   not_installed_here:
     "nothing to remove at this scope. check `crew list`; add `--force` to treat this as a no-op.",
-  no_targets:
-    "no agent coders are active. run `crew targets` to see detection status, or `crew targets enable <name>` to force one on.",
+  no_agents:
+    "no agent coders are active. run `crew agents` to see detection status, or `crew agents enable <name>` to force one on.",
   config_invalid:
     "crew couldn't parse `~/.crew/config.yaml`. fix the YAML or delete the file to get defaults back.",
   state_locked:

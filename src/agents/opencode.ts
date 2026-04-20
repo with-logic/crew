@@ -11,10 +11,10 @@
 
 import { join } from "node:path";
 import { isDirectory } from "../util/fs.ts";
-import type { TargetAdapter } from "./adapter.ts";
+import type { AgentAdapter } from "./adapter.ts";
 import { isOnPath, userHome } from "./path.ts";
 
-export const opencodeAdapter: TargetAdapter = {
+export const opencodeAdapter: AgentAdapter = {
   name: "opencode",
   detect(): boolean {
     return isDirectory(join(userHome(), ".config", "opencode")) || isOnPath("opencode");

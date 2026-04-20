@@ -5,7 +5,7 @@
  *   - A real git repo at a file:// URL simulates a tap or remote source.
  *   - A fake `~/.crew/` under a tmp dir.
  *   - Target adapters are pointed at tmp directories via `CLAUDE_HOME`
- *     etc. — we use `forced_targets` plus override paths by monkey-patching
+ *     etc. — we use `forced_agents` plus override paths by monkey-patching
  *     the adapter's base dir lookups.
  */
 
@@ -13,11 +13,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { readState } from "../../src/state/load.ts";
-import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
-import { codexAdapter } from "../../src/targets/codex.ts";
-import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
   commitAll,
@@ -34,7 +34,7 @@ import {
  * a restore function.
  */
 function redirectAdapters(): {
-  targets: Record<string, string>;
+  agents: Record<string, string>;
   restore: () => void;
   projectRoot: string;
 } {
@@ -73,7 +73,7 @@ function redirectAdapters(): {
   (geminiCliAdapter as { detect: () => boolean }).detect = () => true;
 
   return {
-    targets: { "claude-code": ccRoot, codex: coRoot, "gemini-cli": geRoot },
+    agents: { "claude-code": ccRoot, codex: coRoot, "gemini-cli": geRoot },
     projectRoot,
     restore() {
       (claudeCodeAdapter as { userPath: () => string }).userPath = originals.cc.user;
@@ -112,7 +112,7 @@ describe("install from local path", () => {
     expect(code).toBe(0);
 
     for (const adapter of ["claude-code", "codex", "gemini-cli"]) {
-      const dest = join(redirect.targets[adapter]!, "demo");
+      const dest = join(redirect.agents[adapter]!, "demo");
       expect(existsSync(join(dest, "SKILL.md"))).toBe(true);
       expect(existsSync(join(dest, "RESOURCE.md"))).toBe(true);
       expect(existsSync(join(dest, ".crew.json"))).toBe(true);
@@ -120,7 +120,7 @@ describe("install from local path", () => {
 
     const state = readState(home);
     expect(state.installations).toHaveLength(1);
-    expect([...state.installations[0]!.targets].sort()).toEqual([
+    expect([...state.installations[0]!.agents].sort()).toEqual([
       "claude-code",
       "codex",
       "gemini-cli",
@@ -135,7 +135,7 @@ describe("install from local path", () => {
     runCli(["install", skill], { home, streams: capture.streams });
     const marker = JSON.parse(
       require("node:fs").readFileSync(
-        join(redirect.targets["claude-code"]!, "demo", ".crew.json"),
+        join(redirect.agents["claude-code"]!, "demo", ".crew.json"),
         "utf8",
       ),
     );
@@ -166,7 +166,7 @@ describe("install from local path", () => {
     const code = runCli(["install", "--dry-run", skill], { home, streams: capture.streams });
     expect(code).toBe(0);
     for (const adapter of ["claude-code", "codex", "gemini-cli"]) {
-      expect(existsSync(join(redirect.targets[adapter]!, "demo"))).toBe(false);
+      expect(existsSync(join(redirect.agents[adapter]!, "demo"))).toBe(false);
     }
   });
 
@@ -174,13 +174,13 @@ describe("install from local path", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const code = runCli(["install", "--target", "claude-code", skill], {
+    const code = runCli(["install", "--agent", "claude-code", skill], {
       home,
       streams: captureStreams().streams,
     });
     expect(code).toBe(0);
-    expect(existsSync(join(redirect.targets["claude-code"]!, "demo", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(redirect.targets["codex"]!, "demo"))).toBe(false);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "demo", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(redirect.agents["codex"]!, "demo"))).toBe(false);
   });
 
   test("C-INST-17 --scope project installs under cwd", () => {
@@ -237,9 +237,9 @@ describe("install directory expansion", () => {
 
     const code = runCli(["install", container], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
-    expect(existsSync(join(redirect.targets["claude-code"]!, "one"))).toBe(true);
-    expect(existsSync(join(redirect.targets["claude-code"]!, "two"))).toBe(true);
-    expect(existsSync(join(redirect.targets["claude-code"]!, "three"))).toBe(false);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "one"))).toBe(true);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "two"))).toBe(true);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "three"))).toBe(false);
   });
 
   test("C-INST-09 no valid skills -> no_skills_found exit 4", () => {
@@ -255,12 +255,12 @@ describe("install safety", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const destParent = redirect.targets["claude-code"]!;
+    const destParent = redirect.agents["claude-code"]!;
     mkdirSync(join(destParent, "demo"), { recursive: true });
     writeFileSync(join(destParent, "demo", "user-file.txt"), "don't touch me");
 
     const capture = captureStreams();
-    const code = runCli(["install", "--target", "claude-code", join(src, "demo")], {
+    const code = runCli(["install", "--agent", "claude-code", join(src, "demo")], {
       home,
       streams: capture.streams,
     });
@@ -275,11 +275,11 @@ describe("install safety", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const destParent = redirect.targets["claude-code"]!;
+    const destParent = redirect.agents["claude-code"]!;
     mkdirSync(join(destParent, "demo"), { recursive: true });
     writeFileSync(join(destParent, "demo", "user-file.txt"), "don't touch me");
 
-    const code = runCli(["install", "--force", "--target", "claude-code", join(src, "demo")], {
+    const code = runCli(["install", "--force", "--agent", "claude-code", join(src, "demo")], {
       home,
       streams: captureStreams().streams,
     });
@@ -294,19 +294,19 @@ describe("install safety", () => {
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     // First install.
-    runCli(["install", "--target", "claude-code", skill], {
+    runCli(["install", "--agent", "claude-code", skill], {
       home,
       streams: captureStreams().streams,
     });
     // User tampers.
     writeFileSync(
-      join(redirect.targets["claude-code"]!, "demo", "SKILL.md"),
+      join(redirect.agents["claude-code"]!, "demo", "SKILL.md"),
       "---\nname: demo\ndescription: hacked\n---\n",
     );
     // Another install attempt (from the same source so no name_conflict).
     // We forge a different content to cause a reinstall path — add a file to the source.
     writeFileSync(join(skill, "NEW.md"), "new");
-    const code = runCli(["install", "--target", "claude-code", skill], {
+    const code = runCli(["install", "--agent", "claude-code", skill], {
       home,
       streams: captureStreams().streams,
     });
@@ -318,16 +318,16 @@ describe("install safety", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", "--target", "claude-code", skill], {
+    runCli(["install", "--agent", "claude-code", skill], {
       home,
       streams: captureStreams().streams,
     });
     writeFileSync(
-      join(redirect.targets["claude-code"]!, "demo", "SKILL.md"),
+      join(redirect.agents["claude-code"]!, "demo", "SKILL.md"),
       "---\nname: demo\ndescription: hacked\n---\n",
     );
     writeFileSync(join(skill, "NEW.md"), "new"); // force a different hash
-    const code = runCli(["install", "--force", "--target", "claude-code", skill], {
+    const code = runCli(["install", "--force", "--agent", "claude-code", skill], {
       home,
       streams: captureStreams().streams,
     });
@@ -336,7 +336,7 @@ describe("install safety", () => {
 
   test("C-SAFE-04 inconsistent marker", () => {
     const home = makeCrewHome();
-    const destParent = redirect.targets["claude-code"]!;
+    const destParent = redirect.agents["claude-code"]!;
     mkdirSync(join(destParent, "demo"), { recursive: true });
     writeFileSync(
       join(destParent, "demo", ".crew.json"),
@@ -354,7 +354,7 @@ describe("install safety", () => {
     );
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const code = runCli(["install", "--target", "claude-code", skill], {
+    const code = runCli(["install", "--agent", "claude-code", skill], {
       home,
       streams: captureStreams().streams,
     });
@@ -402,12 +402,12 @@ describe("install from a git source (file:// works)", () => {
 });
 
 describe("install target detection failure", () => {
-  test("C-TARGET-05 no targets -> no_targets exit 4", () => {
+  test("C-TARGET-05 no targets -> no_agents exit 4", () => {
     const home = makeCrewHome();
     // Disable every target.
-    runCli(["targets", "disable", "claude-code"], { home, streams: captureStreams().streams });
-    runCli(["targets", "disable", "codex"], { home, streams: captureStreams().streams });
-    runCli(["targets", "disable", "gemini-cli"], { home, streams: captureStreams().streams });
+    runCli(["agents", "disable", "claude-code"], { home, streams: captureStreams().streams });
+    runCli(["agents", "disable", "codex"], { home, streams: captureStreams().streams });
+    runCli(["agents", "disable", "gemini-cli"], { home, streams: captureStreams().streams });
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     const code = runCli(["install", skill], { home, streams: captureStreams().streams });
@@ -423,7 +423,7 @@ describe("install invalid skill", () => {
     const code = runCli(["install", bad], { home, streams: captureStreams().streams });
     expect(code).toBe(4);
     for (const adapter of ["claude-code", "codex", "gemini-cli"]) {
-      expect(existsSync(join(redirect.targets[adapter]!, "demo"))).toBe(false);
+      expect(existsSync(join(redirect.agents[adapter]!, "demo"))).toBe(false);
     }
   });
 });
@@ -439,8 +439,8 @@ describe("install dependencies", () => {
       streams: captureStreams().streams,
     });
     expect(code).toBe(0);
-    expect(existsSync(join(redirect.targets["claude-code"]!, "dep", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(redirect.targets["claude-code"]!, "root", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "dep", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "root", "SKILL.md"))).toBe(true);
   });
 
   test("C-DEP-08 dependency cycle terminates", () => {
@@ -453,8 +453,8 @@ describe("install dependencies", () => {
       streams: captureStreams().streams,
     });
     expect(code).toBe(0);
-    expect(existsSync(join(redirect.targets["claude-code"]!, "a", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(redirect.targets["claude-code"]!, "b", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "a", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "b", "SKILL.md"))).toBe(true);
   });
 
   test("failed dependency fails the root install", () => {
@@ -483,7 +483,7 @@ describe("uninstall", () => {
     const code = runCli(["uninstall", "demo"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
     for (const adapter of ["claude-code", "codex", "gemini-cli"]) {
-      expect(existsSync(join(redirect.targets[adapter]!, "demo"))).toBe(false);
+      expect(existsSync(join(redirect.agents[adapter]!, "demo"))).toBe(false);
     }
     expect(readState(home).installations).toHaveLength(0);
   });
@@ -499,8 +499,8 @@ describe("uninstall", () => {
     });
     runCli(["uninstall", "a"], { home, streams: captureStreams().streams });
     for (const adapter of ["claude-code", "codex", "gemini-cli"]) {
-      expect(existsSync(join(redirect.targets[adapter]!, "a"))).toBe(false);
-      expect(existsSync(join(redirect.targets[adapter]!, "b"))).toBe(true);
+      expect(existsSync(join(redirect.agents[adapter]!, "a"))).toBe(false);
+      expect(existsSync(join(redirect.agents[adapter]!, "b"))).toBe(true);
     }
   });
 
@@ -558,7 +558,7 @@ describe("list, info, targets", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "partial", skillFrontmatter({ name: "partial" }));
-    runCli(["install", "--target", "claude-code", join(src, "partial")], {
+    runCli(["install", "--agent", "claude-code", join(src, "partial")], {
       home,
       streams: captureStreams().streams,
     });
@@ -755,12 +755,12 @@ describe("list, info, targets", () => {
     // Break the installed SKILL.md so loadSkill throws. The command
     // should still render — just without a description.
     const fs = require("node:fs") as typeof import("node:fs");
-    const ccDemo = join(redirect.targets["claude-code"]!, "demo", "SKILL.md");
+    const ccDemo = join(redirect.agents["claude-code"]!, "demo", "SKILL.md");
     fs.writeFileSync(ccDemo, "not valid frontmatter");
     // Also break the codex and gemini copies so all three fail and we
     // exercise the fall-through.
-    fs.writeFileSync(join(redirect.targets["codex"]!, "demo", "SKILL.md"), "garbage");
-    fs.writeFileSync(join(redirect.targets["gemini-cli"]!, "demo", "SKILL.md"), "garbage");
+    fs.writeFileSync(join(redirect.agents["codex"]!, "demo", "SKILL.md"), "garbage");
+    fs.writeFileSync(join(redirect.agents["gemini-cli"]!, "demo", "SKILL.md"), "garbage");
     const c = captureStreams();
     const code = runCli(["info", "demo"], { home, streams: c.streams });
     expect(code).toBe(0);
@@ -842,7 +842,7 @@ describe("list, info, targets", () => {
   test("targets list output", () => {
     const home = makeCrewHome();
     const capture = captureStreams();
-    runCli(["targets"], { home, streams: capture.streams });
+    runCli(["agents"], { home, streams: capture.streams });
     expect(capture.stdout()).toContain("claude-code");
   });
 
@@ -853,9 +853,9 @@ describe("list, info, targets", () => {
     (codexAdapter as { detect: () => boolean }).detect = () => false;
     try {
       const c = captureStreams();
-      runCli(["targets"], { home, streams: c.streams });
+      runCli(["agents"], { home, streams: c.streams });
       expect(c.stdout()).toContain("not found");
-      expect(c.stdout()).toContain("crew targets enable");
+      expect(c.stdout()).toContain("crew agents enable");
     } finally {
       (codexAdapter as { detect: () => boolean }).detect = orig;
     }

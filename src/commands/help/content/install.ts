@@ -15,9 +15,9 @@ export const installHelp: CommandHelp = {
       description: "Install for yourself everywhere (default), or only inside the current project.",
     },
     {
-      flag: "--target <name>",
+      flag: "--agent <name>",
       description:
-        "Only install into the named agent(s). Repeatable. See `crew targets` for what's available.",
+        "Only install into the named agent(s). Repeatable. See `crew agents` for what's available.",
     },
     {
       flag: "--dry-run",
@@ -56,7 +56,7 @@ export const installHelp: CommandHelp = {
       description: "Only for the current project, not system-wide.",
     },
     {
-      command: "crew install --dry-run --target claude-code python-testing",
+      command: "crew install --dry-run --agent claude-code python-testing",
       description: "Preview what would land in Claude Code, without writing anything.",
     },
   ],

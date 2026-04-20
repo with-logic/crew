@@ -12,10 +12,10 @@
 
 import { join } from "node:path";
 import { isDirectory } from "../util/fs.ts";
-import type { TargetAdapter } from "./adapter.ts";
+import type { AgentAdapter } from "./adapter.ts";
 import { isOnPath, userHome } from "./path.ts";
 
-export const cursorAdapter: TargetAdapter = {
+export const cursorAdapter: AgentAdapter = {
   name: "cursor",
   detect(): boolean {
     return (

@@ -5,11 +5,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { readState, writeState } from "../../src/state/load.ts";
-import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
-import { codexAdapter } from "../../src/targets/codex.ts";
-import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
   commitAll,
@@ -167,7 +167,7 @@ describe("install --target ghost fails with clean message", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    const code = runCli(["install", "--target", "nonexistent", skill], {
+    const code = runCli(["install", "--agent", "nonexistent", skill], {
       home,
       streams: captureStreams().streams,
     });
@@ -216,7 +216,7 @@ describe("name conflict cleanup in state", () => {
             content_hash: "sha256:00",
             scope: "user",
             installed_at: "2026-04-18T00:00:00Z",
-            targets: ["claude-code"],
+            agents: ["claude-code"],
             pinned: false,
             explicit: true,
             required_by: [],

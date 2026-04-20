@@ -18,11 +18,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { readState } from "../../src/state/load.ts";
-import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
-import { codexAdapter } from "../../src/targets/codex.ts";
-import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -114,14 +114,14 @@ describe("path sharing (§7.2)", () => {
     // State lists every adapter that owns the install.
     const state = readState(home);
     expect(state.installations).toHaveLength(1);
-    expect([...state.installations[0]!.targets].sort()).toEqual([
+    expect([...state.installations[0]!.agents].sort()).toEqual([
       "claude-code",
       "codex",
       "gemini-cli",
     ]);
   });
 
-  test("C-SHARE-02 marker.adapters is non-empty and sorted", () => {
+  test("C-SHARE-02 marker.agents is non-empty and sorted", () => {
     const home = makeCrewHome();
     const src = makeTempDir("crew-src-");
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
@@ -129,13 +129,13 @@ describe("path sharing (§7.2)", () => {
 
     const sharedMarker = JSON.parse(
       readFileSync(join(redirect.shared, "demo", ".crew.json"), "utf8"),
-    ) as { adapters: string[] };
-    expect(sharedMarker.adapters).toEqual(["codex", "gemini-cli"]);
+    ) as { agents: string[] };
+    expect(sharedMarker.agents).toEqual(["codex", "gemini-cli"]);
 
     const ccMarker = JSON.parse(
       readFileSync(join(redirect.ccRoot, "demo", ".crew.json"), "utf8"),
-    ) as { adapters: string[] };
-    expect(ccMarker.adapters).toEqual(["claude-code"]);
+    ) as { agents: string[] };
+    expect(ccMarker.agents).toEqual(["claude-code"]);
   });
 
   test("C-SHARE-03 re-install with a newly-detected adapter unions the marker", () => {
@@ -150,8 +150,8 @@ describe("path sharing (§7.2)", () => {
 
     const marker1 = JSON.parse(
       readFileSync(join(redirect.shared, "demo", ".crew.json"), "utf8"),
-    ) as { adapters: string[] };
-    expect(marker1.adapters).toEqual(["codex"]);
+    ) as { agents: string[] };
+    expect(marker1.agents).toEqual(["codex"]);
 
     // Now turn gemini on and reinstall. The skill bytes are unchanged
     // so it's an `up_to_date` reinstall from the store's perspective,
@@ -161,14 +161,14 @@ describe("path sharing (§7.2)", () => {
 
     const marker2 = JSON.parse(
       readFileSync(join(redirect.shared, "demo", ".crew.json"), "utf8"),
-    ) as { adapters: string[] };
-    expect(marker2.adapters).toEqual(["codex", "gemini-cli"]);
+    ) as { agents: string[] };
+    expect(marker2.agents).toEqual(["codex", "gemini-cli"]);
 
     const state = readState(home);
     const entry = state.installations.find((e) => e.name === "demo");
     expect(entry).toBeDefined();
-    expect(entry!.targets).toContain("codex");
-    expect(entry!.targets).toContain("gemini-cli");
+    expect(entry!.agents).toContain("codex");
+    expect(entry!.agents).toContain("gemini-cli");
   });
 
   test("C-UNINST-16/17 uninstall --target detaches one adapter; bytes stay", () => {
@@ -179,7 +179,7 @@ describe("path sharing (§7.2)", () => {
 
     // Uninstall only codex. Gemini-cli and claude-code still own
     // their markers, so NO bytes go away.
-    const code = runCli(["uninstall", "--target", "codex", "demo"], {
+    const code = runCli(["uninstall", "--agent", "codex", "demo"], {
       home,
       streams: captureStreams().streams,
     });
@@ -190,9 +190,9 @@ describe("path sharing (§7.2)", () => {
     expect(existsSync(join(sharedDest, "SKILL.md"))).toBe(true);
     // Marker at shared path lists only gemini-cli now.
     const marker = JSON.parse(readFileSync(join(sharedDest, ".crew.json"), "utf8")) as {
-      adapters: string[];
+      agents: string[];
     };
-    expect(marker.adapters).toEqual(["gemini-cli"]);
+    expect(marker.agents).toEqual(["gemini-cli"]);
 
     // Claude Code still untouched.
     expect(existsSync(join(redirect.ccRoot, "demo", "SKILL.md"))).toBe(true);
@@ -201,7 +201,7 @@ describe("path sharing (§7.2)", () => {
     const state = readState(home);
     const entry = state.installations.find((e) => e.name === "demo");
     expect(entry).toBeDefined();
-    expect([...entry!.targets].sort()).toEqual(["claude-code", "gemini-cli"]);
+    expect([...entry!.agents].sort()).toEqual(["claude-code", "gemini-cli"]);
   });
 
   test("uninstall --target for the LAST adapter at a shared path removes bytes", () => {
@@ -212,7 +212,7 @@ describe("path sharing (§7.2)", () => {
 
     // Remove both codex and gemini-cli in one command — shared path
     // empties out.
-    runCli(["uninstall", "--target", "codex", "--target", "gemini-cli", "demo"], {
+    runCli(["uninstall", "--agent", "codex", "--agent", "gemini-cli", "demo"], {
       home,
       streams: captureStreams().streams,
     });
@@ -223,7 +223,7 @@ describe("path sharing (§7.2)", () => {
     const state = readState(home);
     const entry = state.installations.find((e) => e.name === "demo");
     expect(entry).toBeDefined();
-    expect(entry!.targets).toEqual(["claude-code"]);
+    expect(entry!.agents).toEqual(["claude-code"]);
   });
 
   test("nanobot is not applicable for project scope", () => {
@@ -231,7 +231,7 @@ describe("path sharing (§7.2)", () => {
     // from detect()), but we force it on here to exercise the
     // "empty base path = skipped" branch for project scope.
     const { nanobotAdapter } =
-      require("../../src/targets/nanobot.ts") as typeof import("../../src/targets/nanobot.ts");
+      require("../../src/agents/nanobot.ts") as typeof import("../../src/agents/nanobot.ts");
     type Mut = {
       detect: () => boolean;
       projectPath: (cwd: string) => string;

@@ -30,8 +30,8 @@ export function defaultConfig(): Config {
         path: "",
       },
     ],
-    disabled_targets: [],
-    forced_targets: [],
+    disabled_agents: [],
+    forced_agents: [],
     autoupdate: {
       enabled: false,
       interval_seconds: DEFAULT_AUTOUPDATE_INTERVAL_SECONDS,

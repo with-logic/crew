@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ALL_ADAPTERS } from "../../src/targets/registry.ts";
+import { ALL_AGENTS } from "../../src/agents/registry.ts";
 import { withOriginalAdapter } from "../helpers/env.ts";
 
 // Every adapter redirects its user path detection via $HOME. Swap in
@@ -146,8 +146,8 @@ const EXPECTATIONS: readonly AdapterExpectation[] = [
 
 describe("target adapter paths (§7.2)", () => {
   test("every registered adapter has an expectation", () => {
-    expect(ALL_ADAPTERS.length).toBe(EXPECTATIONS.length);
-    for (const a of ALL_ADAPTERS) {
+    expect(ALL_AGENTS.length).toBe(EXPECTATIONS.length);
+    for (const a of ALL_AGENTS) {
       expect(EXPECTATIONS.some((e) => e.name === a.name)).toBe(true);
     }
   });

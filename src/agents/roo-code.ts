@@ -9,10 +9,10 @@
 
 import { join } from "node:path";
 import { isDirectory } from "../util/fs.ts";
-import type { TargetAdapter } from "./adapter.ts";
+import type { AgentAdapter } from "./adapter.ts";
 import { userHome } from "./path.ts";
 
-export const rooCodeAdapter: TargetAdapter = {
+export const rooCodeAdapter: AgentAdapter = {
   name: "roo-code",
   detect(): boolean {
     return isDirectory(join(userHome(), ".roo"));

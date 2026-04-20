@@ -9,16 +9,16 @@
  */
 
 import { join } from "node:path";
+import { baseFor } from "../../agents/adapter.ts";
+import { agentByName } from "../../agents/registry.ts";
 import type { ResolvedSkill } from "../../core/types.ts";
 import type { AlreadyInstalled } from "../../install/duplicate-rules.ts";
-import type { InstallRecord, PerTargetResult } from "../../install/perform.ts";
-import { baseFor } from "../../targets/adapter.ts";
-import { adapterByName } from "../../targets/registry.ts";
+import type { InstallRecord, PerAgentResult } from "../../install/perform.ts";
 import { firstSentences, plural, shortenHome, wrap } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 
 /** Remedy hints shown when a target install fails. Plain English only. */
-const TARGET_FAIL_REMEDIES: Record<string, string> = {
+const AGENT_FAIL_REMEDIES: Record<string, string> = {
   untracked_directory: "something was already there (pass --force to overwrite)",
   customized: "you've edited this version (pass --force to replace it)",
   inconsistent_marker: "a leftover marker doesn't match (pass --force to replace)",
@@ -69,7 +69,7 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
     lines.push(...renderRecord(record, byName.get(record.name), input.cwd, input.width, style));
   }
 
-  const totals = tallyTargets(input.records);
+  const totals = tallyAgents(input.records);
   if (totals.total > 0) {
     lines.push("");
     lines.push(style.dim(formatTotals(totals)));
@@ -91,8 +91,8 @@ function renderAlreadyInstalled(
   ];
   const version = formatVersion(existing.ref, existing.resolvedSha);
   if (version) bits.push(style.dim(`· ${version}`));
-  if (existing.targets.length > 0) {
-    bits.push(style.dim(`· in ${existing.targets.join(", ")}`));
+  if (existing.agents.length > 0) {
+    bits.push(style.dim(`· in ${existing.agents.join(", ")}`));
   }
   const firstLine = `  ${bits.join(" ")}`;
   if (!resolved?.frontmatter.description) return firstLine;
@@ -122,29 +122,29 @@ function renderRecord(
       lines.push(style.dim(`${indent}${l}`));
     }
   }
-  for (const t of record.targets) {
-    lines.push(`    ${renderTargetLine(record.name, t, record.scope, cwd, style)}`);
+  for (const t of record.agents) {
+    lines.push(`    ${renderAgentLine(record.name, t, record.scope, cwd, style)}`);
   }
   return lines;
 }
 
-function renderTargetLine(
+function renderAgentLine(
   skillName: string,
-  target: PerTargetResult,
+  result: PerAgentResult,
   scope: "user" | "project",
   cwd: string,
   style: Styler,
 ): string {
-  const name = target.target;
-  if (target.kind === "installed" || target.kind === "up_to_date") {
-    const adapter = adapterByName(name);
+  const name = result.agent;
+  if (result.kind === "installed" || result.kind === "up_to_date") {
+    const adapter = agentByName(name);
     const installPath = adapter ? shortenHome(join(baseFor(adapter, scope, cwd), skillName)) : "";
-    const status = target.kind === "up_to_date" ? style.dim("already up to date") : "";
+    const status = result.kind === "up_to_date" ? style.dim("already up to date") : "";
     const pathSuffix = installPath ? `${style.dim("→")} ${style.dim(installPath)}` : "";
     const parts = [style.symbol("ok"), name, pathSuffix, status].filter((s) => s.length > 0);
     return parts.join(" ");
   }
-  const remedy = TARGET_FAIL_REMEDIES[target.error.code] ?? target.error.code.replace(/_/g, " ");
+  const remedy = AGENT_FAIL_REMEDIES[result.error.code] ?? result.error.code.replace(/_/g, " ");
   return `${style.symbol("fail")} ${name}  ${style.red(remedy)}`;
 }
 
@@ -155,10 +155,10 @@ interface Totals {
   total: number;
 }
 
-function tallyTargets(records: readonly InstallRecord[]): Totals {
+function tallyAgents(records: readonly InstallRecord[]): Totals {
   const t: Totals = { installed: 0, upToDate: 0, failed: 0, total: 0 };
   for (const r of records) {
-    for (const tgt of r.targets) {
+    for (const tgt of r.agents) {
       t.total++;
       if (tgt.kind === "installed") t.installed++;
       else if (tgt.kind === "up_to_date") t.upToDate++;

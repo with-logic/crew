@@ -19,7 +19,7 @@ const EVERY_COMMAND = [
   "info",
   "search",
   "tap",
-  "targets",
+  "agents",
   "autoupdate",
   "doctor",
   "cache",

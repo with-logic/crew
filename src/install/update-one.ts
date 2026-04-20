@@ -12,19 +12,19 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { type AgentAdapter, baseFor, cwdForEntry } from "../agents/adapter.ts";
+import { installSkillIntoAgents } from "../agents/install.ts";
+import { agentByName } from "../agents/registry.ts";
 import { CrewError } from "../core/errors.ts";
 import type { Config, StateEntry, StateFile } from "../core/types.ts";
 import { loadSkill } from "../skill/load.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
 import { stageIntoStore } from "../sources/store.ts";
 import { upsertEntry } from "../state/load.ts";
-import { baseFor, cwdForEntry, type TargetAdapter } from "../targets/adapter.ts";
-import { installSkillIntoTarget } from "../targets/install.ts";
-import { adapterByName } from "../targets/registry.ts";
 import { nowIso } from "../util/time.ts";
 
-export interface PerTargetUpdate {
-  readonly target: string;
+export interface PerAgentUpdate {
+  readonly agent: string;
   readonly kind: "installed" | "up_to_date" | "skipped" | "failed";
   readonly error?: { code: string; message: string };
   readonly reason?: string;
@@ -32,7 +32,7 @@ export interface PerTargetUpdate {
 
 export type Outcome =
   | { kind: "up_to_date" }
-  | { kind: "updated"; new_sha: string | null; per_target: PerTargetUpdate[] }
+  | { kind: "updated"; new_sha: string | null; per_target: PerAgentUpdate[] }
   | { kind: "skipped"; reason: string }
   | { kind: "source_gone" }
   | { kind: "missing_project_root"; root: string }
@@ -63,7 +63,7 @@ export function updateOneEntry(
     if (outcome.kind === "updated") {
       const successfulTargets = outcome.per_target
         .filter((t) => t.kind !== "failed")
-        .map((t) => t.target);
+        .map((t) => t.agent);
       const newEntry = rebuildStateEntry(entry, outcome.new_sha, successfulTargets);
       next = upsertEntry(state, newEntry);
     }
@@ -152,12 +152,12 @@ function updateOne(
 
   const loaded = loadSkill(skillDir);
   const staged = stageIntoStore(loaded.path, entry.name, newSha, home);
-  const perTarget: PerTargetUpdate[] = [];
+  const perTarget: PerAgentUpdate[] = [];
   // Group by resolved install path (§7.2 path sharing) so shared-path
   // targets install once but every adapter reports its own outcome.
-  const groups = new Map<string, TargetAdapter[]>();
-  for (const targetName of entry.targets) {
-    const adapter = adapterByName(targetName);
+  const groups = new Map<string, AgentAdapter[]>();
+  for (const targetName of entry.agents) {
+    const adapter = agentByName(targetName);
     if (!adapter) continue;
     const base = baseFor(adapter, entry.scope, entryCwd);
     if (base === "") continue;
@@ -168,8 +168,8 @@ function updateOne(
   }
   for (const group of groups.values()) {
     try {
-      const res = installSkillIntoTarget({
-        adapters: group,
+      const res = installSkillIntoAgents({
+        agents: group,
         scope: entry.scope,
         cwd: entryCwd,
         storePath: staged.storePath,
@@ -183,14 +183,14 @@ function updateOne(
       });
       for (const a of group) {
         perTarget.push({
-          target: a.name,
+          agent: a.name,
           kind: res.kind === "installed" ? "installed" : "up_to_date",
         });
       }
     } catch (err) {
       const ce = err as CrewError;
       for (const a of group) {
-        perTarget.push({ target: a.name, kind: "skipped", reason: ce.code });
+        perTarget.push({ agent: a.name, kind: "skipped", reason: ce.code });
       }
     }
   }
@@ -205,7 +205,7 @@ function rebuildStateEntry(
   return {
     ...entry,
     resolved_sha: newSha,
-    targets: successfulTargets.length > 0 ? successfulTargets : entry.targets,
+    agents: successfulTargets.length > 0 ? successfulTargets : entry.agents,
     installed_at: nowIso(),
   };
 }

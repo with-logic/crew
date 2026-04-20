@@ -7,9 +7,9 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { AgentAdapter } from "../../src/agents/adapter.ts";
+import { ALL_AGENTS } from "../../src/agents/registry.ts";
 import type { OutputStreams } from "../../src/cli/output.ts";
-import type { TargetAdapter } from "../../src/targets/adapter.ts";
-import { ALL_ADAPTERS } from "../../src/targets/registry.ts";
 
 /** Capture stdout/stderr into a buffer. */
 export function captureStreams(): { streams: OutputStreams; stdout(): string; stderr(): string } {
@@ -35,9 +35,9 @@ export function makeCrewHome(): string {
 }
 
 type AdapterMut = {
-  userPath: TargetAdapter["userPath"];
-  projectPath: TargetAdapter["projectPath"];
-  detect: TargetAdapter["detect"];
+  userPath: AgentAdapter["userPath"];
+  projectPath: AgentAdapter["projectPath"];
+  detect: AgentAdapter["detect"];
 };
 
 /**
@@ -62,7 +62,7 @@ const ADAPTER_ORIGINALS = new Map<string, AdapterMut>();
 export function neutralizeAdaptersExcept(keep: readonly string[]): void {
   const keepSet = new Set(keep);
   const inert = mkdtempSync(join(tmpdir(), "crew-inert-adapters-"));
-  for (const a of ALL_ADAPTERS) {
+  for (const a of ALL_AGENTS) {
     if (keepSet.has(a.name)) continue;
     ADAPTER_ORIGINALS.set(a.name, {
       userPath: a.userPath,
@@ -81,8 +81,8 @@ export function neutralizeAdaptersExcept(keep: readonly string[]): void {
  * by unit tests that need to exercise an adapter's actual
  * detect/userPath/projectPath code against a controlled environment.
  */
-export function withOriginalAdapter<T>(adapterName: string, cb: (a: TargetAdapter) => T): T {
-  const adapter = ALL_ADAPTERS.find((a) => a.name === adapterName);
+export function withOriginalAdapter<T>(adapterName: string, cb: (a: AgentAdapter) => T): T {
+  const adapter = ALL_AGENTS.find((a) => a.name === adapterName);
   if (!adapter) throw new Error(`unknown adapter ${adapterName}`);
   const orig = ADAPTER_ORIGINALS.get(adapterName);
   if (!orig) return cb(adapter);

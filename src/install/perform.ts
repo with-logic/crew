@@ -1,12 +1,12 @@
 /**
- * Install every resolved skill into every active target (§9 steps 9–10).
+ * Install every resolved skill into every active agent (§9 steps 9–10).
  *
  * Given a resolved, topologically-ordered install set and the active
- * targets, this function:
+ * agents, this function:
  *
- *   - groups adapters by resolved install path (path sharing, §7.2);
+ *   - groups agents by resolved install path (path sharing, §7.2);
  *   - runs the per-dest install algorithm (§7.3) once per group;
- *   - records per-target outcomes for every adapter (not per-dest);
+ *   - records per-agent outcomes for every agent (not per-dest);
  *   - updates `state.json` via upsert under the state lock held by the
  *     caller;
  *   - maintains `explicit` and `required_by` on every entry per §11.1
@@ -15,31 +15,31 @@
  *   - returns a structured summary the CLI layer can format.
  *
  * Failures are per-group: a failure in one (skill, dest) group fails
- * every adapter in that group but doesn't stop other groups or other
+ * every agent in that group but doesn't stop other groups or other
  * skills. The summary decides the exit code.
  */
 
+import { type AgentAdapter, baseFor } from "../agents/adapter.ts";
+import { type InstallOutcome, installSkillIntoAgents } from "../agents/install.ts";
 import type { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
 import type { ResolvedSkill, Scope, StateEntry, StateFile } from "../core/types.ts";
 import type { RequiredByMap } from "../install/resolve.ts";
 import { upsertEntry } from "../state/load.ts";
-import { baseFor, type TargetAdapter } from "../targets/adapter.ts";
-import { type InstallOutcome, installSkillIntoTarget } from "../targets/install.ts";
 import { nowIso } from "../util/time.ts";
 
-/** Per-(skill, target) outcome. */
-export type PerTargetResult =
-  | { kind: "installed"; target: string }
-  | { kind: "up_to_date"; target: string }
-  | { kind: "failed"; target: string; error: { code: string; message: string } };
+/** Per-(skill, agent) outcome. */
+export type PerAgentResult =
+  | { kind: "installed"; agent: string }
+  | { kind: "up_to_date"; agent: string }
+  | { kind: "failed"; agent: string; error: { code: string; message: string } };
 
 /** Per-skill install record. */
 export interface InstallRecord {
   readonly name: string;
   readonly scope: Scope;
-  readonly targets: readonly PerTargetResult[];
-  /** True iff the skill succeeded in at least one target (or was up-to-date). */
+  readonly agents: readonly PerAgentResult[];
+  /** True iff the skill succeeded in at least one agent (or was up-to-date). */
   readonly anySuccess: boolean;
 }
 
@@ -49,10 +49,10 @@ export interface InstallSummary {
   readonly newState: StateFile;
 }
 
-/** Install every resolved skill into every active target. */
+/** Install every resolved skill into every active agent. */
 export function performInstall(
   resolved: readonly ResolvedSkill[],
-  targets: readonly TargetAdapter[],
+  activeAgents: readonly AgentAdapter[],
   scope: Scope,
   cwd: string,
   startingState: StateFile,
@@ -63,7 +63,7 @@ export function performInstall(
     readonly requiredBy: RequiredByMap;
     /**
      * The full resolve set (including skills that were already
-     * installed and thus skipped during the per-target loop). Used to
+     * installed and thus skipped during the per-agent loop). Used to
      * maintain `required_by` edges on already-installed shared deps —
      * e.g. installing `b` when `a` and `b` both depend on `shared`.
      * Defaults to `resolved` when absent.
@@ -77,20 +77,20 @@ export function performInstall(
   let state = startingState;
 
   for (const skill of resolved) {
-    const perTarget: PerTargetResult[] = [];
-    const successfulTargets: string[] = [];
-    const groups = groupAdaptersByDest(targets, skill.name, scope, cwd);
+    const perAgent: PerAgentResult[] = [];
+    const successfulAgents: string[] = [];
+    const groups = groupAgentsByDest(activeAgents, skill.name, scope, cwd);
     for (const group of groups) {
       try {
         if (options.dryRun) {
-          for (const a of group.adapters) {
-            perTarget.push({ kind: "installed", target: a.name });
-            successfulTargets.push(a.name);
+          for (const a of group.agents) {
+            perAgent.push({ kind: "installed", agent: a.name });
+            successfulAgents.push(a.name);
           }
           continue;
         }
-        const outcome: InstallOutcome = installSkillIntoTarget({
-          adapters: group.adapters,
+        const outcome: InstallOutcome = installSkillIntoAgents({
+          agents: group.agents,
           scope,
           cwd,
           storePath: skill.storePath,
@@ -102,30 +102,30 @@ export function performInstall(
           contentHash: skill.contentHash,
           force: options.force,
         });
-        for (const a of group.adapters) {
-          perTarget.push({
+        for (const a of group.agents) {
+          perAgent.push({
             kind: outcome.kind === "installed" ? "installed" : "up_to_date",
-            target: a.name,
+            agent: a.name,
           });
-          successfulTargets.push(a.name);
+          successfulAgents.push(a.name);
         }
       } catch (err) {
         const ce = err as CrewError;
-        for (const a of group.adapters) {
-          perTarget.push({
+        for (const a of group.agents) {
+          perAgent.push({
             kind: "failed",
-            target: a.name,
+            agent: a.name,
             error: { code: ce.code ?? "usage_error", message: ce.message },
           });
         }
       }
     }
-    const anySuccess = successfulTargets.length > 0;
-    records.push({ name: skill.name, scope, targets: perTarget, anySuccess });
+    const anySuccess = successfulAgents.length > 0;
+    records.push({ name: skill.name, scope, agents: perAgent, anySuccess });
     if (!options.dryRun && anySuccess) {
       state = upsertEntry(
         state,
-        buildStateEntry(skill, scope, successfulTargets, state, options, cwd),
+        buildStateEntry(skill, scope, successfulAgents, state, options, cwd),
       );
     }
   }
@@ -142,23 +142,23 @@ export function performInstall(
 }
 
 /**
- * Group adapters by the filesystem path they'd install into for this
- * skill+scope. Adapters that don't support the scope (empty base path)
- * are skipped — they're a silent per-target no-op.
+ * Group agents by the filesystem path they'd install into for this
+ * skill+scope. Agents that don't support the scope (empty base path)
+ * are skipped — they're a silent per-agent no-op.
  */
-interface AdapterGroup {
+interface AgentGroup {
   readonly dest: string;
-  readonly adapters: readonly TargetAdapter[];
+  readonly agents: readonly AgentAdapter[];
 }
 
-function groupAdaptersByDest(
-  adapters: readonly TargetAdapter[],
+function groupAgentsByDest(
+  agents: readonly AgentAdapter[],
   skillName: string,
   scope: Scope,
   cwd: string,
-): AdapterGroup[] {
-  const groups = new Map<string, TargetAdapter[]>();
-  for (const a of adapters) {
+): AgentGroup[] {
+  const groups = new Map<string, AgentAdapter[]>();
+  for (const a of agents) {
     const base = baseFor(a, scope, cwd);
     if (base === "") continue;
     const dest = `${base}/${skillName}`;
@@ -166,7 +166,7 @@ function groupAdaptersByDest(
     if (existing) existing.push(a);
     else groups.set(dest, [a]);
   }
-  return [...groups.entries()].map(([dest, as]) => ({ dest, adapters: as }));
+  return [...groups.entries()].map(([dest, as]) => ({ dest, agents: as }));
 }
 
 /**
@@ -178,7 +178,7 @@ function groupAdaptersByDest(
 function buildStateEntry(
   skill: ResolvedSkill,
   scope: Scope,
-  successfulTargets: string[],
+  successfulAgents: string[],
   state: StateFile,
   options: { readonly requiredBy: RequiredByMap },
   cwd: string,
@@ -198,11 +198,11 @@ function buildStateEntry(
   // would be individual on its own.
   const tracksTap = skill.tracksTap || (existing?.tracks_tap ?? false);
   const required_by = [...(options.requiredBy.get(skill.name) ?? [])].sort();
-  // Merge preserves adapters from prior installs that aren't part of
-  // this operation (e.g. adapter X installed the skill last run; this
-  // run adds adapter Y to the same dest — state should list both).
-  const mergedTargets = [
-    ...new Set<string>([...(existing?.targets ?? []), ...successfulTargets]),
+  // Merge preserves agents from prior installs that aren't part of
+  // this operation (e.g. agent X installed the skill last run; this
+  // run adds agent Y to the same dest — state should list both).
+  const mergedAgents = [
+    ...new Set<string>([...(existing?.agents ?? []), ...successfulAgents]),
   ].sort();
   return {
     name: skill.name,
@@ -212,7 +212,7 @@ function buildStateEntry(
     content_hash: skill.contentHash,
     scope,
     installed_at: nowIso(),
-    targets: mergedTargets,
+    agents: mergedAgents,
     pinned: skill.pinned,
     explicit,
     ...(tracksTap ? { tracks_tap: true } : {}),

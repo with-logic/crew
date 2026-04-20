@@ -10,6 +10,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { defaultStreams, writeError, writeSuccess } from "../../src/cli/output.ts";
 import { readConfig } from "../../src/config/load.ts";
@@ -18,9 +21,6 @@ import type { TapConfig } from "../../src/core/types.ts";
 import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";
 import { ensureRepo, resolveRef } from "../../src/git/repo.ts";
 import { parseRef } from "../../src/refs/parse.ts";
-import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
-import { codexAdapter } from "../../src/targets/codex.ts";
-import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
   commitAll,
@@ -365,10 +365,10 @@ describe("targets/install — same-SHA early exit", () => {
 
     // Re-run the install algorithm directly (bypassing the flow-level
     // "already installed" short-circuit) with the same SHA and content.
-    const { installSkillIntoTarget } =
-      require("../../src/targets/install.ts") as typeof import("../../src/targets/install.ts");
+    const { installSkillIntoAgents } =
+      require("../../src/agents/install.ts") as typeof import("../../src/agents/install.ts");
     const { claudeCodeAdapter } =
-      require("../../src/targets/claude-code.ts") as typeof import("../../src/targets/claude-code.ts");
+      require("../../src/agents/claude-code.ts") as typeof import("../../src/agents/claude-code.ts");
     const { hashDirectory } =
       require("../../src/hash/content.ts") as typeof import("../../src/hash/content.ts");
     const { readState } =
@@ -377,8 +377,8 @@ describe("targets/install — same-SHA early exit", () => {
     const storeDir = join(home, "store");
     const storeEntry = require("node:fs").readdirSync(storeDir)[0]!;
     const storePath = join(storeDir, storeEntry);
-    const result = installSkillIntoTarget({
-      adapters: [claudeCodeAdapter],
+    const result = installSkillIntoAgents({
+      agents: [claudeCodeAdapter],
       scope: "user",
       cwd: process.cwd(),
       storePath,
@@ -426,7 +426,7 @@ describe("targets/path — existsSync edge (path.ts:27-28)", () => {
     // Create a directory (not a file) named `crew-test-stub` on a PATH
     // component and verify `isOnPath` returns false.
     const { isOnPath } =
-      require("../../src/targets/path.ts") as typeof import("../../src/targets/path.ts");
+      require("../../src/agents/path.ts") as typeof import("../../src/agents/path.ts");
     const dir = makeTempDir();
     require("node:fs").mkdirSync(join(dir, "target-dir-not-a-binary"));
     const prev = process.env["PATH"];
@@ -501,7 +501,7 @@ describe("commands/update — branch coverage", () => {
         ...state,
         installations: state.installations.map((e) => ({
           ...e,
-          targets: [...e.targets, "bogus-xyz"],
+          agents: [...e.agents, "bogus-xyz"],
         })),
       },
       home,
@@ -557,9 +557,9 @@ describe("commands/update — branch coverage", () => {
 describe("targets list renders disabled flag (targets.ts:39)", () => {
   test("disabled target shows `disabled` label in list output", () => {
     const home = makeCrewHome();
-    runCli(["targets", "disable", "codex"], { home, streams: captureStreams().streams });
+    runCli(["agents", "disable", "codex"], { home, streams: captureStreams().streams });
     const c = captureStreams();
-    runCli(["targets"], { home, streams: c.streams });
+    runCli(["agents"], { home, streams: c.streams });
     expect(c.stdout()).toContain("disabled");
   });
 });
@@ -631,9 +631,9 @@ describe("skill/frontmatter — invalid yaml raises invalid_skill (frontmatter.t
 describe("targets/install — uninstall tolerates inconsistent marker with --force (install.ts:128)", () => {
   test("--force lets uninstall proceed past an inconsistent marker", () => {
     const { claudeCodeAdapter } =
-      require("../../src/targets/claude-code.ts") as typeof import("../../src/targets/claude-code.ts");
-    const { uninstallSkillFromTarget } =
-      require("../../src/targets/install.ts") as typeof import("../../src/targets/install.ts");
+      require("../../src/agents/claude-code.ts") as typeof import("../../src/agents/claude-code.ts");
+    const { uninstallSkillFromAgents } =
+      require("../../src/agents/install.ts") as typeof import("../../src/agents/install.ts");
     const projCwd = makeTempDir();
     const dir = join(projCwd, ".claude", "skills", "demo");
     require("node:fs").mkdirSync(dir, { recursive: true });
@@ -653,8 +653,8 @@ describe("targets/install — uninstall tolerates inconsistent marker with --for
     );
     require("node:fs").writeFileSync(join(dir, "SKILL.md"), "x");
     // With --force, the inconsistent_marker check is bypassed and we remove.
-    const res = uninstallSkillFromTarget({
-      adapters: [claudeCodeAdapter],
+    const res = uninstallSkillFromAgents({
+      agents: [claudeCodeAdapter],
       scope: "project",
       cwd: projCwd,
       skillName: "demo",
@@ -715,7 +715,7 @@ describe("doctor repair — adds missing adapter to existing entry (doctor.ts:17
     expect(code).toBe(0);
     const after = readState(home);
     const demo = after.installations.find((i) => i.name === "demo")!;
-    expect(demo.targets.length).toBeGreaterThan(1);
+    expect(demo.agents.length).toBeGreaterThan(1);
   });
 });
 

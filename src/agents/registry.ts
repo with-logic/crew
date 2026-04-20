@@ -2,13 +2,13 @@
  * Adapter registry.
  *
  * Every adapter crew supports (§7.2) is registered here. Order is
- * alphabetical so `crew targets` output is deterministic. Multiple
+ * alphabetical so `crew agents` output is deterministic. Multiple
  * adapters may resolve to the same install path (path sharing, §7.2);
  * the install engine dedupes writes but still reports each adapter
  * name to the user.
  */
 
-import type { TargetAdapter } from "./adapter.ts";
+import type { AgentAdapter } from "./adapter.ts";
 import { ampAdapter } from "./amp.ts";
 import { autohandAdapter } from "./autohand.ts";
 import { claudeCodeAdapter } from "./claude-code.ts";
@@ -28,7 +28,7 @@ import { piAdapter } from "./pi.ts";
 import { rooCodeAdapter } from "./roo-code.ts";
 
 /** Every adapter crew ships, alphabetical by name. */
-export const ALL_ADAPTERS: readonly TargetAdapter[] = [
+export const ALL_AGENTS: readonly AgentAdapter[] = [
   ampAdapter,
   autohandAdapter,
   claudeCodeAdapter,
@@ -49,6 +49,6 @@ export const ALL_ADAPTERS: readonly TargetAdapter[] = [
 ];
 
 /** Look up an adapter by name, or undefined if not registered. */
-export function adapterByName(name: string): TargetAdapter | undefined {
-  return ALL_ADAPTERS.find((a) => a.name === name);
+export function agentByName(name: string): AgentAdapter | undefined {
+  return ALL_AGENTS.find((a) => a.name === name);
 }

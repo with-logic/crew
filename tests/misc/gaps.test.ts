@@ -12,6 +12,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
+import { uninstallSkillFromAgents } from "../../src/agents/install.ts";
+import { ALL_AGENTS, agentByName } from "../../src/agents/registry.ts";
 import { resetLaunchctlRunner, setLaunchctlRunner } from "../../src/autoupdate/launchd.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { parseDuration } from "../../src/commands/autoupdate.ts";
@@ -23,11 +28,6 @@ import {
   tapPath,
 } from "../../src/core/paths.ts";
 import { readState, writeState } from "../../src/state/load.ts";
-import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
-import { codexAdapter } from "../../src/targets/codex.ts";
-import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
-import { uninstallSkillFromTarget } from "../../src/targets/install.ts";
-import { ALL_ADAPTERS, adapterByName } from "../../src/targets/registry.ts";
 import {
   ensureDir,
   exists,
@@ -44,12 +44,12 @@ import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts
 
 describe("adapters: project paths and detect false branches", () => {
   test("every adapter returns a user path; most also support project scope", () => {
-    // ALL_ADAPTERS is neutralized by the test preload — each adapter's
+    // ALL_AGENTS is neutralized by the test preload — each adapter's
     // methods are replaced with tmp-dir stubs, so here we just confirm
     // the registry is non-empty and every adapter still returns a
     // non-null string for both calls.
-    expect(ALL_ADAPTERS.length).toBeGreaterThan(3);
-    for (const a of ALL_ADAPTERS) {
+    expect(ALL_AGENTS.length).toBeGreaterThan(3);
+    for (const a of ALL_AGENTS) {
       expect(typeof a.userPath()).toBe("string");
       expect(typeof a.projectPath("/tmp/proj")).toBe("string");
     }
@@ -70,16 +70,16 @@ describe("adapters: project paths and detect false branches", () => {
     }
   });
 
-  test("adapterByName unknown returns undefined", () => {
-    expect(adapterByName("nothing")).toBeUndefined();
+  test("agentByName unknown returns undefined", () => {
+    expect(agentByName("nothing")).toBeUndefined();
   });
 });
 
-describe("uninstallSkillFromTarget edges", () => {
+describe("uninstallSkillFromAgents edges", () => {
   test("without force, missing skill -> not_installed_here", () => {
     expect(() =>
-      uninstallSkillFromTarget({
-        adapters: [claudeCodeAdapter],
+      uninstallSkillFromAgents({
+        agents: [claudeCodeAdapter],
         scope: "user",
         cwd: process.cwd(),
         skillName: "ghost",
@@ -89,8 +89,8 @@ describe("uninstallSkillFromTarget edges", () => {
   });
 
   test("force absent -> 'absent'", () => {
-    const res = uninstallSkillFromTarget({
-      adapters: [claudeCodeAdapter],
+    const res = uninstallSkillFromAgents({
+      agents: [claudeCodeAdapter],
       scope: "project",
       cwd: makeTempDir(),
       skillName: "ghost",
@@ -106,8 +106,8 @@ describe("uninstallSkillFromTarget edges", () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "SKILL.md"), "x");
     expect(() =>
-      uninstallSkillFromTarget({
-        adapters: [claudeCodeAdapter],
+      uninstallSkillFromAgents({
+        agents: [claudeCodeAdapter],
         scope: "project",
         cwd: projCwd,
         skillName: "demo",
@@ -126,7 +126,7 @@ describe("uninstallSkillFromTarget edges", () => {
       JSON.stringify({
         schema_version: 1,
         name: "other",
-        adapters: ["claude-code"],
+        agents: ["claude-code"],
         source: { type: "path", path: "/x" },
         ref: null,
         resolved_sha: null,
@@ -138,8 +138,8 @@ describe("uninstallSkillFromTarget edges", () => {
     );
     writeFileSync(join(dir, "SKILL.md"), "x");
     expect(() =>
-      uninstallSkillFromTarget({
-        adapters: [claudeCodeAdapter],
+      uninstallSkillFromAgents({
+        agents: [claudeCodeAdapter],
         scope: "project",
         cwd: projCwd,
         skillName: "demo",
@@ -153,8 +153,8 @@ describe("uninstallSkillFromTarget edges", () => {
     const dir = join(projCwd, ".claude", "skills", "demo");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "SKILL.md"), "x");
-    const res = uninstallSkillFromTarget({
-      adapters: [claudeCodeAdapter],
+    const res = uninstallSkillFromAgents({
+      agents: [claudeCodeAdapter],
       scope: "project",
       cwd: projCwd,
       skillName: "demo",
@@ -347,7 +347,7 @@ describe("doctor warnings — orphan store", () => {
             content_hash: "sha256:00",
             scope: "user",
             installed_at: "2026-04-18T00:00:00Z",
-            targets: ["claude-code"],
+            agents: ["claude-code"],
             pinned: false,
             explicit: true,
             required_by: [],

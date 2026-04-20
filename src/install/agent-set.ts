@@ -3,40 +3,40 @@
  * (§9 step 7).
  *
  *   1. Start with every adapter whose `detect()` returns true OR that
- *      appears in `config.forced_targets`.
- *   2. Remove any listed in `config.disabled_targets`.
- *   3. Restrict to `--target` adapters if any were supplied.
- *   4. If the set is empty, throw `no_targets` (exit 4).
+ *      appears in `config.forced_agents`.
+ *   2. Remove any listed in `config.disabled_agents`.
+ *   3. Restrict to `--agent` adapters if any were supplied.
+ *   4. If the set is empty, throw `no_agents` (exit 4).
  */
 
+import type { AgentAdapter } from "../agents/adapter.ts";
+import { ALL_AGENTS, agentByName } from "../agents/registry.ts";
 import { CrewError } from "../core/errors.ts";
 import type { Config } from "../core/types.ts";
-import type { TargetAdapter } from "../targets/adapter.ts";
-import { ALL_ADAPTERS, adapterByName } from "../targets/registry.ts";
 
 /** Compute the active set of target adapters. */
-export function computeTargetSet(
+export function computeAgentSet(
   config: Config,
   restrictTo: readonly string[] = [],
-): TargetAdapter[] {
-  const unknown = restrictTo.filter((n) => !adapterByName(n));
+): AgentAdapter[] {
+  const unknown = restrictTo.filter((n) => !agentByName(n));
   if (unknown.length > 0) {
-    const known = ALL_ADAPTERS.map((a) => a.name).join(", ");
+    const known = ALL_AGENTS.map((a) => a.name).join(", ");
     throw new CrewError(
-      "no_targets",
+      "no_agents",
       `unknown target${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")} — known targets: ${known}`,
       { unknown },
     );
   }
 
-  let active: TargetAdapter[] = [];
-  for (const adapter of ALL_ADAPTERS) {
-    const forced = config.forced_targets.includes(adapter.name);
+  let active: AgentAdapter[] = [];
+  for (const adapter of ALL_AGENTS) {
+    const forced = config.forced_agents.includes(adapter.name);
     const detected = adapter.detect();
     if (!(forced || detected)) {
       continue;
     }
-    if (config.disabled_targets.includes(adapter.name)) {
+    if (config.disabled_agents.includes(adapter.name)) {
       continue;
     }
     active.push(adapter);
@@ -47,8 +47,8 @@ export function computeTargetSet(
   }
   if (active.length === 0) {
     throw new CrewError(
-      "no_targets",
-      "no agent coders are active — install Claude Code, Codex CLI, or Gemini CLI, or run `crew targets enable <name>` to force one on",
+      "no_agents",
+      "no agent coders are active — install Claude Code, Codex CLI, or Gemini CLI, or run `crew agents enable <name>` to force one on",
     );
   }
   return active;

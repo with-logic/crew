@@ -9,10 +9,10 @@
 
 import { join } from "node:path";
 import { isDirectory } from "../util/fs.ts";
-import type { TargetAdapter } from "./adapter.ts";
+import type { AgentAdapter } from "./adapter.ts";
 import { isOnPath, userHome } from "./path.ts";
 
-export const factoryAdapter: TargetAdapter = {
+export const factoryAdapter: AgentAdapter = {
   name: "factory",
   detect(): boolean {
     return isDirectory(join(userHome(), ".factory")) || isOnPath("droid");

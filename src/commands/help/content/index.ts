@@ -4,6 +4,7 @@
  * edits to help copy never touch rendering logic or unrelated commands.
  */
 
+import { agentsHelp } from "./agents.ts";
 import { autoupdateHelp } from "./autoupdate.ts";
 import { cacheHelp } from "./cache.ts";
 import { doctorHelp } from "./doctor.ts";
@@ -13,7 +14,6 @@ import { installHelp } from "./install.ts";
 import { listHelp } from "./list.ts";
 import { searchHelp } from "./search.ts";
 import { tapHelp } from "./tap.ts";
-import { targetsHelp } from "./targets.ts";
 import type { CommandHelp } from "./types.ts";
 import { uninstallHelp } from "./uninstall.ts";
 import { updateHelp } from "./update.ts";
@@ -30,7 +30,7 @@ export interface CommandGroup {
 export const GROUPS: readonly CommandGroup[] = [
   { title: "Managing skills", commands: ["install", "uninstall", "update", "list", "info"] },
   { title: "Discovery", commands: ["search", "tap"] },
-  { title: "Agents & automation", commands: ["targets", "autoupdate"] },
+  { title: "Agents & automation", commands: ["agents", "autoupdate"] },
   { title: "Housekeeping", commands: ["doctor", "cache"] },
   { title: "Meta", commands: ["help", "version"] },
 ];
@@ -43,7 +43,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
   info: infoHelp,
   search: searchHelp,
   tap: tapHelp,
-  targets: targetsHelp,
+  agents: agentsHelp,
   autoupdate: autoupdateHelp,
   doctor: doctorHelp,
   cache: cacheHelp,
@@ -60,7 +60,7 @@ export const ONELINERS: Record<string, string> = {
   info: "Get the details on a skill.",
   search: "Look for a skill by name or description.",
   tap: "Manage the collections you install from.",
-  targets: "See or adjust which agent coders crew touches.",
+  agents: "See or adjust which agent coders crew touches.",
   autoupdate: "Keep skills up to date in the background.",
   doctor: "Check crew's health; fix what's fixable.",
   cache: "Free up disk space.",

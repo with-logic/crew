@@ -28,7 +28,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     scope: ctx.flags.scope,
     force: ctx.flags.force,
     dryRun: ctx.flags.dryRun,
-    restrictTargets: ctx.flags.target,
+    restrictAgents: ctx.flags.agent,
     cwd: ctx.cwd,
     home: ctx.home,
   });

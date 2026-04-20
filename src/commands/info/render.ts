@@ -44,7 +44,7 @@ export function renderInstalled(info: InstalledInfo, style: Styler, width: numbe
   const rows: [string, string][] = [];
   rows.push([style.dim("from"), formatFrom(primary)]);
   rows.push([style.dim("version"), formatVersion(primary, style)]);
-  rows.push([style.dim("agents"), formatTargets(primary)]);
+  rows.push([style.dim("agents"), formatAgents(primary)]);
   rows.push([
     style.dim("installed"),
     `${timeAgo(primary.installed_at)} ${style.dim(`(${primary.installed_at.slice(0, 10)})`)}`,
@@ -158,7 +158,7 @@ function formatVersion(entry: StateEntry, style: Styler): string {
   return style.dim("local");
 }
 
-function formatTargets(entry: StateEntry): string {
-  if (entry.targets.length === 0) return "(none)";
-  return entry.targets.join(", ");
+function formatAgents(entry: StateEntry): string {
+  if (entry.agents.length === 0) return "(none)";
+  return entry.agents.join(", ");
 }

@@ -41,7 +41,7 @@ const STRING_SUB: Record<string, readonly string[]> = {
   autoupdate: ["interval"],
 };
 /** Flags that should always be collected into a list. */
-const ARRAY_GLOBALS = ["target"] as const;
+const ARRAY_GLOBALS = ["agent"] as const;
 /** The subset of flags that is part of the public `CommandFlags` surface. */
 const BUILT_IN_FLAGS = new Set<string>([...BOOLEAN_GLOBALS, ...STRING_GLOBALS, ...ARRAY_GLOBALS]);
 
@@ -74,8 +74,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         "duplicate-arguments-array": true,
       })
       .array([...ARRAY_GLOBALS])
-      // `--target` is repeatable but each occurrence takes exactly one
-      // value (`--target a --target b`); without `nargs` yargs would
+      // `--agent` is repeatable but each occurrence takes exactly one
+      // value (`--agent a --agent b`); without `nargs` yargs would
       // greedily absorb every subsequent positional argument into the array.
       .nargs(Object.fromEntries(ARRAY_GLOBALS.map((n) => [n, 1])))
       .boolean(booleans)
@@ -101,7 +101,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "usage_error",
       `--scope must be \`user\` or \`project\` (got \`${scope}\`) — \`user\` is the default`,
     );
-  const target = asStringArray(parsed["target"]);
+  const agent = asStringArray(parsed["agent"]);
 
   const extras: Record<string, string | boolean> = {};
   for (const [key, value] of Object.entries(parsed)) {
@@ -116,7 +116,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
   const flags: CommandFlags = {
     scope,
-    target,
+    agent,
     dryRun: Boolean(parsed["dry-run"]),
     json: Boolean(parsed["json"]),
     quiet: Boolean(parsed["quiet"]),

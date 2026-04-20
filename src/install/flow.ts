@@ -18,10 +18,10 @@ import { crewHome } from "../core/paths.ts";
 import type { Config, ResolvedSkill, Scope, StateFile } from "../core/types.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
+import { computeAgentSet } from "./agent-set.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules.ts";
 import { type InstallSummary, performInstall } from "./perform.ts";
 import { type RequiredByMap, resolveInstallSet } from "./resolve.ts";
-import { computeTargetSet } from "./target-set.ts";
 
 /** Options accepted by `runInstall`. */
 export interface InstallOptions {
@@ -29,7 +29,7 @@ export interface InstallOptions {
   readonly scope: Scope;
   readonly force: boolean;
   readonly dryRun: boolean;
-  readonly restrictTargets: readonly string[];
+  readonly restrictAgents: readonly string[];
   readonly cwd?: string;
   readonly home?: string;
 }
@@ -52,7 +52,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
 
-  const targets = computeTargetSet(config, options.restrictTargets);
+  const agents = computeAgentSet(config, options.restrictAgents);
 
   // Resolve the install set — this stages everything into the store
   // and may extend the config with auto-taps for new git URLs / paths.
@@ -72,11 +72,11 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     currentState,
     options.scope,
     cwd,
-    { activeTargets: targets.map((t) => t.name), force: options.force },
+    { activeAgents: agents.map((a) => a.name), force: options.force },
   );
 
   if (options.dryRun) {
-    const summary = performInstall(toInstall, targets, options.scope, cwd, currentState, {
+    const summary = performInstall(toInstall, agents, options.scope, cwd, currentState, {
       force: options.force,
       dryRun: true,
       home,
@@ -93,7 +93,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     if (configWithAutoTaps !== config) writeConfig(configWithAutoTaps, home);
 
     const freshState = readState(home);
-    const result = performInstall(toInstall, targets, options.scope, cwd, freshState, {
+    const result = performInstall(toInstall, agents, options.scope, cwd, freshState, {
       force: options.force,
       dryRun: false,
       home,

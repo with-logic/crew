@@ -1,7 +1,7 @@
 /**
  * State mutations for `crew uninstall` (§7.4).
  *
- * - `reduceEntryTargets` — partial removal: entry stays but loses some targets.
+ * - `reduceEntryAgents` — partial removal: entry stays but loses some agents.
  * - `dropScopedEntryAndUpdateRequiredBy` — full removal at one (name, scope);
  *    also scrubs the removed name from every surviving `required_by`.
  * - `findOrphan` — identifies a skill that `--prune` should autoremove.
@@ -9,8 +9,8 @@
 
 import type { StateEntry, StateFile } from "../../core/types.ts";
 
-/** Replace the (name, scope) entry's `targets` array with `remaining`. */
-export function reduceEntryTargets(
+/** Replace the (name, scope) entry's `agents` array with `remaining`. */
+export function reduceEntryAgents(
   state: StateFile,
   name: string,
   scope: StateEntry["scope"],
@@ -19,7 +19,7 @@ export function reduceEntryTargets(
   return {
     schema_version: 1,
     installations: state.installations.map((e) =>
-      e.name === name && e.scope === scope ? { ...e, targets: [...remaining] } : e,
+      e.name === name && e.scope === scope ? { ...e, agents: [...remaining] } : e,
     ),
   };
 }

@@ -5,14 +5,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
+import { isOnPath } from "../../src/agents/path.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import { parseRef } from "../../src/refs/parse.ts";
 import { writeState } from "../../src/state/load.ts";
-import { claudeCodeAdapter } from "../../src/targets/claude-code.ts";
-import { codexAdapter } from "../../src/targets/codex.ts";
-import { geminiCliAdapter } from "../../src/targets/gemini-cli.ts";
-import { isOnPath } from "../../src/targets/path.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -69,7 +69,7 @@ describe("doctor warns when target in state no longer detected", () => {
             content_hash: "sha256:00",
             scope: "user",
             installed_at: "2026-04-18T00:00:00Z",
-            targets: ["codex"],
+            agents: ["codex"],
             pinned: false,
             explicit: true,
             required_by: [],
@@ -97,7 +97,7 @@ describe("doctor repair merges markers into existing entry", () => {
         ...state,
         installations: state.installations.map((e: { name: string }) => ({
           ...e,
-          targets: ["claude-code"],
+          agents: ["claude-code"],
         })),
       },
       home,
@@ -105,7 +105,7 @@ describe("doctor repair merges markers into existing entry", () => {
     const code = runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
     const after = require("../../src/state/load.ts").readState(home);
-    expect(after.installations[0].targets.length).toBeGreaterThan(1);
+    expect(after.installations[0].agents.length).toBeGreaterThan(1);
   });
 });
 

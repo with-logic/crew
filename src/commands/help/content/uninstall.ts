@@ -14,7 +14,7 @@ export const uninstallHelp: CommandHelp = {
       description: "Remove the system-wide copy (default) or just the project-scoped one.",
     },
     {
-      flag: "--target <name>",
+      flag: "--agent <name>",
       description: "Only remove from the named agent(s); other agents keep their copy. Repeatable.",
     },
     {
@@ -34,7 +34,7 @@ export const uninstallHelp: CommandHelp = {
       description: "Remove the skill from every agent it's in.",
     },
     {
-      command: "crew uninstall --target codex python-testing",
+      command: "crew uninstall --agent codex python-testing",
       description: "Remove it from Codex only; keep it in Claude Code and Gemini.",
     },
     {
@@ -48,8 +48,8 @@ export const uninstallHelp: CommandHelp = {
   ],
   notes: [
     "`--prune` only touches dependencies crew auto-installed for you. Anything you installed yourself stays put.",
-    "If you only uninstall from some agents (`--target`), the skill is still installed elsewhere, so its dependencies still count as needed — pruning won't touch them.",
+    "If you only uninstall from some agents (`--agent`), the skill is still installed elsewhere, so its dependencies still count as needed — pruning won't touch them.",
     "crew never reaches outside its own install folders. `--force` lets you get past a tampered marker, but it won't let you delete anything you didn't install through crew.",
   ],
-  seeAlso: ["list", "install", "targets"],
+  seeAlso: ["list", "install", "agents"],
 };

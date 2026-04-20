@@ -1,5 +1,5 @@
 /**
- * The `TargetAdapter` interface (§7.1).
+ * The `AgentAdapter` interface (§7.1).
  *
  * Every agent coder crew installs into is handled through an adapter that
  * knows that tool's skill base directory. Adapters do not know anything
@@ -21,7 +21,7 @@ export interface InstalledSkillRecord {
 }
 
 /** The adapter contract. */
-export interface TargetAdapter {
+export interface AgentAdapter {
   /** Stable adapter name (lowercase, hyphens). */
   readonly name: string;
   /** True if this target is installed on the host. */
@@ -46,7 +46,7 @@ export interface TargetAdapter {
  * doesn't support the scope. Callers should skip adapters that return
  * empty for the requested scope.
  */
-export function baseFor(adapter: TargetAdapter, scope: Scope, cwd: string): string {
+export function baseFor(adapter: AgentAdapter, scope: Scope, cwd: string): string {
   return scope === "user" ? adapter.userPath() : adapter.projectPath(cwd);
 }
 

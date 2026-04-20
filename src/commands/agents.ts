@@ -1,20 +1,20 @@
 /**
- * `crew targets [enable|disable <name>]` (§7.2).
+ * `crew agents [enable|disable <name>]` (§7.2).
  *
- * With no arguments, shows every agent coder crew knows about with
- * human status descriptors (detected, forced on, disabled, not
- * found). The enable/disable subcommands toggle config flags.
+ * With no arguments, shows every agent crew knows about with human
+ * status descriptors (detected, forced on, disabled, not found). The
+ * enable/disable subcommands toggle config flags.
  */
 
+import { ALL_AGENTS, agentByName } from "../agents/registry.ts";
 import { readConfig, writeConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
 import { withStateLock } from "../state/lock.ts";
-import { ALL_ADAPTERS, adapterByName } from "../targets/registry.ts";
 import { columns } from "../util/format.ts";
 import type { Styler } from "../util/term.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
-export function targetsCommand(ctx: CommandContext): CommandOutput {
+export function agentsCommand(ctx: CommandContext): CommandOutput {
   const sub = ctx.positional[0];
   if (!sub) return list(ctx);
   if (sub === "enable") return toggle(ctx, ctx.positional.slice(1), "enable");
@@ -22,12 +22,12 @@ export function targetsCommand(ctx: CommandContext): CommandOutput {
   // Unknown subcommand — a typo, most likely. Error with a hint.
   throw new CrewError(
     "usage_error",
-    `\`crew targets\` has no subcommand named \`${sub}\` — run \`crew help targets\` to see what's available`,
+    `\`crew agents\` has no subcommand named \`${sub}\` — run \`crew help agents\` to see what's available`,
     { sub },
   );
 }
 
-interface TargetRow {
+interface AgentRow {
   readonly name: string;
   readonly detected: boolean;
   readonly forced: boolean;
@@ -36,18 +36,18 @@ interface TargetRow {
 
 function list(ctx: CommandContext): CommandOutput {
   const config = readConfig(ctx.home);
-  const rows: TargetRow[] = ALL_ADAPTERS.map((a) => ({
+  const rows: AgentRow[] = ALL_AGENTS.map((a) => ({
     name: a.name,
     detected: a.detect(),
-    forced: config.forced_targets.includes(a.name),
-    disabled: config.disabled_targets.includes(a.name),
+    forced: config.forced_agents.includes(a.name),
+    disabled: config.disabled_agents.includes(a.name),
   }));
-  return { exitCode: 0, human: renderList(rows, ctx.style), json: { targets: rows } };
+  return { exitCode: 0, human: renderList(rows, ctx.style), json: { agents: rows } };
 }
 
-function renderList(rows: readonly TargetRow[], style: Styler): string[] {
+function renderList(rows: readonly AgentRow[], style: Styler): string[] {
   const lines: string[] = [];
-  lines.push(style.bold("Agent coders"));
+  lines.push(style.bold("Agents"));
   lines.push("");
   const cells: string[][] = rows.map((r) => [
     `  ${symbolFor(r, style)}`,
@@ -56,22 +56,22 @@ function renderList(rows: readonly TargetRow[], style: Styler): string[] {
   ]);
   for (const line of columns(cells, 2)) lines.push(line);
   lines.push("");
-  // With 17+ adapters registered, at least one is always "not found"
+  // With 17+ agents registered, at least one is always "not found"
   // on a normal machine. A single hint covers both cases — enable to
   // force one on, disable to skip.
   lines.push(
-    style.dim("Run `crew targets enable <name>` or `crew targets disable <name>` to adjust."),
+    style.dim("Run `crew agents enable <name>` or `crew agents disable <name>` to adjust."),
   );
   return lines;
 }
 
-function symbolFor(row: TargetRow, style: Styler): string {
+function symbolFor(row: AgentRow, style: Styler): string {
   if (row.disabled) return style.symbol("muted");
   if (row.detected || row.forced) return style.symbol("ok");
   return style.symbol("muted");
 }
 
-function statusFor(row: TargetRow, style: Styler): string {
+function statusFor(row: AgentRow, style: Styler): string {
   if (row.disabled) return style.yellow("disabled");
   if (row.forced && !row.detected) return style.green("forced on");
   if (row.forced) return style.green("forced on (detected)");
@@ -87,19 +87,19 @@ function toggle(
   if (args.length !== 1)
     throw new CrewError(
       "usage_error",
-      `\`crew targets ${mode}\` needs exactly one target name — see \`crew targets\` for the list`,
+      `\`crew agents ${mode}\` needs exactly one agent name — see \`crew agents\` for the list`,
     );
   const name = args[0]!;
-  if (!adapterByName(name)) {
-    const known = ALL_ADAPTERS.map((a) => a.name).join(", ");
-    throw new CrewError("usage_error", `unknown target \`${name}\` — known targets: ${known}`, {
+  if (!agentByName(name)) {
+    const known = ALL_AGENTS.map((a) => a.name).join(", ");
+    throw new CrewError("usage_error", `unknown agent \`${name}\` — known agents: ${known}`, {
       name,
     });
   }
   withStateLock(() => {
     const config = readConfig(ctx.home);
-    const forced = new Set(config.forced_targets);
-    const disabled = new Set(config.disabled_targets);
+    const forced = new Set(config.forced_agents);
+    const disabled = new Set(config.disabled_agents);
     if (mode === "enable") {
       forced.add(name);
       disabled.delete(name);
@@ -108,7 +108,7 @@ function toggle(
       forced.delete(name);
     }
     writeConfig(
-      { ...config, forced_targets: [...forced].sort(), disabled_targets: [...disabled].sort() },
+      { ...config, forced_agents: [...forced].sort(), disabled_agents: [...disabled].sort() },
       ctx.home,
     );
   }, ctx.home);

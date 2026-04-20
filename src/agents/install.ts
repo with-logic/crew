@@ -18,12 +18,12 @@ import { copyTree } from "../util/copy.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
 import { nowIso } from "../util/time.ts";
-import { baseFor, type TargetAdapter } from "./adapter.ts";
+import { type AgentAdapter, baseFor } from "./adapter.ts";
 
-/** Input to the install operation for one (dest, adapter-group). */
+/** Input to the install operation for one (dest, agent-group). */
 export interface InstallInput {
-  /** The adapters that share this `dest`. Always non-empty. */
-  readonly adapters: readonly TargetAdapter[];
+  /** The agents that share this `dest`. Always non-empty. */
+  readonly agents: readonly AgentAdapter[];
   readonly scope: Scope;
   readonly cwd: string;
   readonly storePath: string;
@@ -43,25 +43,25 @@ export type InstallOutcome = { kind: "installed" } | { kind: "up_to_date" };
 
 /**
  * Install a staged skill into one physical `dest`, performing all
- * safety checks. All adapters in `input.adapters` end up as owners of
+ * safety checks. All adapters in `input.agents` end up as owners of
  * the resulting marker. Throws `CrewError` on abort (unless --force
  * overrides the check).
  */
-export function installSkillIntoTarget(input: InstallInput): InstallOutcome {
+export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
   // Every adapter in the group must resolve to the same `dest` —
   // grouping happens before we get here. Use the first adapter's
   // `base` and carry all adapter names in the marker.
-  const base = baseFor(input.adapters[0]!, input.scope, input.cwd);
+  const base = baseFor(input.agents[0]!, input.scope, input.cwd);
   ensureDir(base, 0o755);
   const dest = join(base, input.skillName);
 
-  const incomingAdapters = [...new Set(input.adapters.map((a) => a.name))].sort();
+  const incomingAdapters = [...new Set(input.agents.map((a) => a.name))].sort();
   let priorAdapters: readonly string[] = [];
 
   if (existsSync(dest)) {
     const existingMarker = tryReadJson<Marker>(join(dest, ".crew.json"));
     if (existingMarker) {
-      priorAdapters = existingMarker.adapters ?? [];
+      priorAdapters = existingMarker.agents ?? [];
       if (existingMarker.name === input.skillName) {
         const currentHash = hashDirectory(dest);
         if (currentHash !== existingMarker.content_hash) {
@@ -109,11 +109,11 @@ export function installSkillIntoTarget(input: InstallInput): InstallOutcome {
   if (exists(staging)) rmrf(staging);
   copyTree(input.storePath, staging, { stripRootMarker: true });
 
-  const adapters = mergeAdapters(priorAdapters, incomingAdapters);
+  const agents = mergeAdapters(priorAdapters, incomingAdapters);
   const marker: Marker = {
     schema_version: 1,
     name: input.skillName,
-    adapters,
+    agents,
     tap_name: input.tap.name,
     tap_kind: input.tap.kind,
     tap_url: input.tap.url,
@@ -138,10 +138,10 @@ function mergeAdapters(a: readonly string[], b: readonly string[]): string[] {
   return [...new Set([...a, ...b])].sort();
 }
 
-/** Input to uninstall from one `dest` shared by a group of adapters. */
+/** Input to uninstall from one `dest` shared by a group of agents. */
 export interface UninstallInput {
-  /** The adapters whose ownership of this dest is being removed. */
-  readonly adapters: readonly TargetAdapter[];
+  /** The agents whose ownership of this dest is being removed. */
+  readonly agents: readonly AgentAdapter[];
   readonly scope: Scope;
   readonly cwd: string;
   readonly skillName: string;
@@ -158,8 +158,8 @@ export type UninstallOutcome =
   | { kind: "absent" };
 
 /** Remove adapter ownership from a physical dest. Throws on abort. */
-export function uninstallSkillFromTarget(input: UninstallInput): UninstallOutcome {
-  const base = baseFor(input.adapters[0]!, input.scope, input.cwd);
+export function uninstallSkillFromAgents(input: UninstallInput): UninstallOutcome {
+  const base = baseFor(input.agents[0]!, input.scope, input.cwd);
   const dest = join(base, input.skillName);
   if (!existsSync(dest)) {
     if (!input.force)
@@ -192,13 +192,13 @@ export function uninstallSkillFromTarget(input: UninstallInput): UninstallOutcom
     rmrf(dest);
     return { kind: "removed" };
   }
-  const leaving = new Set(input.adapters.map((a) => a.name));
-  const remaining = (marker.adapters ?? []).filter((a) => !leaving.has(a));
+  const leaving = new Set(input.agents.map((a) => a.name));
+  const remaining = (marker.agents ?? []).filter((a) => !leaving.has(a));
   if (remaining.length === 0) {
     rmrf(dest);
     return { kind: "removed" };
   }
-  // Rewrite the marker with reduced `adapters` — bytes stay.
-  writeJson(join(dest, ".crew.json"), { ...marker, adapters: remaining.sort() });
+  // Rewrite the marker with reduced `agents` — bytes stay.
+  writeJson(join(dest, ".crew.json"), { ...marker, agents: remaining.sort() });
   return { kind: "detached", remaining };
 }

@@ -8,18 +8,18 @@
  * again here would be noise.
  *
  * When multiple adapters share an install path (§7.2), the same
- * physical marker would be returned by `listInstalledForTarget` once
+ * physical marker would be returned by `listInstalledForAgent` once
  * per adapter. We dedupe by `(scope, installDir)` so each marker
  * appears exactly once in the index.
  */
 
 import { existsSync } from "node:fs";
+import { listInstalledForAgent } from "../../agents/list.ts";
+import { ALL_AGENTS } from "../../agents/registry.ts";
 import type { StateEntry } from "../../core/types.ts";
-import { listInstalledForTarget } from "../../targets/list.ts";
-import { ALL_ADAPTERS } from "../../targets/registry.ts";
 
 export interface MarkerEntry {
-  record: ReturnType<typeof listInstalledForTarget>[number];
+  record: ReturnType<typeof listInstalledForAgent>[number];
   currentHash?: string;
   /** For project-scope markers, the cwd we walked from — used as `project_root` during --repair. */
   projectRoot?: string;
@@ -32,8 +32,8 @@ export function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: strin
   for (const e of stateEntries) {
     if (e.scope === "project" && e.project_root) projectRoots.add(e.project_root);
   }
-  for (const adapter of ALL_ADAPTERS) {
-    for (const rec of listInstalledForTarget(adapter, "user", cwd)) {
+  for (const adapter of ALL_AGENTS) {
+    for (const rec of listInstalledForAgent(adapter, "user", cwd)) {
       const key = `user\0${rec.installDir}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -41,7 +41,7 @@ export function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: strin
     }
     for (const root of projectRoots) {
       if (!existsSync(root)) continue;
-      for (const rec of listInstalledForTarget(adapter, "project", root)) {
+      for (const rec of listInstalledForAgent(adapter, "project", root)) {
         const key = `project\0${rec.installDir}`;
         if (seen.has(key)) continue;
         seen.add(key);

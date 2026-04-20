@@ -87,7 +87,7 @@ describe("stringifyYaml round-trip", () => {
   test("nested round-trip", () => {
     const obj = {
       taps: [{ name: "core", url: "https://x/y.git" }],
-      disabled_targets: [],
+      disabled_agents: [],
       autoupdate: { enabled: false, interval_seconds: 14400 },
     };
     const serialized = stringifyYaml(obj);
