@@ -4,39 +4,34 @@ export const updateHelp: CommandHelp = {
   name: "update",
   synopsis: "crew update [<name>...]",
   summary: [
-    "Re-resolve each installed skill's ref and reinstall if the upstream SHA has moved.",
-    "Pinned installs (exact SHA or tag) are skipped unless `--force`. Customized installs are skipped silently — your edits are preserved.",
-    "Taps are re-expanded: new skills added upstream get installed; skills that disappeared upstream are reported as `source_gone` and left in place locally.",
-    "Dependency closure: `crew update <name>...` also updates every skill transitively required by a named one. This keeps a skill and the libraries it relies on in sync. Transitive entries are marked `(required by <name>)` in the output.",
-    "Fetch scope: without args, every configured tap is fetched. With `<name>...`, only the taps that back those skills (plus their dep closure) are fetched — other taps are left untouched.",
+    "Catch your installed skills up to the latest versions.",
+    "Run this whenever you want to pull in improvements the authors have published since you installed. With no arguments, every skill you have is checked; pass one or more names to update just those.",
+    "If you installed a whole collection of skills at once (e.g. `crew install @your-org/skills`), any new ones the team has added show up automatically. Skills you pinned to a specific version (`skill@v1.0.0`) are left alone unless you pass `--force`.",
+    "If a skill has dependencies, updating it also updates the things it depends on — your setup stays consistent.",
   ],
   flags: [
     {
       flag: "--force",
-      description: "Update pinned skills, overwrite customized installs, and ignore user edits.",
+      description: "Update even pinned skills and overwrite any local edits you've made.",
     },
-    { flag: "--json", description: "Emit a structured per-skill result table." },
+    { flag: "--json", description: "Machine-readable output, one record per skill." },
   ],
   examples: [
-    { command: "crew update", description: "Update every unpinned skill in state." },
+    { command: "crew update", description: "The usual: pull in every available improvement." },
     {
       command: "crew update python-testing",
-      description: "Update a single skill by name; the tap it belongs to is also re-expanded.",
+      description: "Just update this one skill (and anything it depends on).",
     },
     {
-      command: "crew update --force python-testing",
-      description: "Force-update even if the skill is pinned or has local edits.",
-    },
-    {
-      command: "crew update my-agent",
-      description:
-        "Update `my-agent` and every skill it transitively depends on. Transitive entries appear in the summary with `(required by my-agent)`.",
+      command: "crew update --force my-pinned-skill",
+      description: "Move a pinned skill forward anyway, or overwrite local edits.",
     },
   ],
   notes: [
-    "Upstream deletion is soft: if a skill is removed upstream but its source still resolves, `crew update` reports `source_gone` and leaves your local install untouched. Run `crew uninstall <name>` when you want it gone.",
-    "Network failures are isolated per-skill — one broken source doesn't stop the rest.",
-    "Use `crew tap update` if you only want to refresh tap clones (for faster `crew search`) without touching installed skills.",
+    "Your edits are safe. If you've modified a skill's files locally, `crew update` leaves them alone — it won't clobber your changes unless you pass `--force`.",
+    "Removed skills stay installed. If an author deletes a skill upstream, your local copy is preserved. Run `crew uninstall <name>` yourself when you want it gone.",
+    "One broken skill won't stop the rest. If a source is temporarily unreachable, crew updates what it can and reports the rest so you can retry later.",
+    "Want to schedule updates? See `crew autoupdate`.",
   ],
   seeAlso: ["autoupdate", "install", "list"],
 };

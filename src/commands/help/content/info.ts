@@ -2,25 +2,26 @@ import type { CommandHelp } from "./types.ts";
 
 export const infoHelp: CommandHelp = {
   name: "info",
-  synopsis: "crew info <ref-or-name>",
+  synopsis: "crew info <name-or-reference>",
   summary: [
-    "Show metadata for a skill. If the argument matches an installed skill name, details come from local state; otherwise the ref is resolved and the skill is inspected fresh without installing it.",
-    "Accepts the same reference shapes as `crew install` — see `crew help install` for the full list (tap names, paths, git URLs, `gh:`/`gl:`/`bb:` and `@owner/repo` shorthands).",
+    "Get the details on a skill — installed or not.",
+    "If you already have it installed, you'll see what's going on locally: where it came from, which version you're on, and which agents it's in. If it's just a reference (a URL, a name in a collection you've added), crew fetches the skill's metadata so you can look before you leap.",
+    "Works with every reference shape `crew install` understands — see `crew help install` for the list.",
   ],
-  flags: [{ flag: "--json", description: "Emit a structured payload." }],
+  flags: [{ flag: "--json", description: "Machine-readable output." }],
   examples: [
-    { command: "crew info python-testing", description: "Show details for an installed skill." },
+    { command: "crew info python-testing", description: "See the details on a skill you have." },
     {
       command: "crew info gh:acme/skills//python/testing",
-      description: "Inspect a skill without installing.",
+      description: "Preview a skill without installing it.",
     },
     {
       command: "crew info @with-logic/skills",
-      description: "Preview every skill in a tap (by URL).",
+      description: "Peek at everything a collection (by URL) has to offer.",
     },
     {
       command: "crew info team-skills",
-      description: "Preview every skill in a configured tap (by name).",
+      description: "Peek at everything a collection you've added has to offer.",
     },
   ],
   seeAlso: ["list", "search", "install"],

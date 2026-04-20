@@ -4,53 +4,52 @@ export const uninstallHelp: CommandHelp = {
   name: "uninstall",
   synopsis: "crew uninstall <name> [<name>...]",
   summary: [
-    "Remove installed skills from every agent coder crew put them in.",
-    "Sibling skills and anything crew didn't install are left untouched. Transitively-installed dependencies are kept unless you pass `--prune`.",
-    "`--target <name>` restricts removal to the named targets — other targets keep their installs, and the state entry survives with a reduced target list.",
+    "Remove an installed skill from every agent on your machine.",
+    "crew only touches skills it installed — anything else in your agents' skills folders is left alone.",
+    "If the skill pulled in dependencies, those stick around by default in case you want them. Pass `--prune` to also clean up anything that's now unused, like `apt autoremove`.",
   ],
   flags: [
     {
       flag: "--scope {user,project}",
-      description: "Which scope to remove from (default user).",
+      description: "Remove the system-wide copy (default) or just the project-scoped one.",
     },
     {
       flag: "--target <name>",
-      description:
-        "Remove only from the named target(s). Repeatable. Other targets keep their copy. If this empties the state entry's targets, the entry is removed as with a full uninstall.",
+      description: "Only remove from the named agent(s); other agents keep their copy. Repeatable.",
     },
     {
       flag: "--prune",
       description:
-        "After removing the named skills, also remove any dependency that's no longer required by anything and wasn't installed directly. Like `apt autoremove`.",
+        "Also clean up dependencies that are no longer needed. Like `apt autoremove` — safe and tidy.",
     },
     {
       flag: "--force",
       description:
-        "Treat a not-installed skill as a no-op. Also allows removing a destination whose marker was tampered with.",
+        "Don't complain if the skill isn't installed, or if crew's record of it got tampered with.",
     },
   ],
   examples: [
     {
       command: "crew uninstall python-testing",
-      description: "Remove a skill from every target it was installed in.",
+      description: "Remove the skill from every agent it's in.",
     },
     {
       command: "crew uninstall --target codex python-testing",
-      description: "Remove from Codex only; keep it in Claude Code and Gemini CLI.",
+      description: "Remove it from Codex only; keep it in Claude Code and Gemini.",
     },
     {
       command: "crew uninstall --prune python-testing",
-      description: "Remove it and any dependency orphans it leaves behind.",
+      description: "Remove it and anything it pulled in that's no longer needed.",
     },
     {
       command: "crew uninstall --scope project python-testing",
-      description: "Only remove the project-scope copy.",
+      description: "Only remove the project-scoped copy; leave the system-wide one.",
     },
   ],
   notes: [
-    "`--prune` never removes a skill you installed directly (`explicit: true` in state.json) — only transitive deps. It also doesn't cascade through a partial `--target` removal: if the skill is still installed somewhere after the run, its deps are still required.",
-    "`--force` doesn't let you remove things outside `{agent-base}/<skill-name>/` — those aren't crew's to touch.",
-    "`--target <name>` naming a target the skill isn't installed in is a silent no-op; it doesn't trigger `not_installed_here`.",
+    "`--prune` only touches dependencies crew auto-installed for you. Anything you installed yourself stays put.",
+    "If you only uninstall from some agents (`--target`), the skill is still installed elsewhere, so its dependencies still count as needed — pruning won't touch them.",
+    "crew never reaches outside its own install folders. `--force` lets you get past a tampered marker, but it won't let you delete anything you didn't install through crew.",
   ],
   seeAlso: ["list", "install", "targets"],
 };

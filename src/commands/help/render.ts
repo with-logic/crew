@@ -11,23 +11,24 @@ export function overview(): CommandOutput {
   const lines: string[] = [
     `crew ${CREW_VERSION} — a package manager for Agent Skills.`,
     "",
-    "One command installs a skill into every agent coder on your machine",
-    "(Claude Code, Codex CLI, Gemini CLI) and keeps it up to date.",
+    "One command installs a skill into every agent coder on your machine —",
+    "Claude Code, Codex, Gemini — and keeps it up to date. You focus on what",
+    "your agents should know how to do; crew handles the plumbing.",
     "",
     "GETTING STARTED",
-    "  crew search <query>           Find a skill.",
+    "  crew search <query>           Look for a skill.",
     "  crew install <skill>          Install it everywhere.",
-    "  crew list                     See what's installed.",
-    "  crew help <command>           See flags and examples for any command.",
+    "  crew list                     See what you have.",
+    "  crew help <command>           Dig into any command.",
     "",
     "A FEW FLOWS",
-    "  # Install one skill from the default tap",
+    "  # Install a skill from the default collection",
     "  crew install python-testing",
     "",
-    "  # Install every skill in a GitHub repo; pick up new ones automatically",
+    "  # Install your team's whole skill set; stay current automatically",
     "  crew install @your-org/skills && crew autoupdate enable",
     "",
-    "  # Install only into the current project",
+    "  # Add something to just this project, not system-wide",
     "  crew install --scope project team/conventions",
     "",
     "COMMANDS",
@@ -41,10 +42,10 @@ export function overview(): CommandOutput {
     lines.push("");
   }
   lines.push("ENVIRONMENT");
-  lines.push("  CREW_HOME        Override ~/.crew (state, caches, tap clones).");
+  lines.push("  CREW_HOME        Where crew stores its data. Defaults to ~/.crew.");
   lines.push("");
-  lines.push("Run `crew help <command>` for details and examples.");
-  lines.push("Spec: https://agentskills.io/specification");
+  lines.push("Run `crew help <command>` for details and examples on any command.");
+  lines.push("About Agent Skills: https://agentskills.io/specification");
   return {
     exitCode: 0,
     human: lines,
@@ -121,9 +122,10 @@ export function renderCommand(help: CommandHelp): CommandOutput {
   if (help.notes && help.notes.length > 0) {
     lines.push("NOTES");
     for (const note of help.notes) {
-      for (const wrapped of wrap(note, 74)) {
-        lines.push(`  ${wrapped}`);
-      }
+      const [first, ...rest] = wrap(note, 74);
+      // Bullet the first line; hanging-indent the rest for visual grouping.
+      lines.push(`  • ${first ?? ""}`);
+      for (const cont of rest) lines.push(`    ${cont}`);
     }
     lines.push("");
   }

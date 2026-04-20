@@ -4,13 +4,16 @@ export const searchHelp: CommandHelp = {
   name: "search",
   synopsis: "crew search <query>",
   summary: [
-    "Match <query> case-insensitively against the name and description of every skill in every configured tap.",
-    "Searches only taps (git-based registries). Ad-hoc git URLs and local paths don't appear in search.",
+    "Find a skill. Searches names and descriptions across every collection you've added.",
+    "Matches are case-insensitive and partial — search for `python` to find everything Python-related.",
   ],
-  flags: [{ flag: "--json", description: "Emit a structured array of matches." }],
+  flags: [{ flag: "--json", description: "Machine-readable output." }],
   examples: [
-    { command: "crew search python", description: "Find skills mentioning `python`." },
-    { command: "crew search 'code review'", description: "Multi-word query (quoted)." },
+    { command: "crew search python", description: "Find everything Python-related." },
+    { command: "crew search 'code review'", description: "Quote multi-word queries." },
+  ],
+  notes: [
+    "Search covers collections you've added (see `crew tap`). To look at a one-off git URL or local folder, use `crew info` instead.",
   ],
   seeAlso: ["tap", "info", "install"],
 };

@@ -4,31 +4,36 @@ export const doctorHelp: CommandHelp = {
   name: "doctor",
   synopsis: "crew doctor [--verify] [--repair]",
   summary: [
-    "Audit crew's state for drift between `state.json`, the markers at each install site, and the expected store entries.",
-    "Safe to run any time. `--repair` reconciles recoverable drift — it never touches user-customized skills or anything outside `~/.crew/` and each skill's install directory.",
+    "Check that crew is in good shape, and optionally fix anything that isn't.",
+    "Safe to run any time — it just looks around and reports. Pass `--repair` when you want it to actually fix things it finds.",
+    "Typical reasons to reach for this: something feels off, an update failed weirdly, you manually edited files crew manages, or you want a quick health check.",
   ],
   flags: [
-    { flag: "--verify", description: "Recompute every install's content hash (slower)." },
+    {
+      flag: "--verify",
+      description:
+        "Thorough check: re-hash every installed file to catch local edits. Slower, but more precise.",
+    },
     {
       flag: "--repair",
       description:
-        "Fix recoverable drift: rebuild state from markers, delete orphan store entries, reconcile autoupdate state.",
+        "Actually fix what's fixable: rebuild bookkeeping, tidy up leftover files, reconcile scheduled updates.",
     },
-    { flag: "--json", description: "Emit a structured list of findings." },
+    { flag: "--json", description: "Machine-readable list of findings." },
   ],
   examples: [
-    { command: "crew doctor", description: "Quick integrity check." },
+    { command: "crew doctor", description: "Quick health check." },
     {
       command: "crew doctor --verify",
-      description: "Thorough check that flags user customizations (slower, hashes every file).",
+      description: "Thorough check that also flags any local edits you've made.",
     },
     {
       command: "crew doctor --repair",
-      description: "Reconcile drift. Inspect findings without --repair first if unsure.",
+      description: "Fix recoverable problems. Run without `--repair` first if you're not sure.",
     },
   ],
   notes: [
-    "`state.json` is a convenience index; markers (`.crew.json` inside each install dir) are ground truth. `--repair` rebuilds state from markers when they disagree.",
+    "`--repair` is conservative — it won't touch skills you've edited, or anything outside crew's own install folders.",
   ],
   seeAlso: ["cache", "list"],
 };

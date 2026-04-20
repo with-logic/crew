@@ -4,9 +4,9 @@ export const cacheHelp: CommandHelp = {
   name: "cache",
   synopsis: "crew cache clean",
   summary: [
-    "Delete the ephemeral git clone cache (`~/.crew/cache/`) and any store entries no longer referenced by state.",
-    "Safe to run — crew re-fetches what it needs on the next install/update. Doesn't touch installed skills or tap clones.",
+    "Free up some disk space.",
+    "crew keeps a few caches to make installs and updates fast. This command clears the ones that are safe to throw away — crew will just re-download what it needs next time. Your installed skills and your collections are untouched.",
   ],
-  examples: [{ command: "crew cache clean", description: "Reclaim disk space." }],
+  examples: [{ command: "crew cache clean", description: "Reclaim disk space. Totally safe." }],
   seeAlso: ["doctor", "update"],
 };

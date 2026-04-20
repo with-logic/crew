@@ -4,21 +4,25 @@ export const listHelp: CommandHelp = {
   name: "list",
   synopsis: "crew list",
   summary: [
-    "Print every skill crew currently manages, with its source, resolved SHA, which targets it's installed in, and whether it was pinned or pulled in as a dependency.",
+    "Show everything you have installed.",
+    "For each skill you'll see where it came from, which agents it's in, which version you're on, and whether you pinned it or it came along as a dependency.",
   ],
   flags: [
-    { flag: "--json", description: "Emit a structured array for scripting." },
-    { flag: "--scope {user,project}", description: "Filter to one scope (default: all)." },
+    { flag: "--json", description: "Machine-readable output, handy for scripts." },
+    {
+      flag: "--scope {user,project}",
+      description: "Only show system-wide or project-scoped installs (default: both).",
+    },
   ],
   examples: [
-    { command: "crew list", description: "Show everything crew is tracking." },
+    { command: "crew list", description: "See what's installed." },
     {
       command: "crew list --json | jq '.installations[].name'",
       description: "Pipe names into a script.",
     },
     {
       command: "crew list --json | jq '.installations[] | select(.pinned)'",
-      description: "Find all pinned installs.",
+      description: "Find every skill you've pinned to a specific version.",
     },
   ],
   seeAlso: ["info", "search", "doctor"],

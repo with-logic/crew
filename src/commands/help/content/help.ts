@@ -4,12 +4,12 @@ export const helpHelp: CommandHelp = {
   name: "help",
   synopsis: "crew help [<command>]",
   summary: [
-    "Show overall usage, or detailed help for a specific command.",
-    "Running `crew` with no arguments is the same as `crew help`.",
+    "Show how to use crew, or get details on a specific command.",
+    "Running `crew` with no arguments gives you the same overview.",
   ],
   examples: [
-    { command: "crew help", description: "Overview and command list." },
-    { command: "crew help install", description: "Detailed help for `install`." },
+    { command: "crew help", description: "Overview and the full command list." },
+    { command: "crew help install", description: "Everything about `crew install`." },
     { command: "crew help --json", description: "Machine-readable help for scripting." },
   ],
 };

@@ -4,36 +4,35 @@ export const autoupdateHelp: CommandHelp = {
   name: "autoupdate",
   synopsis: "crew autoupdate {enable|disable|status}",
   summary: [
-    "Manage a background launchd agent that runs `crew update --quiet` on a schedule.",
-    "Once enabled, any tap you've installed a skill from (e.g. `@your-org/skills`) automatically picks up new skills as the team adds them upstream.",
-    "The agent shows up in System Settings → General → Login Items as `Crew Skill Autoupdate`.",
+    "Keep your skills up to date automatically, in the background.",
+    "Turn it on and crew checks for updates on a schedule — your team's new skills appear, existing ones roll forward. No more forgetting to run `crew update`.",
+    "On macOS, you'll see it in System Settings → General → Login Items as `Crew Skill Autoupdate`.",
   ],
   flags: [
     {
-      flag: "--interval <dur>",
-      description: "Interval for `enable`. Units: `s`, `m`, `h`, `d`. Default `4h`.",
+      flag: "--interval <time>",
+      description: "How often to check (e.g. `30m`, `2h`, `1d`). Default is every 4 hours.",
     },
-    { flag: "--json", description: "Structured status output." },
+    { flag: "--json", description: "Machine-readable output for `status`." },
   ],
   examples: [
     {
       command: "crew autoupdate enable",
-      description: "Turn on the default 4-hour schedule.",
+      description: "Turn it on, every 4 hours.",
     },
     {
       command: "crew autoupdate enable --interval 30m",
-      description: "Run every 30 minutes.",
+      description: "Check every 30 minutes instead.",
     },
     {
       command: "crew autoupdate status",
-      description: "Check whether the agent is loaded and when it last ran.",
+      description: "See whether it's running and when it last checked.",
     },
-    { command: "crew autoupdate disable", description: "Stop the background updates." },
+    { command: "crew autoupdate disable", description: "Turn it off." },
   ],
   notes: [
-    "Logs go to `~/.crew/logs/autoupdate.log`.",
-    "If status says `agent_loaded: false` but config says enabled, run `crew autoupdate disable` then `enable` to reconcile — or `crew doctor --repair`.",
-    "Advanced: set the `CREW_LAUNCH_AGENTS_DIR` env var to override where the plist is written (defaults to `~/Library/LaunchAgents`). Mostly a test seam; you shouldn't need it in normal use.",
+    "Logs go to `~/.crew/logs/autoupdate.log` if you want to see what it's been doing.",
+    "If status ever looks wrong (e.g. says it's enabled but not running), `crew autoupdate disable` then `enable` is a safe reset. `crew doctor --repair` can also sort it out.",
   ],
   seeAlso: ["update", "doctor"],
 };
