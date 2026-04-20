@@ -12,7 +12,7 @@ import type { Config } from "../core/types.ts";
 export const DEFAULT_TAP_NAME = "core";
 
 /** URL of the default tap. Kept here so §19 item 1 has one place to update. */
-export const DEFAULT_TAP_URL = "https://github.com/crew-sh/core.git";
+export const DEFAULT_TAP_URL = "https://github.com/with-logic/crew-skills.git";
 
 /** The default autoupdate interval (4 hours in seconds) per §10.2. */
 export const DEFAULT_AUTOUPDATE_INTERVAL_SECONDS = 14400;
