@@ -67,6 +67,6 @@ describe("autoupdate command (status only — enable/disable require real launch
     const c = captureStreams();
     const code = runCli(["autoupdate", "status"], { home, streams: c.streams });
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("enabled: false");
+    expect(c.stdout()).toContain("Autoupdate is off");
   });
 });

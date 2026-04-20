@@ -1,5 +1,10 @@
 /**
  * `crew autoupdate {enable|disable|status}` (§10.2).
+ *
+ * Human-friendly output: a single bold headline ("Autoupdate is on"
+ * / "Autoupdate is off"), then a small metadata block — how often
+ * crew checks, when it last ran — and a pointer to the log file
+ * when relevant.
  */
 
 import {
@@ -12,19 +17,15 @@ import { DEFAULT_AUTOUPDATE_INTERVAL_SECONDS } from "../config/defaults.ts";
 import { readConfig, writeConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
 import { withStateLock } from "../state/lock.ts";
+import { timeAgo, twoColumnTable } from "../util/format.ts";
+import type { Styler } from "../util/term.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function autoupdateCommand(ctx: CommandContext): CommandOutput {
   const sub = ctx.positional[0];
-  if (sub === "enable") {
-    return enable(ctx);
-  }
-  if (sub === "disable") {
-    return disable(ctx);
-  }
-  if (sub === "status") {
-    return status(ctx);
-  }
+  if (sub === "enable") return enable(ctx);
+  if (sub === "disable") return disable(ctx);
+  if (sub === "status") return status(ctx);
   throw new CrewError(
     "usage_error",
     "`crew autoupdate` takes one of: `enable [--interval <dur>]`, `disable`, or `status`",
@@ -46,7 +47,11 @@ function enable(ctx: CommandContext): CommandOutput {
 
   return {
     exitCode: 0,
-    human: [`autoupdate enabled; interval=${seconds}s`],
+    human: [
+      `${ctx.style.symbol("ok")} ${ctx.style.bold("Autoupdate enabled")}`,
+      ctx.style.dim(`  checking every ${formatInterval(seconds)}`),
+      ctx.style.dim("  see progress in `crew autoupdate status`"),
+    ],
     json: { enabled: true, interval_seconds: seconds },
   };
 }
@@ -57,22 +62,30 @@ function disable(ctx: CommandContext): CommandOutput {
     disableAutoupdate(ctx.home);
     writeConfig({ ...config, autoupdate: { ...config.autoupdate, enabled: false } }, ctx.home);
   }, ctx.home);
-  return { exitCode: 0, human: ["autoupdate disabled"], json: { enabled: false } };
+  return {
+    exitCode: 0,
+    human: [
+      `${ctx.style.symbol("muted")} ${ctx.style.bold("Autoupdate disabled")}`,
+      ctx.style.dim("  your skills won't update on their own anymore"),
+      ctx.style.dim("  re-enable with `crew autoupdate enable`"),
+    ],
+    json: { enabled: false },
+  };
 }
 
 function status(ctx: CommandContext): CommandOutput {
   const config = readConfig(ctx.home);
   const loaded = isAutoupdateLoaded();
   const tail = readAutoupdateLogTail(ctx.home);
-  const human = [
-    `enabled: ${config.autoupdate.enabled}`,
-    `interval_seconds: ${config.autoupdate.interval_seconds}`,
-    `agent_loaded: ${loaded}`,
-    `last_run: ${tail.last_run ?? "(unknown)"}`,
-  ];
   return {
     exitCode: 0,
-    human,
+    human: renderStatus(
+      config.autoupdate.enabled,
+      config.autoupdate.interval_seconds,
+      loaded,
+      tail.last_run,
+      ctx.style,
+    ),
     json: {
       enabled: config.autoupdate.enabled,
       interval_seconds: config.autoupdate.interval_seconds,
@@ -80,6 +93,63 @@ function status(ctx: CommandContext): CommandOutput {
       last_run: tail.last_run,
     },
   };
+}
+
+function renderStatus(
+  enabled: boolean,
+  intervalSeconds: number,
+  loaded: boolean,
+  lastRun: string | null,
+  style: Styler,
+): string[] {
+  const lines: string[] = [];
+  if (!enabled) {
+    lines.push(`${style.symbol("muted")} ${style.bold("Autoupdate is off")}`);
+    lines.push("");
+    lines.push(style.dim("Turn it on with `crew autoupdate enable`."));
+    return lines;
+  }
+  const headline = loaded
+    ? `${style.symbol("ok")} ${style.bold("Autoupdate is on")}`
+    : `${style.symbol("warn")} ${style.bold("Autoupdate is on, but the background agent isn't loaded")}`;
+  lines.push(headline);
+  lines.push("");
+  const rows: [string, string][] = [];
+  rows.push([style.dim("frequency"), `every ${formatInterval(intervalSeconds)}`]);
+  rows.push([
+    style.dim("last ran"),
+    lastRun
+      ? `${timeAgo(lastRun)} ${style.dim(`(${lastRun.slice(0, 10)})`)}`
+      : style.dim("not yet"),
+  ]);
+  for (const line of twoColumnTable(rows, 2)) lines.push(`  ${line}`);
+  lines.push("");
+  if (loaded) {
+    lines.push(style.dim("Logs: `~/.crew/logs/autoupdate.log`."));
+  } else {
+    lines.push(
+      style.dim(
+        "Reset with `crew autoupdate disable` then `crew autoupdate enable`, or `crew doctor --repair`.",
+      ),
+    );
+  }
+  return lines;
+}
+
+function formatInterval(seconds: number): string {
+  if (seconds % 86400 === 0) {
+    const d = seconds / 86400;
+    return d === 1 ? "day" : `${d} days`;
+  }
+  if (seconds % 3600 === 0) {
+    const h = seconds / 3600;
+    return h === 1 ? "hour" : `${h} hours`;
+  }
+  if (seconds % 60 === 0) {
+    const m = seconds / 60;
+    return m === 1 ? "minute" : `${m} minutes`;
+  }
+  return `${seconds} seconds`;
 }
 
 /** Parse `30s`, `5m`, `2h`, `1d` into seconds. */

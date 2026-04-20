@@ -124,6 +124,73 @@ describe("autoupdate commands", () => {
     expect(readConfig(crewHome).autoupdate.interval_seconds).toBe(30);
   });
 
+  test("status shows `Autoupdate is on` after enabling", () => {
+    const crewHome = makeCrewHome();
+    setLaunchctlRunner(() => true);
+    runCli(["autoupdate", "enable", "--interval", "30m"], {
+      home: crewHome,
+      streams: captureStreams().streams,
+    });
+    const c = captureStreams();
+    runCli(["autoupdate", "status"], { home: crewHome, streams: c.streams });
+    expect(c.stdout()).toContain("Autoupdate is on");
+    expect(c.stdout()).toContain("every 30 minutes");
+    expect(c.stdout()).toContain("not yet");
+  });
+
+  test("status when enabled but agent isn't loaded shows a warning hint", () => {
+    const crewHome = makeCrewHome();
+    setLaunchctlRunner(() => true);
+    runCli(["autoupdate", "enable"], { home: crewHome, streams: captureStreams().streams });
+    // Flip the runner to say "not loaded" for the status check.
+    setLaunchctlRunner((args) => args[0] !== "list");
+    const c = captureStreams();
+    runCli(["autoupdate", "status"], { home: crewHome, streams: c.streams });
+    expect(c.stdout()).toContain("background agent isn't loaded");
+    expect(c.stdout()).toContain("crew autoupdate disable");
+  });
+
+  test("status with --interval 1d reports `every day`", () => {
+    const crewHome = makeCrewHome();
+    setLaunchctlRunner(() => true);
+    runCli(["autoupdate", "enable", "--interval", "1d"], {
+      home: crewHome,
+      streams: captureStreams().streams,
+    });
+    const c = captureStreams();
+    runCli(["autoupdate", "status"], { home: crewHome, streams: c.streams });
+    expect(c.stdout()).toContain("every day");
+  });
+
+  test("status with --interval 2d reports `every 2 days`", () => {
+    const crewHome = makeCrewHome();
+    setLaunchctlRunner(() => true);
+    runCli(["autoupdate", "enable", "--interval", "2d"], {
+      home: crewHome,
+      streams: captureStreams().streams,
+    });
+    const c = captureStreams();
+    runCli(["autoupdate", "status"], { home: crewHome, streams: c.streams });
+    expect(c.stdout()).toContain("every 2 days");
+  });
+
+  test("status with a recent log line shows time-ago", () => {
+    const crewHome = makeCrewHome();
+    setLaunchctlRunner(() => true);
+    runCli(["autoupdate", "enable"], { home: crewHome, streams: captureStreams().streams });
+    // Inject a log line so readAutoupdateLogTail has something to surface.
+    const fs = require("node:fs") as typeof import("node:fs");
+    const { paths } =
+      require("../../src/core/paths.ts") as typeof import("../../src/core/paths.ts");
+    fs.mkdirSync(paths(crewHome).logsDir, { recursive: true });
+    const nowIso = new Date().toISOString();
+    fs.writeFileSync(paths(crewHome).autoupdateLog, `${nowIso} ran\n`);
+    const c = captureStreams();
+    runCli(["autoupdate", "status"], { home: crewHome, streams: c.streams });
+    expect(c.stdout()).toContain("Autoupdate is on");
+    expect(c.stdout()).toContain("last ran");
+  });
+
   test("unknown autoupdate subcommand errors", () => {
     const crewHome = makeCrewHome();
     const code = runCli(["autoupdate", "frob"], {
