@@ -1,16 +1,10 @@
 .mark {
-  width: 16px;
-  height: 16px;
-  background: var(--accent);
+  width: 20px;
+  height: 20px;
   display: inline-block;
-  border-radius: 2px;
-  transform: rotate(45deg);
-  position: relative;
-}
-
-.mark::after {
-  content: "";
-  position: absolute;
-  inset: 4px;
-  background: var(--bg);
+  /* `object-contain` would force letterboxing on a non-square source;
+     our logo is ~1:1 after trim so object-fit: cover is fine. The
+     inline styles next/image injects (height/width auto) need to
+     lose to our explicit sizes. */
+  object-fit: contain;
 }
