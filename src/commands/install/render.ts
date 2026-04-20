@@ -110,7 +110,11 @@ function renderRecord(
   style: Styler,
 ): string[] {
   const lines: string[] = [];
-  lines.push(`  ${style.bold(record.name)}${style.dim(`  [${record.scope}]`)}`);
+  // Scope is only annotated for project installs — user scope is the
+  // default and showing `[user]` everywhere is noise. For a project
+  // install, surface where it landed.
+  const scopeTag = record.scope === "project" ? style.dim(`  in ${shortenHome(cwd)}`) : "";
+  lines.push(`  ${style.bold(record.name)}${scopeTag}`);
   if (resolved?.frontmatter.description) {
     const desc = firstSentences(resolved.frontmatter.description, 200);
     const indent = "    ";

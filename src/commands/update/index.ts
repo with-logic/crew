@@ -90,7 +90,12 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
       if (sourceGone.has(entry.name)) {
         rows.push(
           withTransitive(
-            { name: entry.name, scope: entry.scope, outcome: { kind: "source_gone" } },
+            {
+              name: entry.name,
+              scope: entry.scope,
+              ...(entry.project_root === undefined ? {} : { project_root: entry.project_root }),
+              outcome: { kind: "source_gone" },
+            },
             transitiveSources,
           ),
         );

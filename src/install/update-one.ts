@@ -41,6 +41,8 @@ export type Outcome =
 export interface UpdateRow {
   readonly name: string;
   readonly scope: string;
+  /** For project-scope entries, the directory the skill is installed under. */
+  readonly project_root?: string;
   readonly outcome: Outcome;
   /** Top-level names whose dep closure pulled this entry in (when `crew update <name>...`). */
   readonly transitively_required_by?: readonly string[];
@@ -66,7 +68,7 @@ export function updateOneEntry(
       next = upsertEntry(state, newEntry);
     }
     return {
-      row: { name: entry.name, scope: entry.scope, outcome },
+      row: rowFor(entry, outcome),
       updatedState: next,
       bumpHardFailure:
         outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed"),
@@ -76,25 +78,31 @@ export function updateOneEntry(
     const soft = ce.code === "no_skills_found" || ce.code === "invalid_ref";
     if (soft) {
       return {
-        row: { name: entry.name, scope: entry.scope, outcome: { kind: "source_gone" } },
+        row: rowFor(entry, { kind: "source_gone" }),
         updatedState: state,
         bumpHardFailure: false,
       };
     }
     const hard = ["source_unreachable", "ref_not_found", "invalid_skill"].includes(ce.code);
     return {
-      row: {
-        name: entry.name,
-        scope: entry.scope,
-        outcome: {
-          kind: "failed",
-          error: { code: ce.code ?? "usage_error", message: ce.message },
-        },
-      },
+      row: rowFor(entry, {
+        kind: "failed",
+        error: { code: ce.code ?? "usage_error", message: ce.message },
+      }),
       updatedState: state,
       bumpHardFailure: hard,
     };
   }
+}
+
+/** Build an UpdateRow for a state entry, threading through project_root. */
+function rowFor(entry: StateEntry, outcome: Outcome): UpdateRow {
+  return {
+    name: entry.name,
+    scope: entry.scope,
+    ...(entry.project_root === undefined ? {} : { project_root: entry.project_root }),
+    outcome,
+  };
 }
 
 function updateOne(

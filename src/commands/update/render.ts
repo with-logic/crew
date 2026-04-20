@@ -12,7 +12,7 @@
 
 import type { TapReexpandRow } from "../../install/tap-reexpand.ts";
 import type { UpdateRow } from "../../install/update-one.ts";
-import { columns, plural } from "../../util/format.ts";
+import { columns, plural, shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
 
@@ -50,7 +50,9 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   lines.push(style.bold(header));
   lines.push("");
 
-  // Per-skill rows, aligned.
+  // Per-skill rows, aligned. Project-scope rows get a dim "in <path>"
+  // tag so the user can tell which of several installs of the same
+  // name is which.
   if (input.rows.length > 0) {
     const rowCells: string[][] = input.rows.map((r) => {
       const parts = formatRowParts(r, style);
@@ -58,7 +60,11 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
       const tailCells: string[] = [];
       if (parts.detail) tailCells.push(parts.detail);
       if (parts.required) tailCells.push(parts.required);
-      return [`  ${sym} ${style.bold(r.name)}`, parts.status, tailCells.join(" ")];
+      const nameCell =
+        r.scope === "project" && r.project_root
+          ? `  ${sym} ${style.bold(r.name)} ${style.dim(`(in ${shortenHome(r.project_root)})`)}`
+          : `  ${sym} ${style.bold(r.name)}`;
+      return [nameCell, parts.status, tailCells.join(" ")];
     });
     for (const line of columns(rowCells, 2)) lines.push(line);
   }

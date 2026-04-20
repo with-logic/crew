@@ -35,16 +35,22 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   const arg = ctx.positional[0]!;
 
   // Bare names try state first — show the user what they have, with
-  // a real description pulled from the installed SKILL.md.
+  // a real description pulled from the installed SKILL.md. A skill
+  // can be installed in multiple places (user + several projects);
+  // gather them all so info reflects the full picture.
   const state = readState(ctx.home);
   const isBareName = NAME_PATTERN.test(arg);
-  const entry = isBareName ? state.installations.find((e) => e.name === arg) : undefined;
-  if (entry) {
-    const installed = buildInstalledInfo(entry, ctx.cwd);
+  const matches = isBareName ? state.installations.filter((e) => e.name === arg) : [];
+  if (matches.length > 0) {
+    const installed = buildInstalledInfo(matches, ctx.cwd);
     return {
       exitCode: 0,
       human: renderInstalled(installed, ctx.style, ctx.width),
-      json: { installed: entry, description: installed.description },
+      json: {
+        installed: installed.primary,
+        entries: matches,
+        description: installed.description,
+      },
     };
   }
 
@@ -93,25 +99,39 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   };
 }
 
-/** Enrich a state entry with a description pulled from the installed SKILL.md. */
-function buildInstalledInfo(entry: StateEntry, fallbackCwd: string): InstalledInfo {
-  let description: string | null = null;
-  for (const target of entry.targets) {
-    const adapter = adapterByName(target);
-    if (!adapter) continue;
-    const cwd = cwdForEntry(entry, fallbackCwd);
-    const installDir = join(baseFor(adapter, entry.scope, cwd), entry.name);
-    if (hasSkillMd(installDir)) {
-      try {
-        const loaded = loadSkill(installDir);
-        description = loaded.frontmatter.description ?? null;
-        break;
-      } catch {
-        // Skip silently; try the next target.
+/**
+ * Gather all state entries that match a skill name and enrich with a
+ * description pulled from any installed SKILL.md. The "primary" entry
+ * is the user-scope install when present, otherwise the first project
+ * install; it drives the top-level metadata block.
+ */
+function buildInstalledInfo(entries: readonly StateEntry[], fallbackCwd: string): InstalledInfo {
+  const primary = entries.find((e) => e.scope === "user") ?? entries[0]!;
+  const description = loadDescriptionFromAny(entries, fallbackCwd);
+  return { primary, entries, description };
+}
+
+function loadDescriptionFromAny(
+  entries: readonly StateEntry[],
+  fallbackCwd: string,
+): string | null {
+  for (const entry of entries) {
+    for (const target of entry.targets) {
+      const adapter = adapterByName(target);
+      if (!adapter) continue;
+      const cwd = cwdForEntry(entry, fallbackCwd);
+      const installDir = join(baseFor(adapter, entry.scope, cwd), entry.name);
+      if (hasSkillMd(installDir)) {
+        try {
+          const loaded = loadSkill(installDir);
+          return loaded.frontmatter.description ?? null;
+        } catch {
+          // Skip silently; try the next target/entry.
+        }
       }
     }
   }
-  return { entry, description };
+  return null;
 }
 
 /** Walk a source directory and gather SkillInfo per skill we find. */

@@ -11,11 +11,14 @@
  */
 
 import type { StateEntry, TapConfig } from "../../core/types.ts";
-import { plural, timeAgo, twoColumnTable, wrap } from "../../util/format.ts";
+import { plural, shortenHome, timeAgo, twoColumnTable, wrap } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 
 export interface InstalledInfo {
-  readonly entry: StateEntry;
+  /** The entry that drives the top-level metadata (user scope if any). */
+  readonly primary: StateEntry;
+  /** Every state entry for this skill (user + per-project installs). */
+  readonly entries: readonly StateEntry[];
   readonly description: string | null;
 }
 
@@ -29,9 +32,9 @@ export interface SkillInfo {
 }
 
 export function renderInstalled(info: InstalledInfo, style: Styler, width: number): string[] {
-  const { entry, description } = info;
+  const { primary, entries, description } = info;
   const lines: string[] = [];
-  lines.push(style.bold(entry.name));
+  lines.push(style.bold(primary.name));
   lines.push("");
   if (description && description.length > 0) {
     for (const w of wrap(description, Math.max(40, width - 2))) lines.push(`  ${w}`);
@@ -39,20 +42,43 @@ export function renderInstalled(info: InstalledInfo, style: Styler, width: numbe
   }
 
   const rows: [string, string][] = [];
-  rows.push([style.dim("from"), formatFrom(entry)]);
-  rows.push([style.dim("version"), formatVersion(entry, style)]);
-  rows.push([style.dim("installed in"), formatTargets(entry)]);
+  rows.push([style.dim("from"), formatFrom(primary)]);
+  rows.push([style.dim("version"), formatVersion(primary, style)]);
+  rows.push([style.dim("agents"), formatTargets(primary)]);
   rows.push([
     style.dim("installed"),
-    `${timeAgo(entry.installed_at)} ${style.dim(`(${entry.installed_at.slice(0, 10)})`)}`,
+    `${timeAgo(primary.installed_at)} ${style.dim(`(${primary.installed_at.slice(0, 10)})`)}`,
   ]);
-  if (entry.pinned) rows.push([style.dim("status"), style.yellow("pinned")]);
-  if (!entry.explicit) rows.push([style.dim("status"), style.dim("installed as a dependency")]);
+  if (primary.pinned) rows.push([style.dim("status"), style.yellow("pinned")]);
+  if (!primary.explicit) rows.push([style.dim("status"), style.dim("installed as a dependency")]);
   for (const line of twoColumnTable(rows, 2)) lines.push(`  ${line}`);
 
+  // "Installed in" breakdown — only worth showing when there's more
+  // than one install or at least one project install. A single user-
+  // scope install is the default and doesn't need its own section.
+  const hasProject = entries.some((e) => e.scope === "project");
+  if (entries.length > 1 || hasProject) {
+    lines.push("");
+    lines.push(`  ${style.dim("installed in")}`);
+    for (const l of locationLines(entries, style)) lines.push(`    ${l}`);
+  }
+
   lines.push("");
-  lines.push(style.dim(`Run \`crew uninstall ${entry.name}\` to remove it.`));
+  lines.push(style.dim(`Run \`crew uninstall ${primary.name}\` to remove it.`));
   return lines;
+}
+
+function locationLines(entries: readonly StateEntry[], style: Styler): string[] {
+  const out: string[] = [];
+  for (const e of entries) {
+    if (e.scope === "user") {
+      out.push(`${style.symbol("muted")} for you (system-wide)`);
+    } else {
+      const root = e.project_root ? shortenHome(e.project_root) : "(unknown project)";
+      out.push(`${style.symbol("muted")} ${root} ${style.dim("(project scope)")}`);
+    }
+  }
+  return out;
 }
 
 export function renderSkills(
