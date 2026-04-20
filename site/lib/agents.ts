@@ -10,7 +10,6 @@ export interface Agent {
 }
 
 export const AGENTS: readonly Agent[] = [
-  { name: "agent-skills", display: "Agent Skills" },
   { name: "amp", display: "Amp" },
   { name: "autohand", display: "Autohand" },
   { name: "claude-code", display: "Claude Code" },
