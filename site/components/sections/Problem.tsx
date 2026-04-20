@@ -51,8 +51,8 @@ export function Problem() {
         <SectionHead
           number="01"
           label="Why crew"
-          title="Great skills exist. You should have them all."
-          description="Right now, the best prompts and agent playbooks either sit on one person's machine or get copy-pasted through gists and Slack messages that nobody keeps current. Crew gives them a format, a home, and a way to travel. Anyone can publish. Anyone can install."
+          title="Great skills exist. You should have all of them."
+          description="Right now, the best prompts and agent playbooks either sit on one person's machine or get copy-pasted through gists and Slack messages that nobody keeps current. Crew gives them a home, a way to be shared, and kept up to date. Anyone can publish. Anyone can install."
         />
         <div className={styles.grid}>
           {CELLS.map((c) => (

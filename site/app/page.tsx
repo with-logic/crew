@@ -23,8 +23,8 @@ export default function Page() {
       <main>
         <Hero />
         <AgentsStrip />
-        <ValueProp />
         <Install />
+        <ValueProp />
         <Problem />
         <HowItWorks />
         <SkillRefs />

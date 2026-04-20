@@ -4,33 +4,49 @@
   gap: 24px;
 }
 
-.requirements {
-  margin-top: 32px;
-  padding: 20px 24px;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 14.5px;
-  color: var(--ink-2);
+/* Requirements pill: centered, pill-shaped, Apple glyph + one line. */
+.reqRow {
   display: flex;
-  gap: 20px;
-  align-items: flex-start;
+  justify-content: center;
+  margin-top: 28px;
 }
 
-.reqBadge {
+.reqPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--mute);
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 3px 7px;
+  color: var(--ink-2);
+  background: #fff;
   border: 1px solid var(--line-2);
-  border-radius: 3px;
-  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 7px 14px 7px 12px;
 }
 
-.reqStrong {
+.apple {
   color: var(--ink);
+}
+
+/* Longer explanation of what gets installed / how to uninstall. Dim
+   copy under the requirements pill. */
+.footnote {
+  margin: 28px auto 0;
+  max-width: 720px;
+  text-align: center;
+  color: var(--mute);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.footnote code {
+  font-family: var(--font-mono);
+  background: var(--paper);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.9em;
 }
 
 @media (max-width: 860px) {

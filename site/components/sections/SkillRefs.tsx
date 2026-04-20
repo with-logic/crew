@@ -42,7 +42,8 @@ const CARDS: readonly {
     title: "founding-engineer",
     desc: (
       <>
-        A skill inside a configured tap. Bare names search every tap; qualify with{" "}
+        A skill inside a configured tap. Bare names search every tap — including the default{" "}
+        <code>core</code> tap, which ships with a curated set of battle-tested skills. Qualify with{" "}
         <code>tap/name</code> to be explicit. Pin with <code>@v1.0</code>.
       </>
     ),
