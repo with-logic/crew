@@ -103,17 +103,21 @@ export function isAutoupdateLoaded(): boolean {
 
 /**
  * Test seam for `launchctl`. Replace with a stub in tests; the default
- * invokes the real binary.
+ * invokes the real binary on macOS and returns `false` everywhere else
+ * (launchctl is Darwin-only, so on Linux CI runners the right answer
+ * is always "not loaded" without spawning a nonexistent binary).
  */
 export type LaunchctlRunner = (args: string[]) => boolean;
-let launchctlRunner: LaunchctlRunner = (args) => {
+function defaultRunner(args: string[]): boolean {
+  if (process.platform !== "darwin") return false;
   const proc = Bun.spawnSync({
     cmd: ["launchctl", ...args],
     stdout: "pipe",
     stderr: "pipe",
   });
   return (proc.exitCode ?? -1) === 0;
-};
+}
+let launchctlRunner: LaunchctlRunner = defaultRunner;
 
 export function setLaunchctlRunner(next: LaunchctlRunner): LaunchctlRunner {
   const prev = launchctlRunner;
@@ -122,14 +126,7 @@ export function setLaunchctlRunner(next: LaunchctlRunner): LaunchctlRunner {
 }
 
 export function resetLaunchctlRunner(): void {
-  launchctlRunner = (args) => {
-    const proc = Bun.spawnSync({
-      cmd: ["launchctl", ...args],
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    return (proc.exitCode ?? -1) === 0;
-  };
+  launchctlRunner = defaultRunner;
 }
 
 /** Read the last line of the autoupdate log (if any). */
