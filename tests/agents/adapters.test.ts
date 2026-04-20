@@ -37,9 +37,23 @@ interface AdapterExpectation {
   readonly projectSuffix: string;
   /** Subpaths under $HOME to create to trigger detect() === true. */
   readonly detectFixtures: readonly string[];
+  /**
+   * True for the `agent-skills` fallback adapter (§7.2) whose raw
+   * `detect()` always returns `false` by design — its "detected" state
+   * is computed in `src/agents/fallback.ts`, not by the adapter itself.
+   * Detection-related assertions skip these rows.
+   */
+  readonly isFallback?: boolean;
 }
 
 const EXPECTATIONS: readonly AdapterExpectation[] = [
+  {
+    name: "agent-skills",
+    userSuffix: ".agents/skills",
+    projectSuffix: ".agents/skills",
+    detectFixtures: [],
+    isFallback: true,
+  },
   {
     name: "amp",
     userSuffix: ".config/amp/skills",
@@ -186,20 +200,22 @@ describe("target adapter paths (§7.2)", () => {
       }
     });
 
-    test(`${exp.name} detect() true when config dir exists`, () => {
-      for (const sub of exp.detectFixtures) {
-        mkdirSync(join(tempHome, sub), { recursive: true });
-      }
-      const prevPath = process.env["PATH"];
-      process.env["PATH"] = "";
-      try {
-        withOriginalAdapter(exp.name, (a) => {
-          expect(a.detect()).toBe(true);
-        });
-      } finally {
-        process.env["PATH"] = prevPath;
-      }
-    });
+    if (!exp.isFallback) {
+      test(`${exp.name} detect() true when config dir exists`, () => {
+        for (const sub of exp.detectFixtures) {
+          mkdirSync(join(tempHome, sub), { recursive: true });
+        }
+        const prevPath = process.env["PATH"];
+        process.env["PATH"] = "";
+        try {
+          withOriginalAdapter(exp.name, (a) => {
+            expect(a.detect()).toBe(true);
+          });
+        } finally {
+          process.env["PATH"] = prevPath;
+        }
+      });
+    }
   }
 });
 

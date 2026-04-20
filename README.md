@@ -297,7 +297,10 @@ Amp · Autohand · Claude Code · Codex · Command Code · Cursor · Factory ·
 Gemini CLI · GitHub Copilot · Goose · Junie · Kiro · Mistral Vibe · Nanobot ·
 OpenCode · pi · Roo Code
 
-Don't see yours? Its adapter probably takes an afternoon to write — see
+Don't see yours? If it reads the spec path (`~/.agents/skills/`), the
+`agent-skills` fallback adapter already covers it — crew installs there when
+no tool-specific adapter detects. If it reads a tool-specific path, writing
+the adapter usually takes an afternoon — see
 [§7.1](./PRD.md#71-adapter-operations) in the PRD.
 
 ## FAQ

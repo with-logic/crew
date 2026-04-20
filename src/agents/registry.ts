@@ -9,6 +9,7 @@
  */
 
 import type { AgentAdapter } from "./adapter.ts";
+import { agentSkillsAdapter } from "./agent-skills.ts";
 import { ampAdapter } from "./amp.ts";
 import { autohandAdapter } from "./autohand.ts";
 import { claudeCodeAdapter } from "./claude-code.ts";
@@ -29,6 +30,7 @@ import { rooCodeAdapter } from "./roo-code.ts";
 
 /** Every adapter crew ships, alphabetical by name. */
 export const ALL_AGENTS: readonly AgentAdapter[] = [
+  agentSkillsAdapter,
   ampAdapter,
   autohandAdapter,
   claudeCodeAdapter,

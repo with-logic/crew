@@ -385,6 +385,7 @@ Every adapter listed at [agentskills.io/clients](https://agentskills.io/clients)
 
 | Adapter | User-scope skills dir | Project-scope skills dir | Detection |
 |---|---|---|---|
+| `agent-skills` | `~/.agents/skills/` | `<project>/.agents/skills/` | **fallback** — detected iff no other adapter in this table detects |
 | `amp` | `~/.config/amp/skills/` | `<project>/.agents/skills/` | `amp` on PATH or `~/.config/amp/` exists |
 | `autohand` | `~/.autohand/skills/` | `<project>/.autohand/skills/` | `autohand` on PATH or `~/.autohand/` exists |
 | `claude-code` | `~/.claude/skills/` | `<project>/.claude/skills/` | `claude` on PATH or `~/.claude/` exists |
@@ -413,11 +414,13 @@ Clients that exist on [agentskills.io/clients](https://agentskills.io/clients) b
 
 Adding a new adapter later requires updating this table, adding a file under `src/agents/`, registering it in `src/agents/registry.ts`, and adding tests.
 
+**Fallback adapter.** `agent-skills` is a special row in the table: its `detect()` returns true only when every other registered adapter's `detect()` returns false. It exists so that any spec-compliant agent crew doesn't ship a dedicated adapter for still gets covered — if the user has only such a tool installed, crew writes into the cross-tool `~/.agents/skills/` path and install succeeds instead of aborting with `no_agents`. When any known adapter detects (Codex, Cursor, Gemini CLI, etc.), `agent-skills` stays off, since those adapters already cover the spec path and activating `agent-skills` too would add a redundant row to the install summary without changing the bytes written. Like every other adapter, `agent-skills` participates in `forced_agents` / `disabled_agents` and is reported under its own name in install/uninstall summaries.
+
 **Detection.** Each adapter uses a best-effort signal: the tool's CLI binary on `PATH`, or the tool's user-scope configuration directory (`~/.<tool>/` or `~/.config/<tool>/`). Either signal makes the adapter "detected." A user may force-enable or force-disable any adapter through `forced_agents` / `disabled_agents` in `config.yaml`.
 
 **Install path shape.** Each agent has a base directory for skills (user scope and project scope). A skill named `python-testing` is installed by writing its files under `<base>/python-testing/`. The directory name equals the skill's `name` (spec-guaranteed to match lowercase alphanumerics and hyphens).
 
-**Path sharing.** Most adapters resolve to the same filesystem path: `~/.agents/skills/` (user) and `<project>/.agents/skills/` (project) is the emerging cross-tool convention, read by Codex, Cursor, Command Code, Gemini CLI, GitHub Copilot, Goose, OpenCode, and pi. Crew writes bytes there once and reports the install to the user under each detected adapter's name, even though only one physical copy exists. The rule: **when a tool reads `~/.agents/skills/`, crew's adapter points there** — one install serves every such tool at once. Adapters whose tools don't support the cross-tool path (Amp user-scope, Autohand, Claude Code, Factory, Junie, Kiro, Mistral Vibe, Nanobot, Roo Code) keep their tool-specific paths.
+**Path sharing.** Most adapters resolve to the same filesystem path: `~/.agents/skills/` (user) and `<project>/.agents/skills/` (project) is the emerging cross-tool convention, read by Codex, Cursor, Command Code, Gemini CLI, GitHub Copilot, Goose, OpenCode, pi, and (as a fallback) `agent-skills`. Crew writes bytes there once and reports the install to the user under each detected adapter's name, even though only one physical copy exists. The rule: **when a tool reads `~/.agents/skills/`, crew's adapter points there** — one install serves every such tool at once. Adapters whose tools don't support the cross-tool path (Amp user-scope, Autohand, Claude Code, Factory, Junie, Kiro, Mistral Vibe, Nanobot, Roo Code) keep their tool-specific paths.
 
 The install algorithm (§7.3) dedupes writes by resolved path; the marker (§7.5) records which adapters own the install.
 
@@ -669,7 +672,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
 6. **Resolve dependencies.** For each skill in the install set, read `metadata.crew.dependencies` and add each to the install set. Continue recursively until no new dependencies appear. Cycles are allowed and terminate naturally (a skill already in the set is not re-added).
    - **Bare-name resolution precedence:** (1) a sibling directory at the same source and ref (for sources where "sibling" is meaningful — git sources with a parent directory and path sources in a parent directory); (2) the tap the parent skill was installed from, if any; (3) search across all configured taps. An unqualified name matching multiple taps aborts with `ambiguous_dependency` naming the candidates.
    - **Conflict detection:** if two skills in the install set have the same `name` but resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
-7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
+7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`. The `agent-skills` fallback adapter (§7.2) is a special case: it is considered detected only when every other registered adapter's `detect()` returns false; otherwise it behaves like any other adapter in this step.
 8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. If the store entry already exists and its content hash matches, reuse it.
 9. **Install into each agent.** For each skill × each agent in the agent set × the scope, run the install algorithm from §7.3. Record per-agent results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, agent) pair does not stop others.
 10. **Update state.** For each successfully installed (skill, agent) pair, add or replace the entry in `state.json` per §11.1. Do this under the state lock (§14).
@@ -1577,6 +1580,8 @@ Implementations and test suites refer to criteria by ID.
 | C-AGENT-04 | §7.1 | `crew agents enable <name>` forces a agent active even if `detect()` returns false. |
 | C-AGENT-05 | §9 step 7 | When no agent is active (none detected and none forced), install fails with `no_agents`, exit 4. |
 | C-AGENT-06 | §7.3 | An adapter never modifies files outside `{base}/<name>/`. |
+| C-AGENT-07 | §7.2, §9 step 7 | The `agent-skills` fallback adapter's detection state is true iff every other registered adapter's `detect()` returns false. |
+| C-AGENT-08 | §7.2, §9 step 7 | When only `agent-skills` is detected, `crew install` writes to `~/.agents/skills/<name>/` (user scope) or `<project>/.agents/skills/<name>/` (project scope) and the install summary reports the adapter as `agent-skills`. |
 
 #### C-CONC: Concurrency (§14)
 
