@@ -1,8 +1,7 @@
-<p>
-  <img src="assets/logo.png" alt="" width="96" height="96" align="left" />
-</p>
-
-# crew
+<div align="center">
+  <img src="assets/logo.png" alt="" width="96" height="96" />
+  <h1>crew</h1>
+</div>
 
 **A package manager for [agent skills](https://agentskills.io/specification).**
 
