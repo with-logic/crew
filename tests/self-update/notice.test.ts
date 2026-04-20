@@ -6,10 +6,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { CREW_VERSION } from "../../src/core/version.ts";
 import { writeVersionCheck } from "../../src/self-update/check.ts";
 import { resetReleaseFetcher, setReleaseFetcher } from "../../src/self-update/github.ts";
 import { maybeEmitUpdateNotice, type NoticeContext } from "../../src/self-update/notice.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
+
+const RUNNING_TAG = `v${CREW_VERSION}`;
 
 const savedEnv = {
   CREW_NOW: process.env["CREW_NOW"],
@@ -157,7 +160,7 @@ describe("maybeEmitUpdateNotice — fetch + emission", () => {
 
   test("no notice when cached tag matches running version", () => {
     const h = makeHarness();
-    writeVersionCheck("v0.3.1", h.home);
+    writeVersionCheck(RUNNING_TAG, h.home);
     maybeEmitUpdateNotice(h.ctx({ now: new Date("2026-04-20T12:00:00Z") }));
     expect(h.streams.stderr()).toBe("");
   });
@@ -170,7 +173,7 @@ describe("maybeEmitUpdateNotice — fetch + emission", () => {
   });
 
   test("no record + fetch says we're on latest: writes record, no notice", () => {
-    const h = makeHarness("v0.3.1");
+    const h = makeHarness(RUNNING_TAG);
     maybeEmitUpdateNotice(h.ctx());
     expect(h.fetches.length).toBe(1);
     expect(h.streams.stderr()).toBe("");
@@ -180,7 +183,7 @@ describe("maybeEmitUpdateNotice — fetch + emission", () => {
     const h = makeHarness("v99.99.99");
     // Record two days old with a stale tag
     process.env["CREW_NOW"] = "2026-04-18T00:00:00Z";
-    writeVersionCheck("v0.3.1", h.home);
+    writeVersionCheck(RUNNING_TAG, h.home);
     process.env["CREW_NOW"] = "2026-04-20T12:00:00Z";
     maybeEmitUpdateNotice(h.ctx({ now: new Date("2026-04-20T12:00:00Z") }));
     expect(h.fetches.length).toBe(1);
@@ -202,7 +205,7 @@ describe("maybeEmitUpdateNotice — fetch + emission", () => {
     // Old stale record with the current running version cached — after
     // a failed fetch we fall back to the stale value (no nag).
     process.env["CREW_NOW"] = "2026-04-18T00:00:00Z";
-    writeVersionCheck("v0.3.1", h.home);
+    writeVersionCheck(RUNNING_TAG, h.home);
     process.env["CREW_NOW"] = "2026-04-20T12:00:00Z";
     maybeEmitUpdateNotice(h.ctx({ now: new Date("2026-04-20T12:00:00Z") }));
     expect(h.fetches.length).toBe(1);

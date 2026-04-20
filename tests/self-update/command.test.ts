@@ -14,6 +14,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { CrewError } from "../../src/core/errors.ts";
+import { CREW_VERSION } from "../../src/core/version.ts";
 import { readVersionCheck, writeVersionCheck } from "../../src/self-update/check.ts";
 import {
   resetAssetDownloader,
@@ -61,6 +62,8 @@ function currentAssetName(): string {
   return process.arch === "arm64" ? "crew-macos-arm64" : "crew-macos-x64";
 }
 
+const RUNNING_TAG = `v${CREW_VERSION}`;
+
 describe("crew self-update --check", () => {
   test("prints a human-readable update-available summary and refreshes the record", () => {
     const home = makeCrewHome();
@@ -79,12 +82,12 @@ describe("crew self-update --check", () => {
   test("prints 'on the latest' when versions match", () => {
     const home = makeCrewHome();
     setReleaseFetcher(() => ({
-      tag: "v0.3.1",
+      tag: RUNNING_TAG,
       assets: { [currentAssetName()]: "https://example.com/asset" },
     }));
     const cap = captureStreams();
     runCli(["self-update", "--check"], { home, streams: cap.streams });
-    expect(cap.stdout()).toContain("You're on v0.3.1");
+    expect(cap.stdout()).toContain(`You're on ${RUNNING_TAG}`);
     expect(cap.stdout()).toContain("the latest");
   });
 
@@ -133,13 +136,13 @@ describe("crew self-update (full upgrade)", () => {
   test("'already on the latest' path prints a friendly message", () => {
     const home = makeCrewHome();
     setReleaseFetcher(() => ({
-      tag: "v0.3.1",
+      tag: RUNNING_TAG,
       assets: { [currentAssetName()]: "https://example.com/asset" },
     }));
     const cap = captureStreams();
     const code = runCli(["self-update"], { home, streams: cap.streams });
     expect(code).toBe(0);
-    expect(cap.stdout()).toContain("Already on v0.3.1");
+    expect(cap.stdout()).toContain(`Already on ${RUNNING_TAG}`);
   });
 
   test("network failure surfaces as self_update_unavailable (exit 5)", () => {
@@ -197,7 +200,7 @@ describe("post-command update notice", () => {
     const fetches: string[] = [];
     setReleaseFetcher((url) => {
       fetches.push(url);
-      return { tag: "v0.3.1", assets: {} };
+      return { tag: RUNNING_TAG, assets: {} };
     });
     const cap = captureStreams();
     // No record on disk → stale → should trigger one fetch.

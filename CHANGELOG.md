@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.4.0] — 2026-04-20
+
+### Added
+
+- `crew self-update` command: upgrade the `crew` binary from GitHub releases. `--check` reports available updates without downloading; `--version <tag>` pins a release; `--force` reinstalls. Atomic swap — the running process is unaffected.
+- Background new-version notice: each invocation spawns a detached subprocess (at most once per 24 h) to check for newer releases and prints a one-line stderr nudge when one exists. Suppressed in CI, non-TTY stderr, `--json`, `--quiet`, and via `CREW_NO_UPDATE_CHECK=1`.
+- `agent-skills` fallback adapter: installs skills to `~/.agents/skills/` for any SKILL.md-compliant agent not in crew's known adapter list. Activates only when no other adapter is detected; shows up in `crew agents`.
+- Installer (`install.sh`) now runs `crew update` after placing the binary to pre-fetch the default `core` tap, so `crew search` and `crew list-skills` work immediately on a fresh install. Network failure is non-fatal.
+- Site command reference now includes `crew tap update`, `crew autoupdate disable`, and `crew self-update`.
+
+### Changed
+
+- Config-validation and `--agent` resolver error messages changed from "target" / "unknown target" / "known targets" to "agent" to match the rest of the CLI.
+- `crew install` help summary broadened to reflect 15+ supported agents.
+- README: added curl installer snippet at the top and a `crew self-update` upgrade section.
+- Site `crew autoupdate enable` demo output corrected to match real CLI output.
+
+### Fixed
+
+- PRD / `state.json` marker field name corrected from `adapters` to `agents` (wire format was already `agents`; the spec and conformance criteria were wrong).
+
 ## [0.3.1] — 2026-04-20
 
 ### Added

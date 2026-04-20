@@ -1,3 +1,4 @@
+import { CREW_VERSION_TAG } from "../../lib/version";
 import { Brand } from "../primitives/Brand";
 import { Container } from "../primitives/Container";
 import styles from "./Footer.module.css";
@@ -63,7 +64,7 @@ export function Footer() {
           ))}
         </div>
         <div className={styles.bot}>
-          <span>crew · v0.3.1 · macOS (arm64, x86_64)</span>
+          <span>crew · {CREW_VERSION_TAG} · macOS (arm64, x86_64)</span>
           <span>$ crew help</span>
         </div>
       </Container>

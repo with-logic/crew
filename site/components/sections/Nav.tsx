@@ -1,3 +1,4 @@
+import { CREW_VERSION_TAG } from "../../lib/version";
 import { Brand } from "../primitives/Brand";
 import styles from "./Nav.module.css";
 
@@ -14,7 +15,7 @@ export function Nav() {
     <nav className={styles.nav}>
       <div className={styles.inner}>
         <Brand href="/" />
-        <span className={styles.version}>v0.3.1</span>
+        <span className={styles.version}>{CREW_VERSION_TAG}</span>
         <div className={styles.links}>
           {LINKS.map((l) => (
             <a key={l.href} href={l.href}>
