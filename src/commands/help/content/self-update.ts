@@ -35,7 +35,7 @@ export const selfUpdateHelp: CommandHelp = {
     },
   ],
   notes: [
-    "Crew checks for new releases in the background at most once every 24 hours. When one is out, you'll see a one-line notice on stderr. Set `CREW_NO_UPDATE_CHECK=1` (or `CI=1`) to silence it.",
+    "Crew checks for new releases at most once every 24 hours. When one is out, you'll see a one-line notice on stderr. Set `CREW_NO_UPDATE_CHECK=1` (or `CI=1`) to silence it.",
     "The running process keeps executing on the old binary; the new one takes effect on the next `crew` invocation.",
   ],
   seeAlso: ["update", "autoupdate", "version"],

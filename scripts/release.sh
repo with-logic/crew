@@ -248,6 +248,28 @@ if [ -f PRD.md ]; then
   perl -i -pe 's/^Version:.*$/Version: '"${next_version}"'/' PRD.md
 fi
 
+# Regenerate the site's latest-version.json. This file is served at
+# https://crew.logic.inc/latest-version.json and is the fast-path
+# endpoint that the 24h update-available notice pings (§10.4). Points
+# the asset URLs at the new release's GitHub downloads.
+if [ -d site/public ]; then
+  cat > site/public/latest-version.json <<JSON
+{
+  "tag_name": "${next_tag}",
+  "assets": [
+    {
+      "name": "crew-macos-arm64",
+      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/crew-macos-arm64"
+    },
+    {
+      "name": "crew-macos-x64",
+      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/crew-macos-x64"
+    }
+  ]
+}
+JSON
+fi
+
 # Write/update CHANGELOG.md. If it doesn't exist, create a header
 # first; then prepend the new section below the header.
 if [ ! -f CHANGELOG.md ]; then
@@ -292,6 +314,7 @@ echo "==> Committing version bump + changelog"
 git add package.json CHANGELOG.md
 [ -f src/core/version.ts ] && git add src/core/version.ts
 [ -f PRD.md ] && git add PRD.md
+[ -f site/public/latest-version.json ] && git add site/public/latest-version.json
 git commit -q -m "Release ${next_tag}"
 
 echo "==> Pushing branch"

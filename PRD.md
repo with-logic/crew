@@ -863,18 +863,42 @@ to the chosen interval.
 
 `crew self-update` upgrades the `crew` binary itself to the latest published release. It is distinct from `crew update`, which updates installed skills.
 
-**Release channel.** The canonical release source is the GitHub Releases
-feed of the canonical repository (`with-logic/crew`). Each release
-publishes assets named `crew-macos-arm64` and `crew-macos-x64`. The
-implementation MAY accept a `CREW_SELF_UPDATE_RELEASES_URL` environment
-variable to override the release feed URL for testing or for private
-forks; the default is `https://api.github.com/repos/with-logic/crew/releases/latest`.
+**Release channel.** Two endpoints:
+
+- **Latest release** — `https://crew.logic.inc/latest-version.json`, a
+  static file served from the project's website (edge-cached, fast).
+  Updated by the release script on every publish. This is the endpoint
+  the update-available notice (§10.4) hits every 24h.
+- **Specific tag** — GitHub's `https://api.github.com/repos/with-logic/crew/releases/tags/<tag>`.
+  Only used when the user passes `--version <tag>`.
+
+Both endpoints emit the same JSON shape:
+
+```json
+{
+  "tag_name": "v0.4.0",
+  "assets": [
+    { "name": "crew-macos-arm64", "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.4.0/crew-macos-arm64" },
+    { "name": "crew-macos-x64",   "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.4.0/crew-macos-x64" }
+  ]
+}
+```
+
+The shape matches GitHub's native release response so implementations
+don't need to branch on which endpoint returned the data. The static
+file's asset URLs point at GitHub release downloads (GitHub hosts the
+binaries, the site just advertises the pointer).
+
+Implementations MAY accept `CREW_SELF_UPDATE_RELEASES_URL` to override
+the latest-release URL (used by tests and private forks).
 
 **Flow.** `crew self-update` runs the following algorithm:
 
-1. Resolve the latest tag via the release feed.
-2. If the latest tag matches the running `CREW_VERSION` and `--force` is
-   not set, print "already on the latest version" and exit 0.
+1. Resolve the target release:
+   - If `--version <tag>` was given, fetch that tag from GitHub.
+   - Otherwise fetch the latest-release URL.
+2. If the resolved tag matches the running `CREW_VERSION` and `--force`
+   is not set, print "already on the latest version" and exit 0.
 3. Download the asset matching the current CPU architecture
    (`arm64` → `crew-macos-arm64`, `x86_64` → `crew-macos-x64`).
 4. Mark the downloaded file executable. On macOS, clear the
@@ -927,11 +951,12 @@ the release feed in `~/.crew/version-check.json`:
 ```
 
 At most once every 24 hours, when the cadence has elapsed, the
-implementation kicks off a background check against the release feed
-and writes the result to this file. The check MUST NOT block the
-command in progress; implementations SHOULD spawn a detached worker
-that runs `crew self-update --check --background` and writes the file
-on completion.
+implementation performs a synchronous HTTP GET against the
+latest-release URL (§10.3), with a tight 2-second timeout, and writes
+the result back to `version-check.json`. On timeout or any other
+fetch failure, the existing record is left unchanged — the user's
+command is never blocked for more than 2 seconds and the next
+invocation won't retry until another 24 hours have passed.
 
 **Notice rendering.** If `version-check.json` shows `latest_tag !=
 CREW_VERSION`, the implementation emits a single stderr line like:
@@ -940,8 +965,8 @@ CREW_VERSION`, the implementation emits a single stderr line like:
 A new version of crew is available (v0.3.1 → v0.4.0). Run `crew self-update` to upgrade.
 ```
 
-**Suppression.** The notice MUST be suppressed when any of the
-following hold:
+**Suppression.** The notice MUST be suppressed — and the 24h fetch
+skipped entirely — when any of the following hold:
 
 - `stderr` is not a TTY.
 - `--json` was passed.
@@ -951,10 +976,6 @@ following hold:
 - `CREW_AUTOUPDATE_LOG=1` is set (the command is running under the
   launchd autoupdater).
 - The command itself is `self-update` or `version`.
-
-The background check SHOULD respect the same `CREW_NO_UPDATE_CHECK=1`
-and `CI` suppressions — no one wants CI jobs doing background pings of
-the GitHub API.
 
 ## 11. State
 

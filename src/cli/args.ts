@@ -35,10 +35,7 @@ const STRING_GLOBALS = ["scope", "from-git"] as const;
 const BOOLEAN_SUB: Record<string, readonly string[]> = {
   doctor: ["verify", "repair"],
   uninstall: ["prune"],
-  // `self-update` accepts `--check` (no download, just report), and a
-  // hidden `--background` used by the post-command nag's subprocess to
-  // refresh the check file silently.
-  "self-update": ["check", "background"],
+  "self-update": ["check"],
 };
 /** Subcommand-specific string flags. */
 const STRING_SUB: Record<string, readonly string[]> = {

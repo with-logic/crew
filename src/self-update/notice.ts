@@ -3,18 +3,24 @@
  *
  * Runs after every command, on the main thread:
  *   1. Should we emit anything at all? (suppression rules below)
- *   2. If the cached record is stale (> 24h), kick off a detached
- *      subprocess to refresh it. Never blocks.
- *   3. If the current cached `latest_tag` differs from `CREW_VERSION`,
- *      emit a one-line notice on stderr.
+ *   2. If the cached record is stale (> 24h), fetch the latest tag
+ *      inline with a tight 2s timeout. On failure, leave the stale
+ *      record in place so the next run retries in 24h — not on every
+ *      invocation.
+ *   3. If the resulting `latest_tag` differs from `CREW_VERSION`, emit
+ *      a single stderr line.
  *
- * The suppression rules (§10.4) prevent the notice from contaminating
- * scripts, CI pipelines, the launchd autoupdater, and JSON output.
+ * The fetch targets `https://crew.logic.inc/latest-version.json` by
+ * default — a static file on Vercel's edge cache, much faster than
+ * hitting the GitHub API. The release script updates it on publish.
  */
 
 import type { OutputStreams } from "../cli/output.ts";
-import { spawnBackgroundCheck } from "./background.ts";
-import { isStale, noticeFor, readVersionCheck } from "./check.ts";
+import { isStale, noticeFor, readVersionCheck, writeVersionCheck } from "./check.ts";
+import { fetchRelease, releasesLatestUrl } from "./github.ts";
+
+/** Tight timeout for the background check — we block the main thread. */
+const VERSION_CHECK_TIMEOUT_SECONDS = 2;
 
 /** Everything `maybeEmitUpdateNotice` needs to decide + act. */
 export interface NoticeContext {
@@ -30,23 +36,30 @@ export interface NoticeContext {
 }
 
 /**
- * Maybe emit the notice and maybe spawn the background check.
+ * Maybe refresh the version-check record and maybe emit the notice.
  * Tolerant of every conceivable failure — this is ancillary behavior,
  * not something the user invoked.
  */
 export function maybeEmitUpdateNotice(ctx: NoticeContext): void {
   if (isSuppressed(ctx)) return;
 
-  const record = readVersionCheck(ctx.home);
+  let record = readVersionCheck(ctx.home);
   const now = ctx.now ?? new Date();
 
   if (isStale(now, record)) {
-    spawnBackgroundCheck(ctx.home);
+    // Synchronous fetch with a short timeout. If GitHub is slow or
+    // unreachable we swallow the error — the record just stays stale
+    // for another 24h. We only block once per day.
+    try {
+      const release = fetchRelease(releasesLatestUrl(), VERSION_CHECK_TIMEOUT_SECONDS);
+      writeVersionCheck(release.tag, ctx.home);
+      record = { checked_at: new Date(now).toISOString(), latest_tag: release.tag };
+    } catch {
+      // Leave `record` (and the file) as-is. Next invocation retries
+      // only once 24h have elapsed from the previous `checked_at`.
+    }
   }
 
-  // Emit against the *current* record (not whatever the background
-  // child might eventually write). First-run users see no nag; the
-  // background child populates the file for the next invocation.
   const notice = noticeFor(record);
   if (notice) {
     ctx.streams.stderr(`${notice}\n`);

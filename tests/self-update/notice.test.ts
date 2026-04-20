@@ -1,14 +1,13 @@
 /**
  * Tests for the post-command update notice (§10.4).
  *
- * Covers the suppression rules, the background-spawn trigger, and
- * the emission path. Everything happens against stubbed stream/spawn
- * seams — no real subprocesses are launched.
+ * Covers the suppression rules, the 24h synchronous-fetch trigger,
+ * and the emission path. The release fetch is stubbed — no real HTTP.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { resetBackgroundSpawner, setBackgroundSpawner } from "../../src/self-update/background.ts";
 import { writeVersionCheck } from "../../src/self-update/check.ts";
+import { resetReleaseFetcher, setReleaseFetcher } from "../../src/self-update/github.ts";
 import { maybeEmitUpdateNotice, type NoticeContext } from "../../src/self-update/notice.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 
@@ -20,9 +19,6 @@ const savedEnv = {
 };
 
 beforeEach(() => {
-  // Default to a stable wall clock + no suppression env vars. Tests
-  // that want a suppression env var set it explicitly and the afterEach
-  // restores it.
   process.env["CREW_NOW"] = "2026-04-20T12:00:00Z";
   delete process.env["CREW_NO_UPDATE_CHECK"];
   delete process.env["CREW_AUTOUPDATE_LOG"];
@@ -34,24 +30,29 @@ afterEach(() => {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
-  resetBackgroundSpawner();
+  resetReleaseFetcher();
 });
 
 interface Harness {
   readonly home: string;
-  readonly spawns: string[];
+  readonly fetches: string[];
   readonly streams: ReturnType<typeof captureStreams>;
   ctx(overrides?: Partial<NoticeContext>): NoticeContext;
 }
 
-function makeHarness(): Harness {
+/** Install a fetcher that records every call and returns the given tag. */
+function makeHarness(latestTag: string | "throw" = "v99.99.99"): Harness {
   const home = makeCrewHome();
-  const spawns: string[] = [];
-  setBackgroundSpawner((_argv, h) => spawns.push(h));
+  const fetches: string[] = [];
+  setReleaseFetcher((url) => {
+    fetches.push(url);
+    if (latestTag === "throw") throw new Error("simulated network failure");
+    return { tag: latestTag, assets: {} };
+  });
   const streams = captureStreams();
   return {
     home,
-    spawns,
+    fetches,
     streams,
     ctx(overrides = {}) {
       return {
@@ -67,72 +68,72 @@ function makeHarness(): Harness {
   };
 }
 
-describe("maybeEmitUpdateNotice", () => {
-  test("emits nothing when stderr isn't a TTY, even with a stale newer record", () => {
+describe("maybeEmitUpdateNotice — suppression rules", () => {
+  test("stderr isn't a TTY: no fetch, no output", () => {
     const h = makeHarness();
     writeVersionCheck("v99.99.99", h.home);
     maybeEmitUpdateNotice(h.ctx({ stderrIsTty: false }));
     expect(h.streams.stderr()).toBe("");
-    expect(h.spawns).toEqual([]);
+    expect(h.fetches).toEqual([]);
   });
 
-  test("emits nothing in --json mode", () => {
+  test("--json: no fetch, no output", () => {
     const h = makeHarness();
     writeVersionCheck("v99.99.99", h.home);
     maybeEmitUpdateNotice(h.ctx({ json: true }));
     expect(h.streams.stderr()).toBe("");
-    expect(h.spawns).toEqual([]);
+    expect(h.fetches).toEqual([]);
   });
 
-  test("emits nothing in --quiet mode", () => {
+  test("--quiet: no fetch, no output", () => {
     const h = makeHarness();
     writeVersionCheck("v99.99.99", h.home);
     maybeEmitUpdateNotice(h.ctx({ quiet: true }));
     expect(h.streams.stderr()).toBe("");
-    expect(h.spawns).toEqual([]);
+    expect(h.fetches).toEqual([]);
   });
 
-  test("emits nothing when the command is self-update", () => {
+  test("command=self-update: no fetch, no output", () => {
     const h = makeHarness();
     writeVersionCheck("v99.99.99", h.home);
     maybeEmitUpdateNotice(h.ctx({ command: "self-update" }));
     expect(h.streams.stderr()).toBe("");
-    expect(h.spawns).toEqual([]);
+    expect(h.fetches).toEqual([]);
   });
 
-  test("emits nothing when the command is version", () => {
+  test("command=version: no fetch, no output", () => {
     const h = makeHarness();
     writeVersionCheck("v99.99.99", h.home);
     maybeEmitUpdateNotice(h.ctx({ command: "version" }));
     expect(h.streams.stderr()).toBe("");
-    expect(h.spawns).toEqual([]);
+    expect(h.fetches).toEqual([]);
   });
 
-  test("emits nothing when CREW_NO_UPDATE_CHECK=1", () => {
+  test("CREW_NO_UPDATE_CHECK=1: no fetch, no output", () => {
     const h = makeHarness();
     writeVersionCheck("v99.99.99", h.home);
     process.env["CREW_NO_UPDATE_CHECK"] = "1";
     maybeEmitUpdateNotice(h.ctx());
     expect(h.streams.stderr()).toBe("");
-    expect(h.spawns).toEqual([]);
+    expect(h.fetches).toEqual([]);
   });
 
-  test("emits nothing when CREW_AUTOUPDATE_LOG=1 (launchd autoupdater)", () => {
+  test("CREW_AUTOUPDATE_LOG=1 (launchd autoupdater): no fetch, no output", () => {
     const h = makeHarness();
     writeVersionCheck("v99.99.99", h.home);
     process.env["CREW_AUTOUPDATE_LOG"] = "1";
     maybeEmitUpdateNotice(h.ctx());
     expect(h.streams.stderr()).toBe("");
-    expect(h.spawns).toEqual([]);
+    expect(h.fetches).toEqual([]);
   });
 
-  test("emits nothing when CI is set", () => {
+  test("CI=true: no fetch, no output", () => {
     const h = makeHarness();
     writeVersionCheck("v99.99.99", h.home);
     process.env["CI"] = "true";
     maybeEmitUpdateNotice(h.ctx());
     expect(h.streams.stderr()).toBe("");
-    expect(h.spawns).toEqual([]);
+    expect(h.fetches).toEqual([]);
   });
 
   test("empty CI env var is treated as unset", () => {
@@ -142,8 +143,10 @@ describe("maybeEmitUpdateNotice", () => {
     maybeEmitUpdateNotice(h.ctx());
     expect(h.streams.stderr()).toContain("A new version of crew is available");
   });
+});
 
-  test("emits the notice when the cached tag is newer", () => {
+describe("maybeEmitUpdateNotice — fetch + emission", () => {
+  test("emits the notice when cached tag differs from running", () => {
     const h = makeHarness();
     writeVersionCheck("v99.99.99", h.home);
     maybeEmitUpdateNotice(h.ctx());
@@ -152,43 +155,69 @@ describe("maybeEmitUpdateNotice", () => {
     expect(h.streams.stderr()).toContain("crew self-update");
   });
 
-  test("does NOT emit the notice when the cached tag matches running version", () => {
+  test("no notice when cached tag matches running version", () => {
     const h = makeHarness();
-    // Cache says we're up to date; no notice should fire.
     writeVersionCheck("v0.3.1", h.home);
     maybeEmitUpdateNotice(h.ctx({ now: new Date("2026-04-20T12:00:00Z") }));
     expect(h.streams.stderr()).toBe("");
   });
 
-  test("spawns a background check when no record exists yet", () => {
-    const h = makeHarness();
+  test("no record + fetch succeeds: writes record and emits if newer", () => {
+    const h = makeHarness("v99.99.99");
     maybeEmitUpdateNotice(h.ctx());
-    expect(h.spawns).toEqual([h.home]);
-    // No cached record to nag about on the first run.
-    expect(h.streams.stderr()).toBe("");
-  });
-
-  test("spawns a background check when the record is older than 24h", () => {
-    const h = makeHarness();
-    const oldRecord = "2026-04-18T00:00:00Z";
-    process.env["CREW_NOW"] = oldRecord;
-    writeVersionCheck("v99.99.99", h.home);
-    // Back to current time.
-    process.env["CREW_NOW"] = "2026-04-20T12:00:00Z";
-    maybeEmitUpdateNotice(h.ctx({ now: new Date("2026-04-20T12:00:00Z") }));
-    expect(h.spawns).toEqual([h.home]);
+    expect(h.fetches.length).toBe(1);
     expect(h.streams.stderr()).toContain("v99.99.99");
   });
 
-  test("does NOT spawn when the record is fresh (within 24h)", () => {
+  test("no record + fetch says we're on latest: writes record, no notice", () => {
+    const h = makeHarness("v0.3.1");
+    maybeEmitUpdateNotice(h.ctx());
+    expect(h.fetches.length).toBe(1);
+    expect(h.streams.stderr()).toBe("");
+  });
+
+  test("stale record + fetch succeeds: refreshes + emits against new tag", () => {
+    const h = makeHarness("v99.99.99");
+    // Record two days old with a stale tag
+    process.env["CREW_NOW"] = "2026-04-18T00:00:00Z";
+    writeVersionCheck("v0.3.1", h.home);
+    process.env["CREW_NOW"] = "2026-04-20T12:00:00Z";
+    maybeEmitUpdateNotice(h.ctx({ now: new Date("2026-04-20T12:00:00Z") }));
+    expect(h.fetches.length).toBe(1);
+    expect(h.streams.stderr()).toContain("v99.99.99");
+  });
+
+  test("fresh record (within 24h): no fetch, emits against cached value", () => {
     const h = makeHarness();
-    const recent = "2026-04-20T10:00:00Z";
-    process.env["CREW_NOW"] = recent;
+    process.env["CREW_NOW"] = "2026-04-20T10:00:00Z";
     writeVersionCheck("v99.99.99", h.home);
     process.env["CREW_NOW"] = "2026-04-20T12:00:00Z";
     maybeEmitUpdateNotice(h.ctx({ now: new Date("2026-04-20T12:00:00Z") }));
-    expect(h.spawns).toEqual([]);
-    // Still emits the notice using the cached record.
+    expect(h.fetches).toEqual([]);
+    expect(h.streams.stderr()).toContain("v99.99.99");
+  });
+
+  test("stale record + fetch fails: no notice, no crash", () => {
+    const h = makeHarness("throw");
+    // Old stale record with the current running version cached — after
+    // a failed fetch we fall back to the stale value (no nag).
+    process.env["CREW_NOW"] = "2026-04-18T00:00:00Z";
+    writeVersionCheck("v0.3.1", h.home);
+    process.env["CREW_NOW"] = "2026-04-20T12:00:00Z";
+    maybeEmitUpdateNotice(h.ctx({ now: new Date("2026-04-20T12:00:00Z") }));
+    expect(h.fetches.length).toBe(1);
+    expect(h.streams.stderr()).toBe("");
+  });
+
+  test("stale record with old newer-tag + fetch fails: still emits the stale nag", () => {
+    const h = makeHarness("throw");
+    // Old record claimed a newer tag is out. Fetch fails; we'd rather
+    // show yesterday's nag than silently drop it.
+    process.env["CREW_NOW"] = "2026-04-18T00:00:00Z";
+    writeVersionCheck("v99.99.99", h.home);
+    process.env["CREW_NOW"] = "2026-04-20T12:00:00Z";
+    maybeEmitUpdateNotice(h.ctx({ now: new Date("2026-04-20T12:00:00Z") }));
+    expect(h.fetches.length).toBe(1);
     expect(h.streams.stderr()).toContain("v99.99.99");
   });
 });

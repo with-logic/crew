@@ -2,7 +2,7 @@
  * End-to-end tests for `crew self-update` (via `runCli`).
  *
  * The network + filesystem seams are stubbed: `setReleaseFetcher`,
- * `setAssetDownloader`, `setXattrClearer`, `setBackgroundSpawner`.
+ * `setAssetDownloader`, `setXattrClearer`.
  *
  * The post-command update notice is suppressed by passing a streams
  * override (which sets stderrIsTty=false by default). Tests that need
@@ -14,7 +14,6 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { CrewError } from "../../src/core/errors.ts";
-import { resetBackgroundSpawner, setBackgroundSpawner } from "../../src/self-update/background.ts";
 import { readVersionCheck, writeVersionCheck } from "../../src/self-update/check.ts";
 import {
   resetAssetDownloader,
@@ -29,7 +28,6 @@ afterEach(() => {
   resetReleaseFetcher();
   resetAssetDownloader();
   resetXattrClearer();
-  resetBackgroundSpawner();
 });
 
 function currentAssetName(): string {
@@ -53,7 +51,6 @@ describe("crew self-update --check", () => {
 
   test("prints 'on the latest' when versions match", () => {
     const home = makeCrewHome();
-    // Pretend GitHub says the current version is latest.
     setReleaseFetcher(() => ({
       tag: "v0.3.1",
       assets: { [currentAssetName()]: "https://example.com/asset" },
@@ -62,34 +59,6 @@ describe("crew self-update --check", () => {
     runCli(["self-update", "--check"], { home, streams: cap.streams });
     expect(cap.stdout()).toContain("You're on v0.3.1");
     expect(cap.stdout()).toContain("the latest");
-  });
-
-  test("--background prints nothing and still refreshes the record", () => {
-    const home = makeCrewHome();
-    setReleaseFetcher(() => ({ tag: "v99.99.99", assets: {} }));
-    const cap = captureStreams();
-    const code = runCli(["self-update", "--check", "--background"], {
-      home,
-      streams: cap.streams,
-    });
-    expect(code).toBe(0);
-    expect(cap.stdout()).toBe("");
-    expect(cap.stderr()).toBe("");
-    expect(readVersionCheck(home)?.latest_tag).toBe("v99.99.99");
-  });
-
-  test("--background swallows network failures silently (exit 0)", () => {
-    const home = makeCrewHome();
-    setReleaseFetcher(() => {
-      throw new Error("boom");
-    });
-    const cap = captureStreams();
-    const code = runCli(["self-update", "--check", "--background"], {
-      home,
-      streams: cap.streams,
-    });
-    expect(code).toBe(0);
-    expect(cap.stderr()).toBe("");
   });
 
   test("--check returns JSON when --json is set", () => {
@@ -159,25 +128,22 @@ describe("crew self-update (full upgrade)", () => {
 });
 
 describe("post-command update notice", () => {
-  test("prints on stderr when the cached tag is newer and stderr is a TTY", () => {
+  test("suppressed for `crew version` even with a cached newer tag", () => {
     const home = makeCrewHome();
     writeVersionCheck("v99.99.99", home);
-
     const cap = captureStreams();
     const code = runCli(["version"], {
       home,
       streams: cap.streams,
-      // `version` is suppressed — verify that it IS suppressed here.
       stderrIsTty: true,
     });
     expect(code).toBe(0);
     expect(cap.stderr()).toBe("");
   });
 
-  test("prints on stderr when the command isn't version/self-update", () => {
+  test("emits on stderr for normal commands when a newer tag is cached", () => {
     const home = makeCrewHome();
     writeVersionCheck("v99.99.99", home);
-
     const cap = captureStreams();
     const code = runCli(["list"], { home, streams: cap.streams, stderrIsTty: true });
     expect(code).toBe(0);
@@ -189,25 +155,27 @@ describe("post-command update notice", () => {
     const home = makeCrewHome();
     writeVersionCheck("v99.99.99", home);
     const cap = captureStreams();
-    // Unknown command → usage_error (exit 4).
     const code = runCli(["definitely-not-a-command"], {
       home,
       streams: cap.streams,
       stderrIsTty: true,
     });
     expect(code).toBe(4);
-    // Both the error and the notice go to stderr.
     expect(cap.stderr()).toContain("error:");
     expect(cap.stderr()).toContain("A new version of crew is available");
   });
 
-  test("kicks off a background check when the record is stale", () => {
+  test("performs a synchronous fetch when the record is stale", () => {
     const home = makeCrewHome();
-    const spawns: string[] = [];
-    setBackgroundSpawner((_argv, h) => spawns.push(h));
+    const fetches: string[] = [];
+    setReleaseFetcher((url) => {
+      fetches.push(url);
+      return { tag: "v0.3.1", assets: {} };
+    });
     const cap = captureStreams();
-    // No record on disk → stale → should spawn.
+    // No record on disk → stale → should trigger one fetch.
     runCli(["list"], { home, streams: cap.streams, stderrIsTty: true });
-    expect(spawns).toEqual([home]);
+    expect(fetches.length).toBe(1);
+    expect(fetches[0]).toBe("https://crew.logic.inc/latest-version.json");
   });
 });

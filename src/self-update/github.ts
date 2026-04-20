@@ -1,11 +1,24 @@
 /**
- * GitHub release-feed client (§10.3).
+ * Release-feed client (§10.3).
  *
  * Fetches metadata about a published crew release. Returns only the
  * fields we care about so the rest of the module doesn't have to know
- * what shape the GitHub API returns. The network call itself is behind
- * a seam (`setReleaseFetcher`) so tests can stub the response without
- * touching real HTTP or the real GitHub API.
+ * what the feed looks like on the wire. The network call itself is
+ * behind a seam (`setReleaseFetcher`) so tests can stub the response
+ * without touching real HTTP.
+ *
+ * Two endpoints, one for each use case:
+ *
+ *   - "Latest" — served by `https://crew.logic.inc/latest-version.json`,
+ *     a static file on Vercel's edge cache. Fast (tens of ms), no rate
+ *     limits, updated by `scripts/release.sh` on every release.
+ *   - "Specific tag" — served by the GitHub API's
+ *     `/repos/.../releases/tags/<tag>` endpoint. Slower and rate-limited,
+ *     but the only way to pin a historical release.
+ *
+ * Both endpoints emit the same JSON shape: `{ tag_name, assets: [{ name,
+ * browser_download_url }] }`. That's GitHub's native format; the site's
+ * static file mimics it so we don't branch on response shape.
  *
  * We shell out to `curl` because crew's command path is synchronous
  * throughout — the installer script already requires `curl`, so this
@@ -22,22 +35,26 @@ export interface ReleaseInfo {
   readonly assets: Readonly<Record<string, string>>;
 }
 
-/** URL of the release feed for the "latest" release. */
+/**
+ * URL for the "latest release" feed. Fast-path, edge-cached.
+ * Overridable for tests + private forks via `CREW_SELF_UPDATE_RELEASES_URL`.
+ */
 export function releasesLatestUrl(): string {
   return (
-    process.env["CREW_SELF_UPDATE_RELEASES_URL"] ??
-    "https://api.github.com/repos/with-logic/crew/releases/latest"
+    process.env["CREW_SELF_UPDATE_RELEASES_URL"] ?? "https://crew.logic.inc/latest-version.json"
   );
 }
 
-/** URL of the release feed for a specific tag. */
+/**
+ * URL for a specific tag. Always hits the GitHub API — the site's
+ * fast-path file only carries the latest release.
+ * Overridable for tests via `CREW_SELF_UPDATE_TAG_URL_BASE`.
+ */
 export function releasesByTagUrl(tag: string): string {
   const base =
-    process.env["CREW_SELF_UPDATE_RELEASES_URL"] ??
-    "https://api.github.com/repos/with-logic/crew/releases/latest";
-  // Swap "/releases/latest" for "/releases/tags/<tag>" so the override
-  // env var can redirect both forms with one setting.
-  return base.replace(/\/releases\/latest\/?$/, `/releases/tags/${tag}`);
+    process.env["CREW_SELF_UPDATE_TAG_URL_BASE"] ??
+    "https://api.github.com/repos/with-logic/crew/releases/tags";
+  return `${base}/${tag}`;
 }
 
 /**

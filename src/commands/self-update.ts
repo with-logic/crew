@@ -1,12 +1,10 @@
 /**
  * `crew self-update` (§10.3).
  *
- * Three modes:
+ * Two modes:
  *   - bare: fetch latest, download, replace, refresh version-check.
  *   - `--check`: fetch latest, refresh version-check, print the result.
  *     Makes no filesystem changes beyond writing `version-check.json`.
- *   - `--check --background`: same as `--check` but prints nothing. Used
- *     by the post-command nag's background subprocess (§10.4).
  *
  * `--version <tag>` installs a named tag instead of the latest.
  * `--force` reinstalls even when already on the latest version.
@@ -17,47 +15,32 @@ import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function selfUpdateCommand(ctx: CommandContext): CommandOutput {
   const check = Boolean(ctx.flags.extras["check"]);
-  const background = Boolean(ctx.flags.extras["background"]);
   const tag = firstString(ctx.flags.extras["version"]);
 
   if (check) {
-    return doCheck(ctx, tag, background);
+    return doCheck(ctx, tag);
   }
   return doUpgrade(ctx, tag);
 }
 
-function doCheck(ctx: CommandContext, tag: string | undefined, background: boolean): CommandOutput {
-  try {
-    const { currentVersion, latestTag } = runSelfUpdateCheck(ctx.home, tag);
-    if (background) {
-      // The background subprocess exists to refresh the check file
-      // without user-visible noise. No human output, no JSON payload.
-      return { exitCode: 0 };
-    }
-    const uptodate = normalizeTag(currentVersion) === normalizeTag(latestTag);
-    const human = uptodate
-      ? [`${ctx.style.symbol("ok")} ${ctx.style.bold(`You're on ${currentVersion} — the latest.`)}`]
-      : [
-          `${ctx.style.symbol("warn")} ${ctx.style.bold(`A newer crew is available: ${currentVersion} → ${latestTag}`)}`,
-          ctx.style.dim("  Run `crew self-update` to upgrade."),
-        ];
-    return {
-      exitCode: 0,
-      human,
-      json: {
-        current_version: currentVersion,
-        latest_tag: latestTag,
-        update_available: !uptodate,
-      },
-    };
-  } catch (err) {
-    if (background) {
-      // Background check: never surface errors to the user. The file
-      // just stays stale for another cadence interval.
-      return { exitCode: 0 };
-    }
-    throw err;
-  }
+function doCheck(ctx: CommandContext, tag: string | undefined): CommandOutput {
+  const { currentVersion, latestTag } = runSelfUpdateCheck(ctx.home, tag);
+  const uptodate = normalizeTag(currentVersion) === normalizeTag(latestTag);
+  const human = uptodate
+    ? [`${ctx.style.symbol("ok")} ${ctx.style.bold(`You're on ${currentVersion} — the latest.`)}`]
+    : [
+        `${ctx.style.symbol("warn")} ${ctx.style.bold(`A newer crew is available: ${currentVersion} → ${latestTag}`)}`,
+        ctx.style.dim("  Run `crew self-update` to upgrade."),
+      ];
+  return {
+    exitCode: 0,
+    human,
+    json: {
+      current_version: currentVersion,
+      latest_tag: latestTag,
+      update_available: !uptodate,
+    },
+  };
 }
 
 function doUpgrade(ctx: CommandContext, tag: string | undefined): CommandOutput {

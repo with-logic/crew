@@ -1,10 +1,10 @@
 /**
- * Tests for the GitHub release-feed client.
+ * Tests for the release-feed client.
  *
  * The default `fetchRelease` shells out to `curl`, which we can't
- * reliably run in CI against the real GitHub API. The seam
+ * reliably run in CI against a real endpoint. The seam
  * (`setReleaseFetcher`) lets every test inject a pure stub. A
- * separate test verifies the URL construction and env-var override.
+ * separate test verifies the URL construction and env-var overrides.
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -20,28 +20,27 @@ import {
 afterEach(() => {
   resetReleaseFetcher();
   delete process.env["CREW_SELF_UPDATE_RELEASES_URL"];
+  delete process.env["CREW_SELF_UPDATE_TAG_URL_BASE"];
 });
 
 describe("URL helpers", () => {
-  test("releasesLatestUrl defaults to the canonical GitHub API", () => {
-    expect(releasesLatestUrl()).toBe(
-      "https://api.github.com/repos/with-logic/crew/releases/latest",
-    );
+  test("releasesLatestUrl defaults to the project site's fast-path file", () => {
+    expect(releasesLatestUrl()).toBe("https://crew.logic.inc/latest-version.json");
   });
 
   test("releasesLatestUrl honors the override env var", () => {
-    process.env["CREW_SELF_UPDATE_RELEASES_URL"] = "https://example.com/api/releases/latest";
-    expect(releasesLatestUrl()).toBe("https://example.com/api/releases/latest");
+    process.env["CREW_SELF_UPDATE_RELEASES_URL"] = "https://example.com/latest.json";
+    expect(releasesLatestUrl()).toBe("https://example.com/latest.json");
   });
 
-  test("releasesByTagUrl rewrites /releases/latest to /releases/tags/<tag>", () => {
+  test("releasesByTagUrl goes straight to GitHub's tag endpoint", () => {
     expect(releasesByTagUrl("v0.4.0")).toBe(
       "https://api.github.com/repos/with-logic/crew/releases/tags/v0.4.0",
     );
   });
 
-  test("releasesByTagUrl works with a trailing slash on the override", () => {
-    process.env["CREW_SELF_UPDATE_RELEASES_URL"] = "https://example.com/api/releases/latest/";
+  test("releasesByTagUrl honors CREW_SELF_UPDATE_TAG_URL_BASE", () => {
+    process.env["CREW_SELF_UPDATE_TAG_URL_BASE"] = "https://example.com/api/releases/tags";
     expect(releasesByTagUrl("v1.0")).toBe("https://example.com/api/releases/tags/v1.0");
   });
 });

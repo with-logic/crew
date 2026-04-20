@@ -1,16 +1,15 @@
 /**
  * Tests for the default (unstubbed) subprocess implementations of the
- * release fetcher, asset downloader, xattr clearer, and background
- * spawner. These modules have seams so most tests don't touch real
- * processes; these tests exist to exercise the default paths by
- * monkey-patching `Bun.spawnSync` and `Bun.spawn` — matching the
- * pattern used by `tests/autoupdate/launchd.test.ts`.
+ * release fetcher, asset downloader, and xattr clearer. These modules
+ * have seams so most tests don't touch real processes; these tests
+ * exist to exercise the default paths by monkey-patching
+ * `Bun.spawnSync` — matching the pattern used by
+ * `tests/autoupdate/launchd.test.ts`.
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawnBackgroundCheck } from "../../src/self-update/background.ts";
 import { downloadAssetToTemp, installBinary } from "../../src/self-update/download.ts";
 import { fetchRelease } from "../../src/self-update/github.ts";
 import { makeCrewHome } from "../helpers/env.ts";
@@ -29,11 +28,9 @@ function result(exitCode: number, stdout = "", stderr = "") {
 }
 
 const originalSpawnSync = Bun.spawnSync;
-const originalSpawn = Bun.spawn;
 
 afterEach(() => {
   (Bun as unknown as { spawnSync: typeof Bun.spawnSync }).spawnSync = originalSpawnSync;
-  (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
 });
 
 /** Stub Bun.spawnSync with the given handler for this test only. */
@@ -153,28 +150,5 @@ describe("defaultXattrClearer (download.ts)", () => {
     // non-fatal on platforms that don't have it.
     expect(() => installBinary(src, dest)).not.toThrow();
     expect(readFileSync(dest, "utf8")).toBe("new");
-  });
-});
-
-describe("defaultSpawner (background.ts)", () => {
-  test("calls Bun.spawn with the given argv and detaches (unref)", () => {
-    let gotArgs: unknown = null;
-    let unrefCalled = false;
-    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((a: unknown) => {
-      gotArgs = a;
-      return { unref: () => (unrefCalled = true) } as unknown as ReturnType<typeof Bun.spawn>;
-    }) as typeof Bun.spawn;
-    spawnBackgroundCheck("/tmp/crew-home");
-    const parsed = gotArgs as { cmd: string[]; env: Record<string, string> };
-    expect(parsed.cmd.slice(1)).toEqual(["self-update", "--check", "--background"]);
-    expect(parsed.env["CREW_HOME"]).toBe("/tmp/crew-home");
-    expect(unrefCalled).toBe(true);
-  });
-
-  test("swallows a spawn failure silently", () => {
-    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = (() => {
-      throw new Error("fork failed");
-    }) as typeof Bun.spawn;
-    expect(() => spawnBackgroundCheck("/tmp/crew-home")).not.toThrow();
   });
 });
