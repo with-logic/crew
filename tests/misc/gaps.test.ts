@@ -308,7 +308,21 @@ describe("doctor warnings — orphan store", () => {
     writeFileSync(join(home, "store", "ghost@12345678", "file"), "x");
     const c = captureStreams();
     runCli(["doctor"], { home, streams: c.streams });
-    expect(c.stdout()).toContain("orphan_store_entry");
+    expect(c.stdout()).toContain("cached skill is no longer referenced");
+  });
+
+  test("doctor clusters repeated findings and shows an `...and N more` line", () => {
+    const home = makeCrewHome();
+    // Inject five orphan store entries so the cluster exceeds the
+    // renderer's show-first-three cap and surfaces the summary line.
+    for (const n of ["a", "b", "c", "d", "e"]) {
+      mkdirSync(join(home, "store", `orphan-${n}@deadbeef`), { recursive: true });
+      writeFileSync(join(home, "store", `orphan-${n}@deadbeef`, "file"), "x");
+    }
+    const c = captureStreams();
+    runCli(["doctor"], { home, streams: c.streams });
+    expect(c.stdout()).toContain("(5)");
+    expect(c.stdout()).toContain("...and 2 more");
   });
 
   test("doctor flags state without marker", () => {
@@ -338,7 +352,7 @@ describe("doctor warnings — orphan store", () => {
     const c = captureStreams();
     const code = runCli(["doctor"], { home, streams: c.streams });
     expect(code).toBe(1);
-    expect(c.stdout()).toContain("state_entry_without_marker");
+    expect(c.stdout()).toContain("isn't on disk");
   });
 
   test("doctor with config_invalid reports", () => {
@@ -348,7 +362,7 @@ describe("doctor warnings — orphan store", () => {
     const c = captureStreams();
     const code = runCli(["doctor"], { home, streams: c.streams });
     expect(code).toBe(1);
-    expect(c.stdout()).toContain("config_invalid");
+    expect(c.stdout()).toContain("couldn't be parsed");
   });
 
   test("doctor flags autoupdate drift", () => {
@@ -362,7 +376,7 @@ describe("doctor warnings — orphan store", () => {
     try {
       const c = captureStreams();
       runCli(["doctor"], { home, streams: c.streams });
-      expect(c.stdout()).toContain("autoupdate_not_loaded");
+      expect(c.stdout()).toContain("background agent isn't loaded");
     } finally {
       resetLaunchctlRunner();
     }
@@ -374,7 +388,7 @@ describe("doctor warnings — orphan store", () => {
     try {
       const c = captureStreams();
       runCli(["doctor"], { home, streams: c.streams });
-      expect(c.stdout()).toContain("autoupdate_unexpectedly_loaded");
+      expect(c.stdout()).toContain("still loaded");
     } finally {
       resetLaunchctlRunner();
     }

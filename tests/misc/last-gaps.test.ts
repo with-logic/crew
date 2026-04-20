@@ -80,7 +80,7 @@ describe("doctor warns when target in state no longer detected", () => {
     );
     const c = captureStreams();
     runCli(["doctor"], { home, streams: c.streams });
-    expect(c.stdout()).toContain("target_missing");
+    expect(c.stdout()).toContain("isn't detected anymore");
   });
 });
 

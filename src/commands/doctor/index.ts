@@ -20,6 +20,7 @@ import {
   type Finding,
 } from "./checks.ts";
 import { buildMarkerIndex } from "./markers.ts";
+import { renderDoctor } from "./render.ts";
 import { repairState } from "./repair.ts";
 
 export function doctorCommand(ctx: CommandContext): CommandOutput {
@@ -50,8 +51,7 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
 
   if (repair) repairState(markers, home);
 
-  const human = findings.map((f) => `[${f.level}] ${f.code}: ${f.message}`);
-  if (findings.length === 0) human.push("OK");
+  const human = renderDoctor(findings, { repair, verify }, ctx.style);
   // After a successful `--repair`, drift-class findings are resolved, so
   // exit 0. Without `--repair`, errors keep the non-zero exit code.
   const exitCode = repair ? 0 : findings.some((f) => f.level === "error") ? 1 : 0;

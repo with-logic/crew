@@ -285,7 +285,7 @@ describe("missing project_root is a clean skip, not a failure", () => {
 
     const c = captureStreams();
     runCli(["doctor"], { home, cwd: makeTempDir("crew-elsewhere-"), streams: c.streams });
-    expect(c.stdout()).toContain("missing_project_root");
+    expect(c.stdout()).toContain("project folder is missing");
     expect(c.stdout()).toContain(project);
   });
 });
