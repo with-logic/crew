@@ -32,7 +32,7 @@ export interface PerTargetUpdate {
 
 export type Outcome =
   | { kind: "up_to_date" }
-  | { kind: "updated"; new_sha: string; per_target: PerTargetUpdate[] }
+  | { kind: "updated"; new_sha: string | null; per_target: PerTargetUpdate[] }
   | { kind: "skipped"; reason: string }
   | { kind: "source_gone" }
   | { kind: "missing_project_root"; root: string }
@@ -171,12 +171,12 @@ function updateOne(
       perTarget.push({ target: targetName, kind: "skipped", reason: ce.code });
     }
   }
-  return { kind: "updated", new_sha: newSha ?? entry.resolved_sha ?? "", per_target: perTarget };
+  return { kind: "updated", new_sha: newSha, per_target: perTarget };
 }
 
 function rebuildStateEntry(
   entry: StateEntry,
-  newSha: string,
+  newSha: string | null,
   successfulTargets: string[],
 ): StateEntry {
   return {

@@ -18,7 +18,12 @@ import { BUNDLE_IDENTIFIER, writeAttributionBundle } from "./bundle.ts";
  * macOS Login Items attributes this agent to "Crew Skill Autoupdate"
  * rather than to the Bun binary's Apple Developer signer.
  */
-export function plistXml(crewBinaryPath: string, intervalSeconds: number, logPath: string): string {
+export function plistXml(
+  crewBinaryPath: string,
+  intervalSeconds: number,
+  logPath: string,
+  home: string = crewHome(),
+): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -28,6 +33,11 @@ export function plistXml(crewBinaryPath: string, intervalSeconds: number, logPat
   <array>
     <string>${BUNDLE_IDENTIFIER}</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CREW_HOME</key><string>${escapeXml(home)}</string>
+    <key>CREW_AUTOUPDATE_LOG</key><string>1</string>
+  </dict>
   <key>ProgramArguments</key>
   <array>
     <string>${escapeXml(crewBinaryPath)}</string>
@@ -64,7 +74,7 @@ export function enableAutoupdate(input: EnableInput): void {
   writeAttributionBundle(home);
   writeText(
     p.autoupdatePlist,
-    plistXml(input.crewBinaryPath, input.intervalSeconds, p.autoupdateLog),
+    plistXml(input.crewBinaryPath, input.intervalSeconds, p.autoupdateLog, home),
   );
   if (!runLaunchctl(["bootstrap", `gui/${process.getuid?.() ?? 0}`, p.autoupdatePlist])) {
     if (!runLaunchctl(["load", p.autoupdatePlist])) {
@@ -125,18 +135,25 @@ export function resetLaunchctlRunner(): void {
 /** Read the last line of the autoupdate log (if any). */
 export function readAutoupdateLogTail(home: string = crewHome()): {
   last_run: string | null;
+  last_exit_status: number | null;
   last_line: string | null;
 } {
   const p = paths(home).autoupdateLog;
   if (!exists(p)) {
-    return { last_run: null, last_line: null };
+    return { last_run: null, last_exit_status: null, last_line: null };
   }
   const contents = readFileSync(p, "utf8");
   const lines = contents.split("\n").filter((l) => l.length > 0);
   if (lines.length === 0) {
-    return { last_run: null, last_line: null };
+    return { last_run: null, last_exit_status: null, last_line: null };
   }
-  return { last_run: null, last_line: lines[lines.length - 1]! };
+  const lastLine = lines[lines.length - 1]!;
+  const parsed = lastLine.match(/^crew-autoupdate (\S+) exit=(\d+)$/);
+  return {
+    last_run: parsed ? parsed[1]! : null,
+    last_exit_status: parsed ? Number.parseInt(parsed[2]!, 10) : null,
+    last_line: lastLine,
+  };
 }
 
 function runLaunchctl(args: string[]): boolean {

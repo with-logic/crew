@@ -84,6 +84,7 @@ function status(ctx: CommandContext): CommandOutput {
       config.autoupdate.interval_seconds,
       loaded,
       tail.last_run,
+      tail.last_exit_status,
       ctx.style,
     ),
     json: {
@@ -91,6 +92,7 @@ function status(ctx: CommandContext): CommandOutput {
       interval_seconds: config.autoupdate.interval_seconds,
       agent_loaded: loaded,
       last_run: tail.last_run,
+      last_exit_status: tail.last_exit_status,
     },
   };
 }
@@ -100,6 +102,7 @@ function renderStatus(
   intervalSeconds: number,
   loaded: boolean,
   lastRun: string | null,
+  lastExitStatus: number | null,
   style: Styler,
 ): string[] {
   const lines: string[] = [];
@@ -122,6 +125,7 @@ function renderStatus(
       ? `${timeAgo(lastRun)} ${style.dim(`(${lastRun.slice(0, 10)})`)}`
       : style.dim("not yet"),
   ]);
+  if (lastExitStatus !== null) rows.push([style.dim("last exit"), String(lastExitStatus)]);
   for (const line of twoColumnTable(rows, 2)) lines.push(`  ${line}`);
   lines.push("");
   if (loaded) {

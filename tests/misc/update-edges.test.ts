@@ -116,4 +116,17 @@ describe("update edge cases", () => {
     expect(code).toBe(0);
     expect(c.stdout()).toContain("removed upstream");
   });
+
+  test("autoupdate log mode writes a parseable quiet status line", () => {
+    const home = makeCrewHome();
+    const saved = process.env["CREW_AUTOUPDATE_LOG"];
+    process.env["CREW_AUTOUPDATE_LOG"] = "1";
+    const c = captureStreams();
+    const code = runCli(["update", "--quiet"], { home, streams: c.streams });
+    if (saved === undefined) delete process.env["CREW_AUTOUPDATE_LOG"];
+    else process.env["CREW_AUTOUPDATE_LOG"] = saved;
+    expect(code).toBe(0);
+    expect(c.stdout()).toBe("");
+    expect(c.stderr()).toMatch(/^crew-autoupdate \S+ exit=0\n$/);
+  });
 });

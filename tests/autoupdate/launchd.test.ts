@@ -18,8 +18,15 @@ describe("plistXml", () => {
     expect(xml).toContain("<false/>");
   });
   test("escapes XML special characters in paths", () => {
-    const xml = plistXml("/a&b/<c>d", 60, "/x");
+    const xml = plistXml("/a&b/<c>d", 60, "/x", "/home&/<crew>");
     expect(xml).toContain("/a&amp;b/&lt;c&gt;d");
+    expect(xml).toContain("/home&amp;/&lt;crew&gt;");
+  });
+  test("pins scheduled runs to the same CREW_HOME used at enable time", () => {
+    const xml = plistXml("/usr/local/bin/crew", 14400, "/tmp/crew.log", "/tmp/crew-home");
+    expect(xml).toContain("<key>EnvironmentVariables</key>");
+    expect(xml).toContain("<key>CREW_HOME</key><string>/tmp/crew-home</string>");
+    expect(xml).toContain("<key>CREW_AUTOUPDATE_LOG</key><string>1</string>");
   });
 });
 
@@ -41,7 +48,7 @@ describe("readAutoupdateLogTail", () => {
   test("missing log returns nulls", () => {
     const home = makeCrewHome();
     const t = readAutoupdateLogTail(home);
-    expect(t).toEqual({ last_run: null, last_line: null });
+    expect(t).toEqual({ last_run: null, last_exit_status: null, last_line: null });
   });
   test("returns last non-empty line", () => {
     const home = makeCrewHome();
@@ -49,6 +56,16 @@ describe("readAutoupdateLogTail", () => {
     writeFileSync(paths(home).autoupdateLog, "first\nsecond\n\n");
     const t = readAutoupdateLogTail(home);
     expect(t.last_line).toBe("second");
+    expect(t.last_run).toBe(null);
+    expect(t.last_exit_status).toBe(null);
+  });
+  test("parses scheduled update status lines", () => {
+    const home = makeCrewHome();
+    mkdirSync(paths(home).logsDir, { recursive: true });
+    writeFileSync(paths(home).autoupdateLog, "crew-autoupdate 2026-04-20T10:00:00.000Z exit=1\n");
+    const t = readAutoupdateLogTail(home);
+    expect(t.last_run).toBe("2026-04-20T10:00:00.000Z");
+    expect(t.last_exit_status).toBe(1);
   });
   test("empty log returns nulls", () => {
     const home = makeCrewHome();
@@ -56,6 +73,7 @@ describe("readAutoupdateLogTail", () => {
     writeFileSync(paths(home).autoupdateLog, "");
     const t = readAutoupdateLogTail(home);
     expect(t.last_line).toBe(null);
+    expect(t.last_exit_status).toBe(null);
   });
 });
 

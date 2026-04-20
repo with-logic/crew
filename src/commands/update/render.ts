@@ -109,7 +109,7 @@ function formatRowParts(row: UpdateRow, style: Styler): RowParts {
     return { status: style.dim("up to date"), detail: "", required };
   }
   if (o.kind === "updated") {
-    const shortSha = o.new_sha.slice(0, 8);
+    const shortSha = o.new_sha ? o.new_sha.slice(0, 8) : "local";
     return { status: style.green("updated"), detail: style.cyan(shortSha), required };
   }
   if (o.kind === "skipped") {

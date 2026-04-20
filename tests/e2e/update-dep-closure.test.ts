@@ -9,6 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { readState } from "../../src/state/load.ts";
@@ -167,5 +168,20 @@ describe("C-UPD-24 crew update <name> dependency closure", () => {
     expect(c.stdout()).toMatch(/bar.*required by foo/);
     // `foo` line must NOT mention a parent (it's a top-level name).
     expect(c.stdout()).not.toMatch(/foo.*required by/);
+  });
+
+  test("crew update <name> updates changed local deps even when parent is unchanged", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const src = makeTempDir();
+    makeSkill(src, "bar", skillFrontmatter({ name: "bar" }), "v1");
+    makeSkill(src, "foo", skillFrontmatter({ name: "foo", dependencies: [join(src, "bar")] }));
+    runCli(["install", join(src, "foo")], { home, streams: captureStreams().streams });
+
+    makeSkill(src, "bar", skillFrontmatter({ name: "bar" }), "v2");
+    const code = runCli(["update", "foo"], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+    expect(readFileSync(join(ccRoot, "bar", "SKILL.md"), "utf8")).toContain("v2");
+    expect(readState(home).installations.find((e) => e.name === "bar")!.resolved_sha).toBe(null);
   });
 });

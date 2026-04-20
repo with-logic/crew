@@ -752,6 +752,11 @@ autoupdate would do.
   <array>
     <string>sh.crew.autoupdater</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CREW_HOME</key><string><!-- effective crew home at enable time --></string>
+    <key>CREW_AUTOUPDATE_LOG</key><string>1</string>
+  </dict>
   <key>ProgramArguments</key>
   <array>
     <string><!-- absolute path to the crew executable --></string>
@@ -765,6 +770,21 @@ autoupdate would do.
 </dict>
 </plist>
 ```
+
+`CREW_HOME` MUST be set in the plist to the effective crew home used
+when `crew autoupdate enable` was run. This keeps scheduled updates
+pointing at the same state/config directory even when the user enabled
+autoupdate with a non-default `CREW_HOME`. `CREW_AUTOUPDATE_LOG=1` is
+an internal flag consumed by `crew update --quiet`: when present,
+`crew update` MUST append one line to the autoupdate log before exiting:
+
+```text
+crew-autoupdate <ISO-8601 timestamp> exit=<integer exit code>
+```
+
+This line is in addition to any command output or errors redirected by
+launchd. It is the authoritative source for `crew autoupdate status`'s
+last-run timestamp and exit status.
 
 **Attribution bundle.** On macOS Ventura and later, Login Items labels a
 launchd agent by the code-signing team of the executable unless the
