@@ -318,7 +318,7 @@ taps:
   - name: core
     kind: git
     registered: true
-    url: https://github.com/crew-sh/core.git
+    url: https://github.com/with-logic/crew-skills.git
   - name: acme
     kind: git
     registered: true
@@ -499,7 +499,7 @@ Written into every crew-installed skill directory. JSON, UTF-8, trailing newline
   "adapters": ["codex", "gemini-cli"],
   "tap_name": "core",
   "tap_kind": "git",
-  "tap_url": "https://github.com/crew-sh/core.git",
+  "tap_url": "https://github.com/with-logic/crew-skills.git",
   "tap_subpath": "",
   "path": "python-testing",
   "ref": "main",
