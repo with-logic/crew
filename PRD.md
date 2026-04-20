@@ -1053,7 +1053,7 @@ Crew ships with a registered default tap named `core` at a URL specified by the 
   - For git taps, the initial clone runs **before** the tap is written to config. If the clone fails (bad URL, typo, network failure, no access), the tap is not added — neither `crew tap list` nor `config.yaml` shows it, and any partially-materialized clone directory is removed.
   - If the named tap already exists with a matching URL/path/subpath, the call is an idempotent no-op (exit 0). If an existing tap of the same name has a different URL/path/subpath, the call is a `usage_error` — the user must pick a different name.
   - If the URL/path matches an existing **auto** tap, `crew tap add` promotes it: `registered` flips to `true`, and the `<name>` argument (if supplied) renames the tap. No re-clone.
-- `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Unknown subcommands and bare words that don't parse as a source produce `usage_error`.
+- `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. `crew tap` with no subcommand — or with an unknown word that doesn't parse as a source — prints the command's help page (same as `crew help tap`) with exit 0 instead of producing an error. Other commands that take subcommands (`crew cache`, `crew autoupdate`, `crew targets`) behave the same way.
 - Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`). The subpath, URL, or path is entirely internal — it never appears in skill references.
 - `crew tap remove <name>` deletes the local clone and removes the tap from config. Auto taps are also removed automatically when their last associated state entry is uninstalled (see §16.5).
 - `crew tap list` prints each tap's name, kind (`registered` / `auto`), source (URL`//subpath` or path), and last-fetched timestamp (for git-kind taps only). `--json` emits the structured shape.
@@ -1320,7 +1320,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-07 | §16.4 | `crew search <skill>` matches case-insensitively against `name` and `description` across every tap. |
 | C-TAP-08 | §16.4 | `crew search --json` emits a structured array of matches. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
-| C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source produces `usage_error`. |
+| C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source prints the `crew tap` help page with exit code 0 (same as `crew help tap`). |
 | C-TAP-12 | §16.3 | `crew tap add <url>//<subpath>` configures a tap rooted at `<subpath>` inside the repo. Skills at the top level of `<subpath>` are installable by bare name, just like a root tap. |
 | C-TAP-13 | §16.3 | Default name derivation for a subpath tap is `<last-repo-segment>-<last-subpath-segment>` (e.g. `@with-logic/backend//skills` → `backend-skills`); for a root tap it remains the final repo segment. |
 | C-TAP-14 | §16.3 | Adding a tap whose `(name, url, subpath)` already exists is a no-op (exit 0). Adding the same name with a different URL or subpath is `usage_error`. |

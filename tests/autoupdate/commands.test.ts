@@ -191,12 +191,20 @@ describe("autoupdate commands", () => {
     expect(c.stdout()).toContain("last ran");
   });
 
-  test("unknown autoupdate subcommand errors", () => {
+  test("unknown autoupdate subcommand shows the help page", () => {
     const crewHome = makeCrewHome();
-    const code = runCli(["autoupdate", "frob"], {
-      home: crewHome,
-      streams: captureStreams().streams,
-    });
-    expect(code).toBe(4);
+    const c = captureStreams();
+    const code = runCli(["autoupdate", "frob"], { home: crewHome, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("crew autoupdate");
+    expect(c.stdout()).toContain("USAGE");
+  });
+
+  test("bare `crew autoupdate` shows the help page", () => {
+    const crewHome = makeCrewHome();
+    const c = captureStreams();
+    const code = runCli(["autoupdate"], { home: crewHome, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("crew autoupdate");
   });
 });

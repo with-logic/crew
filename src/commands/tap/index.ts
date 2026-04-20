@@ -20,6 +20,7 @@ import type { TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { rmrf } from "../../util/fs.ts";
+import { showCommandHelp } from "../help/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { displayTarget, tapAdd } from "./add.ts";
 import { refreshTaps, type TapRefreshRow } from "./refresh.ts";
@@ -34,14 +35,13 @@ export function tapCommand(ctx: CommandContext): CommandOutput {
   if (sub === "update") return tapUpdate(ctx, rest);
   // Shorthand: `crew tap <ref> [<name>]` → `crew tap add <ref> [<name>]`.
   // Only dispatch when the first positional parses as a git source or a
-  // path; bare words (subcommand typos) fall through to the usage error.
+  // path; bare words (subcommand typos) fall through to the help page.
   if (sub && looksLikeTapSource(sub, ctx.cwd)) {
     return tapAdd(ctx, ctx.positional);
   }
-  throw new CrewError(
-    "usage_error",
-    "`crew tap` takes one of: `<source> [<name>]`, `add <source> [<name>]`, `remove <name>`, `update [<name>]`, or `list`",
-  );
+  // No subcommand, or one we don't recognize — show the user what the
+  // command can do instead of an error.
+  return showCommandHelp("tap");
 }
 
 /** True if `ref` parses as a git or path source (anything but a tap-name reference). */

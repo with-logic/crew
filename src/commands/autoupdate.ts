@@ -19,6 +19,7 @@ import { CrewError } from "../core/errors.ts";
 import { withStateLock } from "../state/lock.ts";
 import { timeAgo, twoColumnTable } from "../util/format.ts";
 import type { Styler } from "../util/term.ts";
+import { showCommandHelp } from "./help/index.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function autoupdateCommand(ctx: CommandContext): CommandOutput {
@@ -26,10 +27,9 @@ export function autoupdateCommand(ctx: CommandContext): CommandOutput {
   if (sub === "enable") return enable(ctx);
   if (sub === "disable") return disable(ctx);
   if (sub === "status") return status(ctx);
-  throw new CrewError(
-    "usage_error",
-    "`crew autoupdate` takes one of: `enable [--interval <dur>]`, `disable`, or `status`",
-  );
+  // No subcommand or an unknown one — show the help page rather than
+  // barking a usage error.
+  return showCommandHelp("autoupdate");
 }
 
 function enable(ctx: CommandContext): CommandOutput {

@@ -29,6 +29,17 @@ export function helpCommand(ctx: CommandContext): CommandOutput {
   return renderCommand(help);
 }
 
+/**
+ * Render the help page for a named command, for commands to call when
+ * they're invoked with no subcommand / no actionable arguments. Falls
+ * back to the overview if the name is unknown.
+ */
+export function showCommandHelp(name: string): CommandOutput {
+  const help = COMMANDS[name];
+  if (!help) return overview();
+  return renderCommand(help);
+}
+
 /** Entry point for the `version` command. */
 export function versionCommand(_ctx: CommandContext): CommandOutput {
   return { exitCode: 0, human: [`crew ${CREW_VERSION}`], json: { version: CREW_VERSION } };

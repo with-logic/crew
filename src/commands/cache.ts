@@ -7,7 +7,6 @@
  */
 
 import { statSync } from "node:fs";
-import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
 import { garbageCollectStore } from "../maintenance/gc.ts";
 import { readState } from "../state/load.ts";
@@ -15,12 +14,14 @@ import { withStateLock } from "../state/lock.ts";
 import { plural } from "../util/format.ts";
 import { rmrf, walk } from "../util/fs.ts";
 import type { Styler } from "../util/term.ts";
+import { showCommandHelp } from "./help/index.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function cacheCommand(ctx: CommandContext): CommandOutput {
   const sub = ctx.positional[0];
   if (sub !== "clean") {
-    throw new CrewError("usage_error", "`crew cache` currently has one subcommand: `clean`");
+    // No subcommand or an unknown one — show the help page.
+    return showCommandHelp("cache");
   }
   let removedStore: string[] = [];
   let freedBytes = 0;
