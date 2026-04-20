@@ -64,7 +64,7 @@ export function Teams() {
           number="08"
           label="For teams"
           title="Fun for the whole team."
-          description="The best skills on your team are trapped in one engineer's shell history. Crew gives your team a shared shelf — a private git repo that everyone installs from, reviews in PRs, and keeps in sync without thinking about it."
+          description="The best skills on your team are trapped on the other engineers' computers. Crew gives your team a shared shelf — a private git repo that everyone installs from, reviews in PRs, and keeps in sync without thinking about it."
         />
 
         <div className={styles.grid}>

@@ -96,6 +96,17 @@ else
   warn "binary installed but \`$dest version\` failed. Try running it manually."
 fi
 
+# ---------- Prime the default taps --------------------------------------
+
+# Fetch the default tap(s) so `crew search` works immediately. Non-fatal
+# on network failure — a later `crew install` / `crew update` will retry.
+log "Fetching default skill taps"
+if "$dest" update >/dev/null 2>&1; then
+  ok "skill taps ready"
+else
+  warn "couldn't fetch taps right now — run \`crew update\` once you're online."
+fi
+
 # ---------- PATH hint ---------------------------------------------------
 
 case ":${PATH:-}:" in
