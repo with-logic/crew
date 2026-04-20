@@ -64,24 +64,32 @@
 
 /*
  * Stylized "crew" in the headline — reads as an inline code span the
- * way Markdown renders `crew` on GitHub. Keeps the headline font size
- * so it doesn't feel like a shrunk-down code pill; the subtle paper
- * background + border + monospace face are the ligature between
- * "this is the brand name" and "this is also the command you type."
+ * way Markdown renders `crew` on GitHub. Uses inline-flex with a
+ * cap-height-aligned baseline so the monospace character sits
+ * optically centered inside its pill, with the pill itself aligned
+ * to the heading's cap-height rather than its baseline.
+ *
+ * We intentionally avoid `vertical-align: N px` tricks — they shift
+ * the glyph OR the pill, never both in a way that looks correct
+ * across font rendering engines.
  */
 .brandCode {
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 0.82em;
+  font-size: 0.78em;
+  line-height: 1;
   background: var(--paper);
   border: 1px solid var(--line-2);
-  border-radius: 8px;
-  padding: 0.02em 0.18em 0.08em;
+  border-radius: 10px;
+  padding: 0.14em 0.24em 0.18em;
   letter-spacing: -0.02em;
   color: var(--ink);
-  /* Slight optical lift so the border doesn't drop the baseline. */
-  vertical-align: 2px;
-  margin-right: 0.05em;
+  display: inline-block;
+  /* `cap` unit: 1 cap = the font's cap height. Nudging down by 0.1 cap
+     lifts the pill so its vertical center lines up with the heading's
+     cap-height midpoint. */
+  transform: translateY(-0.1em);
+  margin-right: 0.06em;
 }
 
 .lede {
@@ -96,32 +104,6 @@
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-.meta {
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--mute);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-top: 28px;
-}
-
-.meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ok);
-  display: inline-block;
 }
 
 /* Terminal body styling */

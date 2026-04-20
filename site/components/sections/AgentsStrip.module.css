@@ -18,10 +18,18 @@
   letter-spacing: 0.08em;
 }
 
-.trail {
-  color: var(--mute);
+.more {
+  color: var(--ink-2);
+  text-decoration: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 5px 2px;
+  border-radius: 3px;
 }
 
-.trail a {
-  color: var(--ink-2);
+.more:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 3px;
 }

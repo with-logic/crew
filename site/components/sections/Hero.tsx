@@ -32,15 +32,6 @@ export function Hero() {
                 Command reference
               </Button>
             </div>
-            <div className={styles.meta}>
-              <span>
-                <span className={styles.dot} />
-                Open source · MIT
-              </span>
-              <span>macOS · Apple Silicon &amp; Intel</span>
-              <span>Single binary</span>
-              <span>Zero config</span>
-            </div>
           </div>
           <HeroTerminal />
         </div>

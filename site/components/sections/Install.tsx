@@ -1,8 +1,9 @@
+import { SAAP_FULL_PROMPT } from "../../lib/prd";
 import { Acc, CodeBlock } from "../primitives/CodeBlock";
 import { Container } from "../primitives/Container";
-import { Eyebrow } from "../primitives/Eyebrow";
 import { Section } from "../primitives/Section";
 import { SectionHead } from "../primitives/SectionHead";
+import { BuildItYourself } from "./BuildItYourself";
 import styles from "./Install.module.css";
 
 export function Install() {
@@ -12,31 +13,18 @@ export function Install() {
         <SectionHead
           number="02"
           label="Installation"
-          title="Installation."
-          description="Two ways to get it. Pick one."
+          title="One command."
+          description="A single macOS binary. Runs on Apple Silicon and Intel."
         />
 
-        <div className={styles.grid}>
-          <div>
-            <Eyebrow>Homebrew</Eyebrow>
-            <CodeBlock>
-              {"$ brew install "}
-              <Acc>with-logic/tap/crew</Acc>
-              {"\n$ crew version\ncrew "}
-              <Acc>0.3.1</Acc>
-              {" (darwin-arm64)"}
-            </CodeBlock>
-          </div>
-          <div>
-            <Eyebrow>Curl</Eyebrow>
-            <CodeBlock>
-              {"$ curl -fsSL "}
-              <Acc>https://crew.logic.inc/install.sh</Acc>
-              {" | sh\n$ crew version\ncrew "}
-              <Acc>0.3.1</Acc>
-              {" (darwin-arm64)"}
-            </CodeBlock>
-          </div>
+        <div className={styles.card}>
+          <CodeBlock>
+            {"$ curl -fsSL "}
+            <Acc>https://crew.logic.inc/install.sh</Acc>
+            {" | sh\n$ crew version\ncrew "}
+            <Acc>0.3.1</Acc>
+            {" (darwin-arm64)"}
+          </CodeBlock>
         </div>
 
         <div className={styles.reqRow}>
@@ -47,10 +35,12 @@ export function Install() {
         </div>
 
         <p className={styles.footnote}>
-          A single macOS binary. Drops nothing on your system outside of <code>~/.crew/</code> and
+          A single binary. Drops nothing on your system outside of <code>~/.crew/</code> and
           whichever agent skills directories you install into. Uninstall with{" "}
-          <code>rm -rf ~/.crew &amp;&amp; rm /usr/local/bin/crew</code>.
+          <code>rm -rf ~/.crew &amp;&amp; rm ~/.local/bin/crew</code>.
         </p>
+
+        <BuildItYourself prompt={SAAP_FULL_PROMPT} />
       </Container>
     </Section>
   );

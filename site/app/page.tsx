@@ -1,3 +1,4 @@
+import { Agents } from "../components/sections/Agents";
 import { AgentsStrip } from "../components/sections/AgentsStrip";
 import { BottomCTA } from "../components/sections/BottomCTA";
 import { Commands } from "../components/sections/Commands";
@@ -35,6 +36,7 @@ export default function Page() {
         <Safety />
         <SkillMdExample />
         <Faq />
+        <Agents />
         <BottomCTA />
       </main>
       <Footer />
