@@ -14,7 +14,7 @@ export function BottomCTA() {
           <div className={styles.ctaRow}>
             <Button href="#install">Install crew</Button>
             <Button href="#commands" variant="ghost">
-              Read the reference
+              Command reference
             </Button>
           </div>
         </div>

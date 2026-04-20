@@ -1,9 +1,12 @@
 import { SAAP_FULL_PROMPT } from "../../lib/prd";
 import { Acc, CodeBlock } from "../primitives/CodeBlock";
 import { Container } from "../primitives/Container";
+import { CopyButton } from "../primitives/CopyButton";
 import { Section } from "../primitives/Section";
 import { BuildItYourself } from "./BuildItYourself";
 import styles from "./Install.module.css";
+
+const INSTALL_COMMAND = "curl -fsSL https://crew.logic.inc/install.sh | sh";
 
 export function Install() {
   return (
@@ -30,6 +33,9 @@ export function Install() {
             <Acc>0.3.1</Acc>
             {" (darwin-arm64)"}
           </CodeBlock>
+          <div className={styles.copy}>
+            <CopyButton text={INSTALL_COMMAND} label="Copy install command" />
+          </div>
         </div>
 
         <div className={styles.reqRow}>

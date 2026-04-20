@@ -9,12 +9,6 @@ export function Hero() {
       <Container>
         <div className={styles.grid}>
           <div>
-            <p className={styles.kicker}>
-              <span className={styles.sq} />
-              open source
-              <span className={styles.sep}>/</span>
-              <span className={styles.os}>MIT</span>
-            </p>
             <h1 className={styles.title}>
               <code className={styles.brandCode}>crew</code> is a package manager{" "}
               <span className={styles.accent}>for agent skills</span>.
@@ -24,12 +18,8 @@ export function Hero() {
               machine. Share your own as easily as pushing to GitHub.
             </p>
             <div className={styles.ctaRow}>
-              <Button href="#install">Install crew →</Button>
               <Button href="#how" variant="ghost">
                 How it works
-              </Button>
-              <Button href="#commands" variant="ghost">
-                Command reference
               </Button>
             </div>
           </div>
