@@ -1,0 +1,170 @@
+/**
+ * Tests for the self-update orchestration (§10.3 steps 1-6).
+ *
+ * Everything upstream of `runSelfUpdate` is stubbed: the release feed,
+ * the binary download, and the xattr call. The test verifies the
+ * sequencing and the final state (bytes at dest, version-check record
+ * refreshed, error shapes on failure).
+ */
+
+import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { paths } from "../../src/core/paths.ts";
+import { CREW_VERSION } from "../../src/core/version.ts";
+import { readVersionCheck } from "../../src/self-update/check.ts";
+import {
+  resetAssetDownloader,
+  resetXattrClearer,
+  setAssetDownloader,
+  setXattrClearer,
+} from "../../src/self-update/download.ts";
+import { resetReleaseFetcher, setReleaseFetcher } from "../../src/self-update/github.ts";
+import { runSelfUpdate, runSelfUpdateCheck } from "../../src/self-update/upgrade.ts";
+import { makeCrewHome } from "../helpers/env.ts";
+
+afterEach(() => {
+  resetReleaseFetcher();
+  resetAssetDownloader();
+  resetXattrClearer();
+});
+
+/** The fake asset name that assetNameForArch returns on this machine. */
+function currentAssetName(): string {
+  if (process.arch === "arm64") return "crew-macos-arm64";
+  return "crew-macos-x64";
+}
+
+describe("runSelfUpdate", () => {
+  test("downloads + swaps + refreshes version-check when newer", () => {
+    const home = makeCrewHome();
+    const dest = join(home, "crew-bin");
+    writeFileSync(dest, "OLD");
+
+    setReleaseFetcher(() => ({
+      tag: "v99.99.99",
+      assets: { [currentAssetName()]: "https://example.com/asset" },
+    }));
+    setAssetDownloader((_url, destPath) => writeFileSync(destPath, "NEW"));
+    setXattrClearer(() => {});
+
+    const result = runSelfUpdate({ home, force: false, execPath: dest });
+    expect(result.replaced).toBe(true);
+    expect(result.latestTag).toBe("v99.99.99");
+    expect(readFileSync(dest, "utf8")).toBe("NEW");
+
+    const record = readVersionCheck(home);
+    expect(record?.latest_tag).toBe("v99.99.99");
+    expect(existsSync(paths(home).versionCheckFile)).toBe(true);
+  });
+
+  test("no-op when already on latest, but still refreshes version-check", () => {
+    const home = makeCrewHome();
+    const dest = join(home, "crew-bin");
+    writeFileSync(dest, "CURRENT");
+
+    // Stub a release that matches the running CREW_VERSION.
+    setReleaseFetcher(() => ({
+      tag: `v${CREW_VERSION}`,
+      assets: { [currentAssetName()]: "https://example.com/asset" },
+    }));
+    let downloaderCalled = false;
+    setAssetDownloader(() => {
+      downloaderCalled = true;
+    });
+
+    const result = runSelfUpdate({ home, force: false, execPath: dest });
+    expect(result.replaced).toBe(false);
+    expect(downloaderCalled).toBe(false);
+    expect(readFileSync(dest, "utf8")).toBe("CURRENT");
+
+    const record = readVersionCheck(home);
+    expect(record?.latest_tag).toBe(`v${CREW_VERSION}`);
+  });
+
+  test("--force reinstalls even when already on latest", () => {
+    const home = makeCrewHome();
+    const dest = join(home, "crew-bin");
+    writeFileSync(dest, "CURRENT");
+
+    setReleaseFetcher(() => ({
+      tag: `v${CREW_VERSION}`,
+      assets: { [currentAssetName()]: "https://example.com/asset" },
+    }));
+    setAssetDownloader((_url, destPath) => writeFileSync(destPath, "FORCED"));
+    setXattrClearer(() => {});
+
+    const result = runSelfUpdate({ home, force: true, execPath: dest });
+    expect(result.replaced).toBe(true);
+    expect(readFileSync(dest, "utf8")).toBe("FORCED");
+  });
+
+  test("self_update_unavailable when release has no matching asset", () => {
+    const home = makeCrewHome();
+    const dest = join(home, "crew-bin");
+    writeFileSync(dest, "OLD");
+
+    setReleaseFetcher(() => ({ tag: "v99.99.99", assets: {} }));
+
+    expect(() => runSelfUpdate({ home, force: false, execPath: dest })).toThrow(
+      /has no asset named/,
+    );
+  });
+
+  test("accepts an explicit tag", () => {
+    const home = makeCrewHome();
+    const dest = join(home, "crew-bin");
+    writeFileSync(dest, "OLD");
+
+    let requestedUrl = "";
+    setReleaseFetcher((url) => {
+      requestedUrl = url;
+      return { tag: "v0.5.0", assets: { [currentAssetName()]: "https://example.com/asset" } };
+    });
+    setAssetDownloader((_url, destPath) => writeFileSync(destPath, "NEW"));
+    setXattrClearer(() => {});
+
+    runSelfUpdate({ home, force: false, execPath: dest, tag: "v0.5.0" });
+    expect(requestedUrl).toContain("/releases/tags/v0.5.0");
+  });
+});
+
+describe("runSelfUpdateCheck", () => {
+  test("writes the record and returns the latest tag", () => {
+    const home = makeCrewHome();
+    setReleaseFetcher(() => ({ tag: "v99.99.99", assets: {} }));
+
+    const result = runSelfUpdateCheck(home);
+    expect(result.latestTag).toBe("v99.99.99");
+    expect(readVersionCheck(home)?.latest_tag).toBe("v99.99.99");
+  });
+
+  test("check against an explicit tag goes to /releases/tags/<tag>", () => {
+    const home = makeCrewHome();
+    let requestedUrl = "";
+    setReleaseFetcher((url) => {
+      requestedUrl = url;
+      return { tag: "v0.5.0", assets: {} };
+    });
+    runSelfUpdateCheck(home, "v0.5.0");
+    expect(requestedUrl).toContain("/releases/tags/v0.5.0");
+  });
+});
+
+describe("platform guard", () => {
+  test("non-darwin raises self_update_unavailable before touching the network", () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+    let fetcherCalled = false;
+    setReleaseFetcher(() => {
+      fetcherCalled = true;
+      return { tag: "v1", assets: {} };
+    });
+    try {
+      expect(() => runSelfUpdateCheck(makeCrewHome())).toThrow(/crew ships macOS binaries only/);
+      expect(fetcherCalled).toBe(false);
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
+    }
+  });
+});

@@ -116,6 +116,8 @@ crew autoupdate enable [--interval <dur>]   Install the launchd agent (default 4
 crew autoupdate disable                      Remove the launchd agent.
 crew autoupdate status                       Show whether active, last run, next run.
 
+crew self-update [--check] [--version <v>]  Upgrade the crew binary itself to the latest release.
+
 crew doctor [--verify] [--repair]  Check integrity; optionally fix recoverable state issues.
 crew cache clean                   Remove ephemeral caches and unreferenced store entries.
 
@@ -857,6 +859,103 @@ to the chosen interval.
 
 `crew autoupdate status` reports: whether the agent is loaded, the configured interval, the timestamp of the last run (from the log), and the exit status of the last run.
 
+### 10.3 `crew self-update`
+
+`crew self-update` upgrades the `crew` binary itself to the latest published release. It is distinct from `crew update`, which updates installed skills.
+
+**Release channel.** The canonical release source is the GitHub Releases
+feed of the canonical repository (`with-logic/crew`). Each release
+publishes assets named `crew-macos-arm64` and `crew-macos-x64`. The
+implementation MAY accept a `CREW_SELF_UPDATE_RELEASES_URL` environment
+variable to override the release feed URL for testing or for private
+forks; the default is `https://api.github.com/repos/with-logic/crew/releases/latest`.
+
+**Flow.** `crew self-update` runs the following algorithm:
+
+1. Resolve the latest tag via the release feed.
+2. If the latest tag matches the running `CREW_VERSION` and `--force` is
+   not set, print "already on the latest version" and exit 0.
+3. Download the asset matching the current CPU architecture
+   (`arm64` → `crew-macos-arm64`, `x86_64` → `crew-macos-x64`).
+4. Mark the downloaded file executable. On macOS, clear the
+   `com.apple.quarantine` extended attribute.
+5. Atomically rename the downloaded file over `process.execPath`. The
+   running process keeps executing on the old inode; subsequent
+   invocations run the new binary.
+6. Record the new version in the version-check file (§10.4) so the
+   update notice doesn't nag the user about a version they already
+   installed.
+
+**Flags.**
+
+- `--check` — query the release feed and print whether an update is
+  available; perform no download or replacement. Exit 0 either way.
+- `--version <tag>` — install the named release (e.g. `v0.4.0`) instead
+  of the latest. Useful for pinning or downgrading.
+- `--force` — reinstall even when the resolved version matches the
+  running version. Does NOT override `self_update_unavailable` (the
+  release couldn't be fetched) or `self_update_failed` (the replacement
+  failed mid-flight).
+
+**Errors.**
+
+- `self_update_unavailable` (exit 5) — the release feed or the asset
+  download couldn't be reached, the release doesn't have an asset for
+  the current arch, or the named `--version` doesn't exist.
+- `self_update_failed` (exit 8) — the replacement step failed (e.g. the
+  binary path isn't writable). The old binary is left in place.
+
+**Non-macOS.** `crew self-update` on a non-macOS host produces
+`self_update_unavailable` with a message indicating crew ships only for
+macOS. No release feed request is made.
+
+### 10.4 Update-available notice
+
+Every human invocation of `crew` SHOULD emit a short informational
+notice on stderr when a newer release of `crew` itself is available,
+so users don't have to remember to check. The notice is advisory and
+never affects the exit code, stdout, or the operation in progress.
+
+**Check cadence.** The implementation tracks the last time it queried
+the release feed in `~/.crew/version-check.json`:
+
+```json
+{
+  "checked_at": "2026-04-20T12:00:00Z",
+  "latest_tag": "v0.4.0"
+}
+```
+
+At most once every 24 hours, when the cadence has elapsed, the
+implementation kicks off a background check against the release feed
+and writes the result to this file. The check MUST NOT block the
+command in progress; implementations SHOULD spawn a detached worker
+that runs `crew self-update --check --background` and writes the file
+on completion.
+
+**Notice rendering.** If `version-check.json` shows `latest_tag !=
+CREW_VERSION`, the implementation emits a single stderr line like:
+
+```text
+A new version of crew is available (v0.3.1 → v0.4.0). Run `crew self-update` to upgrade.
+```
+
+**Suppression.** The notice MUST be suppressed when any of the
+following hold:
+
+- `stderr` is not a TTY.
+- `--json` was passed.
+- `--quiet` was passed.
+- `CREW_NO_UPDATE_CHECK=1` is set.
+- `CI` is set (standard GitHub Actions / generic CI convention).
+- `CREW_AUTOUPDATE_LOG=1` is set (the command is running under the
+  launchd autoupdater).
+- The command itself is `self-update` or `version`.
+
+The background check SHOULD respect the same `CREW_NO_UPDATE_CHECK=1`
+and `CI` suppressions — no one wants CI jobs doing background pings of
+the GitHub API.
+
 ## 11. State
 
 ### 11.1 `state.json` schema
@@ -1026,6 +1125,8 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `config_invalid` | 4 | `config.yaml` did not parse. |
 | `state_locked` | 7 | Could not acquire `state.json.lock` within timeout. |
 | `launchd_failure` | 8 | Autoupdate enable/disable couldn't load/unload the agent. |
+| `self_update_unavailable` | 5 | `crew self-update` couldn't reach the release feed, the asset is missing for the current arch, or the named `--version` doesn't exist. |
+| `self_update_failed` | 8 | `crew self-update` fetched a new binary but couldn't replace the running one (e.g. the install prefix isn't writable). |
 
 The `--force` flag overrides `customized`, `untracked_directory`, `inconsistent_marker`, and `not_installed_here`. It does **not** override `invalid_skill`, `name_conflict`, `conflicting_dependencies`, or any other error.
 
@@ -1071,10 +1172,10 @@ Crew mutates state from multiple entry points (interactive commands, autoupdate)
 | 1 | General failure; used when `crew update` has any skill hard-fail. |
 | 2 | Nothing was attempted (e.g. install command with only already-installed skills, or empty directory expansion where user asked for a specific thing). |
 | 4 | User error: invalid arguments, invalid skill, unresolvable references, no agents available, config invalid. |
-| 5 | Network / source failure: could not reach git, ref does not exist. |
+| 5 | Network / source failure: could not reach git, ref does not exist, release feed unreachable. |
 | 6 | Safety-check abort: untracked directory, customized skill, bad marker. |
 | 7 | Could not acquire state lock. |
-| 8 | macOS integration failure: launchd agent could not be loaded or unloaded. |
+| 8 | macOS integration failure: launchd agent could not be loaded/unloaded, or self-update couldn't replace the binary. |
 
 ## 16. Taps
 
@@ -1430,6 +1531,20 @@ Implementations and test suites refer to criteria by ID.
 | C-AUTO-08 | §10.2 | Interval strings `30s`, `5m`, `2h`, `1d` are accepted. |
 | C-AUTO-09 | §10.2 | `crew autoupdate enable` writes an attribution bundle at `~/.crew/Crew.app/Contents/Info.plist` with `CFBundleIdentifier = sh.crew.autoupdater` and `CFBundleDisplayName = "Crew Skill Autoupdate"`. |
 | C-AUTO-10 | §10.2 | The plist carries an `AssociatedBundleIdentifiers` array containing `sh.crew.autoupdater`. |
+
+#### C-SELF: Self-update (§10.3, §10.4)
+
+| ID | Reference | Assertion |
+|---|---|---|
+| C-SELF-01 | §10.3 | `crew self-update --check` queries the release feed, prints the latest tag, and makes no filesystem changes. |
+| C-SELF-02 | §10.3 | `crew self-update` on a version equal to `latest_tag` prints "already on the latest version" and exits 0. |
+| C-SELF-03 | §10.3 | `crew self-update` downloads the asset for the current arch, `chmod +x`s it, and atomically renames over the running binary. |
+| C-SELF-04 | §10.3 | A release-feed or asset-download failure produces `self_update_unavailable`, exit 5. |
+| C-SELF-05 | §10.3 | A failure to replace the binary produces `self_update_failed`, exit 8. The old binary is left in place. |
+| C-SELF-06 | §10.3 | `crew self-update --version v0.1.0` targets the named tag instead of the latest, and errors `self_update_unavailable` if the tag does not exist. |
+| C-SELF-07 | §10.4 | A human `crew` invocation whose stderr is a TTY and whose cached `latest_tag` differs from `CREW_VERSION` emits exactly one stderr notice naming both versions. |
+| C-SELF-08 | §10.4 | The update notice is suppressed when `--json`, `--quiet`, `CREW_NO_UPDATE_CHECK=1`, `CI`, or `CREW_AUTOUPDATE_LOG=1` is set, or when stderr is not a TTY. |
+| C-SELF-09 | §10.4 | The update notice is never emitted during `crew self-update` or `crew version`. |
 
 #### C-AGENT: Agents (§7)
 

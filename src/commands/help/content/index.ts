@@ -13,6 +13,7 @@ import { infoHelp } from "./info.ts";
 import { installHelp } from "./install.ts";
 import { listHelp } from "./list.ts";
 import { searchHelp } from "./search.ts";
+import { selfUpdateHelp } from "./self-update.ts";
 import { tapHelp } from "./tap.ts";
 import type { CommandHelp } from "./types.ts";
 import { uninstallHelp } from "./uninstall.ts";
@@ -31,7 +32,7 @@ export const GROUPS: readonly CommandGroup[] = [
   { title: "Managing skills", commands: ["install", "uninstall", "update", "list", "info"] },
   { title: "Discovery", commands: ["search", "tap"] },
   { title: "Agents & automation", commands: ["agents", "autoupdate"] },
-  { title: "Housekeeping", commands: ["doctor", "cache"] },
+  { title: "Housekeeping", commands: ["doctor", "cache", "self-update"] },
   { title: "Meta", commands: ["help", "version"] },
 ];
 
@@ -47,6 +48,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
   autoupdate: autoupdateHelp,
   doctor: doctorHelp,
   cache: cacheHelp,
+  "self-update": selfUpdateHelp,
   help: helpHelp,
   version: versionHelp,
 };
@@ -64,6 +66,7 @@ export const ONELINERS: Record<string, string> = {
   autoupdate: "Keep skills up to date in the background.",
   doctor: "Check crew's health; fix what's fixable.",
   cache: "Free up disk space.",
+  "self-update": "Upgrade the crew binary itself.",
   help: "Get help on any command.",
   version: "Print the version.",
 };

@@ -46,6 +46,7 @@ export interface CrewPaths {
   readonly autoupdateLog: string;
   readonly launchAgentsDir: string;
   readonly autoupdatePlist: string;
+  readonly versionCheckFile: string;
 }
 
 /** Compute every well-known path from the crew home. */
@@ -63,6 +64,7 @@ export function paths(home: string = crewHome()): CrewPaths {
     autoupdateLog: join(home, "logs", "autoupdate.log"),
     launchAgentsDir: launchAgentsDir(),
     autoupdatePlist: join(launchAgentsDir(), "sh.crew.autoupdate.plist"),
+    versionCheckFile: join(home, "version-check.json"),
   };
 }
 

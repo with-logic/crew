@@ -4,3 +4,6 @@ coverage/
 bun.lockb
 .DS_Store
 *.log
+# Stale bun --compile artifacts left by an aborted build (e.g. when the
+# atomic rename over process.execPath fails mid-flight).
+.*.bun-build
