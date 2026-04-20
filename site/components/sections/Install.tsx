@@ -2,14 +2,18 @@ import { SAAP_FULL_PROMPT } from "../../lib/prd";
 import { Acc, CodeBlock } from "../primitives/CodeBlock";
 import { Container } from "../primitives/Container";
 import { Section } from "../primitives/Section";
+import { SectionHead } from "../primitives/SectionHead";
 import { BuildItYourself } from "./BuildItYourself";
 import styles from "./Install.module.css";
 
 export function Install() {
   return (
+    // Anchor target sits on the <Section> element itself. `scroll-margin-top`
+    // on the Section class pushes the scroll stop down past the sticky nav
+    // so "Install crew" isn't hidden behind it when #install is hit.
     <Section id="install" ruleTop className={styles.section}>
       <Container>
-        <h2 className={styles.heading}>Install crew</h2>
+        <SectionHead number="02" label="Installation" title="Install crew" description="" />
 
         <div className={styles.card}>
           <CodeBlock>
@@ -29,10 +33,9 @@ export function Install() {
         </div>
 
         <p className={styles.footnote}>
-          A single binary. Drops itself in <code>~/.local/bin/crew</code>, plus whatever skills
-          you install go under <code>~/.crew/</code> and into your agents' skills directories.
-          Nothing else. Uninstall with{" "}
-          <code>rm -rf ~/.crew &amp;&amp; rm ~/.local/bin/crew</code>.
+          A single binary. Drops itself in <code>~/.local/bin/crew</code>, plus whatever skills you
+          install go under <code>~/.crew/</code> and into your agents' skills directories. Nothing
+          else. Uninstall with <code>rm -rf ~/.crew &amp;&amp; rm ~/.local/bin/crew</code>.
         </p>
 
         <BuildItYourself prompt={SAAP_FULL_PROMPT} />

@@ -5,18 +5,6 @@
   padding: 40px 0 72px;
 }
 
-/* Simple centered heading — replaces the generic SectionHead on this
-   section specifically, which felt heavy for "here is the command." */
-.heading {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 28px;
-  letter-spacing: -0.02em;
-  text-align: center;
-  margin: 0 0 24px;
-  color: var(--ink);
-}
-
 /* The curl install card is single-column. Wider is better — gives
    the full command room to breathe. */
 .card {
