@@ -28,11 +28,27 @@ import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 // guard rejects non-macOS hosts. Without this override every test in
 // this file would fail on a Linux CI runner.
 const originalPlatform = process.platform;
+// Also clear the notice-suppression env vars so that on a CI runner
+// (where `CI` is set) the post-command update notice still fires —
+// otherwise the tests below would see suppression instead of the
+// notice they're asserting on.
+const savedEnv = {
+  CI: process.env["CI"],
+  CREW_NO_UPDATE_CHECK: process.env["CREW_NO_UPDATE_CHECK"],
+  CREW_AUTOUPDATE_LOG: process.env["CREW_AUTOUPDATE_LOG"],
+};
 beforeAll(() => {
   Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+  delete process.env["CI"];
+  delete process.env["CREW_NO_UPDATE_CHECK"];
+  delete process.env["CREW_AUTOUPDATE_LOG"];
 });
 afterAll(() => {
   Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
+  for (const [k, v] of Object.entries(savedEnv)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
 });
 
 afterEach(() => {
