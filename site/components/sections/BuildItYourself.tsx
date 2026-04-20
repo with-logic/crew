@@ -51,7 +51,7 @@ export function BuildItYourself({ prompt }: Props) {
           PRD
         </a>
         . Build your own from the same spec — in Go, Rust, Swift, or whatever else. The button below
-        copies a ready-to-paste prompt with the full PRD embedded.
+        copies a ready-to-paste prompt with the full PRD.
       </p>
 
       <div className={styles.buttonRow}>
