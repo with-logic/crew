@@ -2,18 +2,25 @@ import { SAAP_FULL_PROMPT } from "../../lib/prd";
 import { Acc, CodeBlock } from "../primitives/CodeBlock";
 import { Container } from "../primitives/Container";
 import { Section } from "../primitives/Section";
-import { SectionHead } from "../primitives/SectionHead";
 import { BuildItYourself } from "./BuildItYourself";
 import styles from "./Install.module.css";
 
 export function Install() {
   return (
     // Anchor target sits on the <Section> element itself. `scroll-margin-top`
-    // on the Section class pushes the scroll stop down past the sticky nav
-    // so "Install crew" isn't hidden behind it when #install is hit.
+    // applied globally to `[id]` in globals.css pushes the scroll stop down
+    // past the sticky nav when #install is hit.
     <Section id="install" ruleTop className={styles.section}>
       <Container>
-        <SectionHead number="02" label="Installation" title="Install crew" description="" />
+        {/* Install-specific header: keeps the `§ 02 Installation` meta label
+            floating on the left like other sections, but centers the title
+            above the install box so it visually anchors it. */}
+        <header className={styles.head}>
+          <div className={styles.num}>
+            § 02&nbsp;&nbsp;<strong>Installation</strong>
+          </div>
+          <h2 className={styles.title}>Install Crew</h2>
+        </header>
 
         <div className={styles.card}>
           <CodeBlock>

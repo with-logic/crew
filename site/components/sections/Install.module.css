@@ -5,6 +5,52 @@
   padding: 40px 0 72px;
 }
 
+/*
+ * Install-section header: relative-positioned so the `§ 02 Installation`
+ * meta label can float to the left without pushing the centered title
+ * off-axis. Everything is center-aligned on the section's own midline.
+ */
+.head {
+  position: relative;
+  text-align: center;
+  margin-bottom: 20px;
+  min-height: 48px;
+}
+
+.num {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--mute);
+}
+
+.num strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 40px;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  margin: 0;
+  color: var(--ink);
+}
+
+/* On narrow viewports, stack the meta above the title instead of
+   floating it — there's no room for a side-positioned label. */
+@media (max-width: 860px) {
+  .num {
+    position: static;
+    display: block;
+    margin-bottom: 12px;
+  }
+}
+
 /* The curl install card is single-column. Wider is better — gives
    the full command room to breathe. */
 .card {
