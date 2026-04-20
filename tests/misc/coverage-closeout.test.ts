@@ -352,7 +352,7 @@ describe("commands/install — up_to_date reporting", () => {
     const c = captureStreams();
     const code = runCli(["install", skill], { home, streams: c.streams });
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("up-to-date");
+    expect(c.stdout()).toContain("already up to date");
   });
 });
 

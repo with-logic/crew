@@ -1,16 +1,18 @@
 /**
  * `crew install <ref> [<ref>...]` (§5.1).
  *
- * Thin command wrapper: reads config, runs the flow, formats the summary
- * for human or JSON output, and picks the right exit code per §9/§18.6.
+ * Thin command wrapper: reads config, resolves any tap/skill-name
+ * collision prompts, runs the install flow, and hands the result to
+ * `./render.ts` for human output.
  */
 
-import { readConfig } from "../config/load.ts";
-import { CrewError } from "../core/errors.ts";
-import type { Config } from "../core/types.ts";
-import { countSkills, detectCollision } from "../install/collision-check.ts";
-import { runInstall } from "../install/flow.ts";
-import type { CommandContext, CommandOutput } from "./types.ts";
+import { readConfig } from "../../config/load.ts";
+import { CrewError } from "../../core/errors.ts";
+import type { Config } from "../../core/types.ts";
+import { countSkills, detectCollision } from "../../install/collision-check.ts";
+import { runInstall } from "../../install/flow.ts";
+import type { CommandContext, CommandOutput } from "../types.ts";
+import { renderInstall } from "./render.ts";
 
 export function installCommand(ctx: CommandContext): CommandOutput {
   if (ctx.positional.length === 0) {
@@ -32,41 +34,27 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   });
 
   // Exit-code rules (§18.6 clarification): exit 1 if any root skill has
-  // zero successful targets; otherwise 0. If nothing attempted (all were
-  // already installed), §15 says exit 2 if the user explicitly asked —
-  // but the clean "already installed" short-circuit case is exit 0 per
-  // §5.4. We follow §5.4 for already-installed and §18.6 for failures.
+  // zero successful targets; otherwise 0. The clean "already installed"
+  // short-circuit case is exit 0 per §5.4.
   const allAlreadyInstalled =
     result.alreadyInstalled.length > 0 && result.summary.records.length === 0;
   let exitCode = 0;
   if (!allAlreadyInstalled) {
     const anyRootFail = result.summary.records.some((r) => !r.anySuccess);
-    if (anyRootFail) {
-      exitCode = 1;
-    }
+    if (anyRootFail) exitCode = 1;
   }
 
-  const human: string[] = [];
-  for (const existing of result.alreadyInstalled) {
-    // Show the user what they already have: ref (if any) and short SHA
-    // (if any). Makes "already installed" actually informative.
-    const version = formatVersion(existing.ref, existing.resolvedSha);
-    const targets = existing.targets.length > 0 ? ` in ${existing.targets.join(", ")}` : "";
-    human.push(`${existing.name}: already installed${version ? ` (${version})` : ""}${targets}`);
-  }
-  for (const rec of result.summary.records) {
-    const parts: string[] = [];
-    for (const t of rec.targets) {
-      if (t.kind === "installed") {
-        parts.push(`${t.target}=installed`);
-      } else if (t.kind === "up_to_date") {
-        parts.push(`${t.target}=up-to-date`);
-      } else {
-        parts.push(`${t.target}=failed(${t.error.code})`);
-      }
-    }
-    human.push(`${rec.name} [${rec.scope}]: ${parts.join(", ")}`);
-  }
+  const human = renderInstall(
+    {
+      records: result.summary.records,
+      alreadyInstalled: result.alreadyInstalled,
+      resolved: result.resolved,
+      dryRun: ctx.flags.dryRun,
+      cwd: ctx.cwd,
+      width: ctx.width,
+    },
+    ctx.style,
+  );
 
   return {
     exitCode,
@@ -93,8 +81,6 @@ function resolveCollisions(ctx: CommandContext, config: Config): string[] {
   const refs: string[] = [];
   for (const raw of ctx.positional) {
     const trimmed = raw.trim();
-    // Only bare names — no slash, no URL-ish characters — can collide.
-    // `<tap>/<skill>`, git URLs, and path refs are unambiguous by grammar.
     if (!isBareName(trimmed)) {
       refs.push(raw);
       continue;
@@ -138,18 +124,4 @@ const BARE_NAME = /^[a-z0-9][a-z0-9-]*$/i;
 
 function isBareName(s: string): boolean {
   return BARE_NAME.test(s);
-}
-
-/**
- * Build a human-readable "version" tag for an already-installed skill:
- * the requested ref plus a short SHA when both exist, or just one of
- * them if that's all we have. Returns "" when neither is set (e.g.
- * pure path sources with no git identity).
- */
-function formatVersion(ref: string | null, sha: string | null): string {
-  const shortSha = sha ? sha.slice(0, 8) : null;
-  if (ref && shortSha && ref !== sha) return `${ref} @ ${shortSha}`;
-  if (shortSha) return shortSha;
-  if (ref) return ref;
-  return "";
 }

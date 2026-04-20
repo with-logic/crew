@@ -15,7 +15,7 @@
 
 import { writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
-import type { Config, Scope, StateFile } from "../core/types.ts";
+import type { Config, ResolvedSkill, Scope, StateFile } from "../core/types.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules.ts";
@@ -39,6 +39,12 @@ export interface InstallFlowResult {
   readonly summary: InstallSummary;
   /** Skills detected as already installed at the same ref / SHA. */
   readonly alreadyInstalled: readonly AlreadyInstalled[];
+  /**
+   * Every skill the resolver considered (including ones that ended up
+   * in `alreadyInstalled`). The CLI layer uses this to look up
+   * descriptions, tap attribution, etc. when rendering human output.
+   */
+  readonly resolved: readonly ResolvedSkill[];
 }
 
 /** Run the install flow end-to-end. */
@@ -73,7 +79,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       requiredBy,
       allResolved: resolvedAll,
     });
-    return { summary, alreadyInstalled };
+    return { summary, alreadyInstalled, resolved: resolvedAll };
   }
 
   const summary = withStateLock(() => {
@@ -100,7 +106,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     return { ...result, newState: promoted };
   }, home);
 
-  return { summary, alreadyInstalled };
+  return { summary, alreadyInstalled, resolved: resolvedAll };
 }
 
 /**
