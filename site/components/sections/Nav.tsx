@@ -13,7 +13,7 @@ export function Nav() {
   return (
     <nav className={styles.nav}>
       <div className={styles.inner}>
-        <Brand />
+        <Brand href="/" />
         <span className={styles.version}>v0.3.1</span>
         <div className={styles.links}>
           {LINKS.map((l) => (
