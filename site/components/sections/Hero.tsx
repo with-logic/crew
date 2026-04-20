@@ -11,11 +11,11 @@ export function Hero() {
           <div>
             <h1 className={styles.title}>
               <code className={styles.brandCode}>crew</code> lets your team{" "}
-              <span className={styles.accent}>easily share</span> agent skills.
+              <span className={styles.accent}>share</span> agent skills.
             </h1>
             <p className={styles.lede}>
-              Easily share skills across your team. One command to install. The same skills on every
-              laptop, in every coding agent. Updated automatically.
+              Easily discover and share skills across your team. One command to install. The same
+              skills on every laptop, in every coding agent. Updated automatically.
             </p>
             <div className={styles.ctaRow}>
               <Button href="#how" variant="ghost">

@@ -3,10 +3,10 @@
   <h1>crew</h1>
 </div>
 
-**Let your team easily share [agent skills](https://agentskills.io/specification).**
+**Let your team share [agent skills](https://agentskills.io/specification).**
 
-Easily share skills across your team. One command to install. The same
-skills on every laptop, in every coding agent. Updated automatically.
+Easily discover and share skills across your team. One command to install. The
+same skills on every laptop, in every coding agent. Updated automatically.
 
 ```
 crew tap add @acme/skills
