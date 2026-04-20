@@ -297,7 +297,7 @@ describe("C-UPD-20: per-tap fetch failure doesn't abort update", () => {
     // Exit 0: broken-tap fetch is a warning, not a hard failure.
     expect(code).toBe(0);
     // The warning is surfaced in human output.
-    expect(c.stdout()).toMatch(/warning.*broken/);
+    expect(c.stdout()).toMatch(/couldn't refresh tap.*broken/);
     // The good tap's per-skill work still happened: alpha was processed
     // (either updated or up-to-date) — we just need to see the per-skill
     // row for it to confirm the update loop ran.

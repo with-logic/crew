@@ -93,8 +93,8 @@ describe("update edge cases", () => {
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
     expect(code).toBe(1);
-    expect(c.stdout()).toContain("FAILED");
-    expect(c.stdout()).toContain("source_unreachable");
+    expect(c.stdout()).toContain("failed");
+    expect(c.stdout()).toContain("source unreachable");
   });
 
   test("skill removed from tap upstream → source_gone", () => {
@@ -114,6 +114,6 @@ describe("update edge cases", () => {
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("source_gone");
+    expect(c.stdout()).toContain("removed upstream");
   });
 });

@@ -147,7 +147,7 @@ describe("tap re-expansion on update (§10.1.1)", () => {
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("source_gone");
+    expect(c.stdout()).toContain("removed upstream");
     expect(existsSync(join(ccRoot, "beta", "SKILL.md"))).toBe(true);
     expect(readState(home).installations.find((e) => e.name === "beta")).toBeDefined();
   });

@@ -116,7 +116,7 @@ describe("update: source_unreachable is a soft warning", () => {
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("warning: couldn't refresh tap");
+    expect(c.stdout()).toContain("couldn't refresh tap");
   });
 });
 
@@ -136,7 +136,7 @@ describe("update: missing skill at new revision", () => {
     const code = runCli(["update"], { home, streams: c.streams });
     // C-UPD-12: exit 0 (soft outcome) — the local install is preserved.
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("source_gone");
+    expect(c.stdout()).toContain("removed upstream");
     // C-UPD-13: the state entry is preserved untouched.
     const { readState } =
       require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
@@ -158,7 +158,7 @@ describe("update: reconstructSource for path entry", () => {
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("up-to-date");
+    expect(c.stdout()).toContain("up to date");
   });
 });
 

@@ -17,7 +17,7 @@ import { tapCommand } from "../commands/tap/index.ts";
 import { targetsCommand } from "../commands/targets.ts";
 import type { CommandContext, CommandOutput } from "../commands/types.ts";
 import { uninstallCommand } from "../commands/uninstall/index.ts";
-import { updateCommand } from "../commands/update.ts";
+import { updateCommand } from "../commands/update/index.ts";
 import { CrewError } from "../core/errors.ts";
 
 export type CommandHandler = (ctx: CommandContext) => CommandOutput;

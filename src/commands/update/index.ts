@@ -32,18 +32,19 @@
  *   - 1 if any skill had a hard failure (network, fetch, validation).
  */
 
-import { readConfig } from "../config/load.ts";
-import { CrewError } from "../core/errors.ts";
-import { crewHome } from "../core/paths.ts";
-import type { Config, StateEntry, StateFile, TapConfig } from "../core/types.ts";
-import { installNewTapChild } from "../install/install-new-tap-child.ts";
-import { reexpandTaps, type TapReexpandRow } from "../install/tap-reexpand.ts";
-import { type UpdateRow, updateOneEntry } from "../install/update-one.ts";
-import { garbageCollectStore } from "../maintenance/gc.ts";
-import { readState, upsertEntry, writeState } from "../state/load.ts";
-import { withStateLock } from "../state/lock.ts";
-import { refreshTaps, type TapRefreshRow } from "./tap/refresh.ts";
-import type { CommandContext, CommandOutput } from "./types.ts";
+import { readConfig } from "../../config/load.ts";
+import { CrewError } from "../../core/errors.ts";
+import { crewHome } from "../../core/paths.ts";
+import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
+import { installNewTapChild } from "../../install/install-new-tap-child.ts";
+import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand.ts";
+import { type UpdateRow, updateOneEntry } from "../../install/update-one.ts";
+import { garbageCollectStore } from "../../maintenance/gc.ts";
+import { readState, upsertEntry, writeState } from "../../state/load.ts";
+import { withStateLock } from "../../state/lock.ts";
+import { refreshTaps, type TapRefreshRow } from "../tap/refresh.ts";
+import type { CommandContext, CommandOutput } from "../types.ts";
+import { renderUpdate } from "./render.ts";
 
 export function updateCommand(ctx: CommandContext): CommandOutput {
   const config = readConfig(ctx.home);
@@ -113,24 +114,7 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   // Post-state garbage collection.
   garbageCollectStore(newState, home);
 
-  const human = rows.map(formatRow);
-  for (const br of tapReexpandRows) {
-    if (br.kind === "added")
-      human.unshift(`${br.name} [${br.scope}]: added (tap \`${br.tap}\` re-expanded)`);
-    else if (br.kind === "tap_error")
-      human.unshift(`tap \`${br.tap}\` error (${br.error?.code ?? "unknown"})`);
-    // `source_gone` rows are reflected in the per-entry row loop.
-  }
-  // Tap fetch warnings go at the very top so users see them before the
-  // per-skill rows. A refreshed tap is a silent success — we only
-  // surface failures to keep the normal-case output tight.
-  for (const tr of tapRows) {
-    if (tr.kind === "failed") {
-      human.unshift(
-        `warning: couldn't refresh tap \`${tr.name}\` (${tr.error?.code ?? "unknown"}) — using the last-fetched clone`,
-      );
-    }
-  }
+  const human = renderUpdate({ rows, tapReexpandRows, tapRows }, ctx.style);
 
   return {
     exitCode: hardFailure ? 1 : 0,
@@ -178,23 +162,6 @@ function withTransitive(
   const parents = transitiveSources.get(row.name);
   if (!parents || parents.length === 0) return row;
   return { ...row, transitively_required_by: parents };
-}
-
-function formatRow(r: UpdateRow): string {
-  const suffix =
-    r.transitively_required_by && r.transitively_required_by.length > 0
-      ? ` (required by ${r.transitively_required_by.join(", ")})`
-      : "";
-  if (r.outcome.kind === "up_to_date") return `${r.name} [${r.scope}]: up-to-date${suffix}`;
-  if (r.outcome.kind === "updated")
-    return `${r.name} [${r.scope}]: updated → ${r.outcome.new_sha.slice(0, 8)}${suffix}`;
-  if (r.outcome.kind === "skipped")
-    return `${r.name} [${r.scope}]: skipped (${r.outcome.reason})${suffix}`;
-  if (r.outcome.kind === "source_gone")
-    return `${r.name} [${r.scope}]: source_gone (local install preserved)${suffix}`;
-  if (r.outcome.kind === "missing_project_root")
-    return `${r.name} [${r.scope}]: skipped — project directory \`${r.outcome.root}\` no longer exists${suffix}`;
-  return `${r.name} [${r.scope}]: FAILED ${r.outcome.error.code}${suffix}`;
 }
 
 /** Expanded update set + per-entry "who pulled you in" map. */

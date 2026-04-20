@@ -86,7 +86,7 @@ describe("update: tag moved without --force", () => {
     // move (it does on recent git), we'll either see a skip or updated.
     // Either outcome confirms the code path.
     expect(code === 0 || code === 1).toBe(true);
-    expect(c.stdout()).toMatch(/skipped|updated|FAILED|up-to-date/);
+    expect(c.stdout()).toMatch(/skipped|updated|failed|up to date/);
   });
 });
 
@@ -98,7 +98,7 @@ describe("update: tentative stage for path source unchanged", () => {
     runCli(["install", skill], { home, streams: captureStreams().streams });
     const c = captureStreams();
     runCli(["update"], { home, streams: c.streams });
-    expect(c.stdout()).toContain("up-to-date");
+    expect(c.stdout()).toContain("up to date");
   });
 
   test("path source where content changed → updated", () => {

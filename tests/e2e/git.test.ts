@@ -128,7 +128,7 @@ describe("git sources via file:// URL", () => {
     const capture = captureStreams();
     const code = runCli(["update"], { home, streams: capture.streams });
     expect(code).toBe(0);
-    expect(capture.stdout()).toContain("up-to-date");
+    expect(capture.stdout()).toContain("up to date");
   });
 
   test("crew update: picks up new SHA", () => {
