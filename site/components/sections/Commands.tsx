@@ -82,6 +82,16 @@ const GROUPS: readonly Group[] = [
         signature: <>crew tap list</>,
         description: "Print each tap's name, URL, and last-fetched timestamp.",
       },
+      {
+        name: "tap-update",
+        signature: <>crew tap update [&lt;name&gt;…]</>,
+        description: (
+          <>
+            Fetch + fast-forward every git tap (or the named subset). Doesn't touch installed skills
+            — use <code>crew update</code> for that.
+          </>
+        ),
+      },
     ],
   },
   {
@@ -118,6 +128,11 @@ const GROUPS: readonly Group[] = [
         ),
       },
       {
+        name: "autoupdate-disable",
+        signature: <>crew autoupdate disable</>,
+        description: "Unload and remove the background update agent.",
+      },
+      {
         name: "autoupdate-status",
         signature: <>crew autoupdate status</>,
         description: "Whether active, last run, next run, configured interval.",
@@ -147,6 +162,20 @@ const GROUPS: readonly Group[] = [
         name: "cache-clean",
         signature: <>crew cache clean</>,
         description: "Remove ephemeral caches and unreferenced store entries.",
+      },
+      {
+        name: "self-update",
+        signature: (
+          <>
+            crew self-update <span className={styles.flag}>[--check]</span>
+          </>
+        ),
+        description: (
+          <>
+            Upgrade the <code>crew</code> binary itself to the latest release.{" "}
+            <span className={styles.flag}>--check</span> reports without downloading.
+          </>
+        ),
       },
     ],
   },
