@@ -57,7 +57,9 @@ export function BuildItYourself({ prompt }: Props) {
       <div className={styles.buttonRow}>
         <button type="button" className={styles.button} onClick={onCopy}>
           <ClipboardGlyph />
-          {copied ? "Copied" : `Copy the whole PRD to your clipboard (${kb} KB)`}
+          {copied
+            ? "Copied — now feed your agent"
+            : `Copy the whole PRD to your clipboard (${kb} KB)`}
         </button>
       </div>
     </aside>
