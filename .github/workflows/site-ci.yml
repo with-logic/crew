@@ -31,9 +31,14 @@ jobs:
           bun-version: latest
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      # Build first: Next regenerates `next-env.d.ts` (which declares
+      # type signatures for static asset imports like `.png`). With
+      # that file in place, typecheck + lint work downstream. Locally
+      # you never notice because prior dev/build runs left the file
+      # on disk; on a fresh CI checkout it isn't there.
+      - name: Build
+        run: bun run build
       - name: Typecheck
         run: bun run typecheck
       - name: Lint
         run: bun run lint
-      - name: Build
-        run: bun run build
