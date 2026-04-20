@@ -346,7 +346,7 @@ taps:
   - name: my-local-skills
     kind: path
     registered: false
-    path: /Users/steve/code/my-skills
+    path: /Users/alice/code/my-skills
 
 # Agents the user has force-disabled. Any agent not listed here is auto-detected.
 disabled_agents: []
