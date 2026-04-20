@@ -16,7 +16,8 @@ export function Hero() {
               <span className={styles.os}>MIT</span>
             </p>
             <h1 className={styles.title}>
-              Crew is a package manager <span className={styles.accent}>for agent skills</span>.
+              <code className={styles.brandCode}>crew</code> is a package manager{" "}
+              <span className={styles.accent}>for agent skills</span>.
             </h1>
             <p className={styles.lede}>
               Find great skills. Install them with one command into every coding agent on your

@@ -1,5 +1,5 @@
 .hero {
-  padding: 56px 0 88px;
+  padding: 40px 0 48px;
   position: relative;
 }
 
@@ -62,6 +62,28 @@
   color: var(--accent-ink);
 }
 
+/*
+ * Stylized "crew" in the headline — reads as an inline code span the
+ * way Markdown renders `crew` on GitHub. Keeps the headline font size
+ * so it doesn't feel like a shrunk-down code pill; the subtle paper
+ * background + border + monospace face are the ligature between
+ * "this is the brand name" and "this is also the command you type."
+ */
+.brandCode {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.82em;
+  background: var(--paper);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 0.02em 0.18em 0.08em;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  /* Slight optical lift so the border doesn't drop the baseline. */
+  vertical-align: 2px;
+  margin-right: 0.05em;
+}
+
 .lede {
   font-size: 20px;
   color: var(--ink-2);
@@ -85,7 +107,7 @@
   color: var(--mute);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  margin-top: 36px;
+  margin-top: 28px;
 }
 
 .meta span {
