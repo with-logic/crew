@@ -12,3 +12,4 @@
 coverage = true
 coverageThreshold = 1.0
 coverageReporter = ["text", "lcov"]
+preload = ["./tests/helpers/preload.ts"]

@@ -38,6 +38,10 @@ export function applyDuplicateRules(
   state: StateFile,
   scope: Scope,
   cwd: string,
+  options: { readonly activeTargets: readonly string[]; readonly force: boolean } = {
+    activeTargets: [],
+    force: false,
+  },
 ): DuplicateAnalysis {
   const toInstall: ResolvedSkill[] = [];
   const alreadyInstalled: AlreadyInstalled[] = [];
@@ -69,9 +73,18 @@ export function applyDuplicateRules(
       );
     }
 
+    // The set of adapters active for this install — if it includes
+    // any adapter the existing entry doesn't, the install still has
+    // work to do (attach ownership to those adapters), even if the
+    // bytes are identical. Similarly with --force.
+    const newAdapters = options.activeTargets.filter((a) => !existing.targets.includes(a));
+    const adaptersChanged = newAdapters.length > 0;
+
     if (
       existing.resolved_sha === skill.resolvedSha &&
-      existing.content_hash === skill.contentHash
+      existing.content_hash === skill.contentHash &&
+      !adaptersChanged &&
+      !options.force
     ) {
       alreadyInstalled.push({
         name: skill.name,
@@ -85,7 +98,8 @@ export function applyDuplicateRules(
       }
       continue;
     }
-    // Same source, different SHA → treat as update.
+    // Same source, different SHA, or a new active adapter, or --force
+    // → install (possibly as no-op byte-copy but with marker rewrite).
     toInstall.push(skill);
   }
   return { toInstall, alreadyInstalled, promoteToExplicit };

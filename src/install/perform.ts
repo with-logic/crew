@@ -4,8 +4,9 @@
  * Given a resolved, topologically-ordered install set and the active
  * targets, this function:
  *
- *   - runs the per-target install algorithm (§7.3);
- *   - records per-target outcomes;
+ *   - groups adapters by resolved install path (path sharing, §7.2);
+ *   - runs the per-dest install algorithm (§7.3) once per group;
+ *   - records per-target outcomes for every adapter (not per-dest);
  *   - updates `state.json` via upsert under the state lock held by the
  *     caller;
  *   - maintains `explicit` and `required_by` on every entry per §11.1
@@ -13,8 +14,9 @@
  *     touched by this install);
  *   - returns a structured summary the CLI layer can format.
  *
- * Failures are per-pair: a failure in one (skill, target) does not stop
- * the rest. The summary decides the exit code.
+ * Failures are per-group: a failure in one (skill, dest) group fails
+ * every adapter in that group but doesn't stop other groups or other
+ * skills. The summary decides the exit code.
  */
 
 import type { CrewError } from "../core/errors.ts";
@@ -22,7 +24,7 @@ import { crewHome } from "../core/paths.ts";
 import type { ResolvedSkill, Scope, StateEntry, StateFile } from "../core/types.ts";
 import type { RequiredByMap } from "../install/resolve.ts";
 import { upsertEntry } from "../state/load.ts";
-import type { TargetAdapter } from "../targets/adapter.ts";
+import { baseFor, type TargetAdapter } from "../targets/adapter.ts";
 import { type InstallOutcome, installSkillIntoTarget } from "../targets/install.ts";
 import { nowIso } from "../util/time.ts";
 
@@ -77,15 +79,18 @@ export function performInstall(
   for (const skill of resolved) {
     const perTarget: PerTargetResult[] = [];
     const successfulTargets: string[] = [];
-    for (const adapter of targets) {
+    const groups = groupAdaptersByDest(targets, skill.name, scope, cwd);
+    for (const group of groups) {
       try {
         if (options.dryRun) {
-          perTarget.push({ kind: "installed", target: adapter.name });
-          successfulTargets.push(adapter.name);
+          for (const a of group.adapters) {
+            perTarget.push({ kind: "installed", target: a.name });
+            successfulTargets.push(a.name);
+          }
           continue;
         }
         const outcome: InstallOutcome = installSkillIntoTarget({
-          adapter,
+          adapters: group.adapters,
           scope,
           cwd,
           storePath: skill.storePath,
@@ -97,18 +102,22 @@ export function performInstall(
           contentHash: skill.contentHash,
           force: options.force,
         });
-        perTarget.push({
-          kind: outcome.kind === "installed" ? "installed" : "up_to_date",
-          target: adapter.name,
-        });
-        successfulTargets.push(adapter.name);
+        for (const a of group.adapters) {
+          perTarget.push({
+            kind: outcome.kind === "installed" ? "installed" : "up_to_date",
+            target: a.name,
+          });
+          successfulTargets.push(a.name);
+        }
       } catch (err) {
         const ce = err as CrewError;
-        perTarget.push({
-          kind: "failed",
-          target: adapter.name,
-          error: { code: ce.code ?? "usage_error", message: ce.message },
-        });
+        for (const a of group.adapters) {
+          perTarget.push({
+            kind: "failed",
+            target: a.name,
+            error: { code: ce.code ?? "usage_error", message: ce.message },
+          });
+        }
       }
     }
     const anySuccess = successfulTargets.length > 0;
@@ -130,6 +139,34 @@ export function performInstall(
   }
 
   return { records, newState: state };
+}
+
+/**
+ * Group adapters by the filesystem path they'd install into for this
+ * skill+scope. Adapters that don't support the scope (empty base path)
+ * are skipped — they're a silent per-target no-op.
+ */
+interface AdapterGroup {
+  readonly dest: string;
+  readonly adapters: readonly TargetAdapter[];
+}
+
+function groupAdaptersByDest(
+  adapters: readonly TargetAdapter[],
+  skillName: string,
+  scope: Scope,
+  cwd: string,
+): AdapterGroup[] {
+  const groups = new Map<string, TargetAdapter[]>();
+  for (const a of adapters) {
+    const base = baseFor(a, scope, cwd);
+    if (base === "") continue;
+    const dest = `${base}/${skillName}`;
+    const existing = groups.get(dest);
+    if (existing) existing.push(a);
+    else groups.set(dest, [a]);
+  }
+  return [...groups.entries()].map(([dest, as]) => ({ dest, adapters: as }));
 }
 
 /**
@@ -161,6 +198,12 @@ function buildStateEntry(
   // would be individual on its own.
   const tracksTap = skill.tracksTap || (existing?.tracks_tap ?? false);
   const required_by = [...(options.requiredBy.get(skill.name) ?? [])].sort();
+  // Merge preserves adapters from prior installs that aren't part of
+  // this operation (e.g. adapter X installed the skill last run; this
+  // run adds adapter Y to the same dest — state should list both).
+  const mergedTargets = [
+    ...new Set<string>([...(existing?.targets ?? []), ...successfulTargets]),
+  ].sort();
   return {
     name: skill.name,
     source: { tap: skill.tap.name, path: skill.tapRelativePath },
@@ -169,7 +212,7 @@ function buildStateEntry(
     content_hash: skill.contentHash,
     scope,
     installed_at: nowIso(),
-    targets: successfulTargets,
+    targets: mergedTargets,
     pinned: skill.pinned,
     explicit,
     ...(tracksTap ? { tracks_tap: true } : {}),

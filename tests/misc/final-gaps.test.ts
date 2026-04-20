@@ -195,6 +195,7 @@ describe("uninstall edges via direct function call", () => {
         JSON.stringify({
           schema_version: 1,
           name: n,
+          adapters: ["claude-code"],
           source: { type: "path", path: "/x" },
           ref: null,
           resolved_sha: null,
@@ -207,13 +208,13 @@ describe("uninstall edges via direct function call", () => {
       require("node:fs").writeFileSync(join(base, n, "SKILL.md"), "x");
     }
     const res = uninstallSkillFromTarget({
-      adapter: claudeCodeAdapter,
+      adapters: [claudeCodeAdapter],
       scope: "project",
       cwd: proj,
       skillName: "demo",
       force: false,
     });
-    expect(res).toBe("removed");
+    expect(res.kind).toBe("removed");
     expect(existsSync(join(base, "demo"))).toBe(false);
     expect(existsSync(join(base, "sibling"))).toBe(true);
   });

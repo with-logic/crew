@@ -6,19 +6,18 @@
  * the detection signal when no user dir exists.
  */
 
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { isDirectory } from "../util/fs.ts";
 import type { TargetAdapter } from "./adapter.ts";
-import { isOnPath } from "./path.ts";
+import { isOnPath, userHome } from "./path.ts";
 
 export const geminiCliAdapter: TargetAdapter = {
   name: "gemini-cli",
   detect(): boolean {
-    return isDirectory(join(homedir(), ".gemini")) || isOnPath("gemini");
+    return isDirectory(join(userHome(), ".gemini")) || isOnPath("gemini");
   },
   userPath(): string {
-    return join(homedir(), ".gemini", "skills");
+    return join(userHome(), ".gemini", "skills");
   },
   projectPath(cwd: string): string {
     return join(cwd, ".gemini", "skills");

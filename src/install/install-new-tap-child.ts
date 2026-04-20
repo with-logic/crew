@@ -8,6 +8,7 @@
 
 import type { Scope, StateEntry, TapConfig } from "../core/types.ts";
 import { stageIntoStore } from "../sources/store.ts";
+import { baseFor, type TargetAdapter } from "../targets/adapter.ts";
 import { installSkillIntoTarget } from "../targets/install.ts";
 import { adapterByName } from "../targets/registry.ts";
 import { nowIso } from "../util/time.ts";
@@ -30,12 +31,23 @@ export function installNewTapChild(
   const childCwd = args.scope === "project" ? (args.projectRoot ?? fallbackCwd) : fallbackCwd;
   const staged = stageIntoStore(args.skillDir, args.skillName, args.resolvedSha, home);
   const successfulTargets: string[] = [];
+  // Group adapters by resolved install path (path sharing, §7.2) so
+  // shared-path targets install once but both get marked successful.
+  const groups = new Map<string, TargetAdapter[]>();
   for (const targetName of args.targets) {
     const adapter = adapterByName(targetName);
     if (!adapter) continue;
+    const base = baseFor(adapter, args.scope, childCwd);
+    if (base === "") continue;
+    const dest = `${base}/${args.skillName}`;
+    const existing = groups.get(dest);
+    if (existing) existing.push(adapter);
+    else groups.set(dest, [adapter]);
+  }
+  for (const group of groups.values()) {
     try {
       installSkillIntoTarget({
-        adapter,
+        adapters: group,
         scope: args.scope,
         cwd: childCwd,
         storePath: staged.storePath,
@@ -47,9 +59,9 @@ export function installNewTapChild(
         contentHash: staged.contentHash,
         force,
       });
-      successfulTargets.push(targetName);
+      for (const a of group) successfulTargets.push(a.name);
     } catch {
-      // Per-target failure is non-fatal.
+      // Per-group failure is non-fatal.
     }
   }
   if (successfulTargets.length === 0) return null;

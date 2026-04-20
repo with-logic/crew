@@ -88,6 +88,14 @@ export interface LoadedSkill {
 export interface Marker {
   readonly schema_version: 1;
   readonly name: string;
+  /**
+   * Target adapter names that own this install (§7.2 path sharing).
+   * Non-empty; alphabetically sorted. When N adapters resolve to the
+   * same `dest`, all N names are recorded here so `crew uninstall
+   * --target X` can remove X's ownership without deleting bytes that
+   * other adapters still need.
+   */
+  readonly adapters: readonly string[];
   /** Tap that owned this skill at install time. May not exist in current config. */
   readonly tap_name: string;
   /** `git` (URL-backed clone) or `path` (local directory). */

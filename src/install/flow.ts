@@ -62,13 +62,17 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     config: configWithAutoTaps,
   } = resolveInstallSet(options.refs, config, { cwd, home });
 
-  // Apply §5.4 — duplicate installs.
+  // Apply §5.4 — duplicate installs. An install with a new active
+  // adapter that didn't previously own the entry still has real work
+  // to do (attach ownership), so the duplicate short-circuit must
+  // consider the active target set.
   const currentState = readState(home);
   const { toInstall, alreadyInstalled, promoteToExplicit } = applyDuplicateRules(
     resolvedAll,
     currentState,
     options.scope,
     cwd,
+    { activeTargets: targets.map((t) => t.name), force: options.force },
   );
 
   if (options.dryRun) {

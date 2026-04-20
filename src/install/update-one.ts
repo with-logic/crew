@@ -18,7 +18,7 @@ import { loadSkill } from "../skill/load.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
 import { stageIntoStore } from "../sources/store.ts";
 import { upsertEntry } from "../state/load.ts";
-import { cwdForEntry } from "../targets/adapter.ts";
+import { baseFor, cwdForEntry, type TargetAdapter } from "../targets/adapter.ts";
 import { installSkillIntoTarget } from "../targets/install.ts";
 import { adapterByName } from "../targets/registry.ts";
 import { nowIso } from "../util/time.ts";
@@ -153,12 +153,23 @@ function updateOne(
   const loaded = loadSkill(skillDir);
   const staged = stageIntoStore(loaded.path, entry.name, newSha, home);
   const perTarget: PerTargetUpdate[] = [];
+  // Group by resolved install path (§7.2 path sharing) so shared-path
+  // targets install once but every adapter reports its own outcome.
+  const groups = new Map<string, TargetAdapter[]>();
   for (const targetName of entry.targets) {
     const adapter = adapterByName(targetName);
     if (!adapter) continue;
+    const base = baseFor(adapter, entry.scope, entryCwd);
+    if (base === "") continue;
+    const dest = `${base}/${entry.name}`;
+    const existing = groups.get(dest);
+    if (existing) existing.push(adapter);
+    else groups.set(dest, [adapter]);
+  }
+  for (const group of groups.values()) {
     try {
       const res = installSkillIntoTarget({
-        adapter,
+        adapters: group,
         scope: entry.scope,
         cwd: entryCwd,
         storePath: staged.storePath,
@@ -170,13 +181,17 @@ function updateOne(
         contentHash: staged.contentHash,
         force,
       });
-      perTarget.push({
-        target: targetName,
-        kind: res.kind === "installed" ? "installed" : "up_to_date",
-      });
+      for (const a of group) {
+        perTarget.push({
+          target: a.name,
+          kind: res.kind === "installed" ? "installed" : "up_to_date",
+        });
+      }
     } catch (err) {
       const ce = err as CrewError;
-      perTarget.push({ target: targetName, kind: "skipped", reason: ce.code });
+      for (const a of group) {
+        perTarget.push({ target: a.name, kind: "skipped", reason: ce.code });
+      }
     }
   }
   return { kind: "updated", new_sha: newSha, per_target: perTarget };

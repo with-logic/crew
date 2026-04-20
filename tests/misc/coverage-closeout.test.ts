@@ -378,7 +378,7 @@ describe("targets/install — same-SHA early exit", () => {
     const storeEntry = require("node:fs").readdirSync(storeDir)[0]!;
     const storePath = join(storeDir, storeEntry);
     const result = installSkillIntoTarget({
-      adapter: claudeCodeAdapter,
+      adapters: [claudeCodeAdapter],
       scope: "user",
       cwd: process.cwd(),
       storePath,
@@ -654,13 +654,13 @@ describe("targets/install — uninstall tolerates inconsistent marker with --for
     require("node:fs").writeFileSync(join(dir, "SKILL.md"), "x");
     // With --force, the inconsistent_marker check is bypassed and we remove.
     const res = uninstallSkillFromTarget({
-      adapter: claudeCodeAdapter,
+      adapters: [claudeCodeAdapter],
       scope: "project",
       cwd: projCwd,
       skillName: "demo",
       force: true,
     });
-    expect(res).toBe("removed");
+    expect(res.kind).toBe("removed");
   });
 });
 

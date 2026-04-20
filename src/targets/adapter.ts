@@ -26,13 +26,26 @@ export interface TargetAdapter {
   readonly name: string;
   /** True if this target is installed on the host. */
   detect(): boolean;
-  /** Absolute user-scope base directory for skills. */
+  /**
+   * Absolute user-scope base directory for skills. Empty string signals
+   * that this adapter does not support user scope — the install engine
+   * treats it as not-applicable for that scope.
+   */
   userPath(): string;
-  /** Absolute project-scope base directory for skills. */
+  /**
+   * Absolute project-scope base directory for skills. Empty string
+   * signals that this adapter does not support project scope (e.g.
+   * nanobot's workspace-only model) — the install engine treats it
+   * as not-applicable for that scope.
+   */
   projectPath(cwd: string): string;
 }
 
-/** Resolve base dir given a scope. */
+/**
+ * Resolve base dir given a scope, or empty string if the adapter
+ * doesn't support the scope. Callers should skip adapters that return
+ * empty for the requested scope.
+ */
 export function baseFor(adapter: TargetAdapter, scope: Scope, cwd: string): string {
   return scope === "user" ? adapter.userPath() : adapter.projectPath(cwd);
 }

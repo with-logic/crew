@@ -56,12 +56,12 @@ function renderList(rows: readonly TargetRow[], style: Styler): string[] {
   ]);
   for (const line of columns(cells, 2)) lines.push(line);
   lines.push("");
-  const anyMissing = rows.some((r) => !(r.detected || r.forced));
-  if (anyMissing) {
-    lines.push(style.dim("Run `crew targets enable <name>` to force one on anyway."));
-  } else {
-    lines.push(style.dim("Run `crew targets disable <name>` to skip one, or re-enable later."));
-  }
+  // With 17+ adapters registered, at least one is always "not found"
+  // on a normal machine. A single hint covers both cases — enable to
+  // force one on, disable to skip.
+  lines.push(
+    style.dim("Run `crew targets enable <name>` or `crew targets disable <name>` to adjust."),
+  );
   return lines;
 }
 

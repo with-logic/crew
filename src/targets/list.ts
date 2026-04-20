@@ -12,14 +12,19 @@ import { isDirectory, listDir } from "../util/fs.ts";
 import { tryReadJson } from "../util/json.ts";
 import { baseFor, type InstalledSkillRecord, type TargetAdapter } from "./adapter.ts";
 
-/** List every crew-installed skill for one adapter at one scope. */
+/**
+ * List every crew-installed skill for one adapter at one scope. The
+ * result includes only markers whose `adapters` list names this
+ * adapter, so path-shared installs show up for every owner but a
+ * marker owned solely by adapter X won't appear when walking adapter Y.
+ */
 export function listInstalledForTarget(
   adapter: TargetAdapter,
   scope: Scope,
   cwd: string,
 ): InstalledSkillRecord[] {
   const base = baseFor(adapter, scope, cwd);
-  if (!isDirectory(base)) {
+  if (base === "" || !isDirectory(base)) {
     return [];
   }
   const records: InstalledSkillRecord[] = [];
@@ -30,6 +35,9 @@ export function listInstalledForTarget(
     }
     const marker = tryReadJson<Marker>(join(installDir, ".crew.json"));
     if (!marker) {
+      continue;
+    }
+    if (!marker.adapters?.includes(adapter.name)) {
       continue;
     }
     records.push({ adapter: adapter.name, scope, installDir, marker });

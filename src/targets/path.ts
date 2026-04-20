@@ -3,7 +3,19 @@
  */
 
 import { existsSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
+
+/**
+ * User's home directory, with `$HOME` taking precedence over Node's
+ * `os.homedir()`. Node caches `homedir()` to a uid lookup that can't
+ * be overridden by env changes at runtime, which breaks tests that
+ * set `process.env.HOME` to a tmp dir to isolate adapter detection.
+ * We prefer `$HOME` so test env is honored.
+ */
+export function userHome(): string {
+  return process.env["HOME"] ?? homedir();
+}
 
 /**
  * Is `binary` on the user's `PATH`? Scanned manually because `Bun.which`

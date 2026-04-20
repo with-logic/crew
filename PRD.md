@@ -379,36 +379,71 @@ Every adapter must provide:
 
 ### 7.2 Targets in v1
 
-Three adapters ship in v1:
+Every adapter listed at [agentskills.io/clients](https://agentskills.io/clients) that (a) is installable on macOS as a local app or CLI and (b) reads skills from a filesystem location ships as a crew adapter. The full set:
 
-- `claude-code`
-- `codex`
-- `gemini-cli`
+| Adapter | User-scope skills dir | Project-scope skills dir | Detection |
+|---|---|---|---|
+| `amp` | `~/.config/amp/skills/` | `<project>/.agents/skills/` | `amp` on PATH or `~/.config/amp/` exists |
+| `autohand` | `~/.autohand/skills/` | `<project>/.autohand/skills/` | `autohand` on PATH or `~/.autohand/` exists |
+| `claude-code` | `~/.claude/skills/` | `<project>/.claude/skills/` | `claude` on PATH or `~/.claude/` exists |
+| `codex` | `~/.agents/skills/` | `<project>/.agents/skills/` | `codex` on PATH or `~/.codex/` exists |
+| `command-code` | `~/.commandcode/skills/` | `<project>/.commandcode/skills/` | `command-code` or `cmd` on PATH or `~/.commandcode/` exists |
+| `cursor` | `~/.cursor/skills/` | `<project>/.cursor/skills/` | `cursor-agent` on PATH or `~/.cursor/` exists or `/Applications/Cursor.app` exists |
+| `factory` | `~/.factory/skills/` | `<project>/.factory/skills/` | `droid` on PATH or `~/.factory/` exists |
+| `gemini-cli` | `~/.gemini/skills/` | `<project>/.gemini/skills/` | `gemini` on PATH or `~/.gemini/` exists |
+| `github-copilot` | `~/.copilot/skills/` | `<project>/.github/skills/` | `copilot` on PATH or `~/.copilot/` exists |
+| `goose` | `~/.config/goose/skills/` | `<project>/.goose/skills/` | `goose` on PATH or `~/.config/goose/` exists |
+| `junie` | `~/.junie/skills/` | `<project>/.junie/skills/` | `~/.junie/` exists (JetBrains IDE plugin, no PATH bin) |
+| `kiro` | `~/.kiro/skills/` | `<project>/.kiro/skills/` | `kiro` on PATH or `~/.kiro/` exists |
+| `mistral-vibe` | `~/.vibe/skills/` | `<project>/.vibe/skills/` | `vibe` on PATH or `~/.vibe/` exists |
+| `nanobot` | `~/.nanobot/workspace/skills/` | — (project scope not supported) | `nanobot` on PATH or `~/.nanobot/` exists |
+| `opencode` | `~/.config/opencode/skills/` | `<project>/.opencode/skills/` | `opencode` on PATH or `~/.config/opencode/` exists |
+| `pi` | `~/.pi/agent/skills/` | `<project>/.pi/skills/` | `pi` on PATH or `~/.pi/` exists |
+| `roo-code` | `~/.roo/skills/` | `<project>/.roo/skills/` | `~/.roo/` exists (VS Code extension, no PATH bin) |
 
-**Detection.** An adapter is considered detected if either the tool's user-scope base directory exists (as defined by the tool's own documentation) or the tool's CLI binary is found on `PATH`. Exact base-directory paths must be taken from each tool's current documented conventions at implementation time; do not hard-code paths without checking.
+Clients that exist on [agentskills.io/clients](https://agentskills.io/clients) but are intentionally excluded from v1:
+
+- **Cloud-only products** (no local filesystem to install into): Claude (claude.ai web), Mux, Qodo, OpenHands, Letta, Ona, Databricks Genie Code, Snowflake Cortex Code, Agentman, Google AI Edge Gallery, Spring AI, TRAE, Workshop (cloud).
+- **Platform-specific**: Firebender (Android IDE).
+- **Reused-path clients**: Piebald reads `~/.claude/skills/`, so the `claude-code` adapter already covers it. VT Code reads only `~/.agents/skills/`, so the `codex` adapter (same path) already covers it.
+- **Re-fanout tools that would create a write-loop**: Laravel Boost installs INTO other targets' skill dirs; adding it as a crew target would mean crew writes into the Boost output dir and Boost then fans it out again.
+- **Docs-unverified at implementation time**: Emdash (docs JS-rendered, paths unconfirmed).
+
+Adding a new adapter later requires updating this table, adding a file under `src/targets/`, registering it in `src/targets/registry.ts`, and adding tests.
+
+**Detection.** Each adapter uses a best-effort signal: the tool's CLI binary on `PATH`, or the tool's user-scope configuration directory (`~/.<tool>/` or `~/.config/<tool>/`). Either signal makes the adapter "detected." A user may force-enable or force-disable any adapter through `forced_targets` / `disabled_targets` in `config.yaml`.
 
 **Install path shape.** Each target has a base directory for skills (user scope and project scope). A skill named `python-testing` is installed by writing its files under `<base>/python-testing/`. The directory name equals the skill's `name` (spec-guaranteed to match lowercase alphanumerics and hyphens).
 
+**Path sharing.** Several adapters resolve to the same filesystem path. Most notably `~/.agents/skills/` is a cross-tool convention read by Codex, Gemini CLI, OpenCode, VT Code, and others; crew writes bytes there once and reports the install to the user as "installed for codex, gemini-cli" (the adapter names) even though only one physical copy exists. The install algorithm (§7.3) dedupes writes by resolved path; the marker (§7.5) records which adapters own the install.
+
+If a user runs `crew uninstall --target <name>` against an adapter that shares its path with another active adapter, only the adapter name is removed from the marker and state — the bytes stay until the last adapter leaves.
+
+A project-scope install for an adapter whose table entry is `—` (currently only `nanobot`) is a silent per-target no-op.
+
 ### 7.3 Install algorithm
 
-Given a staged skill directory in the store, a skill name, a target adapter, and a scope, the adapter installs as follows:
+Install takes a staged skill directory in the store, a skill name, a scope, and the full set of active adapters for the operation. Because two or more adapters may resolve to the same filesystem path (§7.2, path sharing), the algorithm is path-centric: it runs once per **distinct** `dest`, and the marker it writes records every adapter that owns that path.
 
-1. Let `base` = `user_path()` if scope is user, else `project_path(cwd)`.
-2. Ensure `base` exists (create with `0755` if missing).
-3. Let `dest` = `base/<skill-name>/`.
-4. **Pre-flight safety checks on `dest`:**
-   a. If `dest` does not exist, proceed.
-   b. If `dest` exists and contains a `.crew.json` marker (§7.5) whose `name` matches the skill being installed: compute the on-disk content hash of `dest` excluding `.crew.json`, per §12.1. If it matches the marker's `content_hash`, proceed. If it differs, abort with error `customized` (§13) unless `--force` is given.
-   c. If `dest` exists and contains a `.crew.json` marker whose `name` does not match the skill being installed: this should not happen in normal use; abort with error `inconsistent_marker` (§13) unless `--force` is given.
-   d. If `dest` exists and contains no `.crew.json` marker: abort with error `untracked_directory` (§13) unless `--force` is given.
-5. **Stage and copy:**
-   a. Create a temporary staging directory as a sibling of `dest` with a name that cannot collide with a valid skill name (e.g. beginning with a `.` or containing a dot — the exact name is unspecified, but it MUST be atomically rename-able into `dest`).
-   b. Copy every file from the source into the staging directory, preserving relative paths. Do not copy any `.crew.json` from the source (only crew writes markers).
-   c. Compute the content hash of the staging directory per §12.1.
-   d. Write a `.crew.json` marker into the staging directory per §7.5.
-   e. If `dest` exists, remove it.
-   f. Rename the staging directory to `dest`.
-6. **Never modify files outside `dest`.** Adapters must not edit shared configuration files the target tool may use (such as global `AGENTS.md`, settings JSON, etc.). If a target tool's documented convention requires modifying a shared file, that is out of scope for v1.
+1. For each active adapter `a`, let `a.base` = `a.user_path()` if scope is user, else `a.project_path(cwd)`. Adapters whose project-scope path is unsupported are dropped at this step with a per-target "not applicable" outcome.
+2. Group adapters by `dest = a.base/<skill-name>/`. Each group is one physical install.
+3. For each group `(dest, adapters)`:
+   a. Ensure `dirname(dest)` exists (create with `0755` if missing).
+   b. **Pre-flight safety checks on `dest`:**
+      i. If `dest` does not exist, proceed.
+      ii. If `dest` exists and contains a `.crew.json` marker (§7.5) whose `name` matches the skill being installed: compute the on-disk content hash of `dest` excluding `.crew.json`, per §12.1. If it matches the marker's `content_hash`, proceed. If it differs, abort with error `customized` (§13) unless `--force` is given.
+      iii. If `dest` exists and contains a `.crew.json` marker whose `name` does not match the skill being installed: this should not happen in normal use; abort with error `inconsistent_marker` (§13) unless `--force` is given.
+      iv. If `dest` exists and contains no `.crew.json` marker: abort with error `untracked_directory` (§13) unless `--force` is given.
+   c. **Stage and copy:**
+      i. Create a temporary staging directory as a sibling of `dest` with a name that cannot collide with a valid skill name (e.g. beginning with a `.` or containing a dot — the exact name is unspecified, but it MUST be atomically rename-able into `dest`).
+      ii. Copy every file from the source into the staging directory, preserving relative paths. Do not copy any `.crew.json` from the source (only crew writes markers).
+      iii. Compute the content hash of the staging directory per §12.1.
+      iv. Write a `.crew.json` marker into the staging directory per §7.5. The marker's `adapters` field is the **union** of (a) any `adapters` list present in a prior marker at `dest`, and (b) the adapter names in this group. This preserves ownership by adapters that installed into the same path on an earlier run and aren't part of the current operation.
+      v. If `dest` exists, remove it.
+      vi. Rename the staging directory to `dest`.
+4. **Never modify files outside `dest`.** Adapters must not edit shared configuration files the target tool may use (such as global `AGENTS.md`, settings JSON, etc.). If a target tool's documented convention requires modifying a shared file, that is out of scope for v1.
+
+**Per-target reporting.** Even when N adapters share one `dest`, the user-facing summary lists all N adapter names as installed (or up-to-date, or failed). The install summary returned to callers is keyed by adapter name, not by `dest`.
 
 ### 7.4 Uninstall algorithm
 
@@ -419,11 +454,13 @@ keep the install. A `--target` that names a target the skill isn't in
 at the current scope is a silent per-target no-op; it never aborts the
 run.
 
-For each target in the computed target set:
+Like install, uninstall is path-centric: group the target set by `dest` (§7.3 step 2), then run the loop once per distinct path.
+
+For each `(dest, adapters_in_group)`:
 
 1. Read the marker at `dest/.crew.json`. If absent, abort with error `not_installed_here` unless `--force`.
 2. If present, verify the marker's `name` matches the skill being uninstalled. Mismatch → `inconsistent_marker` error unless `--force`.
-3. Remove `dest` and its contents.
+3. Remove `adapters_in_group` from the marker's `adapters` field. If the resulting set is empty, remove `dest` and its contents. Otherwise, rewrite the marker with the reduced `adapters` list — the bytes stay because another adapter still owns them.
 
 **Then update `state.json` (§11.1):**
 
@@ -457,6 +494,7 @@ Written into every crew-installed skill directory. JSON, UTF-8, trailing newline
 {
   "schema_version": 1,
   "name": "python-testing",
+  "adapters": ["codex", "gemini-cli"],
   "tap_name": "core",
   "tap_kind": "git",
   "tap_url": "https://github.com/crew-sh/core.git",
@@ -475,6 +513,7 @@ Written into every crew-installed skill directory. JSON, UTF-8, trailing newline
 
 - `schema_version` — integer, currently `1`. Bumped when the marker schema changes incompatibly.
 - `name` — the skill's `name` from `SKILL.md` frontmatter.
+- `adapters` — the list of target adapter names (§7.2) that own this install. Most installs are owned by a single adapter, but when N adapters resolve to the same `dest` (path-sharing, §7.2) all N are recorded here. Always non-empty; alphabetically sorted.
 - `tap_name` — the configured tap that owns this skill at install time. May not exist in `config.yaml` later (user removed it manually); doctor uses the rest of the marker to rebuild a tap entry.
 - `tap_kind` — `git` or `path`. Determines how `doctor --repair` reconstructs the tap.
 - `tap_url` — for `tap_kind: git`, the clone URL. Empty string for `tap_kind: path`.
@@ -1328,6 +1367,11 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-13 | §7.4 | `--prune` does not cascade through a partial (`--target`) uninstall that leaves the entry alive. Pruning only triggers when the entry was fully removed. |
 | C-UNINST-14 | §7.4 | `--target <name>` naming a target the skill isn't installed in is a silent per-target no-op; it never causes `not_installed_here` on its own. |
 | C-UNINST-15 | §11.1 | `crew uninstall --scope project <name>` removes the install at the entry's recorded `project_root`, NOT the user's current working directory. Run from any cwd, it finds and removes the correct files. |
+| C-UNINST-16 | §7.4 | When two adapters share a `dest` (e.g. `codex` + `gemini-cli` both at `~/.agents/skills/<name>/`), `crew uninstall --target codex <name>` removes `codex` from the marker's `adapters` list but leaves the bytes on disk; `gemini-cli` continues to work. |
+| C-UNINST-17 | §7.4 | After `crew uninstall --target codex <name>` in a path-shared install, the marker at `dest` contains every remaining owning adapter and no others. |
+| C-SHARE-01 | §7.2, §7.3 | When `codex` and `gemini-cli` are both active, `crew install <name>` writes bytes to `~/.agents/skills/<name>/` exactly once, and the per-target summary reports both adapter names as installed. |
+| C-SHARE-02 | §7.5 | The `adapters` field in `.crew.json` is non-empty, alphabetically sorted, and lists every adapter currently owning the install. |
+| C-SHARE-03 | §7.3 | Installing into a path already owned by adapter X with adapter Y active (and not X) results in a marker whose `adapters` contains both X and Y, preserving X's ownership. |
 
 #### C-TAP: Taps (§16)
 
@@ -1389,7 +1433,7 @@ Implementations and test suites refer to criteria by ID.
 
 | ID | Reference | Assertion |
 |---|---|---|
-| C-TARGET-01 | §7.2 | `claude-code`, `codex`, and `gemini-cli` adapters are present. |
+| C-TARGET-01 | §7.2 | Every adapter listed in the §7.2 table is registered and listed by `crew targets`. |
 | C-TARGET-02 | §7.2 | `crew targets` lists every adapter with its detection status. |
 | C-TARGET-03 | §7.1 | `crew targets disable <name>` causes subsequent installs to skip that target. |
 | C-TARGET-04 | §7.1 | `crew targets enable <name>` forces a target active even if `detect()` returns false. |

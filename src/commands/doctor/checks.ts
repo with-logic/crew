@@ -22,7 +22,11 @@ export interface Finding {
   readonly message: string;
 }
 
-/** Check 1 & 2: state ↔ markers drift. */
+/**
+ * Check 1 & 2: state ↔ markers drift. With path sharing (§7.2), a
+ * single marker's `adapters` list covers multiple adapter names, so we
+ * check the list-overlap instead of a scalar equality.
+ */
 export function checkStateMarkerDrift(
   stateEntries: readonly StateEntry[],
   markers: readonly MarkerEntry[],
@@ -34,7 +38,7 @@ export function checkStateMarkerDrift(
         (m) =>
           m.record.marker.name === entry.name &&
           m.record.scope === entry.scope &&
-          m.record.adapter === targetName,
+          m.record.marker.adapters.includes(targetName),
       );
       if (!match) {
         findings.push({
@@ -46,13 +50,13 @@ export function checkStateMarkerDrift(
     }
   }
   for (const m of markers) {
-    const match = stateEntries.find(
-      (e) =>
-        e.name === m.record.marker.name &&
-        e.scope === m.record.scope &&
-        e.targets.includes(m.record.adapter),
+    const ownedByAny = m.record.marker.adapters.some((a) =>
+      stateEntries.some(
+        (e) =>
+          e.name === m.record.marker.name && e.scope === m.record.scope && e.targets.includes(a),
+      ),
     );
-    if (!match) {
+    if (!ownedByAny) {
       findings.push({
         level: "error",
         code: "marker_without_state",
