@@ -12,6 +12,7 @@
     "build": "bun build --compile --minify --sourcemap --target=bun src/index.ts --outfile dist/crew",
     "install-bin": "./scripts/install.sh",
     "uninstall-bin": "rm -fv \"${CREW_INSTALL_PREFIX:-$HOME/.local/bin}/crew\"",
+    "release": "./scripts/release.sh",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",

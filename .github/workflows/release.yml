@@ -1,13 +1,16 @@
 name: Release
 
+# Three ways this workflow fires:
+#   1. `scripts/release.sh` opens a release PR that bumps
+#      `package.json`. When that PR merges to `main`, the push event
+#      notices the version advance, tags the merge commit, and ships.
+#      (Primary path.)
+#   2. Pushing a tag `vX.Y.Z` directly skips the PR flow and ships.
+#   3. `workflow_dispatch` from the Actions tab with a version input.
 on:
-  # Cut a release by pushing a tag like `v0.3.0`.
   push:
-    tags:
-      - "v*.*.*"
-  # Or kick it off from the Actions tab with a one-off version input.
-  # Useful when you want a release without pushing a tag first — this
-  # flow creates the tag on the default branch before building.
+    branches: [main]
+    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       version:
@@ -19,37 +22,81 @@ permissions:
   contents: write # Required to create releases and push tags.
 
 jobs:
+  resolve:
+    # Figures out whether this run should actually release, and what
+    # version/tag to use. For the `push: main` path we need to look at
+    # package.json vs the latest tag — only advance when they differ.
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.decide.outputs.should_release }}
+      version: ${{ steps.decide.outputs.version }}
+      tag: ${{ steps.decide.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Need history + tags.
+      - id: decide
+        run: |
+          set -euo pipefail
+          event="${{ github.event_name }}"
+
+          if [ "$event" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "tag=v$version" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$event" = "push" ] && [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="${GITHUB_REF_NAME}"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # `push: main` path — release only when package.json version
+          # is newer than any existing tag.
+          pkg_version="$(node -e 'console.log(require("./package.json").version)')"
+          candidate_tag="v$pkg_version"
+          if git rev-parse -q --verify "refs/tags/$candidate_tag" >/dev/null 2>&1; then
+            echo "Tag $candidate_tag already exists — nothing to release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Version $pkg_version is new; releasing as $candidate_tag."
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+          echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
+          echo "tag=$candidate_tag" >> "$GITHUB_OUTPUT"
+
   build-and-release:
+    needs: resolve
+    if: needs.resolve.outputs.should_release == 'true'
     # Bun cross-compiles cleanly, so a Linux runner builds both macOS
     # binaries and saves on GitHub minutes (Ubuntu is 10x cheaper than
     # macOS).
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Resolve version
-        id: ver
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-            echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            tag="${GITHUB_REF_NAME}"
-            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
-            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v4
         with:
-          # Need full history so git describe / release notes work.
           fetch-depth: 0
 
-      - name: Create tag (workflow_dispatch only)
-        if: github.event_name == 'workflow_dispatch'
+      # When the trigger isn't a tag push, create the tag pointing at
+      # the current commit so `softprops/action-gh-release` has
+      # something to release. Pushing the tag inside this same workflow
+      # run doesn't trigger a recursive Release workflow run (a
+      # deliberate GitHub Actions safeguard), which is what we want.
+      - name: Create tag
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "${{ steps.ver.outputs.tag }}"
-          git push origin "${{ steps.ver.outputs.tag }}"
+          git tag "${{ needs.resolve.outputs.tag }}"
+          git push origin "${{ needs.resolve.outputs.tag }}"
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -70,8 +117,8 @@ jobs:
       - name: Verify package version matches tag
         run: |
           pkg_version="$(bun -e 'console.log(require("./package.json").version)')"
-          if [ "$pkg_version" != "${{ steps.ver.outputs.version }}" ]; then
-            echo "::error::package.json version ($pkg_version) does not match release tag version (${{ steps.ver.outputs.version }})"
+          if [ "$pkg_version" != "${{ needs.resolve.outputs.version }}" ]; then
+            echo "::error::package.json version ($pkg_version) does not match release tag version (${{ needs.resolve.outputs.version }})"
             exit 1
           fi
 
@@ -94,8 +141,8 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          name: ${{ steps.ver.outputs.tag }}
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          name: ${{ needs.resolve.outputs.tag }}
           generate_release_notes: true
           files: |
             dist/crew-macos-arm64
