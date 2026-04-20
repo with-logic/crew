@@ -2,20 +2,14 @@ import { SAAP_FULL_PROMPT } from "../../lib/prd";
 import { Acc, CodeBlock } from "../primitives/CodeBlock";
 import { Container } from "../primitives/Container";
 import { Section } from "../primitives/Section";
-import { SectionHead } from "../primitives/SectionHead";
 import { BuildItYourself } from "./BuildItYourself";
 import styles from "./Install.module.css";
 
 export function Install() {
   return (
-    <Section id="install" ruleTop>
+    <Section id="install" ruleTop className={styles.section}>
       <Container>
-        <SectionHead
-          number="02"
-          label="Installation"
-          title="One command."
-          description="A single macOS binary. Runs on Apple Silicon and Intel."
-        />
+        <h2 className={styles.heading}>Install crew</h2>
 
         <div className={styles.card}>
           <CodeBlock>
@@ -35,8 +29,9 @@ export function Install() {
         </div>
 
         <p className={styles.footnote}>
-          A single binary. Drops nothing on your system outside of <code>~/.crew/</code> and
-          whichever agent skills directories you install into. Uninstall with{" "}
+          A single binary. Drops itself in <code>~/.local/bin/crew</code>, plus whatever skills
+          you install go under <code>~/.crew/</code> and into your agents' skills directories.
+          Nothing else. Uninstall with{" "}
           <code>rm -rf ~/.crew &amp;&amp; rm ~/.local/bin/crew</code>.
         </p>
 
