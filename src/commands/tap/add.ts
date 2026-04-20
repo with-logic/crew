@@ -14,6 +14,7 @@ import { deriveAutoTapName } from "../../install/tap-naming.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { exists, isDirectory, rmrf } from "../../util/fs.ts";
+import type { Styler } from "../../util/term.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promoteExistingTap } from "./promote.ts";
 
@@ -51,7 +52,7 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   withStateLock(() => {
     out.value = performAdd(ctx, name, rawArg, explicitName, target);
   }, ctx.home);
-  return formatOutcome(out.value, name, target);
+  return formatOutcome(out.value, name, target, ctx.style);
 }
 
 /** The actual write-under-lock flow; returns the chosen outcome. */
@@ -120,22 +121,43 @@ function newTapOf(name: string, target: TapAddTarget): TapConfig {
   };
 }
 
-function formatOutcome(outcome: Outcome, name: string, target: TapAddTarget): CommandOutput {
+function formatOutcome(
+  outcome: Outcome,
+  name: string,
+  target: TapAddTarget,
+  style: Styler,
+): CommandOutput {
   const targetStr = displayTarget(target);
   const payload = { name, ...payloadOf(target) };
-  if (outcome === "no-op")
+  if (outcome === "no-op") {
     return {
       exitCode: 0,
-      human: [`tap ${name} is already configured at ${targetStr} — nothing to do`],
+      human: [
+        `${style.symbol("muted")} Tap ${style.bold(name)} is already set up`,
+        style.dim(`  pointed at ${targetStr}`),
+      ],
       json: { ...payload, already: true },
     };
-  if (outcome === "promoted")
+  }
+  if (outcome === "promoted") {
     return {
       exitCode: 0,
-      human: [`promoted auto tap to registered: ${name} → ${targetStr}`],
+      human: [
+        `${style.symbol("ok")} Promoted ${style.bold(name)} to a saved tap`,
+        style.dim(`  now tracking ${targetStr}`),
+      ],
       json: { ...payload, promoted: true },
     };
-  return { exitCode: 0, human: [`added tap ${name} → ${targetStr}`], json: payload };
+  }
+  return {
+    exitCode: 0,
+    human: [
+      `${style.symbol("ok")} Added tap ${style.bold(name)}`,
+      style.dim(`  from ${targetStr}`),
+      style.dim("  try `crew search <query>` or `crew install <name>` to use it"),
+    ],
+    json: payload,
+  };
 }
 
 function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {

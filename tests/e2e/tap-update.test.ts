@@ -90,8 +90,9 @@ describe("tap update + fetch policy", () => {
     const c = captureStreams();
     const code = runCli(["tap", "update"], { home, streams: c.streams });
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("tap-a: refreshed");
-    expect(c.stdout()).toContain("tap-b: refreshed");
+    // New tap-update table renders `<name>  refreshed  <url>` per row.
+    expect(c.stdout()).toMatch(/tap-a\s+refreshed/);
+    expect(c.stdout()).toMatch(/tap-b\s+refreshed/);
     // Both clones moved to their new tips.
     expect(headSha(tapPath("tap-a", home))).not.toBe(shaAStart);
     expect(headSha(tapPath("tap-b", home))).not.toBe(shaBStart);
@@ -120,6 +121,15 @@ describe("tap update + fetch policy", () => {
     // Only tap-a advanced.
     expect(headSha(tapPath("tap-a", home))).not.toBe(shaAStart);
     expect(headSha(tapPath("tap-b", home))).toBe(shaBStart);
+  });
+
+  test("`crew tap update` with no taps is a clean no-op", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    const code = runCli(["tap", "update"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("No taps to update");
   });
 
   test("C-TAP-16 `crew tap update <unknown>` is a usage error", () => {
@@ -166,8 +176,8 @@ describe("tap update + fetch policy", () => {
     const c = captureStreams();
     const code = runCli(["tap", "update"], { home, streams: c.streams });
     expect(code).toBe(1);
-    expect(c.stdout()).toContain("tap-ok: refreshed");
-    expect(c.stdout()).toContain("tap-broken: FAILED");
+    expect(c.stdout()).toMatch(/tap-ok\s+refreshed/);
+    expect(c.stdout()).toMatch(/tap-broken\s+failed/);
   });
 
   test("search warns + skips a never-cloned unreachable tap (exit 0)", () => {

@@ -156,8 +156,7 @@ describe("crew tap", () => {
       streams: c.streams,
     });
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("already configured");
-    expect(c.stdout()).toContain("nothing to do");
+    expect(c.stdout()).toContain("already set up");
     expect(readConfig(home).taps.filter((t) => t.name === "mytap")).toHaveLength(1);
   });
 
@@ -181,6 +180,28 @@ describe("crew tap", () => {
     // they just tried, so the suggested command is copy-pasteable.
     expect(c.stderr()).toContain(`crew tap add file://${repoB}`);
     expect(c.stderr()).toContain("<tap-name>");
+  });
+
+  test("tap list with no taps shows a welcoming empty state", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    const code = runCli(["tap", "list"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("No taps configured");
+  });
+
+  test("tap remove of a path tap notes the folder wasn't touched", () => {
+    const home = makeCrewHome();
+    const root = makeTempDir("crew-pathtap-removal-");
+    makeSkill(root, "inside", skillFrontmatter({ name: "inside" }));
+    runCli(["tap", "add", root, "pathtap"], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    const code = runCli(["tap", "remove", "pathtap"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("local folder itself wasn't touched");
+    // The folder on disk is intact.
+    expect(existsSync(root)).toBe(true);
   });
 
   test("tap remove nonexistent fails", () => {
@@ -353,8 +374,7 @@ describe("crew tap", () => {
       streams: c.streams,
     });
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("already configured");
-    expect(c.stdout()).toContain("nothing to do");
+    expect(c.stdout()).toContain("already set up");
   });
 
   test("C-TAP-14 same name, different subpath is a usage error", () => {

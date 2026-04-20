@@ -23,6 +23,7 @@ import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { displayTarget, tapAdd } from "./add.ts";
 import { refreshTaps, type TapRefreshRow } from "./refresh.ts";
+import { renderTapList, renderTapRemove, renderTapUpdate, type TapListRow } from "./render.ts";
 
 export function tapCommand(ctx: CommandContext): CommandOutput {
   const sub = ctx.positional[0];
@@ -60,6 +61,7 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
       "`crew tap remove` needs exactly one tap name — see `crew tap list`",
     );
   const name = args[0]!;
+  let kind: "git" | "path" = "git";
   withStateLock(() => {
     const config = readConfig(ctx.home);
     const tap = config.taps.find((t) => t.name === name);
@@ -75,12 +77,13 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
         "usage_error",
         `\`${DEFAULT_TAP_NAME}\` is the default tap — pass \`--force\` if you're sure you want to remove it`,
       );
+    kind = tap.kind;
     const updated = { ...config, taps: config.taps.filter((t) => t.name !== name) };
     writeConfig(updated, ctx.home);
     if (tap.kind === "git") rmrf(tapPath(name, ctx.home));
     // Path taps don't own the directory; never delete it.
   }, ctx.home);
-  return { exitCode: 0, human: [`removed tap ${name}`], json: { name } };
+  return { exitCode: 0, human: renderTapRemove(name, kind, ctx.style), json: { name } };
 }
 
 /**
@@ -93,14 +96,11 @@ function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput 
     args.length === 0 ? config.taps : tapsMatching(config.taps, args);
   const rows: TapRefreshRow[] = refreshTaps(selected, ctx.home);
   const anyFailed = rows.some((r) => r.kind === "failed");
-  const human = rows.map((r) =>
-    r.kind === "refreshed"
-      ? `${r.name}: refreshed (${r.url})`
-      : r.kind === "skipped"
-        ? `${r.name}: skipped (${r.reason ?? "path tap"})`
-        : `${r.name}: FAILED (${r.error?.code ?? "unknown"}) — ${r.error?.message ?? ""}`,
-  );
-  return { exitCode: anyFailed ? 1 : 0, human, json: { rows } };
+  return {
+    exitCode: anyFailed ? 1 : 0,
+    human: renderTapUpdate(rows, ctx.style),
+    json: { rows },
+  };
 }
 
 /** Resolve one-or-more tap names from positional args; unknowns are usage errors. */
@@ -122,7 +122,7 @@ function tapsMatching(all: readonly TapConfig[], names: readonly string[]): TapC
 
 function tapList(ctx: CommandContext): CommandOutput {
   const config = readConfig(ctx.home);
-  const rows = config.taps.map((t) => {
+  const rows: TapListRow[] = config.taps.map((t) => {
     let lastFetched: string | null = null;
     if (t.kind === "git") {
       const p = tapPath(t.name, ctx.home);
@@ -140,10 +140,5 @@ function tapList(ctx: CommandContext): CommandOutput {
       last_fetched: lastFetched,
     };
   });
-  const human = rows.map((r) => {
-    const flag = r.registered ? "registered" : "auto";
-    const fetched = r.kind === "git" ? `last_fetched=${r.last_fetched ?? "-"}` : "(path tap)";
-    return `${r.name.padEnd(16)} ${flag.padEnd(11)} ${r.target.padEnd(60)} ${fetched}`;
-  });
-  return { exitCode: 0, human, json: { taps: rows } };
+  return { exitCode: 0, human: renderTapList(rows, ctx.style), json: { taps: rows } };
 }
