@@ -1,6 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { plistXml, readAutoupdateLogTail } from "../../src/autoupdate/launchd.ts";
+import {
+  isAutoupdateLoaded,
+  plistXml,
+  readAutoupdateLogTail,
+  resetLaunchctlRunner,
+} from "../../src/autoupdate/launchd.ts";
 import { parseDuration } from "../../src/commands/autoupdate.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import { paths } from "../../src/core/paths.ts";
@@ -74,6 +79,31 @@ describe("readAutoupdateLogTail", () => {
     const t = readAutoupdateLogTail(home);
     expect(t.last_line).toBe(null);
     expect(t.last_exit_status).toBe(null);
+  });
+});
+
+describe("default launchctl runner", () => {
+  // Exercise both branches of the real default runner:
+  //   - the try body (spawn returns a boolean) fires on platforms
+  //     that have launchctl (macOS);
+  //   - the catch body (ENOENT from a missing binary) fires on
+  //     platforms that don't, OR when we force it by stubbing Bun.spawnSync.
+  afterEach(() => resetLaunchctlRunner());
+
+  test("runner returns a boolean for a harmless query", () => {
+    expect(typeof isAutoupdateLoaded()).toBe("boolean");
+  });
+
+  test("runner catches spawn errors and returns false", () => {
+    const original = Bun.spawnSync;
+    (Bun as unknown as { spawnSync: typeof Bun.spawnSync }).spawnSync = () => {
+      throw new Error("simulated ENOENT");
+    };
+    try {
+      expect(isAutoupdateLoaded()).toBe(false);
+    } finally {
+      (Bun as unknown as { spawnSync: typeof Bun.spawnSync }).spawnSync = original;
+    }
   });
 });
 
