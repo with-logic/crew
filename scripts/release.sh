@@ -241,6 +241,13 @@ if [ -f src/core/version.ts ]; then
   perl -i -pe 's/(CREW_VERSION\s*=\s*")[^"]*(")/${1}'"${next_version}"'${2}/' src/core/version.ts
 fi
 
+# Update the PRD's `Version:` line so the spec stays in sync with the
+# implementation. The PRD ships alongside the CLI — one version number
+# for both.
+if [ -f PRD.md ]; then
+  perl -i -pe 's/^Version:.*$/Version: '"${next_version}"'/' PRD.md
+fi
+
 # Write/update CHANGELOG.md. If it doesn't exist, create a header
 # first; then prepend the new section below the header.
 if [ ! -f CHANGELOG.md ]; then
@@ -284,6 +291,7 @@ PY
 echo "==> Committing version bump + changelog"
 git add package.json CHANGELOG.md
 [ -f src/core/version.ts ] && git add src/core/version.ts
+[ -f PRD.md ] && git add PRD.md
 git commit -q -m "Release ${next_tag}"
 
 echo "==> Pushing branch"
