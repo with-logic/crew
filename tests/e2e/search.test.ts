@@ -52,13 +52,14 @@ describe("crew search output", () => {
     expect(code).toBe(0);
     const out = c.stdout();
     // 3 hits: alpha/beta from tap-a (both match) and alphabet from tap-b.
-    expect(out).toContain('Found 3 skills matching "alpha".');
-    // Group headers appear once each.
-    expect(out).toContain("tap-a\n");
-    expect(out).toContain("tap-b\n");
-    // Skills appear under their groups, indented.
-    expect(out).toMatch(/tap-a\n(.*\n)*? {2}alpha/);
-    expect(out).toMatch(/tap-b\n(.*\n)*? {2}alphabet/);
+    expect(out).toContain('3 matches for "alpha"');
+    // Group headers appear once each (tap names are indented two
+    // spaces under the header and bolded in TTY mode).
+    expect(out).toContain("  tap-a");
+    expect(out).toContain("  tap-b");
+    // Skills appear under their groups, indented four spaces.
+    expect(out).toMatch(/tap-a\n(.*\n)*? {4}alpha/);
+    expect(out).toMatch(/tap-b\n(.*\n)*? {4}alphabet/);
     // No ANSI escape codes in the buffer (tests aren't a TTY).
     expect(out).not.toMatch(new RegExp(`${String.fromCharCode(0x1b)}\\[`));
   });
@@ -73,7 +74,7 @@ describe("crew search output", () => {
     });
     const c = captureStreams();
     runCli(["search", "lonely"], { home, streams: c.streams });
-    expect(c.stdout()).toContain("Found 1 skill matching");
+    expect(c.stdout()).toContain('1 match for "lonely"');
   });
 
   test("search walks path-kind taps too", () => {
@@ -102,7 +103,7 @@ describe("crew search output", () => {
     const c = captureStreams();
     const code = runCli(["search", "no-such-thing"], { home, streams: c.streams });
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("no skills matched");
+    expect(c.stdout()).toContain("No skills match");
     expect(c.stdout()).toContain("no-such-thing");
   });
 

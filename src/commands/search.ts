@@ -5,11 +5,11 @@
  * match the query against `name` and `description` case-insensitively.
  * Invalid child directories are silently ignored during search.
  *
- * Output is grouped by tap: a count header at the top, then one
- * section per tap (dim tap name) with the matching skills indented
- * underneath — skill name in bold, description truncated to the
- * terminal width. In non-TTY / `NO_COLOR` environments the same shape
- * is emitted without any ANSI codes.
+ * Output is grouped by tap: a bold count header at the top, one bold
+ * tap label per group with its matching skills indented underneath
+ * (skill name bold, description dim and truncated to the terminal
+ * width), then a friendly install hint at the bottom. Warnings about
+ * unreachable taps go to stderr as a separate channel.
  */
 
 import { join } from "node:path";
@@ -19,6 +19,7 @@ import { tapPath } from "../core/paths.ts";
 import { ensureClone } from "../git/repo.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
+import { columns, truncate } from "../util/format.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 import type { Styler } from "../util/term.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
@@ -61,9 +62,7 @@ export function searchCommand(ctx: CommandContext): CommandOutput {
     if (!isDirectory(root)) continue;
     for (const entry of listDir(root)) {
       const dir = join(root, entry);
-      if (!(isDirectory(dir) && hasSkillMd(dir))) {
-        continue;
-      }
+      if (!(isDirectory(dir) && hasSkillMd(dir))) continue;
       try {
         const skill = loadSkill(dir);
         const { name, description } = skill.frontmatter;
@@ -79,7 +78,7 @@ export function searchCommand(ctx: CommandContext): CommandOutput {
   hits.sort((a, b) =>
     a.tap === b.tap ? a.name.localeCompare(b.name) : a.tap.localeCompare(b.tap),
   );
-  const human = formatHits(hits, query, ctx.style, ctx.width);
+  const human = formatHits(hits, ctx.positional.join(" "), ctx.style, ctx.width);
   return {
     exitCode: 0,
     human,
@@ -89,51 +88,50 @@ export function searchCommand(ctx: CommandContext): CommandOutput {
 }
 
 /**
- * Render hits as a grouped, styled table.
- *
- *   Found N skills matching "query".
- *
- *   tap-name
- *     skill-name          description (truncated to terminal width)
- *     skill-name          ...
- *
- *   other-tap
- *     ...
- *
- * No results prints a single "no matches" line so scripts and humans
- * both know the run completed cleanly.
+ * Render hits as a grouped, styled table with a friendly hint.
  */
 function formatHits(hits: readonly Hit[], query: string, style: Styler, width: number): string[] {
   if (hits.length === 0) {
-    return [`no skills matched "${query}".`];
+    return [
+      style.dim(`No skills match "${query}".`),
+      "",
+      style.dim("Try a broader query, or add a collection with `crew tap add <url>`."),
+    ];
   }
-  const nameColumnWidth = Math.max(...hits.map((h) => h.name.length));
-  // Reserve 2 spaces for the "  " indent + nameColumnWidth + 2 spaces
-  // of gutter before the description. Everything after is the desc.
-  const descStart = 2 + nameColumnWidth + 2;
-  const descBudget = Math.max(20, width - descStart);
 
-  const lines: string[] = [];
-  const noun = hits.length === 1 ? "skill" : "skills";
-  lines.push(`Found ${hits.length} ${noun} matching "${query}".`);
+  const noun = hits.length === 1 ? "match" : "matches";
+  const header = `${style.bold(`${hits.length} ${noun}`)} for "${style.bold(query)}"`;
+  const lines: string[] = [header, ""];
+
+  // Group hits by tap; within each tap render a name/description table
+  // with widths derived from that tap's hits (so long names in one tap
+  // don't push every other tap's description right).
+  const grouped = groupByTap(hits);
+  let first = true;
+  for (const [tap, tapHits] of grouped) {
+    if (!first) lines.push("");
+    first = false;
+    lines.push(`  ${style.bold(tap)}`);
+    const nameWidth = Math.max(...tapHits.map((h) => h.name.length));
+    const descStart = 4 + nameWidth + 2;
+    const descBudget = Math.max(20, width - descStart);
+    const rows: string[][] = tapHits.map((h) => {
+      const desc = style.dim(truncate(h.description, descBudget));
+      return [`    ${h.name}`, desc];
+    });
+    for (const line of columns(rows, 2)) lines.push(line);
+  }
+
   lines.push("");
-
-  let currentTap: string | null = null;
-  for (const h of hits) {
-    if (h.tap !== currentTap) {
-      if (currentTap !== null) lines.push(""); // blank line between groups
-      lines.push(style.dim(h.tap));
-      currentTap = h.tap;
-    }
-    const paddedName = h.name.padEnd(nameColumnWidth);
-    const truncatedDesc = truncate(h.description, descBudget);
-    lines.push(`  ${style.bold(paddedName)}  ${truncatedDesc}`);
-  }
+  lines.push(style.dim(`Install any of these with \`crew install <name>\`.`));
   return lines;
 }
 
-/** Cut `s` to at most `max` characters, appending `…` if truncated. */
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return `${s.slice(0, Math.max(0, max - 1))}…`;
+function groupByTap(hits: readonly Hit[]): Map<string, Hit[]> {
+  const out = new Map<string, Hit[]>();
+  for (const h of hits) {
+    if (!out.has(h.tap)) out.set(h.tap, []);
+    out.get(h.tap)!.push(h);
+  }
+  return out;
 }
