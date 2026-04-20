@@ -56,6 +56,14 @@
 .card {
   max-width: 820px;
   margin: 0 auto;
+  position: relative;
+}
+
+/* Overlays the copy button in the code block's top-right corner. */
+.copy {
+  position: absolute;
+  top: 10px;
+  right: 10px;
 }
 
 .reqRow {
