@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { defaultPrompt, type PromptIO } from "../../src/cli/prompt.ts";
+import { defaultPrompt, type PromptIO, realIO } from "../../src/cli/prompt.ts";
 
 /** Make a fake PromptIO that replays fixed bytes and captures stderr. */
 function fakeIO(bytes: string, opts: { isTTY?: boolean; throwOnRead?: boolean } = {}) {
@@ -92,15 +92,28 @@ describe("defaultPrompt", () => {
 });
 
 describe("defaultPrompt real IO seam", () => {
-  test("default call uses process.stdin.isTTY (non-TTY in tests → abort)", () => {
-    // Under `bun test`, process.stdin is not a TTY, so we hit the
-    // realIO.isTTY path and short-circuit to abort without reading.
-    expect(defaultPrompt("should not print")).toBe("abort");
+  // These tests drive each `realIO` method in isolation — we don't
+  // call `defaultPrompt()` without a stub IO, because that would
+  // invoke `readSync(0, ...)` on the real stdin and block when the
+  // suite is run from an interactive terminal.
+
+  test("realIO.isTTY mirrors process.stdin.isTTY", () => {
+    const orig = process.stdin.isTTY;
+    Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
+    try {
+      expect(realIO.isTTY()).toBe(true);
+    } finally {
+      Object.defineProperty(process.stdin, "isTTY", { value: orig, configurable: true });
+    }
+    Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+    try {
+      expect(realIO.isTTY()).toBe(false);
+    } finally {
+      Object.defineProperty(process.stdin, "isTTY", { value: orig, configurable: true });
+    }
   });
 
-  test("realIO.writeStderr is wired to process.stderr.write", () => {
-    const origIsTTY = process.stdin.isTTY;
-    Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
+  test("realIO.writeStderr writes to process.stderr", () => {
     const origWrite = process.stderr.write.bind(process.stderr);
     let captured = "";
     (process.stderr as { write: (s: string) => boolean }).write = (s: string) => {
@@ -108,21 +121,51 @@ describe("defaultPrompt real IO seam", () => {
       return true;
     };
     try {
-      // The TTY gate passes; writeStderr is called; then readByte is
-      // called against the test runner's stdin — which is at EOF, so
-      // the prompt returns abort. The stderr write happened before
-      // the EOF read, so we can assert on it.
-      const result = defaultPrompt("hello ");
-      expect(result).toBe("abort");
+      realIO.writeStderr("hello ");
       expect(captured).toBe("hello ");
     } finally {
-      Object.defineProperty(process.stdin, "isTTY", {
-        value: origIsTTY,
-        configurable: true,
-      });
       (process.stderr as { write: (s: string) => boolean }).write = origWrite as unknown as (
         s: string,
       ) => boolean;
+    }
+  });
+
+  test("realIO.readByte reads from the given fd (EOF on an empty file)", () => {
+    const { openSync, closeSync, writeFileSync, mkdtempSync } =
+      require("node:fs") as typeof import("node:fs");
+    const { join } = require("node:path") as typeof import("node:path");
+    const { tmpdir } = require("node:os") as typeof import("node:os");
+    const dir = mkdtempSync(join(tmpdir(), "crew-prompt-"));
+    const empty = join(dir, "empty");
+    writeFileSync(empty, "");
+    const fd = openSync(empty, "r");
+    try {
+      const buf = Buffer.alloc(1);
+      expect(realIO.readByte(buf, fd)).toBe(0);
+    } finally {
+      closeSync(fd);
+    }
+    const withByte = join(dir, "one");
+    writeFileSync(withByte, "y");
+    const fd2 = openSync(withByte, "r");
+    try {
+      const buf = Buffer.alloc(1);
+      expect(realIO.readByte(buf, fd2)).toBe(1);
+      expect(buf.toString("utf8", 0, 1)).toBe("y");
+    } finally {
+      closeSync(fd2);
+    }
+  });
+
+  test("defaultPrompt with realIO short-circuits to abort when stdin is not a TTY", () => {
+    const orig = process.stdin.isTTY;
+    Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+    try {
+      // isTTY: false → returns abort immediately without calling readByte.
+      // Safe to run against the real realIO because no read happens.
+      expect(defaultPrompt("nope", realIO)).toBe("abort");
+    } finally {
+      Object.defineProperty(process.stdin, "isTTY", { value: orig, configurable: true });
     }
   });
 });

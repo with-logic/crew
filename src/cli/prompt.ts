@@ -28,16 +28,25 @@ export type PromptFn = (message: string) => ConfirmOutcome;
 export interface PromptIO {
   isTTY(): boolean;
   writeStderr(s: string): void;
-  /** Read a single byte from fd 0; return number of bytes read (0 on EOF) or throws on error. */
-  readByte(buf: Buffer): number;
+  /**
+   * Read a single byte from the given fd; return number of bytes read
+   * (0 on EOF) or throws on error. Defaults to fd 0 (stdin) in
+   * production. Tests pass a different fd (e.g. an empty file) to
+   * exercise the wiring without blocking on a real terminal.
+   */
+  readByte(buf: Buffer, fd?: number): number;
 }
 
-const realIO: PromptIO = {
+/**
+ * Production IO. Exported so tests can exercise each method
+ * without invoking the full prompt (which would block on a real TTY).
+ */
+export const realIO: PromptIO = {
   isTTY: () => Boolean(process.stdin.isTTY),
   writeStderr: (s) => {
     process.stderr.write(s);
   },
-  readByte: (buf) => readSync(0, buf, 0, 1, null),
+  readByte: (buf, fd = 0) => readSync(fd, buf, 0, 1, null),
 };
 
 /**
