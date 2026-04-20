@@ -572,7 +572,8 @@ describe("list, info, targets", () => {
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     const capture = captureStreams();
     runCli(["info", skill], { home, streams: capture.streams });
-    expect(capture.stdout()).toContain("description");
+    // Expect the skill's actual description text to appear.
+    expect(capture.stdout()).toContain("A test skill");
   });
 
   test("info on path ref that backs a configured tap", () => {
@@ -586,7 +587,7 @@ describe("list, info, targets", () => {
     const capture = captureStreams();
     const code = runCli(["info", skill], { home, streams: capture.streams });
     expect(code).toBe(0);
-    expect(capture.stdout()).toContain("description");
+    expect(capture.stdout()).toContain("A test skill");
   });
 
   test("info <tap-name> lists every skill in that tap", () => {
@@ -602,6 +603,78 @@ describe("list, info, targets", () => {
     // Either matched the installed state entry OR walked the tap — both
     // must mention the skill name.
     expect(capture.stdout()).toContain("widget");
+  });
+
+  test("info on an installed child of a multi-skill tap shows a subpath `from`", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "alpha", skillFrontmatter({ name: "alpha" }));
+    makeSkill(src, "beta", skillFrontmatter({ name: "beta" }));
+    runCli(["install", src], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    runCli(["info", "alpha"], { home, streams: c.streams });
+    // Because alpha came from a multi-skill install, its source.path is
+    // "alpha" inside the parent tap — info renders "<tap>/alpha".
+    expect(c.stdout()).toMatch(/from\s+\S+\/alpha/);
+  });
+
+  test("info shows `ref (sha)` when a skill is pinned to a tag", () => {
+    const home = makeCrewHome();
+    const repo = makeTempDir();
+    makeGitRepo(repo);
+    makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
+    commitAll(repo, "init");
+    tagRepo(repo, "v1.0.0");
+    runCli(["install", `file://${repo}@v1.0.0//demo`], {
+      home,
+      streams: captureStreams().streams,
+    });
+    const c = captureStreams();
+    runCli(["info", "demo"], { home, streams: c.streams });
+    // Version line should show the tag AND the short SHA (they differ).
+    expect(c.stdout()).toMatch(/v1\.0\.0\s*\(/);
+  });
+
+  test("info on an installed skill whose SKILL.md got tampered with still renders", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "demo", skillFrontmatter({ name: "demo", description: "original" }));
+    runCli(["install", src], { home, streams: captureStreams().streams });
+    // Break the installed SKILL.md so loadSkill throws. The command
+    // should still render — just without a description.
+    const fs = require("node:fs") as typeof import("node:fs");
+    const ccDemo = join(redirect.targets["claude-code"]!, "demo", "SKILL.md");
+    fs.writeFileSync(ccDemo, "not valid frontmatter");
+    // Also break the codex and gemini copies so all three fail and we
+    // exercise the fall-through.
+    fs.writeFileSync(join(redirect.targets["codex"]!, "demo", "SKILL.md"), "garbage");
+    fs.writeFileSync(join(redirect.targets["gemini-cli"]!, "demo", "SKILL.md"), "garbage");
+    const c = captureStreams();
+    const code = runCli(["info", "demo"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("demo");
+  });
+
+  test("info on a multi-skill tap lists each skill under a header", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "alpha", skillFrontmatter({ name: "alpha", license: "MIT" }));
+    makeSkill(
+      src,
+      "beta",
+      skillFrontmatter({ name: "beta", dependencies: ["alpha"], homepage: "https://x.dev" }),
+    );
+    runCli(["tap", "add", src, "multi"], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    const code = runCli(["info", "multi"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("2 skills in multi");
+    expect(c.stdout()).toContain("alpha");
+    expect(c.stdout()).toContain("beta");
+    expect(c.stdout()).toContain("license");
+    expect(c.stdout()).toContain("depends on");
+    expect(c.stdout()).toContain("homepage");
+    expect(c.stdout()).toContain("install them all");
   });
 
   test("info `<tap>/<skill>` walks the named tap", () => {

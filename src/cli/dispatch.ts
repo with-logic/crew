@@ -9,7 +9,7 @@ import { autoupdateCommand } from "../commands/autoupdate.ts";
 import { cacheCommand } from "../commands/cache.ts";
 import { doctorCommand } from "../commands/doctor/index.ts";
 import { helpCommand, versionCommand } from "../commands/help/index.ts";
-import { infoCommand } from "../commands/info.ts";
+import { infoCommand } from "../commands/info/index.ts";
 import { installCommand } from "../commands/install/index.ts";
 import { listCommand } from "../commands/list.ts";
 import { searchCommand } from "../commands/search.ts";
