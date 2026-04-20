@@ -70,27 +70,28 @@
   justify-content: center;
 }
 
-/* Warmer button to match the accent palette — not the heavy black
-   of the hero CTA. Reads as "intentional secondary action." */
+/* Clean outlined button on the page background — reads as a clickable
+   surface within the dashed paper card, no color competition with the
+   accent pill above. */
 .button {
   font-family: var(--font-mono);
   font-size: 13px;
   padding: 10px 18px;
   border-radius: 6px;
-  border: 1px solid var(--accent-ink);
-  background: var(--accent-ink);
-  color: #fff;
+  border: 1px solid var(--line-2);
+  background: var(--bg);
+  color: var(--ink);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   transition:
     transform 0.08s ease,
-    filter 0.12s ease;
+    border-color 0.12s ease;
 }
 
 .button:hover {
-  filter: brightness(1.08);
+  border-color: var(--ink);
 }
 
 .button:active {

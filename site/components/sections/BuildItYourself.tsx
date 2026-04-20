@@ -42,21 +42,16 @@ export function BuildItYourself({ prompt }: Props) {
       </div>
 
       <h3 id="saap-heading" className={styles.heading}>
-        From Scratch
+        Create Your Own From Scratch
       </h3>
 
       <p className={styles.copy}>
-        Crew was built by agents deriving source code from a thorough spec. You can do the same
-        thing. If you don't want to install our version of <span className={styles.mono}>crew</span>
-        , you can use your own agents and tokens to build your own from scratch. Here's the{" "}
+        Crew was built by agents from this{" "}
         <a href={PRD_URL} target="_blank" rel="noreferrer">
           PRD
         </a>
-        . As a convenience, here's a one-click agent prompt, with the PRD embedded, that you can
-        give to your agent of choice. You should get back a working{" "}
-        <span className={styles.mono}>crew</span>-compliant binary out the other side. Ours is
-        written in TypeScript. Yours could be in Go, Rust, Swift, or whatever you're in the mood for
-        today.
+        . Build your own from the same spec — in Go, Rust, Swift, or whatever else. The button below
+        copies a ready-to-paste prompt with the full PRD embedded.
       </p>
 
       <div className={styles.buttonRow}>
