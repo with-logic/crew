@@ -733,6 +733,21 @@ describe("list, info, targets", () => {
     runCli(["targets"], { home, streams: capture.streams });
     expect(capture.stdout()).toContain("claude-code");
   });
+
+  test("targets list shows `not found` for undetected agents with the enable hint", () => {
+    const home = makeCrewHome();
+    // Stub detect() off for one adapter to exercise the undetected path.
+    const orig = codexAdapter.detect;
+    (codexAdapter as { detect: () => boolean }).detect = () => false;
+    try {
+      const c = captureStreams();
+      runCli(["targets"], { home, streams: c.streams });
+      expect(c.stdout()).toContain("not found");
+      expect(c.stdout()).toContain("crew targets enable");
+    } finally {
+      (codexAdapter as { detect: () => boolean }).detect = orig;
+    }
+  });
 });
 
 describe("unknown commands and flags", () => {

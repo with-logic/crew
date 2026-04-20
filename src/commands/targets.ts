@@ -1,14 +1,17 @@
 /**
  * `crew targets [enable|disable <name>]` (§7.2).
  *
- * With no arguments, lists every adapter with detection status and
- * whether it's force-enabled or disabled.
+ * With no arguments, shows every agent coder crew knows about with
+ * human status descriptors (detected, forced on, disabled, not
+ * found). The enable/disable subcommands toggle config flags.
  */
 
 import { readConfig, writeConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
 import { withStateLock } from "../state/lock.ts";
 import { ALL_ADAPTERS, adapterByName } from "../targets/registry.ts";
+import { columns } from "../util/format.ts";
+import type { Styler } from "../util/term.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 
 export function targetsCommand(ctx: CommandContext): CommandOutput {
@@ -22,23 +25,56 @@ export function targetsCommand(ctx: CommandContext): CommandOutput {
   );
 }
 
+interface TargetRow {
+  readonly name: string;
+  readonly detected: boolean;
+  readonly forced: boolean;
+  readonly disabled: boolean;
+}
+
 function list(ctx: CommandContext): CommandOutput {
   const config = readConfig(ctx.home);
-  const rows = ALL_ADAPTERS.map((a) => ({
+  const rows: TargetRow[] = ALL_ADAPTERS.map((a) => ({
     name: a.name,
     detected: a.detect(),
     forced: config.forced_targets.includes(a.name),
     disabled: config.disabled_targets.includes(a.name),
   }));
-  const human = rows.map((r) => {
-    const flags: string[] = [];
-    if (r.detected) flags.push("detected");
-    if (r.forced) flags.push("forced");
-    if (r.disabled) flags.push("disabled");
-    if (flags.length === 0) flags.push("not-installed");
-    return `${r.name.padEnd(16)} [${flags.join(", ")}]`;
-  });
-  return { exitCode: 0, human, json: { targets: rows } };
+  return { exitCode: 0, human: renderList(rows, ctx.style), json: { targets: rows } };
+}
+
+function renderList(rows: readonly TargetRow[], style: Styler): string[] {
+  const lines: string[] = [];
+  lines.push(style.bold("Agent coders"));
+  lines.push("");
+  const cells: string[][] = rows.map((r) => [
+    `  ${symbolFor(r, style)}`,
+    style.bold(r.name),
+    statusFor(r, style),
+  ]);
+  for (const line of columns(cells, 2)) lines.push(line);
+  lines.push("");
+  const anyMissing = rows.some((r) => !(r.detected || r.forced));
+  if (anyMissing) {
+    lines.push(style.dim("Run `crew targets enable <name>` to force one on anyway."));
+  } else {
+    lines.push(style.dim("Run `crew targets disable <name>` to skip one, or re-enable later."));
+  }
+  return lines;
+}
+
+function symbolFor(row: TargetRow, style: Styler): string {
+  if (row.disabled) return style.symbol("muted");
+  if (row.detected || row.forced) return style.symbol("ok");
+  return style.symbol("muted");
+}
+
+function statusFor(row: TargetRow, style: Styler): string {
+  if (row.disabled) return style.yellow("disabled");
+  if (row.forced && !row.detected) return style.green("forced on");
+  if (row.forced) return style.green("forced on (detected)");
+  if (row.detected) return style.green("detected");
+  return style.dim("not found");
 }
 
 function toggle(
@@ -74,5 +110,15 @@ function toggle(
       ctx.home,
     );
   }, ctx.home);
-  return { exitCode: 0, human: [`${name} ${mode}d`], json: { name, mode } };
+  const verb = mode === "enable" ? "Enabled" : "Disabled";
+  const detail =
+    mode === "enable" ? "crew will install into it from now on" : "crew will skip it from now on";
+  return {
+    exitCode: 0,
+    human: [
+      `${ctx.style.symbol("ok")} ${verb} ${ctx.style.bold(name)}`,
+      ctx.style.dim(`  ${detail}`),
+    ],
+    json: { name, mode },
+  };
 }
