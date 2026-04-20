@@ -63,12 +63,17 @@ export function neutralizeAdaptersExcept(keep: readonly string[]): void {
   const keepSet = new Set(keep);
   const inert = mkdtempSync(join(tmpdir(), "crew-inert-adapters-"));
   for (const a of ALL_AGENTS) {
+    // Capture every adapter's real implementation before any
+    // mutation, so `withOriginalAdapter` can restore any of them
+    // later (even kept ones the preload further tweaks).
+    if (!ADAPTER_ORIGINALS.has(a.name)) {
+      ADAPTER_ORIGINALS.set(a.name, {
+        userPath: a.userPath,
+        projectPath: a.projectPath,
+        detect: a.detect,
+      });
+    }
     if (keepSet.has(a.name)) continue;
-    ADAPTER_ORIGINALS.set(a.name, {
-      userPath: a.userPath,
-      projectPath: a.projectPath,
-      detect: a.detect,
-    });
     (a as AdapterMut).userPath = () => join(inert, a.name);
     (a as AdapterMut).projectPath = () => join(inert, a.name);
     (a as AdapterMut).detect = () => false;
