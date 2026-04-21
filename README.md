@@ -22,7 +22,7 @@ GitHub Copilot, Goose, and [every other supported agent](#agents).
 
 ## Why crew
 
-> **Great skills exist. You should have all of them.**
+> **Your team has great skills. You should have all of them.**
 
 Right now, the best prompts and agent playbooks either sit on one person's
 machine or get copy-pasted through gists and Slack messages that nobody keeps
