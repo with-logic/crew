@@ -319,7 +319,7 @@ workflows. A few things that are particular to crew:
   graph and installs everything they need. A single `team-baseline` meta-skill
   can pull in a dozen others.
 - **Background autoupdate.** `crew autoupdate enable` sets up a launchd agent
-  that keeps every skill current every 4 hours.
+  that keeps every skill current.
 - **Local-edit protection.** Crew hashes what it installs and refuses to
   clobber your edits on re-install — so you can tweak a skill in place and
   not lose your work the next time something updates.

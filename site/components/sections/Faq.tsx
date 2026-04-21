@@ -35,7 +35,7 @@ const QAS: readonly QA[] = [
           </li>
           <li>
             <strong>Background autoupdate.</strong> <code>crew autoupdate enable</code> sets up a
-            launchd agent that keeps every skill current every 4 hours.
+            launchd agent that keeps every skill current.
           </li>
           <li>
             <strong>Local-edit protection.</strong> Crew hashes what it installs and refuses to
