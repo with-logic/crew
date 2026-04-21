@@ -307,24 +307,24 @@ afternoon — see [§7.1](./PRD.md#71-adapter-operations) in the PRD.
 
 ## FAQ
 
-**How is this different from `skills.sh` or `gh skill`?** Both are fine for
-grabbing a single public skill. Crew is built for *teams*. The practical
-differences:
+**How is this different from `skills.sh` or `gh skill`?** They're great
+projects too — different takes on the same problem. Crew leans hard into team
+workflows. A few things that are particular to crew:
 
-- **Taps.** Point crew at a private git repo once; every skill in it is
-  searchable and installable by bare name. Neither competitor has a tap
-  concept — they resolve each install against a specific repo URL.
+- **Taps.** Point crew at a git repo once; every skill in it is searchable
+  and installable. You can even just install the entire tap, and as skills
+  are added to that tap, they'll get added to your machine when you run
+  `crew update`.
 - **Skill dependencies.** Skills can depend on other skills. Crew walks the
   graph and installs everything they need. A single `team-baseline` meta-skill
-  can pull in a dozen others. Neither competitor supports this.
-- **Background autoupdate.** `crew autoupdate enable` and a launchd agent
-  keep every skill current every 4 hours. Both competitors are run-it-yourself.
+  can pull in a dozen others.
+- **Background autoupdate.** `crew autoupdate enable` sets up a launchd agent
+  that keeps every skill current every 4 hours.
 - **Local-edit protection.** Crew hashes what it installs and refuses to
-  clobber your edits on re-install. `skills.sh` silently `rm -rf`s; `gh skill`
-  uses a GitHub tree SHA that only catches upstream changes.
+  clobber your edits on re-install — so you can tweak a skill in place and
+  not lose your work the next time something updates.
 - **Private-first.** Crew clones taps with whatever git credentials are on
   the machine — SSH, GitHub tokens, Enterprise hosts. No hosted middleman.
-  `gh skill` doesn't document Enterprise support.
 
 **How does crew work with a private team skills repo?** Same as any private
 git repo you clone. Add it as a tap: `crew tap add git@github.com:acme/skills.git`.

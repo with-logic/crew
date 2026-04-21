@@ -19,34 +19,32 @@ const QAS: readonly QA[] = [
     a: (
       <>
         <p>
-          Both are fine for grabbing a single public skill. Crew is built for <em>teams</em>. The
-          practical differences:
+          They're great projects too — different takes on the same problem. Crew leans hard into
+          team workflows. A few things that are particular to crew:
         </p>
         <ul>
           <li>
-            <strong>Taps.</strong> Point crew at a private git repo once; every skill in it is
-            searchable and installable by bare name. Neither competitor has a tap concept — they
-            resolve each install against a specific repo URL.
+            <strong>Taps.</strong> Point crew at a git repo once; every skill in it is searchable
+            and installable. You can even just install the entire tap, and as skills are added to
+            that tap, they'll get added to your machine when you run <code>crew update</code>.
           </li>
           <li>
             <strong>Skill dependencies.</strong> Skills can depend on other skills. Crew walks the
             graph and installs everything they need. A single <code>team-baseline</code> meta-skill
-            can pull in a dozen others. Neither competitor supports this.
+            can pull in a dozen others.
           </li>
           <li>
-            <strong>Background autoupdate.</strong> <code>crew autoupdate enable</code> and a
-            launchd agent keeps every skill current every 4 hours. Both competitors are
-            run-it-yourself-only.
+            <strong>Background autoupdate.</strong> <code>crew autoupdate enable</code> sets up a
+            launchd agent that keeps every skill current every 4 hours.
           </li>
           <li>
             <strong>Local-edit protection.</strong> Crew hashes what it installs and refuses to
-            clobber your edits on re-install. skills.sh silently <code>rm -rf</code>s;{" "}
-            <code>gh skill</code> uses a GitHub tree SHA that only catches upstream changes.
+            clobber your edits on re-install — so you can tweak a skill in place and not lose your
+            work the next time something updates.
           </li>
           <li>
             <strong>Private-first.</strong> Crew clones taps with whatever git credentials are on
-            the machine — SSH, GitHub tokens, Enterprise hosts. No hosted middleman.{" "}
-            <code>gh skill</code> doesn't document Enterprise support.
+            the machine — SSH, GitHub tokens, Enterprise hosts. No hosted middleman.
           </li>
         </ul>
       </>
