@@ -41,10 +41,9 @@ without thinking about it.
 
 ## What is Crew?
 
-Easily share skills across your team. One command to install. The same skills
-on every laptop, in every coding agent. Updated automatically. Changes ship
-through pull requests. Nothing leaves your network — crew, the CLI, and every
-skill you install are all open source under MIT.
+Crew turns **any git repo** into a registry of agent skills. Push a `SKILL.md`.
+Share a link. That's the package index. No servers, no accounts, no hosted
+registry — crew, the CLI itself, is open source under MIT.
 
 - **private by default** · your git credentials, your repo
 - **no hosted registry** · git is the backend

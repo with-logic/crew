@@ -8,13 +8,14 @@ export function ValueProp() {
       <Container>
         <p className={styles.label}>What is Crew?</p>
         <h2 className={styles.title}>
-          <span className={styles.mark}>Easily share</span> skills across your team.
+          Crew turns <span className={styles.mark}>any&nbsp;git&nbsp;repo</span> into a registry of
+          agent skills.
         </h2>
         <p className={styles.sub}>
           <span>
-            One command to install. The same skills on every laptop, in every coding agent. Updated
-            automatically. Changes ship through pull requests. Nothing leaves your network — crew,
-            the CLI, and every skill you install are all open source under MIT.
+            Push a <code className={styles.codePaper}>SKILL.md</code>. Share a link. That's the
+            package index. No servers, no accounts, no hosted registry — crew, the CLI itself, is
+            open source under MIT.
           </span>
         </p>
         <div className={styles.chips}>
