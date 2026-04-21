@@ -1,0 +1,37 @@
+# Dependabot configuration.
+#
+# Weekly cadence keeps PRs manageable on a small repo. Three ecosystems:
+#
+#   1. npm at the repo root — the crew CLI's deps (typescript, biome,
+#      bun types, etc.). Bun reads npm packages via the same registry.
+#   2. npm in `site/` — the Next.js landing site.
+#   3. github-actions — the workflows under `.github/workflows/`.
+#
+# Security advisories on any of these come in via Dependabot security
+# updates (enabled separately on the repo) regardless of this schedule.
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "npm"
+    directory: "/site"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(site)"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
