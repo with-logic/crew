@@ -59,7 +59,23 @@ function HeroTerminal() {
       <div className={styles.line}>
         <span className={styles.prompt}>&nbsp;</span>
         <span className={styles.ok}>✓</span>
-        <span className={styles.out}>installed across every detected agent</span>
+        <span className={styles.out}>claude-code &nbsp;→ ~/.claude/skills/team-baseline</span>
+      </div>
+      <div className={styles.line}>
+        <span className={styles.prompt}>&nbsp;</span>
+        <span className={styles.ok}>✓</span>
+        <span className={styles.out}>
+          codex &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ ~/.agents/skills/team-baseline
+        </span>
+      </div>
+      <div className={styles.line}>
+        <span className={styles.prompt}>&nbsp;</span>
+        <span className={styles.ok}>✓</span>
+        <span className={styles.out}>gemini-cli &nbsp;&nbsp;→ ~/.agents/skills/team-baseline</span>
+      </div>
+      <div className={styles.line}>
+        <span className={styles.prompt}>&nbsp;</span>
+        <span className={styles.dim}>installed in 3 agents · 0 skipped · 0 failed</span>
       </div>
       <div className={styles.line}>
         <span className={styles.prompt}>$</span>
