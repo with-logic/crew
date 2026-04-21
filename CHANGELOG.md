@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0] — 2026-04-20
+
+### Changed
+
+- Hero terminal on the marketing site now displays explicit per-agent install rows (e.g. `claude-code`, `codex`, `gemini-cli`) plus a summary line, making crew's multi-agent install visible at a glance.
+- Site copy and README reframed around team sharing and user value: new tagline, reworked hero lede and terminal demo, value-first headlines, and four new FAQ entries covering comparisons with skills.sh / `gh skill`, private team repos, skill dependencies, and multi-agent install.
+
 ## [0.4.0] — 2026-04-20
 
 ### Added
