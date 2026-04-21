@@ -22,28 +22,27 @@ GitHub Copilot, Goose, and [every other supported agent](#agents).
 
 ## Why crew
 
-Right now, the best prompts and agent playbooks on your team are trapped on
-other engineers' computers — or get copy-pasted through gists and Slack
-messages that nobody keeps current. Crew gives your team a shared shelf: a
-private git repo everyone installs from, reviews in PRs, and keeps in sync
-without thinking about it.
+> **Great skills exist. You should have all of them.**
 
-- **Share with your team.** Onboard a new hire in two minutes. Roll out a
-  workflow change to the whole team in one PR. Keep everyone's agents in sync
-  without anyone having to think about it.
-- **Share with peers.** Any git repo with a `SKILL.md` at the root is
+Right now, the best prompts and agent playbooks either sit on one person's
+machine or get copy-pasted through gists and Slack messages that nobody keeps
+current. Crew gives them a home, a way to be shared, and kept up to date.
+Anyone can publish. Anyone can install.
+
+- **Publish a skill.** Any git repo with a `SKILL.md` at the root is
   installable. Push to GitHub, send the link — `crew install @you/skill` and
-  your friend has it. Skills install their dependencies, so one link can
-  onboard a whole workflow.
-- **Share with the industry.** Browse the default `core` tap and community
-  taps for battle-tested skills — review conventions, language idioms,
-  framework playbooks. Fork, tweak, publish your own.
+  your friend has it.
+- **Your skills repo is your registry.** Point crew at a shared repo — a
+  _tap_ — and everyone on the team pulls the same skills, reviewed in PRs,
+  versioned in git. Onboarding is one command.
+- **Discover what actually works.** Browse the default `core` tap and
+  community taps for battle-tested skills. Fork, tweak, publish your own.
 
 ## What is Crew?
 
 Crew turns **any git repo** into a registry of agent skills. Push a `SKILL.md`.
 Share a link. That's the package index. No servers, no accounts, no hosted
-registry — crew, the CLI itself, is open source under MIT.
+registry.
 
 - **private by default** · your git credentials, your repo
 - **no hosted registry** · git is the backend

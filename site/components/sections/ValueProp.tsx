@@ -14,8 +14,7 @@ export function ValueProp() {
         <p className={styles.sub}>
           <span>
             Push a <code className={styles.codePaper}>SKILL.md</code>. Share a link. That's the
-            package index. No servers, no accounts, no hosted registry — crew, the CLI itself, is
-            open source under MIT.
+            package index. No servers, no accounts, no hosted registry.
           </span>
         </p>
         <div className={styles.chips}>
