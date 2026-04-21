@@ -198,7 +198,7 @@ export function Faq() {
         <SectionHead
           number="11"
           label="FAQ"
-          title="Things people ask before they install it."
+          title={<>Things people ask about <code>crew</code>.</>}
           description=""
         />
         <div className={styles.list}>
