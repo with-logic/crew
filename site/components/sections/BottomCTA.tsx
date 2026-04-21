@@ -6,7 +6,7 @@ import styles from "./BottomCTA.module.css";
 
 export function BottomCTA() {
   return (
-    <Section tight ruleTop>
+    <Section tight ruleTop className={styles.section}>
       <Container>
         <div className={styles.wrap}>
           <Eyebrow centered>Share agent skills across your team</Eyebrow>
