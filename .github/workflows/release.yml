@@ -168,7 +168,7 @@ jobs:
         run: sha256sum crew-macos-arm64 crew-macos-x64 > SHA256SUMS
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
           name: ${{ needs.resolve.outputs.tag }}
