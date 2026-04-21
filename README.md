@@ -3,7 +3,7 @@
   <h1>crew</h1>
 </div>
 
-**Let your team share [agent skills](https://agentskills.io/specification).**
+**For teams sharing [agent skills](https://agentskills.io/specification).**
 
 Easily discover and share skills across your team. One command to install. The
 same skills on every laptop, in every coding agent. Updated automatically.

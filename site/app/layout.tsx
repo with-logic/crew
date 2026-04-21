@@ -19,11 +19,11 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://crew.logic.inc"),
-  title: "crew — let your team share agent skills",
+  title: "crew — for teams sharing agent skills",
   description:
     "Easily share skills across your team. One command to install. The same skills on every laptop, in every coding agent. Updated automatically.",
   openGraph: {
-    title: "crew — let your team share agent skills",
+    title: "crew — for teams sharing agent skills",
     description:
       "Easily share skills across your team. One command to install. The same skills on every laptop, in every coding agent. Updated automatically.",
     type: "website",
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "crew — let your team share agent skills",
+    title: "crew — for teams sharing agent skills",
     description:
       "Easily share skills across your team. One command to install. The same skills on every laptop, in every coding agent.",
   },
