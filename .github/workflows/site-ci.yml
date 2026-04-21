@@ -1,16 +1,14 @@
 name: Site CI
 
+# Runs on every PR and push to main, regardless of which paths
+# changed. Branch protection requires this job's success context, so
+# path-filtering it would let CLI-only PRs slip through unblocked.
+
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "site/**"
-      - ".github/workflows/site-ci.yml"
   push:
     branches: [main]
-    paths:
-      - "site/**"
-      - ".github/workflows/site-ci.yml"
 
 # Cancel in-progress runs on the same ref when a new push arrives.
 concurrency:
@@ -18,7 +16,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check:
+  site-check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
