@@ -15,7 +15,7 @@ export function Agents() {
           description={
             <>
               Any agent coder that reads the{" "}
-              <a href="https://agentskills.io/specification">Agent Skills spec</a> is a valid
+              <a href="https://agentskills.io/specification">agent skills spec</a> is a valid
               target. Crew auto-detects the ones you already have and quietly skips the rest.
             </>
           }

@@ -19,7 +19,7 @@ const COLUMNS: readonly {
   {
     title: "Resources",
     links: [
-      { href: "https://agentskills.io/specification", label: "Agent Skills spec" },
+      { href: "https://agentskills.io/specification", label: "agent skills spec" },
       { href: "#skill-md", label: "SKILL.md anatomy" },
       { href: "#faq", label: "FAQ" },
     ],
@@ -46,8 +46,8 @@ export function Footer() {
           <div>
             <Brand />
             <p className={styles.lede}>
-              A package manager for agent skills. Install once, everywhere. Ship skills like
-              packages. macOS-first, open source.
+              A macOS package manager for agent skills. Install once, share through git, keep every
+              agent current.
             </p>
           </div>
           {COLUMNS.map((c) => (

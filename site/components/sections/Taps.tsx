@@ -15,9 +15,9 @@ export function Taps() {
           title="A tap is just a git repo full of skills."
           description={
             <>
-              No hosted registry, no server, no account. Your team's skills repo <em>is</em> the
-              package index. Fork it, branch it, review it in pull requests, and{" "}
-              <code>crew update</code> pulls it like any other.
+              No hosted registry, no server, no account. Your personal skills repo, team repo, or
+              public collection <em>is</em> the package index. Fork it, branch it, review it in pull
+              requests, and <code>crew update</code> pulls it like any other.
             </>
           }
         />
@@ -66,8 +66,8 @@ export function Taps() {
             </CodeBlock>
             <p className={styles.note}>
               A meta-skill is an ordinary skill whose body describes the team's conventions and
-              whose <code>dependencies</code> list pulls in the rest. Onboarding becomes one
-              command.
+              whose <code>dependencies</code> list pulls in the rest. The same pattern works for a
+              solo baseline: one command to recreate your preferred agent setup on a new Mac.
             </p>
           </div>
         </div>

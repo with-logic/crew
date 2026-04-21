@@ -1,6 +1,11 @@
+.section {
+  padding-top: 24px;
+  padding-bottom: 64px;
+}
+
 .wrap {
   text-align: center;
-  padding: 48px 0;
+  padding: 8px 0 0;
 }
 
 .title {

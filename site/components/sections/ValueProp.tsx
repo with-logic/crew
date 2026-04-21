@@ -8,24 +8,24 @@ export function ValueProp() {
       <Container>
         <p className={styles.label}>What is Crew?</p>
         <h2 className={styles.title}>
-          Crew turns <span className={styles.mark}>any&nbsp;git&nbsp;repo</span> into a registry of
-          agent skills.
+          Crew treats <span className={styles.mark}>agent&nbsp;skills</span> like packages.
         </h2>
         <p className={styles.sub}>
           <span>
-            Push a <code className={styles.codePaper}>SKILL.md</code>. Share a link. That's the
-            package index. No servers, no accounts, no hosted registry.
+            Install one skill for yourself, publish a repo for your team, or tap into a shared
+            collection. Git is the package index; <code className={styles.codePaper}>SKILL.md</code>{" "}
+            is the manifest.
           </span>
         </p>
         <div className={styles.chips}>
           <Pill>
-            <strong>no hosted registry</strong> · git is the backend
+            <strong>multi-agent</strong> · one install, every detected agent
+          </Pill>
+          <Pill>
+            <strong>team taps</strong> · private git repos become registries
           </Pill>
           <Pill>
             <strong>no telemetry</strong> · crew never phones home
-          </Pill>
-          <Pill>
-            <strong>open source</strong> · MIT
           </Pill>
         </div>
       </Container>

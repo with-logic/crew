@@ -51,6 +51,23 @@ const QAS: readonly QA[] = [
     ),
   },
   {
+    id: "solo",
+    q: "Is crew useful if I don't have a team?",
+    a: (
+      <>
+        <p>
+          Yes. Crew is still a package manager for your own skills. Install a skill once and it
+          lands in every detected agent. Add your personal skills repo as a tap and your library
+          becomes searchable. Use a baseline skill to recreate your setup on a new Mac.
+        </p>
+        <p>
+          The team features are the same primitives scaled up: git sources, taps, dependency
+          resolution, source tracking, autoupdate, and local-edit protection.
+        </p>
+      </>
+    ),
+  },
+  {
     id: "private-team",
     q: "How does crew work with a private team skills repo?",
     a: (
@@ -63,7 +80,8 @@ const QAS: readonly QA[] = [
         </p>
         <p>
           Every <code>main</code>-merge automatically becomes installable team-wide. Pair it with{" "}
-          <code>crew autoupdate enable</code> and everyone stays in sync without thinking about it.
+          <code>crew autoupdate enable</code> and every Mac pulls approved skill updates on the next
+          interval.
         </p>
       </>
     ),
@@ -94,7 +112,7 @@ const QAS: readonly QA[] = [
         <p>
           Yes. <code>crew install founding-engineer</code> copies the skill into Claude Code, Codex,
           Cursor, Gemini CLI, GitHub Copilot, Goose, and every other{" "}
-          <a href="#agents">supported agent</a> that's detected on the machine. Agents that share a
+          <a href="#agents">supported agent</a> detected on the machine. Agents that share a
           convention (e.g. most read <code>~/.agents/skills/</code>) get one physical copy; the
           install summary reports each adapter by name.
         </p>
@@ -124,40 +142,12 @@ const QAS: readonly QA[] = [
     ),
   },
   {
-    id: "new-agent",
-    q: "How do I add support for a new agent?",
-    a: (
-      <>
-        Write an adapter — six methods: <code>detect</code>, <code>user_path</code>,{" "}
-        <code>project_path</code>, <code>install</code>, <code>uninstall</code>,{" "}
-        <code>list_installed</code>. Register it. The install pipeline is tool-agnostic; adapters
-        just know where the files go.
-      </>
-    ),
-  },
-  {
     id: "registry",
     q: "Is there a hosted registry?",
     a: (
       <>
         No. The default tap <code>core</code> is a plain git repo. Anyone can host a tap — your
-        team, your company, yourself. Crew never phones home.
-      </>
-    ),
-  },
-  {
-    id: "update-skip",
-    q: (
-      <>
-        How does <code>crew update</code> know when to skip a skill?
-      </>
-    ),
-    a: (
-      <>
-        Skills pinned to an exact SHA are skipped unless <code>--force</code>. Skills pinned to a
-        tag are re-resolved: if the tag moved and <code>--force</code> is given, the new commit is
-        installed. Everything else (branches, default branches, bare tap references) updates to
-        whatever the ref resolves to now.
+        team, your company, yourself. Crew never phones home or uploads your skills.
       </>
     ),
   },
@@ -165,27 +155,6 @@ const QAS: readonly QA[] = [
     id: "platforms",
     q: "What about Linux? Windows?",
     a: "Future work. The v1 spec is macOS-only because launchd is the autoupdate mechanism and each agent adapter encodes platform-specific paths. Nothing in the core design is Mac-specific; it's a scope decision, not a technical one.",
-  },
-  {
-    id: "cross-tap-dep",
-    q: "Can a skill depend on another skill in a different tap?",
-    a: "Yes. Dependency references are full skill references — any form the CLI accepts. You can depend on a bare name (resolved across taps), a qualified tap name, a git URL with a ref, or a subpath inside a monorepo.",
-  },
-  {
-    id: "project-git",
-    q: (
-      <>
-        Does <code>project</code> scope interact with git?
-      </>
-    ),
-    a: (
-      <>
-        Not automatically. <code>--scope project</code> writes into the agent's project-local skills
-        directory relative to your current working directory. Whether you commit that directory is
-        up to you. Many teams do; it means cloning a repo gives you its skills, no{" "}
-        <code>crew install</code> required.
-      </>
-    ),
   },
 ];
 

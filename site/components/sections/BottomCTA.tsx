@@ -6,10 +6,10 @@ import styles from "./BottomCTA.module.css";
 
 export function BottomCTA() {
   return (
-    <Section tight ruleTop>
+    <Section tight ruleTop className={styles.section}>
       <Container>
         <div className={styles.wrap}>
-          <Eyebrow centered>Share agent skills across your team</Eyebrow>
+          <Eyebrow centered>A package manager for agent skills</Eyebrow>
           <h2 className={styles.title}>$ crew install &lt;skill&gt;</h2>
           <div className={styles.ctaRow}>
             <Button href="#install">Install crew</Button>

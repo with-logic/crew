@@ -11,34 +11,35 @@ const CELLS: readonly {
 }[] = [
   {
     num: "01",
-    subtitle: "share with peers",
-    title: "Publish a skill.",
+    subtitle: "use your own",
+    title: "Install skills without manual copying.",
     body: (
       <>
-        Any git repo with a <code>SKILL.md</code> at the root is installable. Push to GitHub, send
-        the link — <code>crew install @you/skill</code> and your friend has it.
+        Point crew at a local directory, a git repo, or a tap entry. It validates the{" "}
+        <code>SKILL.md</code>, copies it into the right agent directories, and records what it
+        wrote.
       </>
     ),
   },
   {
     num: "02",
-    subtitle: "share with your team",
+    subtitle: "share with a team",
     title: "Your skills repo is your registry.",
     body: (
       <>
-        Point crew at a shared repo — a <em>tap</em> — and everyone on the team pulls the same
-        skills, reviewed in PRs, versioned in git. Onboarding is one command.
+        Point crew at a shared repo — a <em>tap</em> — and everyone pulls the same skills, reviewed
+        in PRs and versioned in git. A baseline skill can onboard a new laptop in one command.
       </>
     ),
   },
   {
     num: "03",
-    subtitle: "share with the industry",
-    title: "Discover what actually works.",
+    subtitle: "stay current",
+    title: "Update skills like packages.",
     body: (
       <>
-        Browse the default <code>core</code> tap and community taps for battle-tested skills —
-        review conventions, language idioms, framework playbooks. Fork, tweak, publish your own.
+        <code>crew update</code> refreshes taps, resolves refs to commit SHAs, skips pinned skills,
+        and refuses to overwrite local edits unless you explicitly force it.
       </>
     ),
   },
@@ -51,8 +52,8 @@ export function Problem() {
         <SectionHead
           number="01"
           label="Why crew"
-          title="Your team has great skills. You should have all of them."
-          description="Right now, the best prompts and agent playbooks either sit on one person's machine or get copy-pasted through gists and Slack messages that nobody keeps current. Crew gives them a home, a way to be shared, and kept up to date. Anyone can publish. Anyone can install."
+          title="Package-manager workflows for agent skills."
+          description="The best prompts and agent playbooks often live as copied folders, gists, or private notes. Crew gives them install commands, source tracking, update behavior, and a git-native way to share them without a hosted registry."
         />
         <div className={styles.grid}>
           {CELLS.map((c) => (
