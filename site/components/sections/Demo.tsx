@@ -11,7 +11,7 @@ export function Demo() {
           number="05"
           label="A day with crew"
           title="What using it actually feels like."
-          description="Six commands that cover roughly 90% of what you'll ever type."
+          description="Six commands that cover 90% of needs."
         />
 
         <CodeBlock>

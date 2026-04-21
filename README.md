@@ -99,7 +99,7 @@ Run `crew help install` for the full grammar.
 
 ## A day with crew
 
-Six commands that cover roughly 90% of what you'll ever type.
+Six commands that cover 90% of needs.
 
 ```
 # Find a skill across every tap you've added.
