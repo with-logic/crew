@@ -19,9 +19,6 @@ export function ValueProp() {
         </p>
         <div className={styles.chips}>
           <Pill>
-            <strong>private by default</strong> · your git credentials, your repo
-          </Pill>
-          <Pill>
             <strong>no hosted registry</strong> · git is the backend
           </Pill>
           <Pill>

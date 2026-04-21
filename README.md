@@ -44,7 +44,6 @@ Crew turns **any git repo** into a registry of agent skills. Push a `SKILL.md`.
 Share a link. That's the package index. No servers, no accounts, no hosted
 registry.
 
-- **private by default** · your git credentials, your repo
 - **no hosted registry** · git is the backend
 - **no account** · nothing to sign up for
 - **no telemetry** · crew never phones home
