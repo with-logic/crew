@@ -10,12 +10,12 @@ export function Hero() {
         <div className={styles.grid}>
           <div>
             <h1 className={styles.title}>
-              <code className={styles.brandCode}>crew</code> is a package manager{" "}
-              <span className={styles.accent}>for agent skills</span>.
+              <code className={styles.brandCode}>crew</code> helps teams{" "}
+              <span className={styles.accent}>share agent skills</span>.
             </h1>
             <p className={styles.lede}>
-              Find great skills. Install them with one command into every coding agent on your
-              machine. Share your own as easily as pushing to GitHub.
+              Easily discover and share skills across your team. One command to install. The same
+              skills on every laptop, in every coding agent. Updated automatically.
             </p>
             <div className={styles.ctaRow}>
               <Button href="#how" variant="ghost">
@@ -35,42 +35,40 @@ function HeroTerminal() {
     <Terminal title="~/work · zsh">
       <div className={styles.line}>
         <span className={styles.prompt}>$</span>
-        <span className={styles.cmd}>crew install founding-engineer</span>
-      </div>
-      <div className={styles.line}>
-        <span className={styles.prompt}>&nbsp;</span>
-        <span className={styles.dim}>
-          resolving <span className={styles.acc}>founding-engineer</span> from tap{" "}
-          <span className={styles.acc}>core</span>…
-        </span>
-      </div>
-      <div className={styles.line}>
-        <span className={styles.prompt}>&nbsp;</span>
-        <span className={styles.dim}>
-          fetched <span className={styles.acc}>core</span> @{" "}
-          <span className={styles.acc}>a1b2c3d</span> · validated SKILL.md
-        </span>
-      </div>
-      <div className={styles.line}>
-        <span className={styles.prompt}>&nbsp;</span>
-        <span className={styles.ok}>✓</span>
-        <span className={styles.out}>claude-code &nbsp;→ ~/.claude/skills/founding-engineer</span>
+        <span className={styles.cmd}>crew tap add @acme/skills</span>
       </div>
       <div className={styles.line}>
         <span className={styles.prompt}>&nbsp;</span>
         <span className={styles.ok}>✓</span>
         <span className={styles.out}>
-          codex &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ ~/.agents/skills/founding-engineer
+          cloned <span className={styles.acc}>acme</span> → 42 skills available
+        </span>
+      </div>
+      <div className={styles.line}>
+        <span className={styles.prompt}>$</span>
+        <span className={styles.cmd}>crew install acme/team-baseline</span>
+      </div>
+      <div className={styles.line}>
+        <span className={styles.prompt}>&nbsp;</span>
+        <span className={styles.ok}>✓</span>
+        <span className={styles.out}>
+          resolved <span className={styles.acc}>14 dependencies</span> from tap{" "}
+          <span className={styles.acc}>acme</span>
         </span>
       </div>
       <div className={styles.line}>
         <span className={styles.prompt}>&nbsp;</span>
         <span className={styles.ok}>✓</span>
-        <span className={styles.out}>gemini-cli &nbsp;→ ~/.agents/skills/founding-engineer</span>
+        <span className={styles.out}>installed across every detected agent</span>
+      </div>
+      <div className={styles.line}>
+        <span className={styles.prompt}>$</span>
+        <span className={styles.cmd}>crew autoupdate enable</span>
       </div>
       <div className={styles.line}>
         <span className={styles.prompt}>&nbsp;</span>
-        <span className={styles.dim}>installed in 3 agents · 0 skipped · 0 failed</span>
+        <span className={styles.ok}>✓</span>
+        <span className={styles.out}>checking every 4 hours</span>
       </div>
       <div className={styles.line}>
         <span className={styles.prompt}>$</span>

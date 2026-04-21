@@ -13,8 +13,9 @@ const STEPS: readonly {
     title: "Find great skills.",
     body: (
       <>
-        Search across the default <code>core</code> collection and anything else you've added.
-        Browse what your teammates, favorite engineers, and the broader community are publishing.
+        Search across your team's private tap, the default <code>core</code> collection, and
+        anything else you've added. Browse what your team, favorite engineers, and the broader
+        community are publishing.
       </>
     ),
   },

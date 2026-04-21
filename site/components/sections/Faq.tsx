@@ -13,8 +13,100 @@ interface QA {
 
 const QAS: readonly QA[] = [
   {
-    id: "symlinks",
+    id: "vs-others",
     defaultOpen: true,
+    q: "How is this different from skills.sh or `gh skill`?",
+    a: (
+      <>
+        <p>
+          They're great projects too — different takes on the same problem. Crew leans hard into
+          team workflows. A few things that are particular to crew:
+        </p>
+        <ul>
+          <li>
+            <strong>Taps.</strong> Point crew at a git repo once; every skill in it is searchable
+            and installable. You can even just install the entire tap, and as skills are added to
+            that tap, they'll get added to your machine when you run <code>crew update</code>.
+          </li>
+          <li>
+            <strong>Skill dependencies.</strong> Skills can depend on other skills. Crew walks the
+            graph and installs everything they need. A single <code>team-baseline</code> meta-skill
+            can pull in a dozen others.
+          </li>
+          <li>
+            <strong>Background autoupdate.</strong> <code>crew autoupdate enable</code> sets up a
+            launchd agent that keeps every skill current.
+          </li>
+          <li>
+            <strong>Local-edit protection.</strong> Crew hashes what it installs and refuses to
+            clobber your edits on re-install — so you can tweak a skill in place and not lose your
+            work the next time something updates.
+          </li>
+          <li>
+            <strong>Private-first.</strong> Crew clones taps with whatever git credentials are on
+            the machine — SSH, GitHub tokens, Enterprise hosts. No hosted middleman.
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: "private-team",
+    q: "How does crew work with a private team skills repo?",
+    a: (
+      <>
+        <p>
+          Same as any private git repo you clone. Add it as a tap:{" "}
+          <code>crew tap add git@github.com:acme/skills.git</code>. Crew uses whatever credentials
+          your git already has — SSH keys, personal access tokens, GitHub Enterprise hosts. Nothing
+          gets uploaded anywhere; there's no intermediary registry.
+        </p>
+        <p>
+          Every <code>main</code>-merge automatically becomes installable team-wide. Pair it with{" "}
+          <code>crew autoupdate enable</code> and everyone stays in sync without thinking about it.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "dependencies",
+    q: "Skills can depend on other skills?",
+    a: (
+      <>
+        <p>
+          Yes. A <code>SKILL.md</code>'s frontmatter can list{" "}
+          <code>metadata.crew.dependencies</code> — an array of skill references in any form the CLI
+          accepts. Crew walks the graph transitively and installs every dep before the parent.
+        </p>
+        <p>
+          The most useful pattern is a "meta-skill" — a single skill whose body describes a team's
+          conventions and whose <code>dependencies</code> list pulls in the real working skills.
+          Onboarding a new engineer becomes one command.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "multi-agent",
+    q: "Does one install really cover every coding agent?",
+    a: (
+      <>
+        <p>
+          Yes. <code>crew install founding-engineer</code> copies the skill into Claude Code, Codex,
+          Cursor, Gemini CLI, GitHub Copilot, Goose, and every other{" "}
+          <a href="#agents">supported agent</a> that's detected on the machine. Agents that share a
+          convention (e.g. most read <code>~/.agents/skills/</code>) get one physical copy; the
+          install summary reports each adapter by name.
+        </p>
+        <p>
+          Don't have one of them? It's skipped silently. Add the agent later, run{" "}
+          <code>crew update</code>, and it catches up.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "symlinks",
     q: "Why copies instead of symlinks?",
     a: "Symlinks break the moment two agents resolve a skill differently, or a user pins one agent to an older ref. Copies are dumb, predictable, and safe: each agent's directory is self-sufficient. The marginal disk cost is negligible — skills are markdown.",
   },
@@ -104,7 +196,11 @@ export function Faq() {
         <SectionHead
           number="11"
           label="FAQ"
-          title="Things people ask before they install it."
+          title={
+            <>
+              Things people ask about <code>crew</code>.
+            </>
+          }
           description=""
         />
         <div className={styles.list}>

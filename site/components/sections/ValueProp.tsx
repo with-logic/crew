@@ -14,22 +14,18 @@ export function ValueProp() {
         <p className={styles.sub}>
           <span>
             Push a <code className={styles.codePaper}>SKILL.md</code>. Share a link. That's the
-            package index. No servers, no accounts, no hosted registry — crew, the CLI, and every
-            skill you install are all open source under MIT.
+            package index. No servers, no accounts, no hosted registry.
           </span>
         </p>
         <div className={styles.chips}>
           <Pill>
-            <strong>open source</strong> · MIT
-          </Pill>
-          <Pill>
             <strong>no hosted registry</strong> · git is the backend
           </Pill>
           <Pill>
-            <strong>no account</strong> · nothing to sign up for
+            <strong>no telemetry</strong> · crew never phones home
           </Pill>
           <Pill>
-            <strong>no telemetry</strong> · crew never phones home
+            <strong>open source</strong> · MIT
           </Pill>
         </div>
       </Container>

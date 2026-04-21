@@ -19,21 +19,21 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://crew.logic.inc"),
-  title: "crew — a package manager for agent skills",
+  title: "crew — helps teams share agent skills",
   description:
-    "Find great skills. Install them with one command into every coding agent on your machine. Share your own as easily as pushing to GitHub.",
+    "Easily share skills across your team. One command to install. The same skills on every laptop, in every coding agent. Updated automatically.",
   openGraph: {
-    title: "crew — a package manager for agent skills",
+    title: "crew — helps teams share agent skills",
     description:
-      "Find great skills. Install them with one command into every coding agent on your machine.",
+      "Easily share skills across your team. One command to install. The same skills on every laptop, in every coding agent. Updated automatically.",
     type: "website",
     url: "https://crew.logic.inc",
   },
   twitter: {
     card: "summary_large_image",
-    title: "crew — a package manager for agent skills",
+    title: "crew — helps teams share agent skills",
     description:
-      "Find great skills. Install them with one command into every coding agent on your machine.",
+      "Easily share skills across your team. One command to install. The same skills on every laptop, in every coding agent.",
   },
 };
 

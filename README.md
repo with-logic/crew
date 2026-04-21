@@ -3,27 +3,31 @@
   <h1>crew</h1>
 </div>
 
-**A package manager for [agent skills](https://agentskills.io/specification).**
+**Helps teams share [agent skills](https://agentskills.io/specification).**
 
-Find great skills. Install them with one command into every coding agent on your
-machine. Share your own as easily as pushing to GitHub.
+Easily discover and share skills across your team. One command to install. The
+same skills on every laptop, in every coding agent. Updated automatically.
 
 ```
-crew install founding-engineer
+crew tap add @acme/skills
+crew install acme/team-baseline
+crew autoupdate enable
 ```
 
-One command. Every agent on the machine — Claude Code, Codex, Cursor, Gemini
-CLI, GitHub Copilot, Goose, and [more](#agents) — gets the same skill, copied
-into the right place, pinned to a specific commit.
+Three commands. A new hire goes from empty laptop to "they know how we ship
+code" in about two minutes — across Claude Code, Codex, Cursor, Gemini CLI,
+GitHub Copilot, Goose, and [every other supported agent](#agents).
 
 ---
 
 ## Why crew
 
+> **Your team has great skills. You should have all of them.**
+
 Right now, the best prompts and agent playbooks either sit on one person's
 machine or get copy-pasted through gists and Slack messages that nobody keeps
-current. Crew gives them a home, a way to be shared, and a way to stay up to
-date. Anyone can publish. Anyone can install.
+current. Crew gives them a home, a way to be shared, and kept up to date.
+Anyone can publish. Anyone can install.
 
 - **Publish a skill.** Any git repo with a `SKILL.md` at the root is
   installable. Push to GitHub, send the link — `crew install @you/skill` and
@@ -38,10 +42,8 @@ date. Anyone can publish. Anyone can install.
 
 Crew turns **any git repo** into a registry of agent skills. Push a `SKILL.md`.
 Share a link. That's the package index. No servers, no accounts, no hosted
-registry — crew, the CLI, and every skill you install are all open source
-under MIT.
+registry.
 
-- **open source** · MIT
 - **no hosted registry** · git is the backend
 - **no account** · nothing to sign up for
 - **no telemetry** · crew never phones home
@@ -96,7 +98,7 @@ Run `crew help install` for the full grammar.
 
 ## A day with crew
 
-Six commands that cover roughly 90% of what you'll ever type.
+Six commands that cover 90% of needs.
 
 ```
 # Find a skill across every tap you've added.
@@ -304,6 +306,48 @@ If it reads a tool-specific path, writing the adapter usually takes an
 afternoon — see [§7.1](./PRD.md#71-adapter-operations) in the PRD.
 
 ## FAQ
+
+**How is this different from `skills.sh` or `gh skill`?** They're great
+projects too — different takes on the same problem. Crew leans hard into team
+workflows. A few things that are particular to crew:
+
+- **Taps.** Point crew at a git repo once; every skill in it is searchable
+  and installable. You can even just install the entire tap, and as skills
+  are added to that tap, they'll get added to your machine when you run
+  `crew update`.
+- **Skill dependencies.** Skills can depend on other skills. Crew walks the
+  graph and installs everything they need. A single `team-baseline` meta-skill
+  can pull in a dozen others.
+- **Background autoupdate.** `crew autoupdate enable` sets up a launchd agent
+  that keeps every skill current.
+- **Local-edit protection.** Crew hashes what it installs and refuses to
+  clobber your edits on re-install — so you can tweak a skill in place and
+  not lose your work the next time something updates.
+- **Private-first.** Crew clones taps with whatever git credentials are on
+  the machine — SSH, GitHub tokens, Enterprise hosts. No hosted middleman.
+
+**How does crew work with a private team skills repo?** Same as any private
+git repo you clone. Add it as a tap: `crew tap add git@github.com:acme/skills.git`.
+Crew uses whatever credentials your git already has — SSH keys, personal
+access tokens, GitHub Enterprise hosts. Nothing gets uploaded anywhere;
+there's no intermediary registry. Every `main`-merge automatically becomes
+installable team-wide. Pair it with `crew autoupdate enable` and everyone
+stays in sync without thinking about it.
+
+**Skills can depend on other skills?** Yes. A `SKILL.md`'s frontmatter can
+list `metadata.crew.dependencies` — an array of skill references in any form
+the CLI accepts. Crew walks the graph transitively and installs every dep
+before the parent. The most useful pattern is a "meta-skill" — a single skill
+whose body describes a team's conventions and whose `dependencies` list pulls
+in the real working skills. Onboarding a new engineer becomes one command.
+
+**Does one install really cover every coding agent?** Yes. `crew install
+founding-engineer` copies the skill into Claude Code, Codex, Cursor, Gemini
+CLI, GitHub Copilot, Goose, and every other supported agent that's detected
+on the machine. Agents that share a convention (most read `~/.agents/skills/`)
+get one physical copy; the install summary reports each adapter by name.
+Don't have one of them? It's skipped silently. Add the agent later, run
+`crew update`, and it catches up.
 
 **Why copies instead of symlinks?** Symlinks break the moment two agents
 resolve a skill differently, or a user pins one agent to an older ref. Copies
