@@ -1,13 +1,13 @@
 {
-  "tag_name": "v0.4.0",
+  "tag_name": "v0.5.0",
   "assets": [
     {
       "name": "crew-macos-arm64",
-      "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.4.0/crew-macos-arm64"
+      "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.5.0/crew-macos-arm64"
     },
     {
       "name": "crew-macos-x64",
-      "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.4.0/crew-macos-x64"
+      "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.5.0/crew-macos-x64"
     }
   ]
 }
