@@ -65,13 +65,13 @@ function HeroTerminal() {
         <span className={styles.prompt}>&nbsp;</span>
         <span className={styles.ok}>✓</span>
         <span className={styles.out}>
-          codex &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ ~/.agents/skills/team-baseline
+          codex &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ ~/.agents/skills/team-baseline
         </span>
       </div>
       <div className={styles.line}>
         <span className={styles.prompt}>&nbsp;</span>
         <span className={styles.ok}>✓</span>
-        <span className={styles.out}>gemini-cli &nbsp;→ ~/.agents/skills/team-baseline</span>
+        <span className={styles.out}>gemini-cli &nbsp;&nbsp;→ ~/.agents/skills/team-baseline</span>
       </div>
       <div className={styles.line}>
         <span className={styles.prompt}>&nbsp;</span>
