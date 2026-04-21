@@ -10,8 +10,8 @@ export function Demo() {
         <SectionHead
           number="05"
           label="A day with crew"
-          title="What using it actually feels like."
-          description="Six commands that cover 90% of needs."
+          title="The commands you'll use most."
+          description="Search, install, update, repeat."
         />
 
         <CodeBlock>

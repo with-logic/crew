@@ -14,10 +14,11 @@ export function Hero() {
               <span className={styles.accent}>share agent skills</span>.
             </h1>
             <p className={styles.lede}>
-              Easily discover and share skills across your team. One command to install. The same
-              skills on every laptop, in every coding agent. Updated automatically.
+              Install skills for yourself or create a shared tap for your team. Crew will keep your
+              skills up to date.
             </p>
             <div className={styles.ctaRow}>
+              <Button href="#install">Install crew</Button>
               <Button href="#how" variant="ghost">
                 How it works
               </Button>
@@ -35,13 +36,40 @@ function HeroTerminal() {
     <Terminal title="~/work · zsh">
       <div className={styles.line}>
         <span className={styles.prompt}>$</span>
+        <span className={styles.cmd}>crew install founding-engineer</span>
+      </div>
+      <div className={styles.line}>
+        <span className={styles.prompt}>&nbsp;</span>
+        <span className={styles.ok}>✓</span>
+        <span className={styles.out}>claude-code &nbsp;→ ~/.claude/skills/founding-engineer</span>
+      </div>
+      <div className={styles.line}>
+        <span className={styles.prompt}>&nbsp;</span>
+        <span className={styles.ok}>✓</span>
+        <span className={styles.out}>
+          codex &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ ~/.agents/skills/founding-engineer
+        </span>
+      </div>
+      <div className={styles.line}>
+        <span className={styles.prompt}>&nbsp;</span>
+        <span className={styles.ok}>✓</span>
+        <span className={styles.out}>
+          gemini-cli &nbsp;&nbsp;→ ~/.agents/skills/founding-engineer
+        </span>
+      </div>
+      <div className={styles.line}>
+        <span className={styles.prompt}>&nbsp;</span>
+        <span className={styles.dim}>installed in 5 agents · 0 skipped · 0 failed</span>
+      </div>
+      <div className={styles.line}>
+        <span className={styles.prompt}>$</span>
         <span className={styles.cmd}>crew tap add @acme/skills</span>
       </div>
       <div className={styles.line}>
         <span className={styles.prompt}>&nbsp;</span>
         <span className={styles.ok}>✓</span>
         <span className={styles.out}>
-          cloned <span className={styles.acc}>acme</span> → 42 skills available
+          cloned <span className={styles.acc}>acme</span> → 42 skills searchable
         </span>
       </div>
       <div className={styles.line}>
@@ -59,23 +87,7 @@ function HeroTerminal() {
       <div className={styles.line}>
         <span className={styles.prompt}>&nbsp;</span>
         <span className={styles.ok}>✓</span>
-        <span className={styles.out}>claude-code &nbsp;→ ~/.claude/skills/team-baseline</span>
-      </div>
-      <div className={styles.line}>
-        <span className={styles.prompt}>&nbsp;</span>
-        <span className={styles.ok}>✓</span>
-        <span className={styles.out}>
-          codex &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ ~/.agents/skills/team-baseline
-        </span>
-      </div>
-      <div className={styles.line}>
-        <span className={styles.prompt}>&nbsp;</span>
-        <span className={styles.ok}>✓</span>
-        <span className={styles.out}>gemini-cli &nbsp;&nbsp;→ ~/.agents/skills/team-baseline</span>
-      </div>
-      <div className={styles.line}>
-        <span className={styles.prompt}>&nbsp;</span>
-        <span className={styles.dim}>installed in 3 agents · 0 skipped · 0 failed</span>
+        <span className={styles.out}>installed team baseline across every detected agent</span>
       </div>
       <div className={styles.line}>
         <span className={styles.prompt}>$</span>

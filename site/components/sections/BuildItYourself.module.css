@@ -9,8 +9,8 @@
 }
 
 /* "Software-as-a-Prompt" pill sits on its own line, centered. Small,
-   subtle — signals "this is a secondary path" without hierarchy
-   competition against the install card above. */
+   subtle — signals "this is a secondary path" without fighting the
+   install card above. */
 .tagRow {
   display: flex;
   justify-content: center;
@@ -71,7 +71,7 @@
 }
 
 /* Clean outlined button on the page background — reads as a clickable
-   surface within the dashed paper card, no color competition with the
+   surface within the dashed paper card, no loud color next to the
    accent pill above. */
 .button {
   font-family: var(--font-mono);

@@ -13,9 +13,9 @@ const STEPS: readonly {
     title: "Find great skills.",
     body: (
       <>
-        Search across your team's private tap, the default <code>core</code> collection, and
-        anything else you've added. Browse what your team, favorite engineers, and the broader
-        community are publishing.
+        Search across your private taps, your team's repo, the default <code>core</code> collection,
+        and anything else you've added. Your personal library and shared team library use the same
+        command.
       </>
     ),
   },
@@ -36,8 +36,8 @@ const STEPS: readonly {
     body: (
       <>
         One <code>crew install</code> copies the skill into Claude Code, Codex, Cursor, Gemini CLI,
-        GitHub Copilot, Goose, and every other agent on your machine. Grab one skill, or a whole
-        collection at once.
+        GitHub Copilot, Goose, and every other supported agent detected on your machine. Grab one
+        skill, a local folder, a git repo, or a whole tap.
       </>
     ),
   },
@@ -82,7 +82,7 @@ export function HowItWorks() {
           number="03"
           label="How it works"
           title="Find, install, update. Repeat."
-          description="Four everyday motions. No manifest to learn, no plugins to configure — commands that do what they say, across every agent you use."
+          description="Five everyday motions. No proprietary manifest, no hosted account, no per-agent setup loop — just commands that do what they say."
         />
 
         <div className={styles.pipeline}>
@@ -112,7 +112,7 @@ export function HowItWorks() {
               <span className={styles.dEmph}>user</span> and{" "}
               <span className={styles.dEmph}>project</span> scope. Multiple agents that share the
               same convention (Codex, Cursor, Gemini, Goose, and others read{" "}
-              <code>~/.agents/skills/</code>) share a single install copy — one write, every agent.
+              <code>~/.agents/skills/</code>) share a single physical copy.
             </div>
           </aside>
         </div>

@@ -42,7 +42,7 @@ export function BuildItYourself({ prompt }: Props) {
       </div>
 
       <h3 id="saap-heading" className={styles.heading}>
-        Create Your Own From Scratch
+        Vibe Your Own
       </h3>
 
       <p className={styles.copy}>
@@ -51,7 +51,7 @@ export function BuildItYourself({ prompt }: Props) {
           PRD
         </a>
         . You can build your own from the same spec — in Go, Rust, Swift, or whatever else. The
-        button below copies a ready-to-paste prompt.
+        button below copies a ready-to-paste prompt for your agent of choice.
       </p>
 
       <div className={styles.buttonRow}>

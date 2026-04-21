@@ -63,8 +63,8 @@ export function Teams() {
         <SectionHead
           number="08"
           label="For teams"
-          title="Fun for the whole team."
-          description="The best skills on your team are trapped on the other engineers' computers. Crew gives your team a shared shelf — a private git repo that everyone installs from, reviews in PRs, and keeps in sync without thinking about it."
+          title="Turn team know-how into installable skills."
+          description="Your team's best agent playbooks should not be trapped on one engineer's laptop. Crew turns a private git repo into a shared package source that people install from, review in PRs, and keep in sync without another internal service."
         />
 
         <div className={styles.grid}>
