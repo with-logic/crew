@@ -1,0 +1,152 @@
+# Creates a Linear ticket for PRs that lack one.
+#
+# Policy:
+#   - If the PR title already has a ticket marker like `[LOG-123]`,
+#     do nothing.
+#   - Otherwise (either `[NO-TICKET]` or no marker at all), create a
+#     Linear ticket, rewrite the title to `[LOG-N] <original>`, and
+#     post a comment linking to the ticket.
+#
+# Self-contained: talks directly to the Linear GraphQL API and the
+# GitHub API via github-script's preloaded octokit. No external action
+# dependency, no build step.
+name: Create Linear Ticket
+run-name: '${{ github.actor }} - Create Linear Ticket'
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: 'linear-ticket-${{ github.event.pull_request.number }}'
+  cancel-in-progress: true
+
+jobs:
+  create-linear-ticket:
+    timeout-minutes: 2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or find Linear ticket
+        uses: actions/github-script@v7
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          LINEAR_TEAM_KEY: ${{ vars.LINEAR_TEAM_KEY || 'LOG' }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const apiKey = process.env.LINEAR_API_KEY;
+            const teamKey = process.env.LINEAR_TEAM_KEY;
+            const prNumber = Number(process.env.PR_NUMBER);
+            const prTitle = process.env.PR_TITLE || '';
+            const prBody = process.env.PR_BODY || '';
+            const repoOwner = process.env.REPO_OWNER;
+            const repoName = process.env.REPO_NAME;
+
+            if (!apiKey) {
+              core.setFailed('LINEAR_API_KEY is not set');
+              return;
+            }
+
+            // A title "has a ticket" iff it contains [XXX-N] with any
+            // uppercase team key. If so, do nothing.
+            const hasTicket = /\[[A-Z]+-\d+\]/.test(prTitle);
+            if (hasTicket) {
+              core.info(`PR title already has a ticket marker — skipping: ${prTitle}`);
+              return;
+            }
+
+            // Strip [NO-TICKET] if present; the rest is the clean title.
+            const cleanTitle = prTitle.replace(/\[NO-TICKET\]/i, '').trim();
+            const prUrl = `https://github.com/${repoOwner}/${repoName}/pull/${prNumber}`;
+
+            async function linear(query, variables) {
+              const res = await fetch('https://api.linear.app/graphql', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': apiKey,
+                },
+                body: JSON.stringify({ query, variables }),
+              });
+              const json = await res.json();
+              if (json.errors) {
+                throw new Error(`Linear API error: ${JSON.stringify(json.errors)}`);
+              }
+              return json.data;
+            }
+
+            // 1. Resolve the team by key.
+            const teamsData = await linear(`
+              query { teams { nodes { id key } } }
+            `);
+            const team = teamsData.teams.nodes.find((t) => t.key === teamKey);
+            if (!team) {
+              const available = teamsData.teams.nodes.map((t) => t.key).join(', ');
+              core.setFailed(`Team ${teamKey} not found. Available: ${available}`);
+              return;
+            }
+
+            // 2. Check for an existing ticket (idempotent on reruns).
+            // We search on the PR URL appearing in the description.
+            const existingData = await linear(
+              `query($teamId: ID!, $needle: String!) {
+                 issues(filter: {
+                   team: { id: { eq: $teamId } },
+                   description: { contains: $needle }
+                 }) { nodes { id identifier url number } }
+               }`,
+              { teamId: team.id, needle: `${repoOwner}/${repoName}/pull/${prNumber}` }
+            );
+
+            let ticket;
+            if (existingData.issues.nodes.length > 0) {
+              ticket = existingData.issues.nodes[0];
+              core.info(`Found existing Linear ticket: ${ticket.identifier}`);
+            } else {
+              // 3. Create a ticket.
+              const description = `${prBody}\n\nCreated from GitHub PR: ${repoOwner}/${repoName}#${prNumber}\n${prUrl}`;
+              const createData = await linear(
+                `mutation($teamId: String!, $title: String!, $description: String!) {
+                   issueCreate(input: { teamId: $teamId, title: $title, description: $description }) {
+                     success
+                     issue { id identifier url number }
+                   }
+                 }`,
+                { teamId: team.id, title: cleanTitle, description }
+              );
+              if (!createData.issueCreate.success || !createData.issueCreate.issue) {
+                core.setFailed('Linear issueCreate returned success=false');
+                return;
+              }
+              ticket = createData.issueCreate.issue;
+              core.info(`Created Linear ticket: ${ticket.identifier}`);
+            }
+
+            // 4. Rewrite the PR title.
+            const newTitle = `[${ticket.identifier}] ${cleanTitle}`;
+            await github.rest.pulls.update({
+              owner: repoOwner,
+              repo: repoName,
+              pull_number: prNumber,
+              title: newTitle,
+            });
+
+            // 5. Comment with the ticket link (only when newly created,
+            // to avoid repeated comments on rerun).
+            if (existingData.issues.nodes.length === 0) {
+              await github.rest.issues.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                issue_number: prNumber,
+                body: `Created Linear ticket: [${ticket.identifier}](${ticket.url})`,
+              });
+            }
