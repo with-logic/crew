@@ -98,7 +98,7 @@ jobs:
             // 2. Check for an existing ticket (idempotent on reruns).
             // We search on the PR URL appearing in the description.
             const existingData = await linear(
-              `query($teamId: String!, $needle: String!) {
+              `query($teamId: ID!, $needle: String!) {
                  issues(filter: {
                    team: { id: { eq: $teamId } },
                    description: { contains: $needle }
@@ -115,7 +115,7 @@ jobs:
               // 3. Create a ticket.
               const description = `${prBody}\n\nCreated from GitHub PR: ${repoOwner}/${repoName}#${prNumber}\n${prUrl}`;
               const createData = await linear(
-                `mutation($teamId: String!, $title: String!, $description: String!) {
+                `mutation($teamId: ID!, $title: String!, $description: String!) {
                    issueCreate(input: { teamId: $teamId, title: $title, description: $description }) {
                      success
                      issue { id identifier url number }
