@@ -35,6 +35,12 @@ Before reviewing any code, read:
   corresponding `PRD.md` update, or a PRD change not reflected in
   `src/` and `tests/`. CLAUDE.md's opening section defines what
   triggers a PRD update — apply that test.
+- **User-facing surface drift**: a change to user-visible behavior
+  (command, flag, install/tap semantics, repo-layout conventions,
+  defaults) without corresponding updates to `site/` and/or
+  `README.md` where those surfaces describe the thing. See
+  CLAUDE.md's "user-facing surfaces" section — flag prose that is
+  now wrong or misleadingly incomplete.
 - **Coverage gaps**: new code in `src/` without tests, or code
   structured in a way that can't reach 100% coverage (see the
   "coverage quirks" section in CLAUDE.md for the recurring
