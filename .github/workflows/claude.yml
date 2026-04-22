@@ -1,0 +1,55 @@
+# Claude Code PR review — runs automatically on every opened PR.
+#
+# Posts a review with inline comments grounded in CLAUDE.md's working
+# agreement and standards. Uses sonnet (fast, cheap, plenty capable
+# for code review).
+name: Claude Code
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  claude-review-pr:
+    name: "Claude: Review new PR"
+    if: github.event_name == 'pull_request' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Read PR review prompt
+        id: read-prompt
+        run: |
+          {
+            echo 'prompt<<EOF'
+            cat .github/pr-review-prompt.md
+            echo
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Run Claude Code - Review PR
+        id: claude-review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: ${{ steps.read-prompt.outputs.prompt }}
+          path_to_bun_executable: ~/.bun/bin/bun
+          track_progress: 'true'
+          claude_args: |
+            --model claude-sonnet-4-6
+            --allowedTools Bash,View,WebFetch,WebSearch,Glob,Grep
