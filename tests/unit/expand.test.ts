@@ -24,9 +24,9 @@ describe("expandSkills", () => {
     makeSkill(join(root, "skills"), "nested", skillFrontmatter({ name: "nested" }));
 
     const result = expandSkills(root);
-    expect(result.length).toBe(1);
+    expect(result.valid.length).toBe(1);
     // The root is a single skill; `skills/` is ignored entirely.
-    expect(result[0]!.path).toBe(root);
+    expect(result.valid[0]!.path).toBe(root);
   });
 
   test("skills/ directory is walked when no root SKILL.md", () => {
@@ -39,7 +39,7 @@ describe("expandSkills", () => {
     makeSkill(root, "ignored", skillFrontmatter({ name: "ignored" }));
 
     const names = expandSkills(root)
-      .map((s) => s.frontmatter.name)
+      .valid.map((s) => s.frontmatter.name)
       .sort();
     expect(names).toEqual(["alpha", "beta"]);
   });
@@ -59,7 +59,7 @@ describe("expandSkills", () => {
     makeSkill(root, "two", skillFrontmatter({ name: "two" }));
 
     const names = expandSkills(root)
-      .map((s) => s.frontmatter.name)
+      .valid.map((s) => s.frontmatter.name)
       .sort();
     expect(names).toEqual(["one", "two"]);
   });
@@ -70,7 +70,7 @@ describe("expandSkills", () => {
     makeSkill(root, "real", skillFrontmatter({ name: "real" }));
     writeFileSync(join(root, "README.md"), "not a directory");
 
-    const names = expandSkills(root).map((s) => s.frontmatter.name);
+    const names = expandSkills(root).valid.map((s) => s.frontmatter.name);
     expect(names).toEqual(["real"]);
   });
 
@@ -81,7 +81,7 @@ describe("expandSkills", () => {
     mkdirSync(join(root, "docs"));
     writeFileSync(join(root, "docs", "index.md"), "# docs");
 
-    const names = expandSkills(root).map((s) => s.frontmatter.name);
+    const names = expandSkills(root).valid.map((s) => s.frontmatter.name);
     expect(names).toEqual(["real"]);
   });
 
@@ -97,7 +97,7 @@ describe("expandSkills", () => {
     // A regular (non-namespaced) skill at the skills/ root.
     makeSkill(skillsDir, "standalone", skillFrontmatter({ name: "standalone" }));
 
-    const skills = expandSkills(root);
+    const skills = expandSkills(root).valid;
     const names = skills.map((s) => s.frontmatter.name).sort();
     expect(names).toEqual(["email-outreach", "social-posts", "standalone"]);
     // Namespaced skills carry the namespace in their path.
@@ -116,7 +116,7 @@ describe("expandSkills", () => {
     writeFileSync(join(skillsDir, "docs", "README.md"), "# docs");
     makeSkill(skillsDir, "real", skillFrontmatter({ name: "real" }));
 
-    const names = expandSkills(root).map((s) => s.frontmatter.name);
+    const names = expandSkills(root).valid.map((s) => s.frontmatter.name);
     expect(names).toEqual(["real"]);
   });
 
@@ -133,7 +133,7 @@ describe("expandSkills", () => {
     makeSkill(tooDeep, "too-deep", skillFrontmatter({ name: "too-deep" }));
 
     const names = expandSkills(root)
-      .map((s) => s.frontmatter.name)
+      .valid.map((s) => s.frontmatter.name)
       .sort();
     expect(names).toEqual(["real"]);
   });

@@ -60,8 +60,13 @@ const GROUPS: readonly Group[] = [
     commands: [
       {
         name: "search",
-        signature: <>crew search &lt;query&gt;</>,
-        description: "Case-insensitive substring match across every configured tap.",
+        signature: <>crew search [&lt;query&gt;]</>,
+        description: (
+          <>
+            Case-insensitive substring match across every configured tap. With no query, lists every
+            installable skill — installed ones are marked <code>✓</code>.
+          </>
+        ),
       },
       {
         name: "tap-add",

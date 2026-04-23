@@ -262,10 +262,10 @@ describe("crew tap", () => {
     expect(c.stdout()).toContain("USAGE");
   });
 
-  test("search without query fails", () => {
+  test("search without query lists every available skill", () => {
     const home = makeCrewHome();
     const code = runCli(["search"], { home, streams: captureStreams().streams });
-    expect(code).toBe(4);
+    expect(code).toBe(0);
   });
 
   // C-TAP-12/13/14: subpath taps.

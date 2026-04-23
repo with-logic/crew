@@ -16,6 +16,7 @@
 import { writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
 import type { Config, ResolvedSkill, Scope, StateFile } from "../core/types.ts";
+import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { computeAgentSet } from "./agent-set.ts";
@@ -48,6 +49,12 @@ export interface InstallFlowResult {
    * descriptions, tap attribution, etc. when rendering human output.
    */
   readonly resolved: readonly ResolvedSkill[];
+  /**
+   * Skill directories that failed validation and were soft-skipped
+   * during multi-skill expansion. Empty for single-skill installs
+   * (those hard-fail before reaching here).
+   */
+  readonly skipped: readonly SkippedSkill[];
 }
 
 /** Run the install flow end-to-end. */
@@ -63,6 +70,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     skills: resolvedAll,
     requiredBy,
     config: configWithAutoTaps,
+    skipped,
   } = resolveInstallSet(options.refs, config, { cwd, home, kindHint: options.kindHint ?? null });
 
   // Apply §5.4 — duplicate installs. An install with a new active
@@ -86,7 +94,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       requiredBy,
       allResolved: resolvedAll,
     });
-    return { summary, alreadyInstalled, resolved: resolvedAll };
+    return { summary, alreadyInstalled, resolved: resolvedAll, skipped };
   }
 
   const summary = withStateLock(() => {
@@ -113,7 +121,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     return { ...result, newState: promoted };
   }, home);
 
-  return { summary, alreadyInstalled, resolved: resolvedAll };
+  return { summary, alreadyInstalled, resolved: resolvedAll, skipped };
 }
 
 /**

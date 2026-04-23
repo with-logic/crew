@@ -687,7 +687,8 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - `description` is present, non-empty, length ≤ 1024 characters.
    - If `compatibility` is present, length ≤ 500 characters.
    - Every other spec rule from the Agent Skills specification.
-   Invalid skills abort with `invalid_skill` (§13) before any files are written.
+
+   A skill that fails validation is recorded as a failed skill with its message and path; the run continues. No validation failure aborts the whole command. See the exit-code rules in step 9.
 5. **Expand directories.** Three cases, checked in order:
    1. If the resolved source location has a `SKILL.md` at its root, it is one skill.
    2. Else, if the resolved source location has a `skills/` subdirectory, crew walks under `skills/` and collects skills:
@@ -705,6 +706,18 @@ Given one or more skill references on the command line, `crew install` proceeds 
 7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
 8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. If the store entry already exists and its content hash matches, reuse it.
 9. **Install into each agent.** For each skill × each agent in the agent set × the scope, run the install algorithm from §7.3. Record per-agent results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, agent) pair does not stop others.
+
+   **Skill outcome.** After per-agent installs complete, each attempted skill has one of two outcomes:
+   - **succeeded** — the skill validated AND at least one agent install succeeded (`anySuccess` in the per-skill record).
+   - **failed** — the skill failed validation, OR every agent install failed, OR the skill was otherwise prevented from landing anywhere.
+
+   **Exit code.** `crew install` computes its exit code from the set of attempted skills:
+   - `0` — every attempted skill succeeded (or no work was needed because everything was already installed).
+   - `1` — at least one skill succeeded AND at least one skill failed (partial success).
+   - `4` — zero skills succeeded AND at least one skill failed validation. The error name is `invalid_skill` (§13).
+   - `1` — zero skills succeeded AND no validation failures occurred (purely operational failures — agent errors, source unreachable, etc.).
+
+   The human output always renders a per-skill line noting whether each attempted skill succeeded or failed, with the failure reason for each failed skill. `--json` emits a `results` array with the same per-skill outcomes.
 10. **Update state.** For each successfully installed (skill, agent) pair, add or replace the entry in `state.json` per §11.1. Do this under the state lock (§14).
     - Skills named directly on the command line (the "roots") are
       recorded with `explicit: true`. Skills pulled in only via
@@ -1323,7 +1336,9 @@ Auto taps are functionally indistinguishable from registered taps for `crew upda
 
 ### 16.6 Search and network policy
 
-`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured git-kind tap (registered or auto). Path-kind taps are searched too if their root is reachable. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. `--json` emits a structured `{ hits, warnings }` object.
+`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured git-kind tap (registered or auto). Path-kind taps are searched too if their root is reachable. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. Namespaced skills render as `<namespace>/<name>` in the name column. Each row is prefixed by `✓` if the skill name is present in local state (installed at user or project scope) and a space otherwise, so the user can see at a glance what they already have. `--json` emits a structured `{ hits, warnings }` object; each hit has fields `{ tap, name, namespace, description, installed }` where `namespace` is `string | null` and `installed` is `boolean`.
+
+`crew search` (no query) lists every skill in every configured tap — the exhaustive catalog. Output and JSON shape are identical to the query form; the installed marker appears the same way.
 
 **Network policy.** Read-only commands (`crew search`, `crew info`, `crew list`, `crew install <bare-name>` and `<tap>/<skill>` forms, tap re-expansion during `crew update` for unrelated taps) MUST NOT contact the network. They read from local tap clones as-of the last `crew update` / `crew tap update`. A tap that has never been cloned is materialized on demand on first use; if that initial clone fails (offline, bad URL), the command warns on stderr and skips that tap — it does not fail the whole run.
 
@@ -1448,6 +1463,9 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-17 | §9 | `--scope project` writes to the agent's project-scope path instead of the user-scope path. |
 | C-INST-18 | §11.1 | A project-scope install records `project_root` in the state entry equal to the user's working directory at install time. User-scope installs do NOT have a `project_root`. |
 | C-INST-19 | §9 | `state.json` may contain multiple project-scope entries for the same skill name, each with a different `project_root` — they're independent installs, not duplicates. |
+| C-INST-20 | §9 step 9 | A validation failure on any skill is recorded as a failed skill; the run continues through the remaining skills. It does not abort the command. |
+| C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation). |
+| C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
 
@@ -1569,7 +1587,8 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-05 | §16.2 | The default tap named `core` is present on first run. |
 | C-TAP-06 | §16.2 | `crew tap remove core` is refused without `--force`. |
 | C-TAP-07 | §16.4 | `crew search <skill>` matches case-insensitively against `name` and `description` across every tap. |
-| C-TAP-08 | §16.4 | `crew search --json` emits a structured array of matches. |
+| C-TAP-08 | §16.4 | `crew search --json` emits a structured array of matches. Each hit includes `installed: boolean` and `namespace: string \| null` fields. |
+| C-TAP-08b | §16.4 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
 | C-TAP-12 | §16.3 | `crew tap add <url>//<subpath>` configures a tap rooted at `<subpath>` inside the repo. Skills at the top level of `<subpath>` are installable by bare name, just like a root tap. |

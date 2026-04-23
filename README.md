@@ -158,7 +158,7 @@ for examples.
 
 | Command | What it does |
 |---|---|
-| `crew search <query>` | Case-insensitive substring match across every configured tap. |
+| `crew search [<query>]` | Case-insensitive substring match across every configured tap. With no query, lists every installable skill; installed ones are marked `✓`. |
 | `crew tap add <git-url> [name]` | Clone a registry into `~/.crew/taps/`. Name defaults to the repo name. |
 | `crew tap remove <name>` | Delete a local tap clone and drop it from config. |
 | `crew tap list` | Print each tap's name, URL, and last-fetched timestamp. |

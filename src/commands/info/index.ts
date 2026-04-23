@@ -134,10 +134,15 @@ function loadDescriptionFromAny(
   return null;
 }
 
-/** Walk a source directory and gather SkillInfo per skill we find. */
+/**
+ * Walk a source directory and gather SkillInfo per skill we find.
+ * `expandSkills` returns `{ valid, skipped }`; `info` is a
+ * read-only "show me what's valid here" command, so skipped skills
+ * are deliberately dropped. `crew install` surfaces those (§9 step 9).
+ */
 function buildSkillInfos(dir: string): SkillInfo[] {
-  const skills = expandSkills(dir);
-  return skills.map((s) => ({
+  const { valid } = expandSkills(dir);
+  return valid.map((s) => ({
     name: s.frontmatter.name,
     description: s.frontmatter.description,
     license: s.frontmatter.license ?? null,
