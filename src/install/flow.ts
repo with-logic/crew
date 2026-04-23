@@ -21,7 +21,7 @@ import { withStateLock } from "../state/lock.ts";
 import { computeAgentSet } from "./agent-set.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules.ts";
 import { type InstallSummary, performInstall } from "./perform.ts";
-import { type RequiredByMap, resolveInstallSet } from "./resolve.ts";
+import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
 import type { KindHint } from "./resolve-ref/index.ts";
 
 /** Options accepted by `runInstall`. */

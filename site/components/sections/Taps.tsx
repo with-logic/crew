@@ -45,7 +45,7 @@ export function Taps() {
             <p className={styles.note}>
               Group related skills into <strong>namespaces</strong>: <code>skills/marketing/*</code>
               , <code>skills/engineering/*</code>. Then <code>crew install marketing</code> installs
-              the whole bundle, and <code>crew install acme/marketing/copy-review</code> picks one.
+              the whole bundle, and <code>crew install acme/marketing/email-outreach</code> picks one.
             </p>
           </div>
 

@@ -24,7 +24,7 @@ import { type InstallOutcome, installSkillIntoAgents } from "../agents/install.t
 import type { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
 import type { ResolvedSkill, Scope, StateEntry, StateFile } from "../core/types.ts";
-import type { RequiredByMap } from "../install/resolve.ts";
+import type { RequiredByMap } from "../install/resolve/index.ts";
 import { upsertEntry } from "../state/load.ts";
 import { nowIso } from "../util/time.ts";
 

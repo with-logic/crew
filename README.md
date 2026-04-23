@@ -231,8 +231,8 @@ acme-skills/
 Then:
 
 - `crew install marketing` — installs every skill in the namespace
-- `crew install acme/marketing/copy-review` — picks one skill unambiguously
-- `crew install marketing/copy-review` — also picks one skill (when `marketing`
+- `crew install acme/marketing/email-outreach` — picks one skill unambiguously
+- `crew install marketing/email-outreach` — also picks one skill (when `marketing`
   is a namespace in exactly one configured tap)
 
 When a name could mean more than one thing (a tap, a skill, a namespace),

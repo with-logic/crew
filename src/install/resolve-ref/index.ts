@@ -23,8 +23,6 @@ import { enumerateCandidates } from "../attribute-bare-name.ts";
 import { indexTap, type TapIndex } from "../tap-index.ts";
 import { formatCandidate } from "./format.ts";
 
-export { formatCandidate, shortLabelFor } from "./format.ts";
-
 /** Force-one-kind hint from a `--tap` / `--bundle` / `--skill` flag. */
 export type KindHint = "tap" | "namespace" | "skill" | null;
 

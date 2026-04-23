@@ -13,7 +13,7 @@
 import { CrewError } from "../../core/errors.ts";
 import type { Config } from "../../core/types.ts";
 import { enumerateCandidates, type NameCandidate } from "../../install/attribute-bare-name.ts";
-import { formatCandidate, shortLabelFor } from "../../install/resolve-ref/index.ts";
+import { formatCandidate, shortLabelFor } from "../../install/resolve-ref/format.ts";
 import type { CommandContext } from "../types.ts";
 
 /**
@@ -51,6 +51,11 @@ export function promptBareNameAmbiguity(
 ): string {
   const candidates = filterForAmbiguity(enumerateCandidates(trimmed, config, ctx.home), trimmed);
   if (candidates.length <= 1) return raw;
+  // `--yes` skips this prompt but does NOT pick a default candidate
+  // the way it does in the tap/skill collision path (where the tap
+  // wins). Skill/namespace ambiguity has no obvious default, so we
+  // let `raw` flow through and the resolver downstream raises
+  // `ambiguous_reference` — same error the abort path would produce.
   if (ctx.flags.yes) return raw;
 
   const choiceCount = candidates.length + 1; // +1 for abort

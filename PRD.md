@@ -620,10 +620,10 @@ A 2-segment reference `foo/bar` is resolved with tap-first precedence: if `foo` 
 
 A 3-segment reference `tap/namespace/skill` is always unambiguous.
 
-**Disambiguation flags.** The user may force an interpretation on `crew install`:
-- `--tap <name>` — install the entire tap named `<name>`. Errors if the name is not a configured tap.
-- `--bundle <name>` — install every skill in the namespace `<name>`. Errors if the name is not a namespace in exactly one configured tap.
-- `--skill <name>` — install the skill named `<name>`. Errors if the name is only a namespace.
+**Disambiguation flags.** The user may force an interpretation on `crew install`. These are presence flags; the name comes from the positional argument.
+- `--tap` — force every bare-name positional to be resolved as a tap name (install the whole tap). Errors if the positional is not a configured tap.
+- `--bundle` — force every bare-name positional to be resolved as a namespace name (install every skill in the namespace). Errors if the positional is not a namespace in exactly one configured tap.
+- `--skill` — force every bare-name positional to be resolved as a single-skill name. Errors if the positional is only a namespace.
 
 These flags are mutually exclusive and, when given, short-circuit the ambiguity prompt.
 
@@ -1458,9 +1458,9 @@ Implementations and test suites refer to criteria by ID.
 | C-NS-03 | §8.3 | `crew install <tap>/<namespace>/<skill>` installs that specific skill unambiguously. |
 | C-NS-04 | §8.3 | `crew install <namespace>/<skill>` installs the skill when the namespace exists in exactly one configured tap; 2-segment refs are tap-first. |
 | C-NS-05 | §8.3 | A bare name matching both a skill and a namespace (or a tap, or multiple namespaces) triggers an interactive menu on a TTY; otherwise aborts with `ambiguous_reference`. |
-| C-NS-06 | §8.3 | `--tap <name>` forces tap-install interpretation; errors if `<name>` is not a configured tap. |
-| C-NS-07 | §8.3 | `--bundle <name>` forces namespace-install interpretation; errors if `<name>` is not a namespace in exactly one tap. |
-| C-NS-08 | §8.3 | `--skill <name>` forces single-skill interpretation; errors if `<name>` is only a namespace. |
+| C-NS-06 | §8.3 | `--tap` forces tap-install interpretation of every bare-name positional; errors if the name is not a configured tap. |
+| C-NS-07 | §8.3 | `--bundle` forces namespace-install interpretation of every bare-name positional; errors if the name is not a namespace in exactly one tap. |
+| C-NS-08 | §8.3 | `--skill` forces single-skill interpretation of every bare-name positional; errors if the name is only a namespace. |
 | C-NS-09 | §13 | `ambiguous_reference` output names every candidate and includes a copy-pasteable install command for each. |
 | C-NS-10 | §9 step 5 | Namespace nesting deeper than one level is ignored. |
 
