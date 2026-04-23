@@ -13,7 +13,6 @@
  * Every install attributes its skills to exactly one tap (§16.5).
  */
 
-import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
 import type { Config, LoadedSkill, ResolvedSkill, Source, TapConfig } from "../core/types.ts";
@@ -21,8 +20,9 @@ import { parseRef } from "../refs/parse.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
 import { expandSkills } from "../sources/expand.ts";
 import { stageIntoStore } from "../sources/store.ts";
-import { findTapForBareName } from "./attribute-bare-name.ts";
 import { findSiblingDep } from "./dep-resolution.ts";
+import type { KindHint } from "./resolve-ref/index.ts";
+import { resolveTapRef } from "./resolve-ref/index.ts";
 import { attributeRef } from "./tap-attribution.ts";
 import { topoSort } from "./topo.ts";
 
@@ -30,6 +30,12 @@ import { topoSort } from "./topo.ts";
 export interface ResolveOptions {
   readonly cwd: string;
   readonly home: string;
+  /**
+   * Optional force-one-kind hint for bare-name / 2-segment refs. Set
+   * by `--tap` / `--bundle` / `--skill` on the CLI. Applies to every
+   * root ref; dependencies never see a hint.
+   */
+  readonly kindHint: KindHint;
 }
 
 /** name → set of names that depend on it. */
@@ -65,6 +71,7 @@ export function resolveInstallSet(
 ): ResolveResult {
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
+  const kindHint: KindHint = options.kindHint ?? null;
 
   let config = startingConfig;
   const byName = new Map<string, ResolvedSkill>();
@@ -73,7 +80,7 @@ export function resolveInstallSet(
 
   // Step 1–5: resolve every root reference.
   for (const raw of refs) {
-    const enqueued = enqueueRoot(raw, config, cwd, home);
+    const enqueued = enqueueRoot(raw, config, cwd, home, kindHint);
     config = enqueued.config;
     pending.push(...enqueued.items);
   }
@@ -131,12 +138,13 @@ function enqueueRoot(
   config: Config,
   cwd: string,
   home: string,
+  kindHint: KindHint,
 ): { items: PendingItem[]; config: Config } {
   const source = parseRef(raw, cwd);
 
-  // Bare-name (`<skill>`) and qualified (`<tap>/<skill>`) tap refs.
+  // Bare-name (`<skill>`) and qualified (`<tap>/<skill>`, `<tap>/<ns>/<skill>`) tap refs.
   if (source.type === "tap") {
-    return enqueueTapRef(source, config, home, true);
+    return enqueueTapRef(source, config, home, true, kindHint);
   }
 
   // Git URL or path: find or create the tap. This is always a
@@ -157,34 +165,33 @@ function enqueueRoot(
   return { items, config: attrib.config };
 }
 
-/** Resolve a `tap-name` or `tap-name/skill` ref into items. */
+/** Resolve a tap/namespace/skill ref into items. */
 function enqueueTapRef(
-  source: { tap: string | null; name: string; ref: string | null },
+  source: { tap: string | null; namespace: string | null; name: string; ref: string | null },
   config: Config,
   home: string,
   explicit: boolean,
+  kindHint: KindHint,
 ): { items: PendingItem[]; config: Config } {
-  // Two cases:
-  //   - source.tap !== null  → user typed `<tap>/<skill>`
-  //   - source.tap === null  → user typed `<name>`. Could be a tap
-  //     name or a skill name; tap takes precedence per §16.4.
-  let tap: TapConfig;
-  let skillName: string;
-  if (source.tap === null) {
-    // Bare name. The disambiguation is handled by the caller (CLI
-    // command) for top-level installs; here we treat a bare name as a
-    // skill name first, falling back to "tap" only when the name
-    // matches a tap and nothing else.
+  // Whole-tap install short-circuit: bare `<name>` that is the name of
+  // a configured tap. Cross-tap collisions (a same-named skill in a
+  // DIFFERENT tap) are handled earlier in the CLI layer via
+  // `detectCollision`; reaching this point means the CLI already
+  // prompted or `--yes` was in play. Within-tap collisions (the same
+  // name also being a skill in the matched tap) are rare and we
+  // preserve the legacy "tap wins" behavior for back-compat.
+  if (
+    source.tap === null &&
+    source.namespace === null &&
+    (kindHint === "tap" || kindHint === null)
+  ) {
     const matched = config.taps.find((c) => c.name === source.name);
     if (matched) {
-      // Whole-tap install via name — every child should follow new
-      // siblings upstream.
-      tap = matched;
-      const acquired = acquireTap(tap, home);
+      const acquired = acquireTap(matched, home);
       return {
         items: expandSkillsAsItems(
           acquired.rootDir,
-          tap,
+          matched,
           "",
           acquired.resolvedSha,
           source.ref,
@@ -195,27 +202,65 @@ function enqueueTapRef(
         config,
       };
     }
-    tap = findTapForBareName(source.name, config, home);
-    skillName = source.name;
-  } else {
-    const t = config.taps.find((c) => c.name === source.tap);
-    if (!t)
-      throw new CrewError(
-        "invalid_ref",
-        `no tap named \`${source.tap}\` is configured — run \`crew tap list\` to see configured taps, or \`crew tap add\` to add one`,
-        { tap: source.tap },
-      );
-    tap = t;
-    skillName = source.name;
   }
-  // Attribute to a single skill within the tap. Not a whole-tap
-  // install — don't track siblings.
-  const acquired = acquireTap(tap, home);
-  const skillDir = join(acquired.rootDir, skillName);
+
+  // Everything else runs through the resolver, which produces a
+  // concrete NameCandidate (skill / namespace / tap) or throws.
+  const candidate = resolveTapRef(
+    {
+      type: "tap",
+      tap: source.tap,
+      namespace: source.namespace,
+      name: source.name,
+      ref: source.ref,
+    },
+    config,
+    home,
+    kindHint,
+  );
+
+  if (candidate.kind === "tap") {
+    const acquired = acquireTap(candidate.tap, home);
+    return {
+      items: expandSkillsAsItems(
+        acquired.rootDir,
+        candidate.tap,
+        "",
+        acquired.resolvedSha,
+        source.ref,
+        source.ref !== null,
+        explicit,
+        true,
+      ),
+      config,
+    };
+  }
+
+  if (candidate.kind === "namespace") {
+    const acquired = acquireTap(candidate.tap, home);
+    const items: PendingItem[] = [];
+    for (const member of candidate.members) {
+      const member_items = expandSkillsAsItems(
+        member.path,
+        candidate.tap,
+        member.tapRelativePath,
+        acquired.resolvedSha,
+        source.ref,
+        source.ref !== null,
+        explicit,
+        true,
+      );
+      for (const it of member_items) items.push(it);
+    }
+    return { items, config };
+  }
+
+  // kind === "skill"
+  const acquired = acquireTap(candidate.tap, home);
   const items = expandSkillsAsItems(
-    skillDir,
-    tap,
-    skillName,
+    candidate.location.path,
+    candidate.tap,
+    candidate.location.tapRelativePath,
     acquired.resolvedSha,
     source.ref,
     source.ref !== null,
@@ -224,6 +269,7 @@ function enqueueTapRef(
   );
   return { items, config };
 }
+
 
 /** Walk `dir` and produce one PendingItem per skill found (single or expanded). */
 function expandSkillsAsItems(
@@ -300,7 +346,7 @@ function enqueueDep(
 
   // Qualified tap ref or fallback bare name search.
   if (source.type === "tap") {
-    const enqueued = enqueueTapRef(source, config, home, false);
+    const enqueued = enqueueTapRef(source, config, home, false, null);
     return enqueued;
   }
 

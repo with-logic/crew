@@ -84,4 +84,57 @@ describe("expandSkills", () => {
     const names = expandSkills(root).map((s) => s.frontmatter.name);
     expect(names).toEqual(["real"]);
   });
+
+  test("namespace: descends one level under skills/ into grouping dirs", () => {
+    const root = makeTempDir("expand-ns-");
+    const skillsDir = join(root, "skills");
+    mkdirSync(skillsDir);
+    // A namespace: dir under skills/ with no SKILL.md but with children.
+    const marketing = join(skillsDir, "marketing");
+    mkdirSync(marketing);
+    makeSkill(marketing, "email-outreach", skillFrontmatter({ name: "email-outreach" }));
+    makeSkill(marketing, "social-posts", skillFrontmatter({ name: "social-posts" }));
+    // A regular (non-namespaced) skill at the skills/ root.
+    makeSkill(skillsDir, "standalone", skillFrontmatter({ name: "standalone" }));
+
+    const skills = expandSkills(root);
+    const names = skills.map((s) => s.frontmatter.name).sort();
+    expect(names).toEqual(["email-outreach", "social-posts", "standalone"]);
+    // Namespaced skills carry the namespace in their path.
+    const marketingSkills = skills.filter((s) => s.path.includes("/marketing/"));
+    expect(marketingSkills.length).toBe(2);
+  });
+
+  test("namespace: empty namespace dir is silently ignored", () => {
+    // A dir under skills/ with no SKILL.md and no skill children is not
+    // a namespace and not a skill — just drop it. Silent because users
+    // may have non-skill content (docs/, scripts/) under skills/.
+    const root = makeTempDir("expand-empty-ns-");
+    const skillsDir = join(root, "skills");
+    mkdirSync(skillsDir);
+    mkdirSync(join(skillsDir, "docs"));
+    writeFileSync(join(skillsDir, "docs", "README.md"), "# docs");
+    makeSkill(skillsDir, "real", skillFrontmatter({ name: "real" }));
+
+    const names = expandSkills(root).map((s) => s.frontmatter.name);
+    expect(names).toEqual(["real"]);
+  });
+
+  test("namespace: deeper-than-one nesting under a namespace is ignored", () => {
+    const root = makeTempDir("expand-deep-ns-");
+    const skillsDir = join(root, "skills");
+    mkdirSync(skillsDir);
+    const marketing = join(skillsDir, "marketing");
+    mkdirSync(marketing);
+    makeSkill(marketing, "real", skillFrontmatter({ name: "real" }));
+    // Deeper nesting — should not be walked.
+    const tooDeep = join(marketing, "nested");
+    mkdirSync(tooDeep);
+    makeSkill(tooDeep, "too-deep", skillFrontmatter({ name: "too-deep" }));
+
+    const names = expandSkills(root)
+      .map((s) => s.frontmatter.name)
+      .sort();
+    expect(names).toEqual(["real"]);
+  });
 });

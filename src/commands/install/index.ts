@@ -11,8 +11,28 @@ import { CrewError } from "../../core/errors.ts";
 import type { Config, TapConfig } from "../../core/types.ts";
 import { countSkills, detectCollision } from "../../install/collision-check.ts";
 import { runInstall } from "../../install/flow.ts";
+import type { KindHint } from "../../install/resolve-ref/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
+import { promptBareNameAmbiguity } from "./ambiguity-prompt.ts";
 import { renderInstall } from "./render.ts";
+
+/** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
+function readKindHint(ctx: CommandContext): KindHint {
+  const tap = Boolean(ctx.flags.extras["tap"]);
+  const bundle = Boolean(ctx.flags.extras["bundle"]);
+  const skill = Boolean(ctx.flags.extras["skill"]);
+  const count = Number(tap) + Number(bundle) + Number(skill);
+  if (count > 1) {
+    throw new CrewError(
+      "usage_error",
+      "`--tap`, `--bundle`, and `--skill` are mutually exclusive — pick one",
+    );
+  }
+  if (tap) return "tap";
+  if (bundle) return "namespace";
+  if (skill) return "skill";
+  return null;
+}
 
 export function installCommand(ctx: CommandContext): CommandOutput {
   if (ctx.positional.length === 0) {
@@ -21,6 +41,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       "`crew install` needs at least one skill reference — e.g. `crew install python-testing`, `crew install @acme/skills`, or `crew install ./my-skill`",
     );
   }
+  const kindHint = readKindHint(ctx);
   const config = readConfig(ctx.home);
   const refs = resolveCollisions(ctx, config);
   const result = runInstall(config, {
@@ -31,6 +52,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     restrictAgents: ctx.flags.agent,
     cwd: ctx.cwd,
     home: ctx.home,
+    kindHint,
   });
 
   // Exit-code rules (§18.6 clarification): exit 1 if any root skill has
@@ -84,25 +106,34 @@ export function installCommand(ctx: CommandContext): CommandOutput {
  */
 function resolveCollisions(ctx: CommandContext, config: Config): string[] {
   const refs: string[] = [];
+  const kindHint = readKindHint(ctx);
   for (const raw of ctx.positional) {
     const trimmed = raw.trim();
     if (!isBareName(trimmed)) {
       refs.push(raw);
       continue;
     }
+    // Kind hints skip prompting entirely — the user told us what they meant.
+    if (kindHint !== null) {
+      refs.push(raw);
+      continue;
+    }
     const collision = detectCollision(trimmed, config, ctx.home);
-    if (!collision) {
+    if (collision && !ctx.flags.yes) {
+      refs.push(promptForCollision(ctx, collision, trimmed, raw));
+      continue;
+    }
+    if (collision) {
       refs.push(raw);
       continue;
     }
-    if (ctx.flags.yes) {
-      refs.push(raw);
-      continue;
-    }
-    refs.push(promptForCollision(ctx, collision, trimmed, raw));
+    // No tap-vs-other-tap-skill collision. Check for bare-name
+    // ambiguity across skills and namespaces (§8.3).
+    refs.push(promptBareNameAmbiguity(ctx, config, trimmed, raw));
   }
   return refs;
 }
+
 
 function promptForCollision(
   ctx: CommandContext,

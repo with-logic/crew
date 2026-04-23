@@ -172,8 +172,8 @@ describe("parseRef: tap with valid identifier reaching path form validator", () 
     }
   });
 
-  test("three-segment path (too many) fails", () => {
-    expect(() => parseRef("a/b/c")).toThrow(CrewError);
+  test("four-segment path (too many) fails", () => {
+    expect(() => parseRef("a/b/c/d")).toThrow(CrewError);
   });
 
   test("invalid git url missing owner/repo", () => {

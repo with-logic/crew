@@ -22,6 +22,7 @@ import { computeAgentSet } from "./agent-set.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules.ts";
 import { type InstallSummary, performInstall } from "./perform.ts";
 import { type RequiredByMap, resolveInstallSet } from "./resolve.ts";
+import type { KindHint } from "./resolve-ref/index.ts";
 
 /** Options accepted by `runInstall`. */
 export interface InstallOptions {
@@ -32,6 +33,8 @@ export interface InstallOptions {
   readonly restrictAgents: readonly string[];
   readonly cwd?: string;
   readonly home?: string;
+  /** Force a reference interpretation (from `--tap` / `--bundle` / `--skill`). */
+  readonly kindHint?: KindHint;
 }
 
 /** Full result: summary plus any "already installed" short-circuit records. */
@@ -60,7 +63,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     skills: resolvedAll,
     requiredBy,
     config: configWithAutoTaps,
-  } = resolveInstallSet(options.refs, config, { cwd, home });
+  } = resolveInstallSet(options.refs, config, { cwd, home, kindHint: options.kindHint ?? null });
 
   // Apply §5.4 — duplicate installs. An install with a new active
   // adapter that didn't previously own the entry still has real work

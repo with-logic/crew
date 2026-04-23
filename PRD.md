@@ -598,15 +598,34 @@ Git sources are ad-hoc. They are never promoted to taps and do not appear in `cr
 
 ### 8.3 Tap source
 
-A skill known to a configured tap. Reference by bare name or `tap/name`.
+A skill, namespace, or tap known to a configured tap. Reference forms:
 
 ```
-python-testing                # bare name; searched across all taps
-core/python-testing           # qualified to the `core` tap
-acme/python-testing@v1.0.0    # qualified and pinned to a tag
+python-testing                    # bare name; searched across taps and namespaces
+core/python-testing               # 2-segment: tap/skill OR namespace/skill
+acme/python-testing@v1.0.0        # qualified and pinned to a tag
+core/marketing/copy-review        # 3-segment: tap/namespace/skill (always unambiguous)
 ```
 
-Bare names that match skills in more than one tap produce an ambiguity error. Qualified references skip the ambiguity check and go directly to the named tap.
+A **namespace** is a directory directly under a tap's `skills/` root that contains no `SKILL.md` of its own but contains child directories that do. Namespaces group related skills (`skills/marketing/email-outreach`, `skills/marketing/social-posts`, …). A skill's `name` in its frontmatter remains the leaf directory name; the namespace is NOT part of the skill name.
+
+A bare name `foo` may match any of:
+- a **tap** named `foo` (install the entire tap),
+- a **skill** named `foo` (install that skill),
+- a **namespace** named `foo` in exactly one configured tap (install every skill in the namespace).
+
+If more than one interpretation is possible, crew prompts the user interactively (TTY) or aborts with `ambiguous_reference` (non-TTY). The error names every possible resolution and gives a copy-pasteable command for each.
+
+A 2-segment reference `foo/bar` is resolved with tap-first precedence: if `foo` is a configured tap, it means the skill `bar` inside tap `foo` (searching at the tap root and across namespaces). If `foo` is not a tap name but is a namespace in exactly one configured tap, it means the skill `bar` inside that namespace. If neither holds, `invalid_ref`. If both hold, `ambiguous_reference` with suggestions.
+
+A 3-segment reference `tap/namespace/skill` is always unambiguous.
+
+**Disambiguation flags.** The user may force an interpretation on `crew install`:
+- `--tap <name>` — install the entire tap named `<name>`. Errors if the name is not a configured tap.
+- `--bundle <name>` — install every skill in the namespace `<name>`. Errors if the name is not a namespace in exactly one configured tap.
+- `--skill <name>` — install the skill named `<name>`. Errors if the name is only a namespace.
+
+These flags are mutually exclusive and, when given, short-circuit the ambiguity prompt.
 
 ### 8.4 Reference grammar
 
@@ -619,8 +638,10 @@ git-source  := git-url [ "@" git-ref ] [ "//" subpath ]
 git-url     := "https://..." | "git@...:..." | shorthand-host ":" owner "/" repo
              | "@" owner "/" repo
 shorthand-host := "gh" | "gl" | "bb"
-tap-source  := [ tap-name "/" ] skill-name [ "@" tap-ref ]
+tap-source  := [ tap-name "/" ] [ namespace-name "/" ] skill-name [ "@" tap-ref ]
+             | tap-name [ "@" tap-ref ]                   (whole-tap install)
 tap-name    := [a-z][a-z0-9-]*
+namespace-name := [a-z][a-z0-9-]*
 skill-name  := [a-z][a-z0-9-]*     (matches the Agent Skills spec's name rules)
 git-ref     := any non-empty string not containing "/" or whitespace; must not start with "//"
 tap-ref     := any non-empty string not containing "/" or whitespace
@@ -669,7 +690,11 @@ Given one or more skill references on the command line, `crew install` proceeds 
    Invalid skills abort with `invalid_skill` (§13) before any files are written.
 5. **Expand directories.** Three cases, checked in order:
    1. If the resolved source location has a `SKILL.md` at its root, it is one skill.
-   2. Else, if the resolved source location has a `skills/` subdirectory, crew walks **exactly one directory level deep under `skills/`** and adds every subdirectory that contains a `SKILL.md` to the install set. The source root itself is NOT walked in this case — `skills/` is the authoritative index. Deeper nesting under `skills/` is ignored.
+   2. Else, if the resolved source location has a `skills/` subdirectory, crew walks under `skills/` and collects skills:
+      - Every immediate child of `skills/` that contains a `SKILL.md` is a skill (as before).
+      - Every immediate child of `skills/` that contains no `SKILL.md` but contains child directories that do is a **namespace**. Each namespace child containing a `SKILL.md` is a skill; that skill's `source.path` includes the namespace directory (e.g. `skills/marketing/email-outreach`).
+      - Exactly one level of namespace nesting is recognized. Deeper nesting is ignored.
+      - The source root itself is NOT walked in this case — `skills/` is the authoritative index.
    3. Else, crew walks **exactly one directory level deep** under the resolved location and adds every subdirectory containing a `SKILL.md` to the install set. Deeper nesting is ignored.
 
    A location that produces zero valid skills through the applicable case aborts with `no_skills_found`.
@@ -1142,7 +1167,7 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `source_unreachable` | 5 | Network or git failure acquiring a source. |
 | `ref_not_found` | 5 | Ref doesn't exist in the repo. |
 | `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
-| `ambiguous_reference` | 4 | A bare name matches skills in more than one tap. |
+| `ambiguous_reference` | 4 | A reference has more than one valid resolution across taps, skills, and namespaces, and the user is non-interactive or the prompt was aborted. |
 | `ambiguous_dependency` | 4 | A dependency's bare name is ambiguous across taps. |
 | `conflicting_dependencies` | 4 | Two skills with the same name resolve to different SHAs. |
 | `name_conflict` | 4 | Trying to install a skill whose name is already held by a different source, without `--force`. |
@@ -1423,6 +1448,21 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-17 | §9 | `--scope project` writes to the agent's project-scope path instead of the user-scope path. |
 | C-INST-18 | §11.1 | A project-scope install records `project_root` in the state entry equal to the user's working directory at install time. User-scope installs do NOT have a `project_root`. |
 | C-INST-19 | §9 | `state.json` may contain multiple project-scope entries for the same skill name, each with a different `project_root` — they're independent installs, not duplicates. |
+
+#### C-NS: Namespaces (§8.3, §9 step 5)
+
+| ID | Reference | Assertion |
+|---|---|---|
+| C-NS-01 | §9 step 5 | A directory under `skills/` containing child directories with `SKILL.md` (and no root `SKILL.md` of its own) is treated as a namespace; each child is installed as a skill. |
+| C-NS-02 | §9 step 5 | `crew install <namespace>` installs every skill in the namespace when that namespace name exists in exactly one configured tap. |
+| C-NS-03 | §8.3 | `crew install <tap>/<namespace>/<skill>` installs that specific skill unambiguously. |
+| C-NS-04 | §8.3 | `crew install <namespace>/<skill>` installs the skill when the namespace exists in exactly one configured tap; 2-segment refs are tap-first. |
+| C-NS-05 | §8.3 | A bare name matching both a skill and a namespace (or a tap, or multiple namespaces) triggers an interactive menu on a TTY; otherwise aborts with `ambiguous_reference`. |
+| C-NS-06 | §8.3 | `--tap <name>` forces tap-install interpretation; errors if `<name>` is not a configured tap. |
+| C-NS-07 | §8.3 | `--bundle <name>` forces namespace-install interpretation; errors if `<name>` is not a namespace in exactly one tap. |
+| C-NS-08 | §8.3 | `--skill <name>` forces single-skill interpretation; errors if `<name>` is only a namespace. |
+| C-NS-09 | §13 | `ambiguous_reference` output names every candidate and includes a copy-pasteable install command for each. |
+| C-NS-10 | §9 step 5 | Namespace nesting deeper than one level is ignored. |
 
 #### C-DEP: Dependencies (§9 step 6)
 

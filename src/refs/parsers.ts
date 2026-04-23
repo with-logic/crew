@@ -54,25 +54,35 @@ export function parseTap(ref: string): TapSource {
     }
   }
 
-  // Qualified form: `tap/skill`.
+  // Qualified form: `tap/skill`, `ns/skill`, or `tap/ns/skill`.
   if (identifier.includes("/")) {
     const parts = identifier.split("/");
-    if (parts.length !== 2) {
+    if (parts.length > 3) {
       throw new CrewError(
         "invalid_ref",
-        `\`${ref}\` looks like a tap reference but has too many \`/\` segments (expected \`tap/skill\`)`,
+        `\`${ref}\` has too many \`/\` segments (expected \`tap/skill\` or \`tap/namespace/skill\`)`,
         { ref },
       );
     }
-    const [tap, name] = parts as [string, string];
-    if (!(NAME_PATTERN.test(tap) && NAME_PATTERN.test(name))) {
-      throw new CrewError(
-        "invalid_ref",
-        `\`${ref}\` isn't a valid tap reference — names must match [a-z][a-z0-9-]*`,
-        { ref },
-      );
+    for (const p of parts) {
+      if (!NAME_PATTERN.test(p)) {
+        throw new CrewError(
+          "invalid_ref",
+          `\`${ref}\` isn't a valid tap reference — names must match [a-z][a-z0-9-]*`,
+          { ref },
+        );
+      }
     }
-    return { type: "tap", tap, name, ref: gitRef };
+    if (parts.length === 3) {
+      const [tap, namespace, name] = parts as [string, string, string];
+      return { type: "tap", tap, namespace, name, ref: gitRef };
+    }
+    // 2-segment: leave disambiguation (tap/skill vs namespace/skill) to
+    // the resolver. We store the first segment in `tap` as the common
+    // case; the resolver falls back to namespace interpretation if no
+    // tap of that name exists.
+    const [first, second] = parts as [string, string];
+    return { type: "tap", tap: first, namespace: null, name: second, ref: gitRef };
   }
 
   // Bare name.
@@ -83,5 +93,5 @@ export function parseTap(ref: string): TapSource {
       { ref },
     );
   }
-  return { type: "tap", tap: null, name: identifier, ref: gitRef };
+  return { type: "tap", tap: null, namespace: null, name: identifier, ref: gitRef };
 }
