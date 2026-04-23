@@ -273,6 +273,47 @@ describe("install directory expansion", () => {
     expect(existsSync(join(redirect.agents["claude-code"]!, "ignored"))).toBe(false);
   });
 
+  test("C-INST-20 invalid skill in a multi-skill source is soft-skipped", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir("crew-soft-");
+    // A valid skill alongside an invalid one (name doesn't match dir).
+    makeSkill(container, "good-skill", skillFrontmatter({ name: "good-skill" }));
+    makeSkill(container, "bad-dir", skillFrontmatter({ name: "mismatched-name" }));
+    const capture = captureStreams();
+    const code = runCli(["install", container], { home, streams: capture.streams });
+    // Exit 1: partial success, not 4.
+    expect(code).toBe(1);
+    // The valid sibling installed.
+    expect(existsSync(join(redirect.agents["claude-code"]!, "good-skill"))).toBe(true);
+    // The invalid one was reported in stdout, not as a hard error.
+    expect(capture.stdout()).toContain("Skipped");
+    expect(capture.stdout()).toContain("bad-dir");
+  });
+
+  test("C-INST-20 --json surfaces skipped skills", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir("crew-soft-json-");
+    makeSkill(container, "good-skill", skillFrontmatter({ name: "good-skill" }));
+    makeSkill(container, "bad-dir", skillFrontmatter({ name: "mismatched-name" }));
+    const capture = captureStreams();
+    runCli(["install", "--json", container], { home, streams: capture.streams });
+    const parsed = JSON.parse(capture.stdout()) as {
+      skipped: { path: string; message: string; code: string }[];
+    };
+    expect(parsed.skipped.length).toBe(1);
+    expect(parsed.skipped[0]!.code).toBe("invalid_skill");
+  });
+
+  test("C-INST-21 single-skill source still hard-fails on invalid SKILL.md", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir("crew-hard-");
+    const skill = makeSkill(container, "bad-dir", skillFrontmatter({ name: "mismatched-name" }));
+    const capture = captureStreams();
+    const code = runCli(["install", skill], { home, streams: capture.streams });
+    // Exit 4: the user asked for that one skill and it's invalid.
+    expect(code).toBe(4);
+  });
+
   test("C-INST-09 no valid skills -> no_skills_found exit 4", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-empty-");

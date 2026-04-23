@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { baseFor } from "../../../agents/adapter.ts";
 import { agentByName } from "../../../agents/registry.ts";
 import type { InstallRecord, PerAgentResult } from "../../../install/perform.ts";
-import { plural, shortenHome } from "../../../util/format.ts";
+import { shortenHome } from "../../../util/format.ts";
 import type { Styler } from "../../../util/term.ts";
 
 /** Remedy hints shown when a target install fails. Plain English only. */
@@ -60,14 +60,6 @@ export function tallyAgents(records: readonly InstallRecord[]): Totals {
     }
   }
   return t;
-}
-
-export function formatTotals(totals: Totals): string {
-  const parts: string[] = [];
-  if (totals.installed > 0) parts.push(plural(totals.installed, "install", "installs"));
-  if (totals.upToDate > 0) parts.push(`${totals.upToDate} already up to date`);
-  if (totals.failed > 0) parts.push(plural(totals.failed, "failure"));
-  return parts.length > 0 ? parts.join(" · ") : "nothing to do";
 }
 
 /**

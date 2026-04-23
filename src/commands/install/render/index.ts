@@ -14,14 +14,16 @@ import { agentByName } from "../../../agents/registry.ts";
 import type { ResolvedSkill } from "../../../core/types.ts";
 import type { AlreadyInstalled } from "../../../install/duplicate-rules.ts";
 import type { InstallRecord } from "../../../install/perform.ts";
+import type { SkippedSkill } from "../../../sources/expand.ts";
 import { firstSentences, plural, shortenHome, wrap } from "../../../util/format.ts";
 import type { Styler } from "../../../util/term.ts";
-import { formatTotals, formatVersion, renderAgentLine, tallyAgents } from "./helpers.ts";
+import { formatVersion, renderAgentLine, tallyAgents, type Totals } from "./helpers.ts";
 
 export interface RenderInstallInput {
   readonly records: readonly InstallRecord[];
   readonly alreadyInstalled: readonly AlreadyInstalled[];
   readonly resolved: readonly ResolvedSkill[];
+  readonly skipped: readonly SkippedSkill[];
   readonly dryRun: boolean;
   readonly cwd: string;
   readonly width: number;
@@ -76,12 +78,38 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
   }
 
   const totals = tallyAgents(input.records);
-  if (totals.total > 0) {
+  const totalsText = formatTotalsWithSkipped(totals, input.skipped.length);
+  if (totalsText !== null) {
     lines.push("");
-    lines.push(style.dim(formatTotals(totals)));
+    lines.push(style.dim(totalsText));
+  }
+
+  if (input.skipped.length > 0) {
+    lines.push("");
+    lines.push(style.bold(`Skipped (${input.skipped.length}):`));
+    for (const s of input.skipped) {
+      const wrapped = wrap(s.message, Math.max(40, input.width - 4));
+      lines.push(`  ${style.symbol("fail")} ${style.red(wrapped[0] ?? s.message)}`);
+      for (let i = 1; i < wrapped.length; i++) lines.push(`    ${style.red(wrapped[i]!)}`);
+    }
   }
 
   return lines;
+}
+
+/**
+ * Return the dim one-line totals summary, or null when there's
+ * literally nothing to report (no installs, nothing up to date, no
+ * failures, no skips).
+ */
+function formatTotalsWithSkipped(totals: Totals, skippedCount: number): string | null {
+  if (totals.total === 0 && skippedCount === 0) return null;
+  const parts: string[] = [];
+  if (totals.installed > 0) parts.push(plural(totals.installed, "install", "installs"));
+  if (totals.upToDate > 0) parts.push(`${totals.upToDate} already up to date`);
+  if (totals.failed > 0) parts.push(plural(totals.failed, "failure"));
+  if (skippedCount > 0) parts.push(`${skippedCount} skipped`);
+  return parts.length > 0 ? parts.join(" · ") : "nothing to do";
 }
 
 function renderAlreadyInstalled(

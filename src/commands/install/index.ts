@@ -56,11 +56,13 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   });
 
   // Exit-code rules (§18.6 clarification): exit 1 if any root skill has
-  // zero successful targets; otherwise 0. The clean "already installed"
+  // zero successful targets OR if any skill was skipped during
+  // multi-skill expansion; otherwise 0. The clean "already installed"
   // short-circuit case is exit 0 per §5.4.
   const allAlreadyInstalled =
     result.alreadyInstalled.length > 0 && result.summary.records.length === 0;
   let exitCode = 0;
+  if (result.skipped.length > 0) exitCode = 1;
   if (!allAlreadyInstalled) {
     const anyRootFail = result.summary.records.some((r) => !r.anySuccess);
     if (anyRootFail) exitCode = 1;
@@ -71,6 +73,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       records: result.summary.records,
       alreadyInstalled: result.alreadyInstalled,
       resolved: result.resolved,
+      skipped: result.skipped,
       dryRun: ctx.flags.dryRun,
       cwd: ctx.cwd,
       width: ctx.width,
@@ -84,6 +87,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     json: {
       already_installed: result.alreadyInstalled,
       records: result.summary.records,
+      skipped: result.skipped,
       dry_run: ctx.flags.dryRun,
     },
   };

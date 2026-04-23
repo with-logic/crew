@@ -136,8 +136,8 @@ function loadDescriptionFromAny(
 
 /** Walk a source directory and gather SkillInfo per skill we find. */
 function buildSkillInfos(dir: string): SkillInfo[] {
-  const skills = expandSkills(dir);
-  return skills.map((s) => ({
+  const { valid } = expandSkills(dir);
+  return valid.map((s) => ({
     name: s.frontmatter.name,
     description: s.frontmatter.description,
     license: s.frontmatter.license ?? null,

@@ -687,7 +687,8 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - `description` is present, non-empty, length ≤ 1024 characters.
    - If `compatibility` is present, length ≤ 500 characters.
    - Every other spec rule from the Agent Skills specification.
-   Invalid skills abort with `invalid_skill` (§13) before any files are written.
+
+   **Validation policy.** For **single-skill** sources (a source whose resolved location IS one skill — case 1 in step 5 below, or a 3-segment `<tap>/<ns>/<skill>` or 2-segment `<tap>/<skill>` reference), an invalid skill aborts the whole command with `invalid_skill` (§13). For **multi-skill expansions** (cases 2 and 3 in step 5 — walking a `skills/` directory or the source root), invalid skills are **soft-skipped**: each invalid skill is recorded as a skip with its validation message, valid siblings continue to install, and the command exits `1` (not `4`) if any skills were skipped. This avoids one bad skill blocking a whole-tap install. The CLI renders skipped skills in a final "Skipped" section naming each offending path and the validation error.
 5. **Expand directories.** Three cases, checked in order:
    1. If the resolved source location has a `SKILL.md` at its root, it is one skill.
    2. Else, if the resolved source location has a `skills/` subdirectory, crew walks under `skills/` and collects skills:
@@ -1450,6 +1451,8 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-17 | §9 | `--scope project` writes to the agent's project-scope path instead of the user-scope path. |
 | C-INST-18 | §11.1 | A project-scope install records `project_root` in the state entry equal to the user's working directory at install time. User-scope installs do NOT have a `project_root`. |
 | C-INST-19 | §9 | `state.json` may contain multiple project-scope entries for the same skill name, each with a different `project_root` — they're independent installs, not duplicates. |
+| C-INST-20 | §9 step 4 | In a multi-skill expansion (a `skills/` walk or a root walk), an invalid skill is soft-skipped: its path and validation message are recorded, valid siblings proceed, the command exits `1` (not `4`), and the CLI renders a "Skipped" section in the output. |
+| C-INST-21 | §9 step 4 | A single-skill source (`SKILL.md` at the resolved location, or a qualified `<tap>/<skill>` / `<tap>/<ns>/<skill>` reference) continues to hard-fail with `invalid_skill` exit 4 when validation fails — the user asked for that one skill and no partial success exists. |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
 
