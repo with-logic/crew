@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0] — 2026-04-23
+
+### Added
+
+- **Namespace grouping.** Tap authors can organize skills under a `skills/<namespace>/` directory. Install a whole namespace (`crew install marketing`), a skill within one (`crew install marketing/email-outreach`), or use the fully-qualified 3-segment form (`crew install acme/marketing/email-outreach`).
+- **`--tap`, `--bundle`, `--skill` flags on `crew install`.** Explicitly force how a bare name is interpreted when it could match more than one thing.
+- **Interactive ambiguity prompt.** When a name is ambiguous, crew shows a numbered menu on TTY and returns a structured `ambiguous_reference` error with copy-pasteable commands in non-interactive contexts.
+- **`skills/` subdirectory support.** Taps whose skills live under a `skills/` subdirectory (rather than the repo root) are now recognized automatically; the `skills/` tree is used exclusively when present.
+
+### Changed
+
+- Install refs now support a 3-segment form: `<tap>/<namespace>/<skill>`. Existing 1- and 2-segment refs are unchanged.
+- README updated with a Namespaces section documenting the new directory layout and install forms.
+
 ## [0.5.0] — 2026-04-20
 
 ### Changed
