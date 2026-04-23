@@ -162,7 +162,12 @@ describe("install from local path", () => {
     // Verify at least one per-agent row with the destination path is
     // present — this is the regression guard for the old one-liner.
     expect(out).toContain("(already installed)");
-    expect(out).toMatch(/claude-code .+demo/);
+    // Per-agent row carries the muted marker (plain-styler "-"
+    // on non-TTY, "·" on TTY) followed by the agent and a "→"
+    // separator ahead of the install path. The regex nails down
+    // every element so a regression in the muted-marker path
+    // surfaces here.
+    expect(out).toMatch(/[-·]\s+claude-code\s+→.+demo/);
   });
 
   test("C-INST-15 --dry-run writes no files", () => {

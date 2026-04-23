@@ -9,23 +9,14 @@
  */
 
 import { join } from "node:path";
-import { baseFor } from "../../agents/adapter.ts";
-import { agentByName } from "../../agents/registry.ts";
-import type { ResolvedSkill } from "../../core/types.ts";
-import type { AlreadyInstalled } from "../../install/duplicate-rules.ts";
-import type { InstallRecord, PerAgentResult } from "../../install/perform.ts";
-import { firstSentences, plural, shortenHome, wrap } from "../../util/format.ts";
-import type { Styler } from "../../util/term.ts";
-
-/** Remedy hints shown when a target install fails. Plain English only. */
-const AGENT_FAIL_REMEDIES: Record<string, string> = {
-  untracked_directory: "something was already there (pass --force to overwrite)",
-  customized: "you've edited this version (pass --force to replace it)",
-  inconsistent_marker: "a leftover marker doesn't match (pass --force to replace)",
-  name_conflict: "a different skill already owns this name",
-  invalid_skill: "the skill's SKILL.md isn't valid",
-  source_unreachable: "couldn't reach the source",
-};
+import { baseFor } from "../../../agents/adapter.ts";
+import { agentByName } from "../../../agents/registry.ts";
+import type { ResolvedSkill } from "../../../core/types.ts";
+import type { AlreadyInstalled } from "../../../install/duplicate-rules.ts";
+import type { InstallRecord } from "../../../install/perform.ts";
+import { firstSentences, plural, shortenHome, wrap } from "../../../util/format.ts";
+import type { Styler } from "../../../util/term.ts";
+import { formatTotals, formatVersion, renderAgentLine, tallyAgents } from "./helpers.ts";
 
 export interface RenderInstallInput {
   readonly records: readonly InstallRecord[];
@@ -104,7 +95,9 @@ function renderAlreadyInstalled(
   const tagParts: string[] = [style.dim("(already installed)")];
   const version = formatVersion(existing.ref, existing.resolvedSha);
   if (version) tagParts.push(style.dim(`· ${version}`));
-  const scopeTag = existing.scope === "project" ? ` ${style.dim(`in ${shortenHome(cwd)}`)}` : "";
+  // Match `renderRecord`'s scope-tag shape: two leading spaces
+  // inside `style.dim` so color markup brackets the whole tag.
+  const scopeTag = existing.scope === "project" ? style.dim(`  in ${shortenHome(cwd)}`) : "";
   lines.push(`  ${style.bold(existing.name)} ${tagParts.join(" ")}${scopeTag}`);
   if (resolved?.frontmatter.description) {
     const desc = firstSentences(resolved.frontmatter.description, 200);
@@ -151,66 +144,4 @@ function renderRecord(
     lines.push(`    ${renderAgentLine(record.name, t, record.scope, cwd, style)}`);
   }
   return lines;
-}
-
-function renderAgentLine(
-  skillName: string,
-  result: PerAgentResult,
-  scope: "user" | "project",
-  cwd: string,
-  style: Styler,
-): string {
-  const name = result.agent;
-  if (result.kind === "installed" || result.kind === "up_to_date") {
-    const adapter = agentByName(name);
-    const installPath = adapter ? shortenHome(join(baseFor(adapter, scope, cwd), skillName)) : "";
-    const status = result.kind === "up_to_date" ? style.dim("already up to date") : "";
-    const pathSuffix = installPath ? `${style.dim("→")} ${style.dim(installPath)}` : "";
-    const parts = [style.symbol("ok"), name, pathSuffix, status].filter((s) => s.length > 0);
-    return parts.join(" ");
-  }
-  const remedy = AGENT_FAIL_REMEDIES[result.error.code] ?? result.error.code.replace(/_/g, " ");
-  return `${style.symbol("fail")} ${name}  ${style.red(remedy)}`;
-}
-
-interface Totals {
-  installed: number;
-  upToDate: number;
-  failed: number;
-  total: number;
-}
-
-function tallyAgents(records: readonly InstallRecord[]): Totals {
-  const t: Totals = { installed: 0, upToDate: 0, failed: 0, total: 0 };
-  for (const r of records) {
-    for (const tgt of r.agents) {
-      t.total++;
-      if (tgt.kind === "installed") t.installed++;
-      else if (tgt.kind === "up_to_date") t.upToDate++;
-      else t.failed++;
-    }
-  }
-  return t;
-}
-
-function formatTotals(totals: Totals): string {
-  const parts: string[] = [];
-  if (totals.installed > 0) parts.push(plural(totals.installed, "install", "installs"));
-  if (totals.upToDate > 0) parts.push(`${totals.upToDate} already up to date`);
-  if (totals.failed > 0) parts.push(plural(totals.failed, "failure"));
-  return parts.length > 0 ? parts.join(" · ") : "nothing to do";
-}
-
-/**
- * Build a human-readable "version" tag for an already-installed skill:
- * the requested ref plus a short SHA when both exist, or just one of
- * them if that's all we have. Returns "" when neither is set (e.g.
- * pure path sources with no git identity).
- */
-function formatVersion(ref: string | null, sha: string | null): string {
-  const shortSha = sha ? sha.slice(0, 8) : null;
-  if (ref && shortSha && ref !== sha) return `${ref} @ ${shortSha}`;
-  if (shortSha) return shortSha;
-  if (ref) return ref;
-  return "";
 }
