@@ -88,8 +88,10 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
     lines.push("");
     lines.push(style.bold(`Failed (${input.skipped.length}):`));
     for (const s of input.skipped) {
+      // `wrap` always returns at least one element for a non-empty
+      // message — `s.message` is a CrewError message, never empty.
       const wrapped = wrap(s.message, Math.max(40, input.width - 4));
-      lines.push(`  ${style.symbol("fail")} ${style.red(wrapped[0] ?? s.message)}`);
+      lines.push(`  ${style.symbol("fail")} ${style.red(wrapped[0]!)}`);
       for (let i = 1; i < wrapped.length; i++) lines.push(`    ${style.red(wrapped[i]!)}`);
     }
   }
@@ -109,7 +111,10 @@ function formatTotalsWithSkipped(totals: Totals, skippedCount: number): string |
   if (totals.upToDate > 0) parts.push(`${totals.upToDate} already up to date`);
   if (totals.failed > 0) parts.push(plural(totals.failed, "failure"));
   if (skippedCount > 0) parts.push(`${skippedCount} failed`);
-  return parts.length > 0 ? parts.join(" · ") : "nothing to do";
+  // After the early-return guard above, at least one of
+  // installed / upToDate / failed / skippedCount is > 0, so `parts`
+  // is non-empty. No fallback needed.
+  return parts.join(" · ");
 }
 
 function renderAlreadyInstalled(

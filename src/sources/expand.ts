@@ -112,7 +112,9 @@ function pushSoft(candidate: string, valid: LoadedSkill[], skipped: SkippedSkill
   try {
     valid.push(loadSkill(candidate));
   } catch (err) {
+    // `loadSkill` throws only `CrewError`, whose `code` is typed as
+    // a non-null `CrewErrorName`. No fallback needed.
     const ce = err as CrewError;
-    skipped.push({ path: candidate, message: ce.message, code: ce.code ?? "invalid_skill" });
+    skipped.push({ path: candidate, message: ce.message, code: ce.code });
   }
 }

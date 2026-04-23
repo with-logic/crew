@@ -290,6 +290,23 @@ describe("install directory expansion", () => {
     expect(capture.stdout()).toContain("bad-dir");
   });
 
+  test("C-INST-21 multi-skill dir where every skill is invalid: exit 4, all listed in Failed", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir("crew-all-invalid-");
+    // Two siblings, both have mismatched name/dir.
+    makeSkill(container, "bad-one", skillFrontmatter({ name: "wrong-one" }));
+    makeSkill(container, "bad-two", skillFrontmatter({ name: "wrong-two" }));
+    const capture = captureStreams();
+    const code = runCli(["install", container], { home, streams: capture.streams });
+    // Zero succeeded AND ≥1 validation failure → exit 4.
+    expect(code).toBe(4);
+    const out = capture.stdout();
+    expect(out).toContain("Failed");
+    // Both skills reported.
+    expect(out).toContain("bad-one");
+    expect(out).toContain("bad-two");
+  });
+
   test("C-INST-20 --json surfaces skipped skills", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-soft-json-");
