@@ -134,7 +134,6 @@ function resolveCollisions(ctx: CommandContext, config: Config): string[] {
   return refs;
 }
 
-
 function promptForCollision(
   ctx: CommandContext,
   collision: { tap: TapConfig; otherTaps: readonly TapConfig[] },

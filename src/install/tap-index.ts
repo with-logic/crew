@@ -17,8 +17,8 @@ import { join } from "node:path";
 import { tapPath } from "../core/paths.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo.ts";
-import { tapRootDir } from "../sources/acquire/index.ts";
 import { hasSkillMd } from "../skill/load.ts";
+import { tapRootDir } from "../sources/acquire/index.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 
 /** Location of one skill inside a tap. */

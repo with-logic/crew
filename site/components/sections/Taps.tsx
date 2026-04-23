@@ -42,6 +42,11 @@ export function Taps() {
               is ignored. Prefer to keep skills under a <code>skills/</code> directory? That works
               too — if <code>skills/</code> exists, crew indexes its children instead of the root.
             </p>
+            <p className={styles.note}>
+              Group related skills into <strong>namespaces</strong>: <code>skills/marketing/*</code>
+              , <code>skills/engineering/*</code>. Then <code>crew install marketing</code> installs
+              the whole bundle, and <code>crew install acme/marketing/copy-review</code> picks one.
+            </p>
           </div>
 
           <div>

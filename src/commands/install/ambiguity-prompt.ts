@@ -49,10 +49,7 @@ export function promptBareNameAmbiguity(
   trimmed: string,
   raw: string,
 ): string {
-  const candidates = filterForAmbiguity(
-    enumerateCandidates(trimmed, config, ctx.home),
-    trimmed,
-  );
+  const candidates = filterForAmbiguity(enumerateCandidates(trimmed, config, ctx.home), trimmed);
   if (candidates.length <= 1) return raw;
   if (ctx.flags.yes) return raw;
 

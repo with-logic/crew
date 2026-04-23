@@ -267,6 +267,26 @@ describe("install directory expansion", () => {
     const code = runCli(["install", container], { home, streams: captureStreams().streams });
     expect(code).toBe(4);
   });
+
+  test("C-NS-01 namespace dirs under skills/ install every skill", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir("crew-ns-");
+    const skillsDir = join(container, "skills");
+    mkdirSync(skillsDir);
+    const marketing = join(skillsDir, "marketing");
+    mkdirSync(marketing);
+    makeSkill(marketing, "email-outreach", skillFrontmatter({ name: "email-outreach" }));
+    makeSkill(marketing, "social-posts", skillFrontmatter({ name: "social-posts" }));
+    const engineering = join(skillsDir, "engineering");
+    mkdirSync(engineering);
+    makeSkill(engineering, "code-review", skillFrontmatter({ name: "code-review" }));
+
+    const code = runCli(["install", container], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "email-outreach"))).toBe(true);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "social-posts"))).toBe(true);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "code-review"))).toBe(true);
+  });
 });
 
 describe("install safety", () => {

@@ -174,15 +174,33 @@ describe("parseRef: git", () => {
 describe("parseRef: tap", () => {
   test("C-REF-14 bare name", () => {
     const r = parseRef("python-testing");
-    expect(r).toEqual({ type: "tap", tap: null, namespace: null, name: "python-testing", ref: null });
+    expect(r).toEqual({
+      type: "tap",
+      tap: null,
+      namespace: null,
+      name: "python-testing",
+      ref: null,
+    });
   });
   test("C-REF-15 qualified", () => {
     const r = parseRef("core/python-testing");
-    expect(r).toEqual({ type: "tap", tap: "core", namespace: null, name: "python-testing", ref: null });
+    expect(r).toEqual({
+      type: "tap",
+      tap: "core",
+      namespace: null,
+      name: "python-testing",
+      ref: null,
+    });
   });
   test("C-REF-16 qualified pinned", () => {
     const r = parseRef("core/python-testing@v1.0");
-    expect(r).toEqual({ type: "tap", tap: "core", namespace: null, name: "python-testing", ref: "v1.0" });
+    expect(r).toEqual({
+      type: "tap",
+      tap: "core",
+      namespace: null,
+      name: "python-testing",
+      ref: "v1.0",
+    });
   });
   test("bare name with @ref", () => {
     const r = parseRef("foo@bar");

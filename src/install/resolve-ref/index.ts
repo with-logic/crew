@@ -45,7 +45,7 @@ export function resolveTapRef(
 
   // 2-segment: <first>/<second>. Try tap-first, then namespace-first.
   if (source.tap !== null && source.namespace === null) {
-    return resolveTwoSegment(source, config, home, kindHint);
+    return resolveTwoSegment(source, config, home);
   }
 
   // Bare name.
@@ -74,12 +74,7 @@ function resolveThreeSegment(source: TapSource, config: Config, home: string): N
   return { kind: "skill", tap, location: match };
 }
 
-function resolveTwoSegment(
-  source: TapSource,
-  config: Config,
-  home: string,
-  kindHint: KindHint,
-): NameCandidate {
+function resolveTwoSegment(source: TapSource, config: Config, home: string): NameCandidate {
   const first = source.tap!;
   const second = source.name;
   const tap = config.taps.find((t) => t.name === first);
@@ -98,11 +93,6 @@ function resolveTwoSegment(
     if (loc) nsCandidates.push({ kind: "skill", tap: t, location: loc });
   }
 
-  if (kindHint === "skill") {
-    if (asTapSkill && nsCandidates.length === 0) return asTapSkill;
-    if (!asTapSkill && nsCandidates.length === 1) return nsCandidates[0]!;
-    if (asTapSkill && nsCandidates.length >= 1) return asTapSkill;
-  }
   if (asTapSkill && nsCandidates.length === 0) return asTapSkill;
   if (!asTapSkill && nsCandidates.length === 1) return nsCandidates[0]!;
   if (asTapSkill && nsCandidates.length >= 1) {

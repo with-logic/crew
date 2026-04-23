@@ -219,23 +219,6 @@ function enqueueTapRef(
     kindHint,
   );
 
-  if (candidate.kind === "tap") {
-    const acquired = acquireTap(candidate.tap, home);
-    return {
-      items: expandSkillsAsItems(
-        acquired.rootDir,
-        candidate.tap,
-        "",
-        acquired.resolvedSha,
-        source.ref,
-        source.ref !== null,
-        explicit,
-        true,
-      ),
-      config,
-    };
-  }
-
   if (candidate.kind === "namespace") {
     const acquired = acquireTap(candidate.tap, home);
     const items: PendingItem[] = [];
@@ -255,12 +238,15 @@ function enqueueTapRef(
     return { items, config };
   }
 
-  // kind === "skill"
-  const acquired = acquireTap(candidate.tap, home);
+  // kind === "skill". The short-circuit above handles kind === "tap"
+  // for bare names before we reach the resolver; other paths
+  // (2-seg, 3-seg) never resolve to a tap.
+  const skill = candidate as Extract<typeof candidate, { kind: "skill" }>;
+  const acquired = acquireTap(skill.tap, home);
   const items = expandSkillsAsItems(
-    candidate.location.path,
-    candidate.tap,
-    candidate.location.tapRelativePath,
+    skill.location.path,
+    skill.tap,
+    skill.location.tapRelativePath,
     acquired.resolvedSha,
     source.ref,
     source.ref !== null,
@@ -269,7 +255,6 @@ function enqueueTapRef(
   );
   return { items, config };
 }
-
 
 /** Walk `dir` and produce one PendingItem per skill found (single or expanded). */
 function expandSkillsAsItems(

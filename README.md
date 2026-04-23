@@ -90,7 +90,7 @@ skill can list as a dependency. Three shapes:
 
 | Kind | Example | What it is |
 |---|---|---|
-| **Tap source** | `crew install founding-engineer` | A skill inside a configured tap. Bare names search every tap, including the default `core` tap. Qualify with `tap/name`. Pin with `@v1.0`. |
+| **Tap source** | `crew install founding-engineer` | A skill, namespace, or tap known to a configured tap. Bare names search every tap, including the default `core` tap. Qualify with `tap/skill`, `tap/namespace/skill`, or `namespace/skill`. Pin with `@v1.0`. |
 | **Git source** | `crew install @acme/skills@v1.2.0//engineers/founding` | Any reachable git URL. `@owner/repo` is GitHub shorthand; full `https://` and `git@` URLs work too. Append `@ref` to pin, `//subpath` to scope. |
 | **Local path** | `crew install ./my-skill` | A directory on your machine. Detected by a leading `./`, `../`, `/`, or `~`. |
 
@@ -211,6 +211,33 @@ acme-skills/
 Any top-level directory with a valid `SKILL.md` is a skill. Everything else is
 ignored. Prefer to keep skills under a `skills/` directory? That works too — if
 `skills/` exists at the root, crew indexes its children instead of the root.
+
+### Namespaces
+
+Group related skills into a **namespace** by putting them under one directory
+inside `skills/`:
+
+```
+acme-skills/
+└── skills/
+    ├── marketing/
+    │   ├── email-outreach/SKILL.md
+    │   └── social-posts/SKILL.md
+    └── engineering/
+        ├── code-review/SKILL.md
+        └── pr-descriptions/SKILL.md
+```
+
+Then:
+
+- `crew install marketing` — installs every skill in the namespace
+- `crew install acme/marketing/copy-review` — picks one skill unambiguously
+- `crew install marketing/copy-review` — also picks one skill (when `marketing`
+  is a namespace in exactly one configured tap)
+
+When a name could mean more than one thing (a tap, a skill, a namespace),
+crew asks — or takes `--tap`, `--bundle`, or `--skill` to force one
+interpretation.
 
 ## For teams
 
