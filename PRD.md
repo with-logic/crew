@@ -687,7 +687,8 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - `description` is present, non-empty, length ≤ 1024 characters.
    - If `compatibility` is present, length ≤ 500 characters.
    - Every other spec rule from the Agent Skills specification.
-   Invalid skills abort with `invalid_skill` (§13) before any files are written.
+
+   A skill that fails validation is recorded as a failed skill with its message and path; the run continues. No validation failure aborts the whole command. See the exit-code rules in step 9.
 5. **Expand directories.** Three cases, checked in order:
    1. If the resolved source location has a `SKILL.md` at its root, it is one skill.
    2. Else, if the resolved source location has a `skills/` subdirectory, crew walks under `skills/` and collects skills:
@@ -705,6 +706,18 @@ Given one or more skill references on the command line, `crew install` proceeds 
 7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
 8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. If the store entry already exists and its content hash matches, reuse it.
 9. **Install into each agent.** For each skill × each agent in the agent set × the scope, run the install algorithm from §7.3. Record per-agent results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, agent) pair does not stop others.
+
+   **Skill outcome.** After per-agent installs complete, each attempted skill has one of two outcomes:
+   - **succeeded** — the skill validated AND at least one agent install succeeded (`anySuccess` in the per-skill record).
+   - **failed** — the skill failed validation, OR every agent install failed, OR the skill was otherwise prevented from landing anywhere.
+
+   **Exit code.** `crew install` computes its exit code from the set of attempted skills:
+   - `0` — every attempted skill succeeded (or no work was needed because everything was already installed).
+   - `1` — at least one skill succeeded AND at least one skill failed (partial success).
+   - `4` — zero skills succeeded AND at least one skill failed validation. The error name is `invalid_skill` (§13).
+   - `1` — zero skills succeeded AND no validation failures occurred (purely operational failures — agent errors, source unreachable, etc.).
+
+   The human output always renders a per-skill line noting whether each attempted skill succeeded or failed, with the failure reason for each failed skill. `--json` emits a `results` array with the same per-skill outcomes.
 10. **Update state.** For each successfully installed (skill, agent) pair, add or replace the entry in `state.json` per §11.1. Do this under the state lock (§14).
     - Skills named directly on the command line (the "roots") are
       recorded with `explicit: true`. Skills pulled in only via
@@ -1450,6 +1463,9 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-17 | §9 | `--scope project` writes to the agent's project-scope path instead of the user-scope path. |
 | C-INST-18 | §11.1 | A project-scope install records `project_root` in the state entry equal to the user's working directory at install time. User-scope installs do NOT have a `project_root`. |
 | C-INST-19 | §9 | `state.json` may contain multiple project-scope entries for the same skill name, each with a different `project_root` — they're independent installs, not duplicates. |
+| C-INST-20 | §9 step 9 | A validation failure on any skill is recorded as a failed skill; the run continues through the remaining skills. It does not abort the command. |
+| C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation). |
+| C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
 
