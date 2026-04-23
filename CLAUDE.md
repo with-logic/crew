@@ -42,6 +42,36 @@ leave a PRD change unimplemented across a commit.
 
 ---
 
+## Working agreement: user-facing surfaces
+
+If a change affects user-visible behavior — a new command, a new
+flag, a change to install/update/tap semantics, a new way for a
+tap to be structured, a renamed default, anything a user of the
+CLI would notice — also check whether these user-facing surfaces
+describe the thing you just changed, and keep them in sync:
+
+- `site/` — the landing page at `crew.logic.inc`. Sections most
+  likely to go stale: `Commands.tsx` (command reference),
+  `HowItWorks.tsx` (what the flow looks like), `Taps.tsx` (how
+  taps are structured), `Faq.tsx` (common questions), and the
+  hero terminal demo in `Hero.tsx`.
+- `README.md` — the GitHub front page. It mirrors the site's
+  content journey; the "What is Crew?", "How does it work?", and
+  FAQ sections are the usual suspects for drift.
+
+You don't need to update every mention of a thing — only update
+what's now *wrong* or *misleadingly incomplete*. If the site's
+ASCII diagram shows a flat layout and you just added a nested
+layout option, the diagram isn't wrong (flat still works) but the
+surrounding prose might now overclaim that "only the top level is
+indexed." Fix the prose; leave the diagram.
+
+When reviewing a PR, flag changes that touch `src/` behavior but
+don't update `site/` or `README.md` — ask whether those surfaces
+still describe the thing accurately.
+
+---
+
 ## Architecture
 
 ### Runtime and shape

@@ -242,6 +242,25 @@ describe("install directory expansion", () => {
     expect(existsSync(join(redirect.agents["claude-code"]!, "three"))).toBe(false);
   });
 
+  test("C-INST-08b skills/ subdirectory walks one level under it", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir("crew-ctr-skills-");
+    const skillsDir = join(container, "skills");
+    mkdirSync(skillsDir);
+    makeSkill(skillsDir, "one", skillFrontmatter({ name: "one" }));
+    makeSkill(skillsDir, "two", skillFrontmatter({ name: "two" }));
+    // A stray directory at the root that LOOKS skill-like should be
+    // ignored once `skills/` is found — the `skills/` index is
+    // authoritative per PRD §9 step 5 case 2.
+    makeSkill(container, "ignored", skillFrontmatter({ name: "ignored" }));
+
+    const code = runCli(["install", container], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "one"))).toBe(true);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "two"))).toBe(true);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "ignored"))).toBe(false);
+  });
+
   test("C-INST-09 no valid skills -> no_skills_found exit 4", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-empty-");

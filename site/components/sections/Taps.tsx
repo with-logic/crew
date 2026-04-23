@@ -39,7 +39,8 @@ export function Taps() {
             </CodeBlock>
             <p className={styles.note}>
               Any top-level directory with a valid <code>SKILL.md</code> is a skill. Everything else
-              is ignored. You can still nest things — but only the top level is indexed.
+              is ignored. Prefer to keep skills under a <code>skills/</code> directory? That works
+              too — if <code>skills/</code> exists, crew indexes its children instead of the root.
             </p>
           </div>
 
