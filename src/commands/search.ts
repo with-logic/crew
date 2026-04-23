@@ -148,6 +148,9 @@ function formatHits(hits: readonly Hit[], query: string, style: Styler, width: n
   }
 
   lines.push("");
+  // Use the name column verbatim in the hint — it's already the form
+  // the user can paste into `crew install`. Namespaced rows display
+  // `namespace/name`, which is also the qualified install form.
   lines.push(style.dim("Install any of these with `crew install <name>`."));
   return lines;
 }

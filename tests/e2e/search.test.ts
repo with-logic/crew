@@ -8,7 +8,12 @@
  * exercised separately by `tests/util/term.test.ts`.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
@@ -18,6 +23,38 @@ import {
   makeTempDir,
   skillFrontmatter,
 } from "../helpers/fixtures.ts";
+
+/**
+ * Redirect the three detectable adapters to tmp directories so
+ * installs in this suite never write to `~/.claude/skills` etc.
+ * Mirrors the pattern in `tests/e2e/install.test.ts`.
+ */
+let restoreAdapters: () => void = () => {};
+beforeEach(() => {
+  const ccRoot = makeTempDir("search-cc-");
+  const coRoot = makeTempDir("search-co-");
+  const geRoot = makeTempDir("search-ge-");
+  const originals = {
+    cc: { u: claudeCodeAdapter.userPath, d: claudeCodeAdapter.detect },
+    co: { u: codexAdapter.userPath, d: codexAdapter.detect },
+    ge: { u: geminiCliAdapter.userPath, d: geminiCliAdapter.detect },
+  };
+  (claudeCodeAdapter as { userPath: () => string }).userPath = () => ccRoot;
+  (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
+  (codexAdapter as { userPath: () => string }).userPath = () => coRoot;
+  (codexAdapter as { detect: () => boolean }).detect = () => true;
+  (geminiCliAdapter as { userPath: () => string }).userPath = () => geRoot;
+  (geminiCliAdapter as { detect: () => boolean }).detect = () => true;
+  restoreAdapters = () => {
+    (claudeCodeAdapter as { userPath: () => string }).userPath = originals.cc.u;
+    (claudeCodeAdapter as { detect: () => boolean }).detect = originals.cc.d;
+    (codexAdapter as { userPath: () => string }).userPath = originals.co.u;
+    (codexAdapter as { detect: () => boolean }).detect = originals.co.d;
+    (geminiCliAdapter as { userPath: () => string }).userPath = originals.ge.u;
+    (geminiCliAdapter as { detect: () => boolean }).detect = originals.ge.d;
+  };
+});
+afterEach(() => restoreAdapters());
 
 describe("crew search output", () => {
   function makeTestTap(prefix: string, skills: readonly { name: string; desc: string }[]): string {
@@ -197,9 +234,9 @@ describe("crew search output", () => {
       home,
       streams: captureStreams().streams,
     });
-    // Pre-install one of the two skills. The e2e suite's adapter
-    // redirection isn't needed here — install just needs to land in
-    // state for the marker to flip.
+    // Pre-install one of the two skills — the beforeEach redirects
+    // each adapter's user path to a tmp dir so this install never
+    // touches the real `~/.claude/skills/` etc.
     runCli(["install", "marked-tap/installed-skill"], {
       home,
       streams: captureStreams().streams,
@@ -213,6 +250,44 @@ describe("crew search output", () => {
     const byName = new Map(parsed.hits.map((h) => [h.name, h.installed]));
     expect(byName.get("installed-skill")).toBe(true);
     expect(byName.get("other-skill")).toBe(false);
+  });
+
+  test("namespaced skills render as namespace/name; JSON carries namespace field", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    // Build a tap with a namespace directory under skills/:
+    //   skills/marketing/email-outreach/SKILL.md
+    const repo = makeTempDir("crew-search-ns-");
+    makeGitRepo(repo);
+    const skillsDir = join(repo, "skills");
+    mkdirSync(skillsDir);
+    const marketing = join(skillsDir, "marketing");
+    mkdirSync(marketing);
+    makeSkill(
+      marketing,
+      "email-outreach",
+      skillFrontmatter({ name: "email-outreach", description: "Send emails" }),
+    );
+    commitAll(repo, "init");
+    runCli(["tap", "add", `file://${repo}`, "acme"], {
+      home,
+      streams: captureStreams().streams,
+    });
+
+    // Human output: the name column is the namespaced form.
+    const human = captureStreams();
+    runCli(["search"], { home, streams: human.streams });
+    expect(human.stdout()).toContain("marketing/email-outreach");
+
+    // JSON output: namespace populated.
+    const c = captureStreams();
+    runCli(["search", "--json"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout()) as {
+      hits: { name: string; namespace: string | null }[];
+    };
+    expect(parsed.hits).toHaveLength(1);
+    expect(parsed.hits[0]!.name).toBe("email-outreach");
+    expect(parsed.hits[0]!.namespace).toBe("marketing");
   });
 
   test("empty config: no-query reports 'No skills in any configured tap'", () => {
