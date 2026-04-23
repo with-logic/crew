@@ -18,6 +18,7 @@ import { crewHome } from "../../core/paths.ts";
 import type { Config, ResolvedSkill } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
+import type { SkippedSkill } from "../../sources/expand.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
 import { attributeRef } from "../tap-attribution.ts";
@@ -52,6 +53,12 @@ export interface ResolveResult {
   readonly requiredBy: RequiredByMap;
   /** Config including any auto-taps we created. Caller writes it. */
   readonly config: Config;
+  /**
+   * Skill directories that failed validation during expansion and
+   * were soft-skipped. The install command surfaces them and factors
+   * them into the exit code per PRD §9 step 9.
+   */
+  readonly skipped: readonly SkippedSkill[];
 }
 
 /**
@@ -70,12 +77,14 @@ export function resolveInstallSet(
   const byName = new Map<string, ResolvedSkill>();
   const requiredBy: RequiredByMap = new Map();
   const pending: PendingItem[] = [];
+  const skipped: SkippedSkill[] = [];
 
   // Step 1–5: resolve every root reference.
   for (const raw of refs) {
     const enqueued = enqueueRoot(raw, config, cwd, home, kindHint);
     config = enqueued.config;
     pending.push(...enqueued.items);
+    skipped.push(...enqueued.skipped);
   }
 
   // Step 6: dependency walk.
@@ -113,6 +122,7 @@ export function resolveInstallSet(
     for (const depRef of deps) {
       const enqueued = enqueueDep(depRef, item, config, cwd, home);
       config = enqueued.config;
+      skipped.push(...enqueued.skipped);
       for (const depItem of enqueued.items) {
         pending.push(depItem);
         const depName = depItem.loaded.frontmatter.name;
@@ -122,7 +132,7 @@ export function resolveInstallSet(
     }
   }
 
-  return { skills: topoSort(byName), requiredBy, config };
+  return { skills: topoSort(byName), requiredBy, config, skipped };
 }
 
 /** Resolve and enqueue the items produced by a single root reference. */
@@ -132,7 +142,7 @@ function enqueueRoot(
   cwd: string,
   home: string,
   kindHint: KindHint,
-): { items: PendingItem[]; config: Config } {
+): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const source = parseRef(raw, cwd);
 
   // Bare-name (`<skill>`) and qualified (`<tap>/<skill>`, `<tap>/<ns>/<skill>`) tap refs.
@@ -145,7 +155,7 @@ function enqueueRoot(
   // said "install this". Future additions should follow.
   const attrib = attributeRef(source, config);
   const acquired = acquireTap(attrib.tap, home);
-  const items = expandSkillsAsItems(
+  const expansion = expandSkillsAsItems(
     acquired.rootDir,
     attrib.tap,
     "",
@@ -155,5 +165,5 @@ function enqueueRoot(
     true,
     true,
   );
-  return { items, config: attrib.config };
+  return { items: expansion.items, config: attrib.config, skipped: expansion.skipped };
 }

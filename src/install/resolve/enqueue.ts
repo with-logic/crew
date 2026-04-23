@@ -17,7 +17,7 @@
 import type { Config, LoadedSkill, Source, TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
-import { expandSkills } from "../../sources/expand.ts";
+import { expandSkills, type SkippedSkill } from "../../sources/expand.ts";
 import { findSiblingDep } from "../dep-resolution.ts";
 import { type KindHint, resolveTapRef } from "../resolve-ref/index.ts";
 import { attributeRef } from "../tap-attribution.ts";
@@ -41,7 +41,7 @@ export function enqueueTapRef(
   home: string,
   explicit: boolean,
   kindHint: KindHint,
-): { items: PendingItem[]; config: Config } {
+): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   // Whole-tap install short-circuit: bare `<name>` that is the name of
   // a configured tap. Cross-tap collisions (a same-named skill in a
   // DIFFERENT tap) are handled earlier in the CLI layer via
@@ -57,19 +57,17 @@ export function enqueueTapRef(
     const matched = config.taps.find((c) => c.name === source.name);
     if (matched) {
       const acquired = acquireTap(matched, home);
-      return {
-        items: expandSkillsAsItems(
-          acquired.rootDir,
-          matched,
-          "",
-          acquired.resolvedSha,
-          source.ref,
-          source.ref !== null,
-          explicit,
-          true,
-        ),
-        config,
-      };
+      const expansion = expandSkillsAsItems(
+        acquired.rootDir,
+        matched,
+        "",
+        acquired.resolvedSha,
+        source.ref,
+        source.ref !== null,
+        explicit,
+        true,
+      );
+      return { items: expansion.items, config, skipped: expansion.skipped };
     }
   }
 
@@ -91,8 +89,9 @@ export function enqueueTapRef(
   if (candidate.kind === "namespace") {
     const acquired = acquireTap(candidate.tap, home);
     const items: PendingItem[] = [];
+    const skipped: SkippedSkill[] = [];
     for (const member of candidate.members) {
-      const member_items = expandSkillsAsItems(
+      const expansion = expandSkillsAsItems(
         member.path,
         candidate.tap,
         member.tapRelativePath,
@@ -102,9 +101,10 @@ export function enqueueTapRef(
         explicit,
         true,
       );
-      for (const it of member_items) items.push(it);
+      items.push(...expansion.items);
+      skipped.push(...expansion.skipped);
     }
-    return { items, config };
+    return { items, config, skipped };
   }
 
   // kind === "skill". The short-circuit above handles kind === "tap"
@@ -112,7 +112,7 @@ export function enqueueTapRef(
   // (2-seg, 3-seg) never resolve to a tap.
   const skill = candidate as Extract<typeof candidate, { kind: "skill" }>;
   const acquired = acquireTap(skill.tap, home);
-  const items = expandSkillsAsItems(
+  const expansion = expandSkillsAsItems(
     skill.location.path,
     skill.tap,
     skill.location.tapRelativePath,
@@ -122,7 +122,12 @@ export function enqueueTapRef(
     explicit,
     false,
   );
-  return { items, config };
+  return { items: expansion.items, config, skipped: expansion.skipped };
+}
+
+interface ExpansionItems {
+  readonly items: PendingItem[];
+  readonly skipped: readonly SkippedSkill[];
 }
 
 /** Walk `dir` and produce one PendingItem per skill found (single or expanded). */
@@ -135,10 +140,10 @@ export function expandSkillsAsItems(
   pinned: boolean,
   explicit: boolean,
   tracksTap: boolean,
-): PendingItem[] {
-  const loaded = expandSkills(dir);
+): ExpansionItems {
+  const { valid, skipped } = expandSkills(dir);
   const items: PendingItem[] = [];
-  for (const l of loaded) {
+  for (const l of valid) {
     // tap-relative path of this skill's directory inside its tap.
     const subSegment = l.path === dir ? "" : l.path.slice(dir.length + 1);
     const tapRelativePath = baseTapPath
@@ -157,7 +162,7 @@ export function expandSkillsAsItems(
       tracksTap,
     });
   }
-  return items;
+  return { items, skipped };
 }
 
 /** Resolve and enqueue items for a dependency reference. */
@@ -167,7 +172,7 @@ export function enqueueDep(
   config: Config,
   cwd: string,
   home: string,
-): { items: PendingItem[]; config: Config } {
+): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const source = parseRef(depRef, cwd);
 
   // Bare-name dep with a tap-aware parent: prefer a sibling in the parent's tap.
@@ -193,6 +198,7 @@ export function enqueueDep(
           },
         ],
         config,
+        skipped: [],
       };
     }
     // Fall through to bare-name search across all configured taps.
@@ -207,7 +213,7 @@ export function enqueueDep(
   // subscribe the user to every sibling of the dep's source.
   const attrib = attributeRef(source, config);
   const acquired = acquireTap(attrib.tap, home);
-  const items = expandSkillsAsItems(
+  const expansion = expandSkillsAsItems(
     acquired.rootDir,
     attrib.tap,
     "",
@@ -217,7 +223,7 @@ export function enqueueDep(
     false,
     false,
   );
-  return { items, config: attrib.config };
+  return { items: expansion.items, config: attrib.config, skipped: expansion.skipped };
 }
 
 export function sourceRequestedRef(source: Source): string | null {
