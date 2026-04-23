@@ -155,7 +155,14 @@ describe("install from local path", () => {
     const capture = captureStreams();
     const code = runCli(["install", skill], { home, streams: capture.streams });
     expect(code).toBe(0);
-    expect(capture.stdout()).toContain("already installed");
+    const out = capture.stdout();
+    expect(out).toContain("already installed");
+    // New rendering: a full per-skill block with a per-agent row for
+    // each agent the skill is installed into (muted marker, not ✓).
+    // Verify at least one per-agent row with the destination path is
+    // present — this is the regression guard for the old one-liner.
+    expect(out).toContain("(already installed)");
+    expect(out).toMatch(/claude-code .+demo/);
   });
 
   test("C-INST-15 --dry-run writes no files", () => {

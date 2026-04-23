@@ -42,9 +42,22 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
   const dryTag = input.dryRun ? style.dim(" (dry run)") : "";
 
   if (input.records.length === 0 && input.alreadyInstalled.length > 0) {
-    // Every root was already installed — one-liner per skill, nothing more.
+    // Every root was already installed — render each as a full block so
+    // the user can see exactly where it lives, matching the fresh-install
+    // layout but with dim markers.
+    let first = true;
     for (const existing of input.alreadyInstalled) {
-      lines.push(renderAlreadyInstalled(existing, byName.get(existing.name), style, input.width));
+      if (!first) lines.push("");
+      first = false;
+      lines.push(
+        ...renderAlreadyInstalled(
+          existing,
+          byName.get(existing.name),
+          input.cwd,
+          input.width,
+          style,
+        ),
+      );
     }
     return lines;
   }
@@ -61,7 +74,9 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
   // user sees "you already had this" before the fresh work.
   for (const existing of input.alreadyInstalled) {
     lines.push("");
-    lines.push(renderAlreadyInstalled(existing, byName.get(existing.name), style, input.width));
+    lines.push(
+      ...renderAlreadyInstalled(existing, byName.get(existing.name), input.cwd, input.width, style),
+    );
   }
 
   for (const record of input.records) {
@@ -81,25 +96,35 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
 function renderAlreadyInstalled(
   existing: AlreadyInstalled,
   resolved: ResolvedSkill | undefined,
-  style: Styler,
+  cwd: string,
   width: number,
-): string {
-  const bits: string[] = [
-    style.symbol("muted"),
-    style.bold(existing.name),
-    style.dim("already installed"),
-  ];
+  style: Styler,
+): string[] {
+  const lines: string[] = [];
+  const tagParts: string[] = [style.dim("(already installed)")];
   const version = formatVersion(existing.ref, existing.resolvedSha);
-  if (version) bits.push(style.dim(`· ${version}`));
-  if (existing.agents.length > 0) {
-    bits.push(style.dim(`· in ${existing.agents.join(", ")}`));
+  if (version) tagParts.push(style.dim(`· ${version}`));
+  const scopeTag = existing.scope === "project" ? ` ${style.dim(`in ${shortenHome(cwd)}`)}` : "";
+  lines.push(`  ${style.bold(existing.name)} ${tagParts.join(" ")}${scopeTag}`);
+  if (resolved?.frontmatter.description) {
+    const desc = firstSentences(resolved.frontmatter.description, 200);
+    const indent = "    ";
+    for (const l of wrap(desc, Math.max(40, width - indent.length))) {
+      lines.push(style.dim(`${indent}${l}`));
+    }
   }
-  const firstLine = `  ${bits.join(" ")}`;
-  if (!resolved?.frontmatter.description) return firstLine;
-  const desc = firstSentences(resolved.frontmatter.description, 180);
-  const indent = "    ";
-  const wrapped = wrap(desc, Math.max(40, width - indent.length));
-  return [firstLine, ...wrapped.map((l) => style.dim(`${indent}${l}`))].join("\n");
+  // One dim-marker row per agent — matches the newly-installed block's
+  // shape so the user can read both side-by-side at a glance.
+  for (const agentName of existing.agents) {
+    const adapter = agentByName(agentName);
+    const installPath = adapter
+      ? shortenHome(join(baseFor(adapter, existing.scope, cwd), existing.name))
+      : "";
+    const pathSuffix = installPath ? `${style.dim("→")} ${style.dim(installPath)}` : "";
+    const parts = [style.symbol("muted"), agentName, pathSuffix].filter((s) => s.length > 0);
+    lines.push(`    ${parts.join(" ")}`);
+  }
+  return lines;
 }
 
 function renderRecord(
