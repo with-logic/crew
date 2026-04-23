@@ -131,7 +131,7 @@ describe("crew search output", () => {
     for (const l of skillLines) expect(l.length).toBeLessThanOrEqual(40);
   });
 
-  test("--json output is unchanged by the styling work", () => {
+  test("--json output has the expected shape", () => {
     const home = makeCrewHome();
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const repo = makeTestTap("crew-search-json-", [{ name: "json-test", desc: "json friendly" }]);
@@ -142,14 +142,115 @@ describe("crew search output", () => {
     const c = captureStreams();
     runCli(["search", "--json", "json"], { home, streams: c.streams });
     const parsed = JSON.parse(c.stdout()) as {
-      hits: { tap: string; name: string; description: string }[];
+      hits: {
+        tap: string;
+        name: string;
+        namespace: string | null;
+        description: string;
+        installed: boolean;
+      }[];
     };
     expect(parsed.hits).toHaveLength(1);
     expect(parsed.hits[0]).toEqual({
       tap: "jtap",
       name: "json-test",
+      namespace: null,
       description: "json friendly",
+      installed: false,
     });
+  });
+
+  test("no-query: lists every skill in every tap", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repoA = makeTestTap("crew-search-all-a-", [
+      { name: "alpha", desc: "An alpha" },
+      { name: "beta", desc: "A beta" },
+    ]);
+    const repoB = makeTestTap("crew-search-all-b-", [{ name: "gamma", desc: "A gamma" }]);
+    runCli(["tap", "add", `file://${repoA}`, "a"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    runCli(["tap", "add", `file://${repoB}`, "b"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    const c = captureStreams();
+    const code = runCli(["search"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    const out = c.stdout();
+    expect(out).toContain("3 skills available");
+    expect(out).toContain("alpha");
+    expect(out).toContain("beta");
+    expect(out).toContain("gamma");
+  });
+
+  test("installed skills are marked with ✓", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repo = makeTestTap("crew-search-marked-", [
+      { name: "installed-skill", desc: "I am here" },
+      { name: "other-skill", desc: "I am not" },
+    ]);
+    runCli(["tap", "add", `file://${repo}`, "marked-tap"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    // Pre-install one of the two skills. The e2e suite's adapter
+    // redirection isn't needed here — install just needs to land in
+    // state for the marker to flip.
+    runCli(["install", "marked-tap/installed-skill"], {
+      home,
+      streams: captureStreams().streams,
+    });
+
+    const c = captureStreams();
+    runCli(["search", "--json"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout()) as {
+      hits: { name: string; installed: boolean }[];
+    };
+    const byName = new Map(parsed.hits.map((h) => [h.name, h.installed]));
+    expect(byName.get("installed-skill")).toBe(true);
+    expect(byName.get("other-skill")).toBe(false);
+  });
+
+  test("empty config: no-query reports 'No skills in any configured tap'", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    const code = runCli(["search"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("No skills in any configured tap");
+  });
+
+  test("unreachable tap produces a warning", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const { readConfig, writeConfig } =
+      require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
+    const cfg = readConfig(home);
+    writeConfig(
+      {
+        ...cfg,
+        taps: [
+          ...cfg.taps,
+          {
+            name: "offline",
+            kind: "git" as const,
+            registered: true,
+            url: "file:///crew-missing-for-search-test",
+            subpath: "",
+            path: "",
+          },
+        ],
+      },
+      home,
+    );
+    const c = captureStreams();
+    const code = runCli(["search"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stderr()).toContain("offline");
   });
 
   test("color styler wraps bold/dim; plain styler returns raw text", () => {

@@ -1323,7 +1323,9 @@ Auto taps are functionally indistinguishable from registered taps for `crew upda
 
 ### 16.6 Search and network policy
 
-`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured git-kind tap (registered or auto). Path-kind taps are searched too if their root is reachable. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. `--json` emits a structured `{ hits, warnings }` object.
+`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured git-kind tap (registered or auto). Path-kind taps are searched too if their root is reachable. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. Each row is prefixed by `✓` if the skill name is present in local state (installed at user or project scope) and a space otherwise, so the user can see at a glance what they already have. `--json` emits a structured `{ hits, warnings }` object; each hit includes an `installed: boolean` field.
+
+`crew search` (no query) lists every skill in every configured tap — the exhaustive catalog. Output and JSON shape are identical to the query form; the installed marker appears the same way.
 
 **Network policy.** Read-only commands (`crew search`, `crew info`, `crew list`, `crew install <bare-name>` and `<tap>/<skill>` forms, tap re-expansion during `crew update` for unrelated taps) MUST NOT contact the network. They read from local tap clones as-of the last `crew update` / `crew tap update`. A tap that has never been cloned is materialized on demand on first use; if that initial clone fails (offline, bad URL), the command warns on stderr and skips that tap — it does not fail the whole run.
 
@@ -1569,7 +1571,8 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-05 | §16.2 | The default tap named `core` is present on first run. |
 | C-TAP-06 | §16.2 | `crew tap remove core` is refused without `--force`. |
 | C-TAP-07 | §16.4 | `crew search <skill>` matches case-insensitively against `name` and `description` across every tap. |
-| C-TAP-08 | §16.4 | `crew search --json` emits a structured array of matches. |
+| C-TAP-08 | §16.4 | `crew search --json` emits a structured array of matches. Each hit includes an `installed: boolean` field. |
+| C-TAP-08b | §16.4 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
 | C-TAP-12 | §16.3 | `crew tap add <url>//<subpath>` configures a tap rooted at `<subpath>` inside the repo. Skills at the top level of `<subpath>` are installable by bare name, just like a root tap. |
