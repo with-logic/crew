@@ -598,15 +598,34 @@ Git sources are ad-hoc. They are never promoted to taps and do not appear in `cr
 
 ### 8.3 Tap source
 
-A skill known to a configured tap. Reference by bare name or `tap/name`.
+A skill, namespace, or tap known to a configured tap. Reference forms:
 
 ```
-python-testing                # bare name; searched across all taps
-core/python-testing           # qualified to the `core` tap
-acme/python-testing@v1.0.0    # qualified and pinned to a tag
+python-testing                    # bare name; searched across taps and namespaces
+core/python-testing               # 2-segment: tap/skill OR namespace/skill
+acme/python-testing@v1.0.0        # qualified and pinned to a tag
+core/marketing/copy-review        # 3-segment: tap/namespace/skill (always unambiguous)
 ```
 
-Bare names that match skills in more than one tap produce an ambiguity error. Qualified references skip the ambiguity check and go directly to the named tap.
+A **namespace** is a directory directly under a tap's `skills/` root that contains no `SKILL.md` of its own but contains child directories that do. Namespaces group related skills (`skills/marketing/email-outreach`, `skills/marketing/social-posts`, …). A skill's `name` in its frontmatter remains the leaf directory name; the namespace is NOT part of the skill name.
+
+A bare name `foo` may match any of:
+- a **tap** named `foo` (install the entire tap),
+- a **skill** named `foo` (install that skill),
+- a **namespace** named `foo` in exactly one configured tap (install every skill in the namespace).
+
+If more than one interpretation is possible, crew prompts the user interactively (TTY) or aborts with `ambiguous_reference` (non-TTY). The error names every possible resolution and gives a copy-pasteable command for each.
+
+A 2-segment reference `foo/bar` is resolved with tap-first precedence: if `foo` is a configured tap, it means the skill `bar` inside tap `foo` (searching at the tap root and across namespaces). If `foo` is not a tap name but is a namespace in exactly one configured tap, it means the skill `bar` inside that namespace. If neither holds, `invalid_ref`. If both hold, `ambiguous_reference` with suggestions.
+
+A 3-segment reference `tap/namespace/skill` is always unambiguous.
+
+**Disambiguation flags.** The user may force an interpretation on `crew install`. These are presence flags; the name comes from the positional argument.
+- `--tap` — force every bare-name positional to be resolved as a tap name (install the whole tap). Errors if the positional is not a configured tap.
+- `--bundle` — force every bare-name positional to be resolved as a namespace name (install every skill in the namespace). Errors if the positional is not a namespace in exactly one configured tap.
+- `--skill` — force every bare-name positional to be resolved as a single-skill name. Errors if the positional is only a namespace.
+
+These flags are mutually exclusive and, when given, short-circuit the ambiguity prompt.
 
 ### 8.4 Reference grammar
 
@@ -619,8 +638,10 @@ git-source  := git-url [ "@" git-ref ] [ "//" subpath ]
 git-url     := "https://..." | "git@...:..." | shorthand-host ":" owner "/" repo
              | "@" owner "/" repo
 shorthand-host := "gh" | "gl" | "bb"
-tap-source  := [ tap-name "/" ] skill-name [ "@" tap-ref ]
+tap-source  := [ tap-name "/" ] [ namespace-name "/" ] skill-name [ "@" tap-ref ]
+             | tap-name [ "@" tap-ref ]                   (whole-tap install)
 tap-name    := [a-z][a-z0-9-]*
+namespace-name := [a-z][a-z0-9-]*
 skill-name  := [a-z][a-z0-9-]*     (matches the Agent Skills spec's name rules)
 git-ref     := any non-empty string not containing "/" or whitespace; must not start with "//"
 tap-ref     := any non-empty string not containing "/" or whitespace
@@ -666,10 +687,15 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - `description` is present, non-empty, length ≤ 1024 characters.
    - If `compatibility` is present, length ≤ 500 characters.
    - Every other spec rule from the Agent Skills specification.
-   Invalid skills abort with `invalid_skill` (§13) before any files are written.
+
+   A skill that fails validation is recorded as a failed skill with its message and path; the run continues. No validation failure aborts the whole command. See the exit-code rules in step 9.
 5. **Expand directories.** Three cases, checked in order:
    1. If the resolved source location has a `SKILL.md` at its root, it is one skill.
-   2. Else, if the resolved source location has a `skills/` subdirectory, crew walks **exactly one directory level deep under `skills/`** and adds every subdirectory that contains a `SKILL.md` to the install set. The source root itself is NOT walked in this case — `skills/` is the authoritative index. Deeper nesting under `skills/` is ignored.
+   2. Else, if the resolved source location has a `skills/` subdirectory, crew walks under `skills/` and collects skills:
+      - Every immediate child of `skills/` that contains a `SKILL.md` is a skill (as before).
+      - Every immediate child of `skills/` that contains no `SKILL.md` but contains child directories that do is a **namespace**. Each namespace child containing a `SKILL.md` is a skill; that skill's `source.path` includes the namespace directory (e.g. `skills/marketing/email-outreach`).
+      - Exactly one level of namespace nesting is recognized. Deeper nesting is ignored.
+      - The source root itself is NOT walked in this case — `skills/` is the authoritative index.
    3. Else, crew walks **exactly one directory level deep** under the resolved location and adds every subdirectory containing a `SKILL.md` to the install set. Deeper nesting is ignored.
 
    A location that produces zero valid skills through the applicable case aborts with `no_skills_found`.
@@ -680,6 +706,18 @@ Given one or more skill references on the command line, `crew install` proceeds 
 7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
 8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. If the store entry already exists and its content hash matches, reuse it.
 9. **Install into each agent.** For each skill × each agent in the agent set × the scope, run the install algorithm from §7.3. Record per-agent results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, agent) pair does not stop others.
+
+   **Skill outcome.** After per-agent installs complete, each attempted skill has one of two outcomes:
+   - **succeeded** — the skill validated AND at least one agent install succeeded (`anySuccess` in the per-skill record).
+   - **failed** — the skill failed validation, OR every agent install failed, OR the skill was otherwise prevented from landing anywhere.
+
+   **Exit code.** `crew install` computes its exit code from the set of attempted skills:
+   - `0` — every attempted skill succeeded (or no work was needed because everything was already installed).
+   - `1` — at least one skill succeeded AND at least one skill failed (partial success).
+   - `4` — zero skills succeeded AND at least one skill failed validation. The error name is `invalid_skill` (§13).
+   - `1` — zero skills succeeded AND no validation failures occurred (purely operational failures — agent errors, source unreachable, etc.).
+
+   The human output always renders a per-skill line noting whether each attempted skill succeeded or failed, with the failure reason for each failed skill. `--json` emits a `results` array with the same per-skill outcomes.
 10. **Update state.** For each successfully installed (skill, agent) pair, add or replace the entry in `state.json` per §11.1. Do this under the state lock (§14).
     - Skills named directly on the command line (the "roots") are
       recorded with `explicit: true`. Skills pulled in only via
@@ -1142,7 +1180,7 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `source_unreachable` | 5 | Network or git failure acquiring a source. |
 | `ref_not_found` | 5 | Ref doesn't exist in the repo. |
 | `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
-| `ambiguous_reference` | 4 | A bare name matches skills in more than one tap. |
+| `ambiguous_reference` | 4 | A reference has more than one valid resolution across taps, skills, and namespaces, and the user is non-interactive or the prompt was aborted. |
 | `ambiguous_dependency` | 4 | A dependency's bare name is ambiguous across taps. |
 | `conflicting_dependencies` | 4 | Two skills with the same name resolve to different SHAs. |
 | `name_conflict` | 4 | Trying to install a skill whose name is already held by a different source, without `--force`. |
@@ -1298,7 +1336,9 @@ Auto taps are functionally indistinguishable from registered taps for `crew upda
 
 ### 16.6 Search and network policy
 
-`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured git-kind tap (registered or auto). Path-kind taps are searched too if their root is reachable. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. `--json` emits a structured `{ hits, warnings }` object.
+`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured git-kind tap (registered or auto). Path-kind taps are searched too if their root is reachable. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. Namespaced skills render as `<namespace>/<name>` in the name column. Each row is prefixed by `✓` if the skill name is present in local state (installed at user or project scope) and a space otherwise, so the user can see at a glance what they already have. `--json` emits a structured `{ hits, warnings }` object; each hit has fields `{ tap, name, namespace, description, installed }` where `namespace` is `string | null` and `installed` is `boolean`.
+
+`crew search` (no query) lists every skill in every configured tap — the exhaustive catalog. Output and JSON shape are identical to the query form; the installed marker appears the same way.
 
 **Network policy.** Read-only commands (`crew search`, `crew info`, `crew list`, `crew install <bare-name>` and `<tap>/<skill>` forms, tap re-expansion during `crew update` for unrelated taps) MUST NOT contact the network. They read from local tap clones as-of the last `crew update` / `crew tap update`. A tap that has never been cloned is materialized on demand on first use; if that initial clone fails (offline, bad URL), the command warns on stderr and skips that tap — it does not fail the whole run.
 
@@ -1423,6 +1463,24 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-17 | §9 | `--scope project` writes to the agent's project-scope path instead of the user-scope path. |
 | C-INST-18 | §11.1 | A project-scope install records `project_root` in the state entry equal to the user's working directory at install time. User-scope installs do NOT have a `project_root`. |
 | C-INST-19 | §9 | `state.json` may contain multiple project-scope entries for the same skill name, each with a different `project_root` — they're independent installs, not duplicates. |
+| C-INST-20 | §9 step 9 | A validation failure on any skill is recorded as a failed skill; the run continues through the remaining skills. It does not abort the command. |
+| C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation). |
+| C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
+
+#### C-NS: Namespaces (§8.3, §9 step 5)
+
+| ID | Reference | Assertion |
+|---|---|---|
+| C-NS-01 | §9 step 5 | A directory under `skills/` containing child directories with `SKILL.md` (and no root `SKILL.md` of its own) is treated as a namespace; each child is installed as a skill. |
+| C-NS-02 | §9 step 5 | `crew install <namespace>` installs every skill in the namespace when that namespace name exists in exactly one configured tap. |
+| C-NS-03 | §8.3 | `crew install <tap>/<namespace>/<skill>` installs that specific skill unambiguously. |
+| C-NS-04 | §8.3 | `crew install <namespace>/<skill>` installs the skill when the namespace exists in exactly one configured tap; 2-segment refs are tap-first. |
+| C-NS-05 | §8.3 | A bare name matching both a skill and a namespace (or a tap, or multiple namespaces) triggers an interactive menu on a TTY; otherwise aborts with `ambiguous_reference`. |
+| C-NS-06 | §8.3 | `--tap` forces tap-install interpretation of every bare-name positional; errors if the name is not a configured tap. |
+| C-NS-07 | §8.3 | `--bundle` forces namespace-install interpretation of every bare-name positional; errors if the name is not a namespace in exactly one tap. |
+| C-NS-08 | §8.3 | `--skill` forces single-skill interpretation of every bare-name positional; errors if the name is only a namespace. |
+| C-NS-09 | §13 | `ambiguous_reference` output names every candidate and includes a copy-pasteable install command for each. |
+| C-NS-10 | §9 step 5 | Namespace nesting deeper than one level is ignored. |
 
 #### C-DEP: Dependencies (§9 step 6)
 
@@ -1529,7 +1587,8 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-05 | §16.2 | The default tap named `core` is present on first run. |
 | C-TAP-06 | §16.2 | `crew tap remove core` is refused without `--force`. |
 | C-TAP-07 | §16.4 | `crew search <skill>` matches case-insensitively against `name` and `description` across every tap. |
-| C-TAP-08 | §16.4 | `crew search --json` emits a structured array of matches. |
+| C-TAP-08 | §16.4 | `crew search --json` emits a structured array of matches. Each hit includes `installed: boolean` and `namespace: string \| null` fields. |
+| C-TAP-08b | §16.4 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
 | C-TAP-12 | §16.3 | `crew tap add <url>//<subpath>` configures a tap rooted at `<subpath>` inside the repo. Skills at the top level of `<subpath>` are installable by bare name, just like a root tap. |

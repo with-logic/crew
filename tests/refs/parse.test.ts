@@ -174,19 +174,37 @@ describe("parseRef: git", () => {
 describe("parseRef: tap", () => {
   test("C-REF-14 bare name", () => {
     const r = parseRef("python-testing");
-    expect(r).toEqual({ type: "tap", tap: null, name: "python-testing", ref: null });
+    expect(r).toEqual({
+      type: "tap",
+      tap: null,
+      namespace: null,
+      name: "python-testing",
+      ref: null,
+    });
   });
   test("C-REF-15 qualified", () => {
     const r = parseRef("core/python-testing");
-    expect(r).toEqual({ type: "tap", tap: "core", name: "python-testing", ref: null });
+    expect(r).toEqual({
+      type: "tap",
+      tap: "core",
+      namespace: null,
+      name: "python-testing",
+      ref: null,
+    });
   });
   test("C-REF-16 qualified pinned", () => {
     const r = parseRef("core/python-testing@v1.0");
-    expect(r).toEqual({ type: "tap", tap: "core", name: "python-testing", ref: "v1.0" });
+    expect(r).toEqual({
+      type: "tap",
+      tap: "core",
+      namespace: null,
+      name: "python-testing",
+      ref: "v1.0",
+    });
   });
   test("bare name with @ref", () => {
     const r = parseRef("foo@bar");
-    expect(r).toEqual({ type: "tap", tap: null, name: "foo", ref: "bar" });
+    expect(r).toEqual({ type: "tap", tap: null, namespace: null, name: "foo", ref: "bar" });
   });
   test("invalid name fails", () => {
     expect(() => parseRef("BadName")).toThrow();
@@ -194,8 +212,31 @@ describe("parseRef: tap", () => {
   test("invalid qualified name fails", () => {
     expect(() => parseRef("tap/BadName")).toThrow();
   });
-  test("too many slashes fail", () => {
-    expect(() => parseRef("a/b/c")).toThrow();
+  test("3-segment tap/namespace/skill parses unambiguously", () => {
+    const r = parseRef("acme/marketing/copy-review");
+    expect(r).toEqual({
+      type: "tap",
+      tap: "acme",
+      namespace: "marketing",
+      name: "copy-review",
+      ref: null,
+    });
+  });
+  test("3-segment with @ref", () => {
+    const r = parseRef("acme/marketing/copy-review@v1.2");
+    expect(r).toEqual({
+      type: "tap",
+      tap: "acme",
+      namespace: "marketing",
+      name: "copy-review",
+      ref: "v1.2",
+    });
+  });
+  test("4-segment fails", () => {
+    expect(() => parseRef("a/b/c/d")).toThrow(/too many/);
+  });
+  test("3-segment with an invalid part fails", () => {
+    expect(() => parseRef("tap/Namespace/skill")).toThrow();
   });
   test("C-REF-17 empty string fails", () => {
     expect(() => parseRef("")).toThrow(CrewError);

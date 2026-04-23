@@ -24,9 +24,9 @@ describe("expandSkills", () => {
     makeSkill(join(root, "skills"), "nested", skillFrontmatter({ name: "nested" }));
 
     const result = expandSkills(root);
-    expect(result.length).toBe(1);
+    expect(result.valid.length).toBe(1);
     // The root is a single skill; `skills/` is ignored entirely.
-    expect(result[0]!.path).toBe(root);
+    expect(result.valid[0]!.path).toBe(root);
   });
 
   test("skills/ directory is walked when no root SKILL.md", () => {
@@ -39,7 +39,7 @@ describe("expandSkills", () => {
     makeSkill(root, "ignored", skillFrontmatter({ name: "ignored" }));
 
     const names = expandSkills(root)
-      .map((s) => s.frontmatter.name)
+      .valid.map((s) => s.frontmatter.name)
       .sort();
     expect(names).toEqual(["alpha", "beta"]);
   });
@@ -59,7 +59,7 @@ describe("expandSkills", () => {
     makeSkill(root, "two", skillFrontmatter({ name: "two" }));
 
     const names = expandSkills(root)
-      .map((s) => s.frontmatter.name)
+      .valid.map((s) => s.frontmatter.name)
       .sort();
     expect(names).toEqual(["one", "two"]);
   });
@@ -70,7 +70,7 @@ describe("expandSkills", () => {
     makeSkill(root, "real", skillFrontmatter({ name: "real" }));
     writeFileSync(join(root, "README.md"), "not a directory");
 
-    const names = expandSkills(root).map((s) => s.frontmatter.name);
+    const names = expandSkills(root).valid.map((s) => s.frontmatter.name);
     expect(names).toEqual(["real"]);
   });
 
@@ -81,7 +81,60 @@ describe("expandSkills", () => {
     mkdirSync(join(root, "docs"));
     writeFileSync(join(root, "docs", "index.md"), "# docs");
 
-    const names = expandSkills(root).map((s) => s.frontmatter.name);
+    const names = expandSkills(root).valid.map((s) => s.frontmatter.name);
+    expect(names).toEqual(["real"]);
+  });
+
+  test("namespace: descends one level under skills/ into grouping dirs", () => {
+    const root = makeTempDir("expand-ns-");
+    const skillsDir = join(root, "skills");
+    mkdirSync(skillsDir);
+    // A namespace: dir under skills/ with no SKILL.md but with children.
+    const marketing = join(skillsDir, "marketing");
+    mkdirSync(marketing);
+    makeSkill(marketing, "email-outreach", skillFrontmatter({ name: "email-outreach" }));
+    makeSkill(marketing, "social-posts", skillFrontmatter({ name: "social-posts" }));
+    // A regular (non-namespaced) skill at the skills/ root.
+    makeSkill(skillsDir, "standalone", skillFrontmatter({ name: "standalone" }));
+
+    const skills = expandSkills(root).valid;
+    const names = skills.map((s) => s.frontmatter.name).sort();
+    expect(names).toEqual(["email-outreach", "social-posts", "standalone"]);
+    // Namespaced skills carry the namespace in their path.
+    const marketingSkills = skills.filter((s) => s.path.includes("/marketing/"));
+    expect(marketingSkills.length).toBe(2);
+  });
+
+  test("namespace: empty namespace dir is silently ignored", () => {
+    // A dir under skills/ with no SKILL.md and no skill children is not
+    // a namespace and not a skill — just drop it. Silent because users
+    // may have non-skill content (docs/, scripts/) under skills/.
+    const root = makeTempDir("expand-empty-ns-");
+    const skillsDir = join(root, "skills");
+    mkdirSync(skillsDir);
+    mkdirSync(join(skillsDir, "docs"));
+    writeFileSync(join(skillsDir, "docs", "README.md"), "# docs");
+    makeSkill(skillsDir, "real", skillFrontmatter({ name: "real" }));
+
+    const names = expandSkills(root).valid.map((s) => s.frontmatter.name);
+    expect(names).toEqual(["real"]);
+  });
+
+  test("namespace: deeper-than-one nesting under a namespace is ignored", () => {
+    const root = makeTempDir("expand-deep-ns-");
+    const skillsDir = join(root, "skills");
+    mkdirSync(skillsDir);
+    const marketing = join(skillsDir, "marketing");
+    mkdirSync(marketing);
+    makeSkill(marketing, "real", skillFrontmatter({ name: "real" }));
+    // Deeper nesting — should not be walked.
+    const tooDeep = join(marketing, "nested");
+    mkdirSync(tooDeep);
+    makeSkill(tooDeep, "too-deep", skillFrontmatter({ name: "too-deep" }));
+
+    const names = expandSkills(root)
+      .valid.map((s) => s.frontmatter.name)
+      .sort();
     expect(names).toEqual(["real"]);
   });
 });

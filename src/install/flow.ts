@@ -16,12 +16,14 @@
 import { writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
 import type { Config, ResolvedSkill, Scope, StateFile } from "../core/types.ts";
+import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { computeAgentSet } from "./agent-set.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules.ts";
 import { type InstallSummary, performInstall } from "./perform.ts";
-import { type RequiredByMap, resolveInstallSet } from "./resolve.ts";
+import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
+import type { KindHint } from "./resolve-ref/index.ts";
 
 /** Options accepted by `runInstall`. */
 export interface InstallOptions {
@@ -32,6 +34,8 @@ export interface InstallOptions {
   readonly restrictAgents: readonly string[];
   readonly cwd?: string;
   readonly home?: string;
+  /** Force a reference interpretation (from `--tap` / `--bundle` / `--skill`). */
+  readonly kindHint?: KindHint;
 }
 
 /** Full result: summary plus any "already installed" short-circuit records. */
@@ -45,6 +49,12 @@ export interface InstallFlowResult {
    * descriptions, tap attribution, etc. when rendering human output.
    */
   readonly resolved: readonly ResolvedSkill[];
+  /**
+   * Skill directories that failed validation and were soft-skipped
+   * during multi-skill expansion. Empty for single-skill installs
+   * (those hard-fail before reaching here).
+   */
+  readonly skipped: readonly SkippedSkill[];
 }
 
 /** Run the install flow end-to-end. */
@@ -60,7 +70,8 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     skills: resolvedAll,
     requiredBy,
     config: configWithAutoTaps,
-  } = resolveInstallSet(options.refs, config, { cwd, home });
+    skipped,
+  } = resolveInstallSet(options.refs, config, { cwd, home, kindHint: options.kindHint ?? null });
 
   // Apply §5.4 — duplicate installs. An install with a new active
   // adapter that didn't previously own the entry still has real work
@@ -83,7 +94,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       requiredBy,
       allResolved: resolvedAll,
     });
-    return { summary, alreadyInstalled, resolved: resolvedAll };
+    return { summary, alreadyInstalled, resolved: resolvedAll, skipped };
   }
 
   const summary = withStateLock(() => {
@@ -110,7 +121,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     return { ...result, newState: promoted };
   }, home);
 
-  return { summary, alreadyInstalled, resolved: resolvedAll };
+  return { summary, alreadyInstalled, resolved: resolvedAll, skipped };
 }
 
 /**
