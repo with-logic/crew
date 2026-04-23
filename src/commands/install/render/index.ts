@@ -17,7 +17,7 @@ import type { InstallRecord } from "../../../install/perform.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { firstSentences, plural, shortenHome, wrap } from "../../../util/format.ts";
 import type { Styler } from "../../../util/term.ts";
-import { formatVersion, renderAgentLine, tallyAgents, type Totals } from "./helpers.ts";
+import { formatVersion, renderAgentLine, type Totals, tallyAgents } from "./helpers.ts";
 
 export interface RenderInstallInput {
   readonly records: readonly InstallRecord[];
@@ -86,7 +86,7 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
 
   if (input.skipped.length > 0) {
     lines.push("");
-    lines.push(style.bold(`Skipped (${input.skipped.length}):`));
+    lines.push(style.bold(`Failed (${input.skipped.length}):`));
     for (const s of input.skipped) {
       const wrapped = wrap(s.message, Math.max(40, input.width - 4));
       lines.push(`  ${style.symbol("fail")} ${style.red(wrapped[0] ?? s.message)}`);
@@ -108,7 +108,7 @@ function formatTotalsWithSkipped(totals: Totals, skippedCount: number): string |
   if (totals.installed > 0) parts.push(plural(totals.installed, "install", "installs"));
   if (totals.upToDate > 0) parts.push(`${totals.upToDate} already up to date`);
   if (totals.failed > 0) parts.push(plural(totals.failed, "failure"));
-  if (skippedCount > 0) parts.push(`${skippedCount} skipped`);
+  if (skippedCount > 0) parts.push(`${skippedCount} failed`);
   return parts.length > 0 ? parts.join(" · ") : "nothing to do";
 }
 

@@ -55,17 +55,26 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     kindHint,
   });
 
-  // Exit-code rules (§18.6 clarification): exit 1 if any root skill has
-  // zero successful targets OR if any skill was skipped during
-  // multi-skill expansion; otherwise 0. The clean "already installed"
-  // short-circuit case is exit 0 per §5.4.
+  // Exit-code rules (PRD §9 step 9). Per-skill outcome is
+  // "succeeded" iff the skill validated AND at least one agent
+  // install succeeded. Validation failures land in result.skipped;
+  // agent-level failures live in result.summary.records with
+  // `anySuccess === false`.
+  const succeeded = result.summary.records.filter((r) => r.anySuccess).length;
+  const operationalFailures = result.summary.records.filter((r) => !r.anySuccess).length;
+  const validationFailures = result.skipped.length;
+  const failed = operationalFailures + validationFailures;
   const allAlreadyInstalled =
     result.alreadyInstalled.length > 0 && result.summary.records.length === 0;
   let exitCode = 0;
-  if (result.skipped.length > 0) exitCode = 1;
-  if (!allAlreadyInstalled) {
-    const anyRootFail = result.summary.records.some((r) => !r.anySuccess);
-    if (anyRootFail) exitCode = 1;
+  if (failed === 0) {
+    exitCode = 0; // Every attempted skill succeeded, or nothing to do.
+  } else if (succeeded > 0 || allAlreadyInstalled) {
+    exitCode = 1; // Partial success.
+  } else if (validationFailures > 0) {
+    exitCode = 4; // Zero succeeded; at least one invalid skill.
+  } else {
+    exitCode = 1; // Zero succeeded; purely operational failures.
   }
 
   const human = renderInstall(

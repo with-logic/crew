@@ -286,7 +286,7 @@ describe("install directory expansion", () => {
     // The valid sibling installed.
     expect(existsSync(join(redirect.agents["claude-code"]!, "good-skill"))).toBe(true);
     // The invalid one was reported in stdout, not as a hard error.
-    expect(capture.stdout()).toContain("Skipped");
+    expect(capture.stdout()).toContain("Failed");
     expect(capture.stdout()).toContain("bad-dir");
   });
 

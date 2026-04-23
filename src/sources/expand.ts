@@ -46,12 +46,17 @@ export interface ExpansionResult {
 
 /**
  * Expand `rootDir` into loaded skills plus any skipped children.
- * For case 1 (single root SKILL.md), invalid frontmatter bubbles
- * up as a `CrewError` because the input is atomic.
+ * Validation failures (at any level) are recorded in `skipped`
+ * rather than thrown — the caller decides exit code and output.
+ * `no_skills_found` is still thrown when neither a valid skill nor
+ * a validation failure is present (zero candidates).
  */
 export function expandSkills(rootDir: string): ExpansionResult {
   if (hasSkillMd(rootDir)) {
-    return { valid: [loadSkill(rootDir)], skipped: [] };
+    const valid: LoadedSkill[] = [];
+    const skipped: SkippedSkill[] = [];
+    pushSoft(rootDir, valid, skipped);
+    return { valid, skipped };
   }
   const skillsDir = join(rootDir, "skills");
   const result = isDirectory(skillsDir)
