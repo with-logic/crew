@@ -21,7 +21,7 @@
     "check": "bun run typecheck && bun run lint && bun test"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.12",
+    "@biomejs/biome": "2.4.13",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
     "@types/proper-lockfile": "^4.1.4",
