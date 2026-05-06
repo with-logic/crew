@@ -9,7 +9,7 @@ export function Demo() {
       <Container>
         <SectionHead
           number="05"
-          label="A day with crew"
+          label="A day with Homecrew"
           title="The commands you'll use most."
           description="Search, install, update, repeat."
         />

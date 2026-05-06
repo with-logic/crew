@@ -59,7 +59,7 @@ export function noticeFor(record: VersionCheckRecord | null): string | null {
   if (!record.latest_tag) return null;
   const current = `v${CREW_VERSION}`;
   if (normalizeTag(record.latest_tag) === normalizeTag(current)) return null;
-  return `A new version of crew is available (${current} → ${record.latest_tag}). Run \`crew self-update\` to upgrade.`;
+  return `A new version of Homecrew is available (${current} → ${record.latest_tag}). Run \`crew self-update\` to upgrade.`;
 }
 
 /** Strip a leading `v` so `v0.4.0` and `0.4.0` compare equal. */

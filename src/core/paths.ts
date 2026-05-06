@@ -1,5 +1,5 @@
 /**
- * Crew's canonical filesystem layout.
+ * Homecrew's canonical filesystem layout.
  *
  * §6 lays out the directory tree crew owns under `~/.crew/`. Every path in
  * that tree is produced here so we never hardcode a layout decision in two

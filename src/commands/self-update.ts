@@ -29,7 +29,7 @@ function doCheck(ctx: CommandContext, tag: string | undefined): CommandOutput {
   const human = uptodate
     ? [`${ctx.style.symbol("ok")} ${ctx.style.bold(`You're on ${currentVersion} — the latest.`)}`]
     : [
-        `${ctx.style.symbol("warn")} ${ctx.style.bold(`A newer crew is available: ${currentVersion} → ${latestTag}`)}`,
+        `${ctx.style.symbol("warn")} ${ctx.style.bold(`A newer Homecrew is available: ${currentVersion} → ${latestTag}`)}`,
         ctx.style.dim("  Run `crew self-update` to upgrade."),
       ];
   return {
@@ -66,7 +66,7 @@ function doUpgrade(ctx: CommandContext, tag: string | undefined): CommandOutput 
   return {
     exitCode: 0,
     human: [
-      `${ctx.style.symbol("ok")} ${ctx.style.bold(`Upgraded crew: ${result.currentVersion} → ${result.latestTag}`)}`,
+      `${ctx.style.symbol("ok")} ${ctx.style.bold(`Upgraded Homecrew: ${result.currentVersion} → ${result.latestTag}`)}`,
       ctx.style.dim("  The new version takes effect on your next `crew` invocation."),
     ],
     json: {

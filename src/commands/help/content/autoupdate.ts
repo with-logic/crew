@@ -5,8 +5,8 @@ export const autoupdateHelp: CommandHelp = {
   synopsis: "crew autoupdate {enable|disable|status}",
   summary: [
     "Keep your skills up to date automatically, in the background.",
-    "Turn it on and crew checks for updates on a schedule — your team's new skills appear, existing ones roll forward. No more forgetting to run `crew update`.",
-    "On macOS, you'll see it in System Settings → General → Login Items as `Crew Skill Autoupdate`.",
+    "Turn it on and Homecrew checks for updates on a schedule — your team's new skills appear, existing ones roll forward. No more forgetting to run `crew update`.",
+    "On macOS, you'll see it in System Settings → General → Login Items as `Homecrew Skill Autoupdate`.",
   ],
   flags: [
     {

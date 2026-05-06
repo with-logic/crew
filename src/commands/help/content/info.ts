@@ -5,7 +5,7 @@ export const infoHelp: CommandHelp = {
   synopsis: "crew info <name-or-reference>",
   summary: [
     "Get the details on a skill — installed or not.",
-    "If you already have it installed, you'll see what's going on locally: where it came from, which version you're on, and which agents it's in. If it's just a reference (a URL, a name in a collection you've added), crew fetches the skill's metadata so you can look before you leap.",
+    "If you already have it installed, you'll see what's going on locally: where it came from, which version you're on, and which agents it's in. If it's just a reference (a URL, a name in a collection you've added), Homecrew fetches the skill's metadata so you can look before you leap.",
     "Works with every reference shape `crew install` understands — see `crew help install` for the list.",
   ],
   flags: [{ flag: "--json", description: "Machine-readable output." }],

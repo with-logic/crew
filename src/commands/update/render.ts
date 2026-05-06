@@ -43,7 +43,7 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   const checkedCount = input.rows.length;
   const addedRows = input.tapReexpandRows.filter((r) => r.kind === "added");
   if (checkedCount === 0 && addedRows.length === 0) {
-    lines.push(style.dim("Nothing to update — crew isn't tracking any skills yet."));
+    lines.push(style.dim("Nothing to update — Homecrew isn't tracking any skills yet."));
     return lines;
   }
   const header = checkedCount === 1 ? `Checked 1 skill` : `Checked ${checkedCount} skills`;

@@ -1,7 +1,7 @@
 /**
  * Directory copy with explicit rules around hidden files and symlinks.
  *
- * Crew copies a staged skill from the source (or from the store) into a
+ * Homecrew copies a staged skill from the source (or from the store) into a
  * target location and writes a marker. Two requirements drive the shape:
  *
  *   1. `.crew.json` at the root of the source must NEVER be copied — the

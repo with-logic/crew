@@ -109,7 +109,7 @@ describe("noticeFor", () => {
   test("renders the notice when versions differ", () => {
     const notice = noticeFor({ checked_at: "2026-04-20T12:00:00Z", latest_tag: "v99.99.99" });
     expect(notice).toBe(
-      `A new version of crew is available (v${CREW_VERSION} → v99.99.99). Run \`crew self-update\` to upgrade.`,
+      `A new version of Homecrew is available (v${CREW_VERSION} → v99.99.99). Run \`crew self-update\` to upgrade.`,
     );
   });
 });

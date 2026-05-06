@@ -2,6 +2,8 @@
   "name": "crew",
   "version": "0.6.0",
   "description": "A package manager for Agent Skills",
+  "author": "Logic App, Inc.",
+  "license": "MIT",
   "type": "module",
   "module": "src/index.ts",
   "bin": {

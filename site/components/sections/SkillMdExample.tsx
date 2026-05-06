@@ -19,11 +19,11 @@ export function SkillMdExample() {
           }
           description={
             <>
-              Crew reads the{" "}
+              Homecrew reads the{" "}
               <a href="https://agentskills.io/specification">agent skills specification</a>{" "}
-              directly. Crew-specific metadata lives under <code>metadata.crew</code> so the skill
-              stays fully spec-compliant — readable by any agent, not just the ones crew installs
-              into.
+              directly. Homecrew-specific metadata lives under <code>metadata.crew</code> so the
+              skill stays fully spec-compliant — readable by any agent, not just the ones Homecrew
+              installs into.
             </>
           }
         />

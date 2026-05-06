@@ -64,7 +64,8 @@ export function Footer() {
           ))}
         </div>
         <div className={styles.bot}>
-          <span>crew · {CREW_VERSION_TAG} · macOS (arm64, x86_64)</span>
+          <span>Homecrew · {CREW_VERSION_TAG} · macOS (arm64, x86_64)</span>
+          <span>© {new Date().getFullYear()} Logic App, Inc.</span>
           <span>$ crew help</span>
         </div>
       </Container>

@@ -51,7 +51,7 @@ export function removeOne(
     if (!(ctx.flags.force || pruned)) {
       throw new CrewError(
         "not_installed_here",
-        `\`${name}\` isn't in crew's state — nothing to remove`,
+        `\`${name}\` isn't in Homecrew's state — nothing to remove`,
         { name },
       );
     }

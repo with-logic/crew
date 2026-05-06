@@ -12,7 +12,7 @@ import { join } from "node:path";
 export const PRD_CONTENT: string = readFileSync(join(process.cwd(), "..", "PRD.md"), "utf8");
 
 /** Preamble that frames the task for the agent. Prepended to the PRD. */
-export const SAAP_PREAMBLE = `You are going to implement a working \`crew\` — a package manager for agent skills (the SKILL.md spec at agentskills.io) — from the PRD that follows this preamble.
+export const SAAP_PREAMBLE = `You are going to implement Homecrew, a working \`crew\` executable and package manager for agent skills (the SKILL.md spec at agentskills.io), from the PRD that follows this preamble.
 
 Rules:
 - The PRD is the contract. Build to spec.

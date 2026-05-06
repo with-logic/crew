@@ -90,13 +90,13 @@ const REMEDIES: Partial<Record<CrewErrorName, string>> = {
   no_skills_found:
     "pointed at a directory? make sure it contains a SKILL.md, or has subdirectories that do.",
   source_unreachable:
-    "crew couldn't reach the source. check the URL, your network, and that you have access to the repo.",
+    "Homecrew couldn't reach the source. check the URL, your network, and that you have access to the repo.",
   source_gone:
     "the source resolved but the skill is no longer in it. your local copy is kept; run `crew uninstall <name>` if you want it gone.",
   ref_not_found:
     "that tag/branch/SHA doesn't exist upstream. run `git ls-remote <url>` to see what's there.",
   ambiguous_reference:
-    "qualify the name with its tap (e.g. `core/<name>`) so crew knows which one to use.",
+    "qualify the name with its tap (e.g. `core/<name>`) so Homecrew knows which one to use.",
   ambiguous_dependency:
     "a dependency is ambiguous across taps. qualify it in the parent skill's `metadata.crew.dependencies` (e.g. `core/<name>`).",
   conflicting_dependencies:
@@ -104,7 +104,7 @@ const REMEDIES: Partial<Record<CrewErrorName, string>> = {
   name_conflict:
     "a skill with this name is already installed from a different source. uninstall it first (`crew uninstall <name>`), then reinstall from the new source. `--force` does NOT override this.",
   untracked_directory:
-    "something else created this directory (not crew). move or delete it, or pass `--force` to overwrite.",
+    "something else created this directory (not Homecrew). move or delete it, or pass `--force` to overwrite.",
   customized:
     "you've edited this skill since install. to replace your edits with the fresh version, rerun with `--force`.",
   inconsistent_marker:
@@ -114,7 +114,7 @@ const REMEDIES: Partial<Record<CrewErrorName, string>> = {
   no_agents:
     "no agent coders are active. run `crew agents` to see detection status, or `crew agents enable <name>` to force one on.",
   config_invalid:
-    "crew couldn't parse `~/.crew/config.yaml`. fix the YAML or delete the file to get defaults back.",
+    "Homecrew couldn't parse `~/.crew/config.yaml`. fix the YAML or delete the file to get defaults back.",
   state_locked:
     "another `crew` process is holding the lock. wait a few seconds and try again; if it's really stuck, run `crew doctor --repair`.",
   launchd_failure:
@@ -122,7 +122,7 @@ const REMEDIES: Partial<Record<CrewErrorName, string>> = {
   self_update_unavailable:
     "couldn't reach the release feed, or the requested version doesn't exist. check your network, then try `crew self-update --check`.",
   self_update_failed:
-    "crew downloaded the new binary but couldn't swap it in — usually the install directory isn't writable. re-run from a shell that can write to that directory, or reinstall via the installer script.",
+    "Homecrew downloaded the new binary but couldn't swap it in — usually the install directory isn't writable. re-run from a shell that can write to that directory, or reinstall via the installer script.",
   usage_error: "run `crew help` for an overview, or `crew help <command>` for details.",
-  unknown_skill: "not installed under any scope. run `crew list` to see what crew is tracking.",
+  unknown_skill: "not installed under any scope. run `crew list` to see what Homecrew is tracking.",
 };

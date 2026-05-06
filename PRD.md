@@ -1,4 +1,4 @@
-# Crew — Specification
+# Homecrew — Specification
 
 **A package manager for Agent Skills.**
 
@@ -6,17 +6,17 @@ Version: 0.6.0
 Status: Specification, ready for implementation
 Platform: macOS (Apple Silicon and Intel)
 
-This document specifies the behavior of a command-line tool named `crew` in enough detail that two independent implementations should produce interchangeable executables. Anything an end user can observe — commands, outputs, exit codes, file layouts, algorithms, error conditions — is defined here. Internal implementation choices (language, argument parser, hash library, HTTP client, how files are copied) are deliberately left to the implementer; see §17 "Implementation latitude" for the full list.
+This document specifies the behavior of Homecrew, a command-line tool whose executable is named `crew`, in enough detail that two independent implementations should produce interchangeable executables. Anything an end user can observe — commands, outputs, exit codes, file layouts, algorithms, error conditions — is defined here. Internal implementation choices (language, argument parser, hash library, HTTP client, how files are copied) are deliberately left to the implementer; see §17 "Implementation latitude" for the full list.
 
 ---
 
 ## 1. Overview
 
-Crew manages Agent Skills — the standardized, markdown-based skill format specified at [agentskills.io](https://agentskills.io/specification) — across every agent coder on a macOS machine that supports them (Claude Code, Codex CLI, Gemini CLI, and others).
+Homecrew manages Agent Skills — the standardized, markdown-based skill format specified at [agentskills.io](https://agentskills.io/specification) — across every agent coder on a macOS machine that supports them (Claude Code, Codex CLI, Gemini CLI, and others).
 
 The value proposition is one command: `crew install python-testing` installs a skill into every agent tool on the machine, keeps it up to date, and lets users discover new skills from a shared registry or directly from any git repo.
 
-Crew installs skills by copying files into each agent tool's expected directory. It never symlinks, never executes user-supplied scripts, and never modifies files it did not itself create.
+Homecrew installs skills by copying files into each agent tool's expected directory. It never symlinks, never executes user-supplied scripts, and never modifies files it did not itself create.
 
 ## 2. Goals and non-goals
 
@@ -33,11 +33,11 @@ Crew installs skills by copying files into each agent tool's expected directory.
 **Non-goals**
 
 - Cross-platform support. macOS only. Other platforms are future work.
-- Symlinks. Crew always copies files.
+- Symlinks. Homecrew always copies files.
 - Skill authoring tooling (creating and linting new skills) beyond minimal validation.
-- Executing skills. Crew installs files; agents run them.
+- Executing skills. Homecrew installs files; agents run them.
 - A hosted registry service. The default registry is a plain git repo.
-- Code execution at install time. Crew only copies files.
+- Code execution at install time. Homecrew only copies files.
 
 ## 3. Terminology
 
@@ -45,25 +45,25 @@ Crew installs skills by copying files into each agent tool's expected directory.
 
 **Source.** The location a skill is fetched from. Three kinds: local path, git source, tap source (see §8).
 
-**Tap.** A git repository that functions as a registry of skills. Crew clones each configured tap locally and searches within it. A tap may contain many skills organized as subdirectories.
+**Tap.** A git repository that functions as a registry of skills. Homecrew clones each configured tap locally and searches within it. A tap may contain many skills organized as subdirectories.
 
-**Agent.** An agent coder that crew installs skills into (Claude Code, Codex CLI, Gemini CLI, etc.). Each agent has an adapter (§7) that knows where that tool stores skills.
+**Agent.** An agent coder that Homecrew installs skills into (Claude Code, Codex CLI, Gemini CLI, etc.). Each agent has an adapter (§7) that knows where that tool stores skills.
 
 **Scope.** Either `user` (global to the user) or `project` (local to the current working directory). Affects which directory the adapter writes into.
 
 **Skill reference.** A string identifying where to find a skill. Accepted forms are specified in §8.
 
-**Store.** Crew's internal content-addressed cache of skill contents at `~/.crew/store/`. Agents are populated by copying from the store.
+**Store.** Homecrew's internal content-addressed cache of skill contents at `~/.crew/store/`. Agents are populated by copying from the store.
 
 **State.** The ledger at `~/.crew/state.json` recording every installed skill.
 
-**Marker.** A file named `.crew.json` written inside each installed skill directory (at the agent location), recording what crew installed there.
+**Marker.** A file named `.crew.json` written inside each installed skill directory (at the agent location), recording what Homecrew installed there.
 
 ## 4. Skill format
 
-Crew installs any directory meeting the Agent Skills specification. The specification's `SKILL.md` frontmatter is the manifest; crew does not define a separate manifest file.
+Homecrew installs any directory meeting the Agent Skills specification. The specification's `SKILL.md` frontmatter is the manifest; Homecrew does not define a separate manifest file.
 
-**Crew-specific frontmatter fields** live under `metadata.crew` so that skills remain fully spec-compliant. All fields are optional.
+**Homecrew-specific frontmatter fields** live under `metadata.crew` so that skills remain fully spec-compliant. All fields are optional.
 
 ```yaml
 ---
@@ -83,9 +83,9 @@ metadata:
 
 **`metadata.crew.dependencies`** (list of strings, optional). Other skills to install before this one. Each entry is a skill reference in any of the forms `crew install` accepts (§8). Bare names (`general-python-style`) resolve in the precedence order defined in §9.
 
-**Versions are git commit SHAs.** Crew does not define a version field. Every installed skill is identified by the SHA of the commit it was resolved from. Tags and branches resolve to SHAs at install time. Users pin with `@<sha>`, `@<tag>`, or `@<branch>`.
+**Versions are git commit SHAs.** Homecrew does not define a version field. Every installed skill is identified by the SHA of the commit it was resolved from. Tags and branches resolve to SHAs at install time. Users pin with `@<sha>`, `@<tag>`, or `@<branch>`.
 
-**Multi-skill directories.** A directory containing more than one skill has no special designation. When `crew install` is pointed at a source, crew looks for a `SKILL.md` at the root. If present, one skill is installed. If not, crew walks one level deep and installs every valid child skill (§9 step 5).
+**Multi-skill directories.** A directory containing more than one skill has no special designation. When `crew install` is pointed at a source, Homecrew looks for a `SKILL.md` at the root. If present, one skill is installed. If not, Homecrew walks one level deep and installs every valid child skill (§9 step 5).
 
 **Meta-skills** (a skill whose purpose is pulling in a set of others) are ordinary skills with `dependencies` and an optional descriptive body. They require no special frontmatter.
 
@@ -116,7 +116,7 @@ crew autoupdate enable [--interval <dur>]   Install the launchd agent (default 4
 crew autoupdate disable                      Remove the launchd agent.
 crew autoupdate status                       Show whether active, last run, next run.
 
-crew self-update [--check] [--version <v>]  Upgrade the crew binary itself to the latest release.
+crew self-update [--check] [--version <v>]  Upgrade the `crew` binary itself to the latest release.
 
 crew doctor [--verify] [--repair]  Check integrity; optionally fix recoverable state issues.
 crew cache clean                   Remove ephemeral caches and unreferenced store entries.
@@ -167,9 +167,9 @@ shape of help output; wording is left to each implementation.
 **Goals.**
 
 - A new user who types `crew` (no arguments) should, within five
-  seconds of reading, understand what crew is and know three commands
+  seconds of reading, understand what Homecrew is and know three commands
   they can try.
-- Someone who remembers crew roughly but forgot a flag should be able
+- Someone who remembers Homecrew roughly but forgot a flag should be able
   to run `crew help <command>` and see a realistic example of the
   invocation they want.
 - Help is shown on stdout with exit code 0. It is not an error.
@@ -185,7 +185,7 @@ shape of help output; wording is left to each implementation.
 
 **Overview MUST contain:**
 
-1. A one-sentence description of what crew is.
+1. A one-sentence description of what Homecrew is.
 2. A "getting started" section with at least three example invocations
    representative of common first tasks (e.g. search, install, list).
 3. A grouped command list. Every command from §5.1 MUST appear in
@@ -215,7 +215,7 @@ platform notes) are optional.
 **Worked example — overview (§18.4 normative).**
 
 ```
-crew 0.3.0 — a package manager for Agent Skills.
+Homecrew 0.3.0 — a package manager for Agent Skills.
 
 One command installs a skill into every agent coder on your machine
 (Claude Code, Codex CLI, Gemini CLI) and keeps it up to date.
@@ -305,12 +305,12 @@ With `--json`, help MUST emit a structured payload:
 │   └── <skill-name>@<short-sha>/
 ├── logs/
 │   └── autoupdate.log
-└── Crew.app/            # attribution bundle used by autoupdate (see §10.2)
+└── Homecrew.app/        # attribution bundle used by autoupdate (see §10.2)
     └── Contents/
         └── Info.plist
 ```
 
-All paths inside `~/.crew/` are owned by crew. External tools should not write here. Crew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable.
+All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable.
 
 ### 6.1 `config.yaml` schema
 
@@ -362,7 +362,7 @@ autoupdate:
   interval_seconds: 14400
 ```
 
-Missing fields take their defaults. An unparseable `config.yaml` causes crew to fail with exit code 4 on any command that reads it.
+Missing fields take their defaults. An unparseable `config.yaml` causes Homecrew to fail with exit code 4 on any command that reads it.
 
 ## 7. Agent adapters
 
@@ -409,18 +409,18 @@ Clients that exist on [agentskills.io/clients](https://agentskills.io/clients) b
 - **Cloud-only products** (no local filesystem to install into): Claude (claude.ai web), Mux, Qodo, OpenHands, Letta, Ona, Databricks Genie Code, Snowflake Cortex Code, Agentman, Google AI Edge Gallery, Spring AI, TRAE, Workshop (cloud).
 - **Platform-specific**: Firebender (Android IDE).
 - **Reused-path clients**: Piebald reads `~/.claude/skills/`, so the `claude-code` adapter already covers it. VT Code reads only `~/.agents/skills/`, so the `codex` adapter (same path) already covers it.
-- **Re-fanout tools that would create a write-loop**: Laravel Boost installs INTO other agents' skill dirs; adding it as a crew agent would mean crew writes into the Boost output dir and Boost then fans it out again.
+- **Re-fanout tools that would create a write-loop**: Laravel Boost installs INTO other agents' skill dirs; adding it as a Homecrew agent would mean Homecrew writes into the Boost output dir and Boost then fans it out again.
 - **Docs-unverified at implementation time**: Emdash (docs JS-rendered, paths unconfirmed).
 
 Adding a new adapter later requires updating this table, adding a file under `src/agents/`, registering it in `src/agents/registry.ts`, and adding tests.
 
-**`agent-skills` adapter.** The `agent-skills` row covers any spec-compliant agent crew doesn't ship a dedicated adapter for. It detects as soon as `~/.agents/` is present on the filesystem — any spec-compliant tool's install creates that directory, which is enough signal to know a tool that reads `~/.agents/skills/` is on the machine. When `agent-skills` is active alongside known adapters that share the same path (Codex, Cursor, Gemini CLI, etc.), path-sharing (below) deduplicates the write — only one physical copy exists, and the marker lists every active adapter that owns it.
+**`agent-skills` adapter.** The `agent-skills` row covers any spec-compliant agent Homecrew doesn't ship a dedicated adapter for. It detects as soon as `~/.agents/` is present on the filesystem — any spec-compliant tool's install creates that directory, which is enough signal to know a tool that reads `~/.agents/skills/` is on the machine. When `agent-skills` is active alongside known adapters that share the same path (Codex, Cursor, Gemini CLI, etc.), path-sharing (below) deduplicates the write — only one physical copy exists, and the marker lists every active adapter that owns it.
 
 **Detection.** Each adapter uses a best-effort signal: the tool's CLI binary on `PATH`, or the tool's user-scope configuration directory (`~/.<tool>/` or `~/.config/<tool>/`). Either signal makes the adapter "detected." A user may force-enable or force-disable any adapter through `forced_agents` / `disabled_agents` in `config.yaml`.
 
 **Install path shape.** Each agent has a base directory for skills (user scope and project scope). A skill named `python-testing` is installed by writing its files under `<base>/python-testing/`. The directory name equals the skill's `name` (spec-guaranteed to match lowercase alphanumerics and hyphens).
 
-**Path sharing.** Most adapters resolve to the same filesystem path: `~/.agents/skills/` (user) and `<project>/.agents/skills/` (project) is the emerging cross-tool convention, read by Codex, Cursor, Command Code, Gemini CLI, GitHub Copilot, Goose, OpenCode, pi, and `agent-skills`. Crew writes bytes there once and reports the install to the user under each detected adapter's name, even though only one physical copy exists. The rule: **when a tool reads `~/.agents/skills/`, crew's adapter points there** — one install serves every such tool at once. Adapters whose tools don't support the cross-tool path (Amp user-scope, Autohand, Claude Code, Factory, Junie, Kiro, Mistral Vibe, Nanobot, Roo Code) keep their tool-specific paths.
+**Path sharing.** Most adapters resolve to the same filesystem path: `~/.agents/skills/` (user) and `<project>/.agents/skills/` (project) is the emerging cross-tool convention, read by Codex, Cursor, Command Code, Gemini CLI, GitHub Copilot, Goose, OpenCode, pi, and `agent-skills`. Homecrew writes bytes there once and reports the install to the user under each detected adapter's name, even though only one physical copy exists. The rule: **when a tool reads `~/.agents/skills/`, Homecrew's adapter points there** — one install serves every such tool at once. Adapters whose tools don't support the cross-tool path (Amp user-scope, Autohand, Claude Code, Factory, Junie, Kiro, Mistral Vibe, Nanobot, Roo Code) keep their tool-specific paths.
 
 The install algorithm (§7.3) dedupes writes by resolved path; the marker (§7.5) records which adapters own the install.
 
@@ -443,7 +443,7 @@ Install takes a staged skill directory in the store, a skill name, a scope, and 
       iv. If `dest` exists and contains no `.crew.json` marker: abort with error `untracked_directory` (§13) unless `--force` is given.
    c. **Stage and copy:**
       i. Create a temporary staging directory as a sibling of `dest` with a name that cannot collide with a valid skill name (e.g. beginning with a `.` or containing a dot — the exact name is unspecified, but it MUST be atomically rename-able into `dest`).
-      ii. Copy every file from the source into the staging directory, preserving relative paths. Do not copy any `.crew.json` from the source (only crew writes markers).
+      ii. Copy every file from the source into the staging directory, preserving relative paths. Do not copy any `.crew.json` from the source (only Homecrew writes markers).
       iii. Compute the content hash of the staging directory per §12.1.
       iv. Write a `.crew.json` marker into the staging directory per §7.5. The marker's `agents` field is the **union** of (a) any `agents` list present in a prior marker at `dest`, and (b) the agent names in this group. This preserves ownership by agents that installed into the same path on an earlier run and aren't part of the current operation.
       v. If `dest` exists, remove it.
@@ -495,7 +495,7 @@ names it directly or asks for a prune. This matches `apt-get remove` /
 
 ### 7.5 Marker format (`.crew.json`)
 
-Written into every crew-installed skill directory. JSON, UTF-8, trailing newline. The marker is crew's authoritative record at the install site; `state.json` is a convenience index but can be rebuilt from markers (§13, `crew doctor --repair`).
+Written into every Homecrew-installed skill directory. JSON, UTF-8, trailing newline. The marker is Homecrew's authoritative record at the install site; `state.json` is a convenience index but can be rebuilt from markers (§13, `crew doctor --repair`).
 
 ```json
 {
@@ -747,7 +747,7 @@ With no arguments, updates every installed skill. With arguments, updates only t
 1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<name>...`, it is the subset of taps that host the named entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run.
 2. Build the list of skills to consider:
    - `crew update` with no args → every entry in `state.json`.
-   - `crew update <name>...` → the named entries, **plus their transitive dependency closure**. Concretely: for each name, take its state entry's direct deps (from its SKILL.md `metadata.crew.dependencies`, resolved against `required_by` in state), then their deps, and so on. A dep that isn't in state — one that was never installed — is not added; crew does not install new skills during update. Entries pulled in this way appear in the results alongside the named ones, marked `transitively_required_by: [<name>...]` in JSON output so callers can tell them apart. An unknown top-level name (`<name>` not in state) is an error per argument.
+   - `crew update <name>...` → the named entries, **plus their transitive dependency closure**. Concretely: for each name, take its state entry's direct deps (from its SKILL.md `metadata.crew.dependencies`, resolved against `required_by` in state), then their deps, and so on. A dep that isn't in state — one that was never installed — is not added; Homecrew does not install new skills during update. Entries pulled in this way appear in the results alongside the named ones, marked `transitively_required_by: [<name>...]` in JSON output so callers can tell them apart. An unknown top-level name (`<name>` not in state) is an error per argument.
 2b. **Re-expand taps** per §10.1.1. For every git-kind tap with at
    least one state entry attributed to it (filtered by the same name-
    filter rule as step 2 — `crew update <name>` only touches taps that
@@ -786,7 +786,7 @@ should not be confused with a deliberate upstream deletion.
 
 ### 10.1.1 Tap re-expansion
 
-Crew picks up new skills added to a tap automatically — but only for
+Homecrew picks up new skills added to a tap automatically — but only for
 **whole-tap** installs. If the user asked for the whole tap (`crew
 install <tap-url>` or `crew install <tap-name>`), their state entries
 are flagged `tracks_tap: true` and new siblings appear on the next
@@ -887,10 +887,10 @@ last-run timestamp and exit status.
 **Attribution bundle.** On macOS Ventura and later, Login Items labels a
 launchd agent by the code-signing team of the executable unless the
 plist carries `AssociatedBundleIdentifiers` pointing at a resolvable
-bundle. To avoid Login Items showing the crew binary's signer, crew
-writes a minimal attribution bundle at `~/.crew/Crew.app/` containing
+bundle. To avoid Login Items showing the `crew` binary's signer, Homecrew
+writes a minimal attribution bundle at `~/.crew/Homecrew.app/` containing
 `Contents/Info.plist` with `CFBundleIdentifier = sh.crew.autoupdater`
-and `CFBundleDisplayName = "Crew Skill Autoupdate"`. The bundle has no
+and `CFBundleDisplayName = "Homecrew Skill Autoupdate"`. The bundle has no
 executable; it exists solely as metadata for Login Items. The plist's
 `AssociatedBundleIdentifiers` references `sh.crew.autoupdater` so macOS
 attributes the agent to this bundle.
@@ -976,7 +976,7 @@ the latest-release URL (used by tests and private forks).
   binary path isn't writable). The old binary is left in place.
 
 **Non-macOS.** `crew self-update` on a non-macOS host produces
-`self_update_unavailable` with a message indicating crew ships only for
+`self_update_unavailable` with a message indicating Homecrew ships only for
 macOS. No release feed request is made.
 
 ### 10.4 Update-available notice
@@ -1008,7 +1008,7 @@ invocation won't retry until another 24 hours have passed.
 CREW_VERSION`, the implementation emits a single stderr line like:
 
 ```text
-A new version of crew is available (v0.3.1 → v0.4.0). Run `crew self-update` to upgrade.
+A new version of Homecrew is available (v0.3.1 → v0.4.0). Run `crew self-update` to upgrade.
 ```
 
 **Suppression.** The notice MUST be suppressed — and the 24h fetch
@@ -1224,7 +1224,7 @@ bar here is craft, not compliance.
 
 ## 14. Concurrency
 
-Crew mutates state from multiple entry points (interactive commands, autoupdate). To prevent races:
+Homecrew mutates state from multiple entry points (interactive commands, autoupdate). To prevent races:
 
 1. Every command that writes `state.json` or installs into an agent acquires an advisory lock on `~/.crew/state.json.lock` (using `flock(2)` or an equivalent macOS file-lock primitive) before making changes. Read-only commands do not take the lock.
 2. Lock timeout: 30 seconds. If not acquired, exit with `state_locked` (§13).
@@ -1274,7 +1274,7 @@ acme-skills/
 
 ### 16.2 Default tap
 
-Crew ships with a registered default tap named `core` at a URL specified by the implementation's build. The default tap is always listed first in `crew tap list` and cannot be removed via `crew tap remove core` unless `--force` is used.
+Homecrew ships with a registered default tap named `core` at a URL specified by the implementation's build. The default tap is always listed first in `crew tap list` and cannot be removed via `crew tap remove core` unless `--force` is used.
 
 ### 16.3 Tap management
 
@@ -1292,7 +1292,7 @@ Crew ships with a registered default tap named `core` at a URL specified by the 
 
 ### 16.4 `crew install <tap-name>`
 
-When the positional argument to `crew install` matches a configured tap name (registered or auto), crew installs every skill the tap currently exposes — the same outcome as if the user had typed the tap's underlying URL/path. State entries are recorded with `source.tap = <tap-name>` and `explicit = true`.
+When the positional argument to `crew install` matches a configured tap name (registered or auto), Homecrew installs every skill the tap currently exposes — the same outcome as if the user had typed the tap's underlying URL/path. State entries are recorded with `source.tap = <tap-name>` and `explicit = true`.
 
 When a positional matches **both** a configured tap name AND an installable skill in one or more other taps, crew prompts the user interactively. Two prompt shapes, depending on how many other taps hold the same-named skill:
 
@@ -1631,7 +1631,7 @@ Implementations and test suites refer to criteria by ID.
 | C-AUTO-06 | §10.2 | A failure to load the agent produces `launchd_failure`, exit 8, with a clear message. |
 | C-AUTO-07 | §10.2 | Default interval when none is specified is 14400 seconds (4 hours). |
 | C-AUTO-08 | §10.2 | Interval strings `30s`, `5m`, `2h`, `1d` are accepted. |
-| C-AUTO-09 | §10.2 | `crew autoupdate enable` writes an attribution bundle at `~/.crew/Crew.app/Contents/Info.plist` with `CFBundleIdentifier = sh.crew.autoupdater` and `CFBundleDisplayName = "Crew Skill Autoupdate"`. |
+| C-AUTO-09 | §10.2 | `crew autoupdate enable` writes an attribution bundle at `~/.crew/Homecrew.app/Contents/Info.plist` with `CFBundleIdentifier = sh.crew.autoupdater` and `CFBundleDisplayName = "Homecrew Skill Autoupdate"`. |
 | C-AUTO-10 | §10.2 | The plist carries an `AssociatedBundleIdentifiers` array containing `sh.crew.autoupdater`. |
 
 #### C-SELF: Self-update (§10.3, §10.4)

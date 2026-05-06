@@ -5,7 +5,7 @@ export const selfUpdateHelp: CommandHelp = {
   synopsis: "crew self-update [--check] [--version <tag>] [--force]",
   summary: [
     "Upgrade the `crew` binary itself to the latest release.",
-    "Different from `crew update` — that one catches your installed skills up. This one catches crew itself up.",
+    "Different from `crew update` — that one catches your installed skills up. This one catches the `crew` executable itself up.",
     "Safe to re-run: already on the latest? It says so and exits 0.",
   ],
   flags: [
@@ -35,7 +35,7 @@ export const selfUpdateHelp: CommandHelp = {
     },
   ],
   notes: [
-    "Crew checks for new releases at most once every 24 hours. When one is out, you'll see a one-line notice on stderr. Set `CREW_NO_UPDATE_CHECK=1` (or `CI=1`) to silence it.",
+    "Homecrew checks for new releases at most once every 24 hours. When one is out, you'll see a one-line notice on stderr. Set `CREW_NO_UPDATE_CHECK=1` (or `CI=1`) to silence it.",
     "The running process keeps executing on the old binary; the new one takes effect on the next `crew` invocation.",
   ],
   seeAlso: ["update", "autoupdate", "version"],

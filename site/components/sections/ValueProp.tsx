@@ -6,9 +6,9 @@ export function ValueProp() {
   return (
     <section className={styles.section}>
       <Container>
-        <p className={styles.label}>What is Crew?</p>
+        <p className={styles.label}>What is Homecrew?</p>
         <h2 className={styles.title}>
-          Crew treats <span className={styles.mark}>agent&nbsp;skills</span> like packages.
+          Homecrew treats <span className={styles.mark}>agent&nbsp;skills</span> like packages.
         </h2>
         <p className={styles.sub}>
           <span>
@@ -25,7 +25,7 @@ export function ValueProp() {
             <strong>team taps</strong> · private git repos become registries
           </Pill>
           <Pill>
-            <strong>no telemetry</strong> · crew never phones home
+            <strong>no telemetry</strong> · Homecrew never phones home
           </Pill>
         </div>
       </Container>

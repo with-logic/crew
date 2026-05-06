@@ -1,6 +1,6 @@
 <div align="center">
   <img src="assets/logo.png" alt="" width="96" height="96" />
-  <h1>crew</h1>
+  <h1>Homecrew</h1>
 </div>
 
 **Helps teams share [agent skills](https://agentskills.io/specification).**
@@ -20,33 +20,33 @@ GitHub Copilot, Goose, and [every other supported agent](#agents).
 
 ---
 
-## Why crew
+## Why Homecrew
 
 > **Your team has great skills. You should have all of them.**
 
 Right now, the best prompts and agent playbooks either sit on one person's
 machine or get copy-pasted through gists and Slack messages that nobody keeps
-current. Crew gives them a home, a way to be shared, and kept up to date.
+current. Homecrew gives them a home, a way to be shared, and kept up to date.
 Anyone can publish. Anyone can install.
 
 - **Publish a skill.** Any git repo with a `SKILL.md` at the root is
   installable. Push to GitHub, send the link — `crew install @you/skill` and
   your friend has it.
-- **Your skills repo is your registry.** Point crew at a shared repo — a
+- **Your skills repo is your registry.** Point Homecrew at a shared repo — a
   _tap_ — and everyone on the team pulls the same skills, reviewed in PRs,
   versioned in git. Onboarding is one command.
 - **Discover what actually works.** Browse the default `core` tap and
   community taps for battle-tested skills. Fork, tweak, publish your own.
 
-## What is Crew?
+## What is Homecrew?
 
-Crew turns **any git repo** into a registry of agent skills. Push a `SKILL.md`.
+Homecrew turns **any git repo** into a registry of agent skills. Push a `SKILL.md`.
 Share a link. That's the package index. No servers, no accounts, no hosted
 registry.
 
 - **no hosted registry** · git is the backend
 - **no account** · nothing to sign up for
-- **no telemetry** · crew never phones home
+- **no telemetry** · Homecrew never phones home
 
 ## Install
 
@@ -76,7 +76,7 @@ commands that do what they say, across every agent you use.
 3. **Install into every agent.** One `crew install` copies the skill into
    Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Goose, and every
    other supported agent on your machine.
-4. **Dependencies, handled.** Skills can depend on other skills. Crew walks
+4. **Dependencies, handled.** Skills can depend on other skills. Homecrew walks
    the graph and installs everything they need. A single "team baseline"
    meta-skill can pull in a dozen others in one command.
 5. **Stay current automatically.** `crew update` pulls the latest versions
@@ -96,7 +96,7 @@ skill can list as a dependency. Three shapes:
 
 Run `crew help install` for the full grammar.
 
-## A day with crew
+## A day with Homecrew
 
 Six commands that cover 90% of needs.
 
@@ -210,7 +210,7 @@ acme-skills/
 
 Any top-level directory with a valid `SKILL.md` is a skill. Everything else is
 ignored. Prefer to keep skills under a `skills/` directory? That works too — if
-`skills/` exists at the root, crew indexes its children instead of the root.
+`skills/` exists at the root, Homecrew indexes its children instead of the root.
 
 ### Namespaces
 
@@ -236,12 +236,12 @@ Then:
   is a namespace in exactly one configured tap)
 
 When a name could mean more than one thing (a tap, a skill, a namespace),
-crew asks — or takes `--tap`, `--bundle`, or `--skill` to force one
+Homecrew asks — or takes `--tap`, `--bundle`, or `--skill` to force one
 interpretation.
 
 ## For teams
 
-- **One repo, every laptop.** Point crew at a private GitHub repo once. Every
+- **One repo, every laptop.** Point Homecrew at a private GitHub repo once. Every
   new skill that lands on `main` shows up in everyone's `crew search`. No
   internal tool to build. No package server to run.
 - **Onboarding, one command.** Publish a `team-baseline` meta-skill that
@@ -250,24 +250,24 @@ interpretation.
 - **Review in PRs.** Propose a change to the team's prompt library the same
   way you propose a change to anything else — a branch, a PR, comments,
   squash-merge.
-- **Private by default.** Crew clones taps with whatever git credentials you
-  already have. Your private repo stays private — crew never phones home.
+- **Private by default.** Homecrew clones taps with whatever git credentials you
+  already have. Your private repo stays private — Homecrew never phones home.
 
 ## Safety model
 
-Crew is a file copier. It doesn't execute your skills, your taps, or anything
+Homecrew is a file copier. It doesn't execute your skills, your taps, or anything
 they pull in. It leaves a paper trail you can audit, and it refuses to
 overwrite anything it didn't install itself.
 
 - **No symlinks, ever.** Every install is a file copy. Upgrades atomically
   rename into place. You can `rm -rf` a skill with no side effects.
 - **Never executes anything.** No post-install hooks, no build steps, no
-  user-supplied scripts run by crew. It copies files. Agents are what run
+  user-supplied scripts run by Homecrew. It copies files. Agents are what run
   them.
 - **Tracks what it wrote.** Every installed skill gets a `.crew.json` marker
   with its source, ref, SHA, and content hash. Removing a skill removes only
-  what crew created.
-- **Detects your edits.** On re-install, crew re-hashes the destination. If
+  what Homecrew created.
+- **Detects your edits.** On re-install, Homecrew re-hashes the destination. If
   you've customized a managed skill, the install is refused — unless you pass
   `--force`.
 - **Concurrency-safe.** Every write takes an advisory lock on
@@ -275,7 +275,7 @@ overwrite anything it didn't install itself.
   can't stomp on each other.
 - **Reproducible versions.** Tags and branches resolve to full 40-char commit
   SHAs at install time. The SHA — not the tag — is what's recorded.
-- **Owns only `~/.crew/`.** Crew writes to its own directory and to each
+- **Owns only `~/.crew/`.** Homecrew writes to its own directory and to each
   agent's skills directory. It won't touch your global `AGENTS.md`, settings
   JSON, or anything else.
 - **Auditable.** `crew doctor` reconciles state, markers, and agent
@@ -283,10 +283,10 @@ overwrite anything it didn't install itself.
 
 ## Anatomy of a skill
 
-No proprietary manifest. Just `SKILL.md`. Crew reads the [Agent Skills
-specification](https://agentskills.io/specification) directly. Crew-specific
+No proprietary manifest. Just `SKILL.md`. Homecrew reads the [Agent Skills
+specification](https://agentskills.io/specification) directly. Homecrew-specific
 metadata lives under `metadata.crew` so the skill stays fully spec-compliant —
-readable by any agent, not just the ones crew installs into.
+readable by any agent, not just the ones Homecrew installs into.
 
 ```yaml
 ---
@@ -321,14 +321,14 @@ ones. Delete code aggressively. Write the boring version first.
 
 Works with every Mac agent that speaks the spec. Any agent coder that reads
 the [Agent Skills spec](https://agentskills.io/specification) is a valid
-target. Crew auto-detects the ones you already have and quietly skips the rest.
+target. Homecrew auto-detects the ones you already have and quietly skips the rest.
 
 Amp · Autohand · Claude Code · Codex · Command Code · Cursor · Factory ·
 Gemini CLI · GitHub Copilot · Goose · Junie · Kiro · Mistral Vibe · Nanobot ·
 OpenCode · pi · Roo Code
 
 Don't see yours? If it reads the spec path (`~/.agents/skills/`), the
-`agent-skills` adapter already covers it — crew detects it whenever
+`agent-skills` adapter already covers it — Homecrew detects it whenever
 `~/.agents/` exists and writes there alongside any tool-specific adapters.
 If it reads a tool-specific path, writing the adapter usually takes an
 afternoon — see [§7.1](./PRD.md#71-adapter-operations) in the PRD.
@@ -336,27 +336,27 @@ afternoon — see [§7.1](./PRD.md#71-adapter-operations) in the PRD.
 ## FAQ
 
 **How is this different from `skills.sh` or `gh skill`?** They're great
-projects too — different takes on the same problem. Crew leans hard into team
-workflows. A few things that are particular to crew:
+projects too — different takes on the same problem. Homecrew leans hard into team
+workflows. A few things that are particular to Homecrew:
 
-- **Taps.** Point crew at a git repo once; every skill in it is searchable
+- **Taps.** Point Homecrew at a git repo once; every skill in it is searchable
   and installable. You can even just install the entire tap, and as skills
   are added to that tap, they'll get added to your machine when you run
   `crew update`.
-- **Skill dependencies.** Skills can depend on other skills. Crew walks the
+- **Skill dependencies.** Skills can depend on other skills. Homecrew walks the
   graph and installs everything they need. A single `team-baseline` meta-skill
   can pull in a dozen others.
 - **Background autoupdate.** `crew autoupdate enable` sets up a launchd agent
   that keeps every skill current.
-- **Local-edit protection.** Crew hashes what it installs and refuses to
+- **Local-edit protection.** Homecrew hashes what it installs and refuses to
   clobber your edits on re-install — so you can tweak a skill in place and
   not lose your work the next time something updates.
-- **Private-first.** Crew clones taps with whatever git credentials are on
+- **Private-first.** Homecrew clones taps with whatever git credentials are on
   the machine — SSH, GitHub tokens, Enterprise hosts. No hosted middleman.
 
-**How does crew work with a private team skills repo?** Same as any private
+**How does Homecrew work with a private team skills repo?** Same as any private
 git repo you clone. Add it as a tap: `crew tap add git@github.com:acme/skills.git`.
-Crew uses whatever credentials your git already has — SSH keys, personal
+Homecrew uses whatever credentials your git already has — SSH keys, personal
 access tokens, GitHub Enterprise hosts. Nothing gets uploaded anywhere;
 there's no intermediary registry. Every `main`-merge automatically becomes
 installable team-wide. Pair it with `crew autoupdate enable` and everyone
@@ -364,7 +364,7 @@ stays in sync without thinking about it.
 
 **Skills can depend on other skills?** Yes. A `SKILL.md`'s frontmatter can
 list `metadata.crew.dependencies` — an array of skill references in any form
-the CLI accepts. Crew walks the graph transitively and installs every dep
+the CLI accepts. Homecrew walks the graph transitively and installs every dep
 before the parent. The most useful pattern is a "meta-skill" — a single skill
 whose body describes a team's conventions and whose `dependencies` list pulls
 in the real working skills. Onboarding a new engineer becomes one command.
@@ -382,9 +382,9 @@ resolve a skill differently, or a user pins one agent to an older ref. Copies
 are dumb, predictable, and safe: each agent's directory is self-sufficient.
 The marginal disk cost is negligible — skills are markdown.
 
-**What happens if I edit an installed skill?** Crew records a content hash in
+**What happens if I edit an installed skill?** Homecrew records a content hash in
 the `.crew.json` marker at install time. On the next `crew install` or
-`crew update`, it recomputes the hash. If it differs, crew refuses to
+`crew update`, it recomputes the hash. If it differs, Homecrew refuses to
 overwrite your changes and reports `customized`. Pass `--force` to override,
 or copy your edits into a new skill and install that instead.
 
@@ -394,7 +394,7 @@ or copy your edits into a new skill and install that instead.
 just know where the files go.
 
 **Is there a hosted registry?** No. The default tap `core` is a plain git
-repo. Anyone can host a tap — your team, your company, yourself. Crew never
+repo. Anyone can host a tap — your team, your company, yourself. Homecrew never
 phones home.
 
 **How does `crew update` know when to skip a skill?** Skills pinned to an
@@ -424,7 +424,7 @@ want to use it, stop here.
 
 ### Requirements
 
-- [Bun](https://bun.sh) — the only runtime. Crew ships as a single bundled
+- [Bun](https://bun.sh) — the only runtime. Homecrew ships as a single bundled
   Mach-O executable produced by `bun build --compile`.
 - `git` on `PATH`.
 

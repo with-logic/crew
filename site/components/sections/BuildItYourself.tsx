@@ -46,7 +46,7 @@ export function BuildItYourself({ prompt }: Props) {
       </h3>
 
       <p className={styles.copy}>
-        Crew was built by agents from this{" "}
+        Homecrew was built by agents from this{" "}
         <a href={PRD_URL} target="_blank" rel="noreferrer">
           PRD
         </a>

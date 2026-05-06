@@ -102,7 +102,7 @@ function assertMacOS(): void {
   if (process.platform !== "darwin") {
     throw new CrewError(
       "self_update_unavailable",
-      "crew ships macOS binaries only. use your package manager or build from source on other platforms.",
+      "Homecrew ships macOS binaries only. use your package manager or build from source on other platforms.",
       { platform: process.platform },
     );
   }

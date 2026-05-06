@@ -15,7 +15,7 @@ const CELLS: readonly {
     title: "Install skills without manual copying.",
     body: (
       <>
-        Point crew at a local directory, a git repo, or a tap entry. It validates the{" "}
+        Point Homecrew at a local directory, a git repo, or a tap entry. It validates the{" "}
         <code>SKILL.md</code>, copies it into the right agent directories, and records what it
         wrote.
       </>
@@ -27,8 +27,9 @@ const CELLS: readonly {
     title: "Your skills repo is your registry.",
     body: (
       <>
-        Point crew at a shared repo — a <em>tap</em> — and everyone pulls the same skills, reviewed
-        in PRs and versioned in git. A baseline skill can onboard a new laptop in one command.
+        Point Homecrew at a shared repo — a <em>tap</em> — and everyone pulls the same skills,
+        reviewed in PRs and versioned in git. A baseline skill can onboard a new laptop in one
+        command.
       </>
     ),
   },
@@ -51,9 +52,9 @@ export function Problem() {
       <Container>
         <SectionHead
           number="01"
-          label="Why crew"
+          label="Why Homecrew"
           title="Package-manager workflows for agent skills."
-          description="The best prompts and agent playbooks often live as copied folders, gists, or private notes. Crew gives them install commands, source tracking, update behavior, and a git-native way to share them without a hosted registry."
+          description="The best prompts and agent playbooks often live as copied folders, gists, or private notes. Homecrew gives them install commands, source tracking, update behavior, and a git-native way to share them without a hosted registry."
         />
         <div className={styles.grid}>
           {CELLS.map((c) => (

@@ -19,11 +19,11 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://crew.logic.inc"),
-  title: "crew — package manager for agent skills",
+  title: "homecrew — package manager for agent skills",
   description:
     "Install, share, and update agent skills across Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Goose, and more.",
   openGraph: {
-    title: "crew — package manager for agent skills",
+    title: "homecrew — package manager for agent skills",
     description:
       "Install personal skills, team taps, and git-hosted skill collections into every agent on your Mac.",
     type: "website",
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "crew — package manager for agent skills",
+    title: "homecrew — package manager for agent skills",
     description:
       "Install personal skills, team taps, and git-hosted skill collections into every agent on your Mac.",
   },

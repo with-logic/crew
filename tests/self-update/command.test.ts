@@ -74,7 +74,7 @@ describe("crew self-update --check", () => {
     const cap = captureStreams();
     const code = runCli(["self-update", "--check"], { home, streams: cap.streams });
     expect(code).toBe(0);
-    expect(cap.stdout()).toContain("A newer crew is available");
+    expect(cap.stdout()).toContain("A newer Homecrew is available");
     expect(cap.stdout()).toContain("v99.99.99");
     expect(readVersionCheck(home)?.latest_tag).toBe("v99.99.99");
   });
@@ -124,7 +124,7 @@ describe("crew self-update (full upgrade)", () => {
       const cap = captureStreams();
       const code = runCli(["self-update"], { home, streams: cap.streams });
       expect(code).toBe(0);
-      expect(cap.stdout()).toContain("Upgraded crew");
+      expect(cap.stdout()).toContain("Upgraded Homecrew");
       expect(cap.stdout()).toContain("v99.99.99");
       expect(readVersionCheck(home)?.latest_tag).toBe("v99.99.99");
     } finally {
@@ -177,7 +177,7 @@ describe("post-command update notice", () => {
     const cap = captureStreams();
     const code = runCli(["list"], { home, streams: cap.streams, stderrIsTty: true });
     expect(code).toBe(0);
-    expect(cap.stderr()).toContain("A new version of crew is available");
+    expect(cap.stderr()).toContain("A new version of Homecrew is available");
     expect(cap.stderr()).toContain("v99.99.99");
   });
 
@@ -192,7 +192,7 @@ describe("post-command update notice", () => {
     });
     expect(code).toBe(4);
     expect(cap.stderr()).toContain("error:");
-    expect(cap.stderr()).toContain("A new version of crew is available");
+    expect(cap.stderr()).toContain("A new version of Homecrew is available");
   });
 
   test("performs a synchronous fetch when the record is stale", () => {

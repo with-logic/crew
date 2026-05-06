@@ -4,7 +4,7 @@ export const helpHelp: CommandHelp = {
   name: "help",
   synopsis: "crew help [<command>]",
   summary: [
-    "Show how to use crew, or get details on a specific command.",
+    "Show how to use Homecrew, or get details on a specific command.",
     "Running `crew` with no arguments gives you the same overview.",
   ],
   examples: [
