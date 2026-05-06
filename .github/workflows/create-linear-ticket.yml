@@ -51,16 +51,16 @@ jobs:
             const repoOwner = process.env.REPO_OWNER;
             const repoName = process.env.REPO_NAME;
 
-            if (!apiKey) {
-              core.setFailed('LINEAR_API_KEY is not set');
-              return;
-            }
-
             // A title "has a ticket" iff it contains [XXX-N] with any
             // uppercase team key. If so, do nothing.
             const hasTicket = /\[[A-Z]+-\d+\]/.test(prTitle);
             if (hasTicket) {
               core.info(`PR title already has a ticket marker — skipping: ${prTitle}`);
+              return;
+            }
+
+            if (!apiKey) {
+              core.info('LINEAR_API_KEY is not available in this workflow context — skipping ticket creation.');
               return;
             }
 
