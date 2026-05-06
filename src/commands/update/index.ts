@@ -204,7 +204,7 @@ function chooseEntries(state: StateFile, names: readonly string[]): ChosenEntrie
     if (!state.installations.some((e) => e.name === name)) {
       throw new CrewError(
         "unknown_skill",
-        `\`${name}\` isn't installed — run \`crew list\` to see what crew is tracking`,
+        `\`${name}\` isn't installed — run \`crew list\` to see what Homecrew is tracking`,
         { name },
       );
     }

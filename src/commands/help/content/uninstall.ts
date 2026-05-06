@@ -5,7 +5,7 @@ export const uninstallHelp: CommandHelp = {
   synopsis: "crew uninstall <name> [<name>...]",
   summary: [
     "Remove an installed skill from every agent on your machine.",
-    "crew only touches skills it installed — anything else in your agents' skills folders is left alone.",
+    "Homecrew only touches skills it installed — anything else in your agents' skills folders is left alone.",
     "If the skill pulled in dependencies, those stick around by default in case you want them. Pass `--prune` to also clean up anything that's now unused, like `apt autoremove`.",
   ],
   flags: [
@@ -25,7 +25,7 @@ export const uninstallHelp: CommandHelp = {
     {
       flag: "--force",
       description:
-        "Don't complain if the skill isn't installed, or if crew's record of it got tampered with.",
+        "Don't complain if the skill isn't installed, or if Homecrew's record of it got tampered with.",
     },
   ],
   examples: [
@@ -47,9 +47,9 @@ export const uninstallHelp: CommandHelp = {
     },
   ],
   notes: [
-    "`--prune` only touches dependencies crew auto-installed for you. Anything you installed yourself stays put.",
+    "`--prune` only touches dependencies Homecrew auto-installed for you. Anything you installed yourself stays put.",
     "If you only uninstall from some agents (`--agent`), the skill is still installed elsewhere, so its dependencies still count as needed — pruning won't touch them.",
-    "crew never reaches outside its own install folders. `--force` lets you get past a tampered marker, but it won't let you delete anything you didn't install through crew.",
+    "Homecrew never reaches outside its own install folders. `--force` lets you get past a tampered marker, but it won't let you delete anything you didn't install through Homecrew.",
   ],
   seeAlso: ["list", "install", "agents"],
 };

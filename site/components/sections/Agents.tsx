@@ -16,7 +16,7 @@ export function Agents() {
             <>
               Any agent coder that reads the{" "}
               <a href="https://agentskills.io/specification">agent skills spec</a> is a valid
-              target. Crew auto-detects the ones you already have and quietly skips the rest.
+              target. Homecrew auto-detects the ones you already have and quietly skips the rest.
             </>
           }
         />

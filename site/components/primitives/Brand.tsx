@@ -11,14 +11,14 @@ interface BrandProps {
 export function Brand({ as: Tag = "div", href }: BrandProps) {
   if (href !== undefined) {
     return (
-      <a className={styles.brand} href={href} aria-label="crew home">
-        <BrandMark /> crew
+      <a className={styles.brand} href={href} aria-label="homecrew home">
+        <BrandMark /> homecrew
       </a>
     );
   }
   return (
     <Tag className={styles.brand}>
-      <BrandMark /> crew
+      <BrandMark /> homecrew
     </Tag>
   );
 }

@@ -15,7 +15,7 @@ import { BUNDLE_IDENTIFIER, writeAttributionBundle } from "./bundle.ts";
 
 /**
  * Plist body per §10.2, plus an `AssociatedBundleIdentifiers` key so
- * macOS Login Items attributes this agent to "Crew Skill Autoupdate"
+ * macOS Login Items attributes this agent to "Homecrew Skill Autoupdate"
  * rather than to the Bun binary's Apple Developer signer.
  */
 export function plistXml(

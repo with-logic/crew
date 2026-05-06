@@ -34,7 +34,7 @@ die()  { warn "$*"; exit 1; }
 
 # ---------- Prerequisites ------------------------------------------------
 
-[ "$(uname -s)" = "Darwin" ] || die "crew is macOS-only for now. Linux and Windows are tracked but not yet shipping."
+[ "$(uname -s)" = "Darwin" ] || die "Homecrew is macOS-only for now. Linux and Windows are tracked but not yet shipping."
 
 command -v curl >/dev/null 2>&1 || die "\`curl\` is required but not on PATH."
 
@@ -87,7 +87,7 @@ dest="$prefix/crew"
 mkdir -p "$prefix"
 mv "$tmpfile" "$dest"
 
-ok "installed crew to $dest"
+ok "installed Homecrew to $dest"
 
 # Run it once to verify and print the version string.
 if "$dest" version >/dev/null 2>&1; then

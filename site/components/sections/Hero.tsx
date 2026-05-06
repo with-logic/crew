@@ -14,11 +14,11 @@ export function Hero() {
               <span className={styles.accent}>share agent skills</span>.
             </h1>
             <p className={styles.lede}>
-              Install skills for yourself or create a shared tap for your team. Crew will keep your
-              skills up to date.
+              Install skills for yourself or create a shared tap for your team. Homecrew will keep
+              your skills up to date.
             </p>
             <div className={styles.ctaRow}>
-              <Button href="#install">Install crew</Button>
+              <Button href="#install">Install Homecrew</Button>
               <Button href="#how" variant="ghost">
                 How it works
               </Button>

@@ -23,7 +23,7 @@ export function assetNameForArch(arch: string = process.arch): string {
   if (arch === "x64") return "crew-macos-x64";
   throw new CrewError(
     "self_update_unavailable",
-    `no release asset for this CPU (${arch}). crew ships macOS arm64 and x64 builds.`,
+    `no release asset for this CPU (${arch}). Homecrew ships macOS arm64 and x64 builds.`,
     { arch },
   );
 }

@@ -19,32 +19,33 @@ const QAS: readonly QA[] = [
     a: (
       <>
         <p>
-          They're great projects too — different takes on the same problem. Crew leans hard into
-          team workflows. A few things that are particular to crew:
+          They're great projects too — different takes on the same problem. Homecrew leans hard into
+          team workflows. A few things that are particular to Homecrew:
         </p>
         <ul>
           <li>
-            <strong>Taps.</strong> Point crew at a git repo once; every skill in it is searchable
-            and installable. You can even just install the entire tap, and as skills are added to
-            that tap, they'll get added to your machine when you run <code>crew update</code>.
+            <strong>Taps.</strong> Point Homecrew at a git repo once; every skill in it is
+            searchable and installable. You can even just install the entire tap, and as skills are
+            added to that tap, they'll get added to your machine when you run{" "}
+            <code>crew update</code>.
           </li>
           <li>
-            <strong>Skill dependencies.</strong> Skills can depend on other skills. Crew walks the
-            graph and installs everything they need. A single <code>team-baseline</code> meta-skill
-            can pull in a dozen others.
+            <strong>Skill dependencies.</strong> Skills can depend on other skills. Homecrew walks
+            the graph and installs everything they need. A single <code>team-baseline</code>{" "}
+            meta-skill can pull in a dozen others.
           </li>
           <li>
             <strong>Background autoupdate.</strong> <code>crew autoupdate enable</code> sets up a
             launchd agent that keeps every skill current.
           </li>
           <li>
-            <strong>Local-edit protection.</strong> Crew hashes what it installs and refuses to
+            <strong>Local-edit protection.</strong> Homecrew hashes what it installs and refuses to
             clobber your edits on re-install — so you can tweak a skill in place and not lose your
             work the next time something updates.
           </li>
           <li>
-            <strong>Private-first.</strong> Crew clones taps with whatever git credentials are on
-            the machine — SSH, GitHub tokens, Enterprise hosts. No hosted middleman.
+            <strong>Private-first.</strong> Homecrew clones taps with whatever git credentials are
+            on the machine — SSH, GitHub tokens, Enterprise hosts. No hosted middleman.
           </li>
         </ul>
       </>
@@ -52,11 +53,11 @@ const QAS: readonly QA[] = [
   },
   {
     id: "solo",
-    q: "Is crew useful if I don't have a team?",
+    q: "Is Homecrew useful if I don't have a team?",
     a: (
       <>
         <p>
-          Yes. Crew is still a package manager for your own skills. Install a skill once and it
+          Yes. Homecrew is still a package manager for your own skills. Install a skill once and it
           lands in every detected agent. Add your personal skills repo as a tap and your library
           becomes searchable. Use a baseline skill to recreate your setup on a new Mac.
         </p>
@@ -69,14 +70,14 @@ const QAS: readonly QA[] = [
   },
   {
     id: "private-team",
-    q: "How does crew work with a private team skills repo?",
+    q: "How does Homecrew work with a private team skills repo?",
     a: (
       <>
         <p>
           Same as any private git repo you clone. Add it as a tap:{" "}
-          <code>crew tap add git@github.com:acme/skills.git</code>. Crew uses whatever credentials
-          your git already has — SSH keys, personal access tokens, GitHub Enterprise hosts. Nothing
-          gets uploaded anywhere; there's no intermediary registry.
+          <code>crew tap add git@github.com:acme/skills.git</code>. Homecrew uses whatever
+          credentials your git already has — SSH keys, personal access tokens, GitHub Enterprise
+          hosts. Nothing gets uploaded anywhere; there's no intermediary registry.
         </p>
         <p>
           Every <code>main</code>-merge automatically becomes installable team-wide. Pair it with{" "}
@@ -94,7 +95,7 @@ const QAS: readonly QA[] = [
         <p>
           Yes. A <code>SKILL.md</code>'s frontmatter can list{" "}
           <code>metadata.crew.dependencies</code> — an array of skill references in any form the CLI
-          accepts. Crew walks the graph transitively and installs every dep before the parent.
+          accepts. Homecrew walks the graph transitively and installs every dep before the parent.
         </p>
         <p>
           The most useful pattern is a "meta-skill" — a single skill whose body describes a team's
@@ -133,11 +134,11 @@ const QAS: readonly QA[] = [
     q: "What happens if I edit an installed skill?",
     a: (
       <>
-        Crew records a content hash in the <code>.crew.json</code> marker at install time. On the
-        next <code>crew install</code> or <code>crew update</code>, it recomputes the hash. If it
-        differs, crew refuses to overwrite your changes and reports <code>customized</code>. You
-        pass <code>--force</code> to override, or copy your edits into a new skill and install that
-        instead.
+        Homecrew records a content hash in the <code>.crew.json</code> marker at install time. On
+        the next <code>crew install</code> or <code>crew update</code>, it recomputes the hash. If
+        it differs, Homecrew refuses to overwrite your changes and reports <code>customized</code>.
+        You pass <code>--force</code> to override, or copy your edits into a new skill and install
+        that instead.
       </>
     ),
   },
@@ -147,7 +148,7 @@ const QAS: readonly QA[] = [
     a: (
       <>
         No. The default tap <code>core</code> is a plain git repo. Anyone can host a tap — your
-        team, your company, yourself. Crew never phones home or uploads your skills.
+        team, your company, yourself. Homecrew never phones home or uploads your skills.
       </>
     ),
   },
@@ -165,11 +166,7 @@ export function Faq() {
         <SectionHead
           number="11"
           label="FAQ"
-          title={
-            <>
-              Things people ask about <code>crew</code>.
-            </>
-          }
+          title={<>Things people ask about Homecrew.</>}
           description=""
         />
         <div className={styles.list}>

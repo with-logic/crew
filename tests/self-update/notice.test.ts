@@ -144,7 +144,7 @@ describe("maybeEmitUpdateNotice — suppression rules", () => {
     writeVersionCheck("v99.99.99", h.home);
     process.env["CI"] = "";
     maybeEmitUpdateNotice(h.ctx());
-    expect(h.streams.stderr()).toContain("A new version of crew is available");
+    expect(h.streams.stderr()).toContain("A new version of Homecrew is available");
   });
 });
 
@@ -153,7 +153,7 @@ describe("maybeEmitUpdateNotice — fetch + emission", () => {
     const h = makeHarness();
     writeVersionCheck("v99.99.99", h.home);
     maybeEmitUpdateNotice(h.ctx());
-    expect(h.streams.stderr()).toContain("A new version of crew is available");
+    expect(h.streams.stderr()).toContain("A new version of Homecrew is available");
     expect(h.streams.stderr()).toContain("v99.99.99");
     expect(h.streams.stderr()).toContain("crew self-update");
   });

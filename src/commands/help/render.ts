@@ -9,11 +9,11 @@ import { COMMANDS, type CommandHelp, GROUPS, ONELINERS } from "./content/index.t
 
 export function overview(): CommandOutput {
   const lines: string[] = [
-    `crew ${CREW_VERSION} — a package manager for Agent Skills.`,
+    `Homecrew ${CREW_VERSION} — a package manager for Agent Skills.`,
     "",
     "One command installs a skill into every agent coder on your machine —",
     "Claude Code, Codex, Gemini — and keeps it up to date. You focus on what",
-    "your agents should know how to do; crew handles the plumbing.",
+    "your agents should know how to do; Homecrew handles the plumbing.",
     "",
     "GETTING STARTED",
     "  crew search <query>           Look for a skill.",

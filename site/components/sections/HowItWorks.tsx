@@ -46,8 +46,8 @@ const STEPS: readonly {
     title: "Dependencies, handled.",
     body: (
       <>
-        Skills can depend on other skills. Crew walks the graph and installs everything they need. A
-        single "team baseline" meta-skill can pull in a dozen others in one command.
+        Skills can depend on other skills. Homecrew walks the graph and installs everything they
+        need. A single "team baseline" meta-skill can pull in a dozen others in one command.
       </>
     ),
   },

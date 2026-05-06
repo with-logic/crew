@@ -22,7 +22,7 @@ const ITEMS: readonly {
   {
     sym: "exec",
     title: "Never executes anything.",
-    body: "No post-install hooks, no build steps, no user-supplied scripts run by crew. It copies files. Agents are what run them.",
+    body: "No post-install hooks, no build steps, no user-supplied scripts run by Homecrew. It copies files. Agents are what run them.",
   },
   {
     sym: "marker",
@@ -30,7 +30,7 @@ const ITEMS: readonly {
     body: (
       <>
         Every installed skill gets a <code>.crew.json</code> marker with its source, ref, SHA, and
-        content hash. Removing a skill removes only what crew created.
+        content hash. Removing a skill removes only what Homecrew created.
       </>
     ),
   },
@@ -39,7 +39,7 @@ const ITEMS: readonly {
     title: "Detects your edits.",
     body: (
       <>
-        On re-install, crew re-hashes the destination. If you've customized a managed skill, the
+        On re-install, Homecrew re-hashes the destination. If you've customized a managed skill, the
         install is refused — unless you pass <code>--force</code>.
       </>
     ),
@@ -64,8 +64,8 @@ const ITEMS: readonly {
     title: "Owns only ~/.crew/.",
     body: (
       <>
-        Crew writes to its own directory and to each agent's skills directory. It won't touch your
-        global <code>AGENTS.md</code>, settings JSON, or anything else.
+        Homecrew writes to its own directory and to each agent's skills directory. It won't touch
+        your global <code>AGENTS.md</code>, settings JSON, or anything else.
       </>
     ),
   },
@@ -88,8 +88,8 @@ export function Safety() {
         <SectionHead
           number="09"
           label="Safety model"
-          title="Crew is a file copier."
-          description="Crew is a file copier. It doesn't execute your skills, your taps, or anything they pull in. It leaves a paper trail you can audit, and it refuses to overwrite anything it didn't install itself."
+          title="Homecrew is a file copier."
+          description="Homecrew is a file copier. It doesn't execute your skills, your taps, or anything they pull in. It leaves a paper trail you can audit, and it refuses to overwrite anything it didn't install itself."
         />
         <div className={styles.grid}>
           {ITEMS.map((i) => (

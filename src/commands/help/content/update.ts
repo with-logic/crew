@@ -30,7 +30,7 @@ export const updateHelp: CommandHelp = {
   notes: [
     "Your edits are safe. If you've modified a skill's files locally, `crew update` leaves them alone — it won't clobber your changes unless you pass `--force`.",
     "Removed skills stay installed. If an author deletes a skill upstream, your local copy is preserved. Run `crew uninstall <name>` yourself when you want it gone.",
-    "One broken skill won't stop the rest. If a source is temporarily unreachable, crew updates what it can and reports the rest so you can retry later.",
+    "One broken skill won't stop the rest. If a source is temporarily unreachable, Homecrew updates what it can and reports the rest so you can retry later.",
     "Want to schedule updates? See `crew autoupdate`.",
   ],
   seeAlso: ["autoupdate", "install", "list"],

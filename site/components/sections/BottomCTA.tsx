@@ -12,7 +12,7 @@ export function BottomCTA() {
           <Eyebrow centered>A package manager for agent skills</Eyebrow>
           <h2 className={styles.title}>$ crew install &lt;skill&gt;</h2>
           <div className={styles.ctaRow}>
-            <Button href="#install">Install crew</Button>
+            <Button href="#install">Install Homecrew</Button>
             <Button href="#commands" variant="ghost">
               Command reference
             </Button>

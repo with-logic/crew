@@ -5,7 +5,7 @@ export const installHelp: CommandHelp = {
   synopsis: "crew install <skill> [<skill>...]",
   summary: [
     "Install a skill and make it available in every agent coder on your machine.",
-    "crew installs the same skill into every supported agent coder you have — Claude Code, Codex, Cursor, Gemini, and more. One command, all your agents. You don't have to think about where the skill goes; crew figures out the right place for each tool.",
+    "Homecrew installs the same skill into every supported agent coder you have — Claude Code, Codex, Cursor, Gemini, and more. One command, all your agents. You don't have to think about where the skill goes; Homecrew figures out the right place for each tool.",
     "You can install by name (from a collection you've already added), by GitHub URL, from any git repo, or from a local folder — see REFERENCE FORMS below for the full list of shapes you can pass.",
     "Point at a folder full of skills and you get all of them at once. New ones added later show up automatically when you run `crew update`.",
   ],
@@ -26,7 +26,7 @@ export const installHelp: CommandHelp = {
     {
       flag: "--force",
       description:
-        "Overwrite a skill you've edited locally, or a folder crew didn't create. Won't push through a real name conflict or a broken skill — those errors deserve your attention.",
+        "Overwrite a skill you've edited locally, or a folder Homecrew didn't create. Won't push through a real name conflict or a broken skill — those errors deserve your attention.",
     },
     { flag: "--json", description: "Machine-readable output." },
   ],
@@ -64,7 +64,7 @@ export const installHelp: CommandHelp = {
     {
       heading: "Reference forms",
       body: [
-        "Wherever crew accepts a skill — on the command line, in another skill's dependency list — the same shapes work. Pick whichever is convenient.",
+        "Wherever Homecrew accepts a skill — on the command line, in another skill's dependency list — the same shapes work. Pick whichever is convenient.",
         {
           literal: true,
           lines: [
@@ -105,13 +105,13 @@ export const installHelp: CommandHelp = {
             "@acme/skills@v1.0.0                      Same with the `@` shorthand.",
           ],
         },
-        "Point at a whole repo (or any folder of skills) and crew installs all of them. Later, when you run `crew update`, any new skills the authors have added come along for the ride.",
+        "Point at a whole repo (or any folder of skills) and Homecrew installs all of them. Later, when you run `crew update`, any new skills the authors have added come along for the ride.",
       ],
     },
   ],
   notes: [
     "Pinning keeps a skill put. Anything with `@<tag>` or `@<sha>` is treated as pinned — `crew update` leaves it alone unless you ask for `--force`.",
-    "How crew tells names apart: a plain word is a skill name. Paths start with `./`, `../`, `/`, or `~`. Git URLs start with `https://`, `git@`, `ssh://`, `file://`, `gh:`, `gl:`, `bb:`, or `@<owner>/<repo>`. Anything containing `//` is always treated as a git reference (that's the subfolder syntax).",
+    "How Homecrew tells names apart: a plain word is a skill name. Paths start with `./`, `../`, `/`, or `~`. Git URLs start with `https://`, `git@`, `ssh://`, `file://`, `gh:`, `gl:`, `bb:`, or `@<owner>/<repo>`. Anything containing `//` is always treated as a git reference (that's the subfolder syntax).",
   ],
   seeAlso: ["uninstall", "update", "info", "search"],
 };

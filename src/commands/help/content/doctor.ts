@@ -4,9 +4,9 @@ export const doctorHelp: CommandHelp = {
   name: "doctor",
   synopsis: "crew doctor [--verify] [--repair]",
   summary: [
-    "Check that crew is in good shape, and optionally fix anything that isn't.",
+    "Check that Homecrew is in good shape, and optionally fix anything that isn't.",
     "Safe to run any time — it just looks around and reports. Pass `--repair` when you want it to actually fix things it finds.",
-    "Typical reasons to reach for this: something feels off, an update failed weirdly, you manually edited files crew manages, or you want a quick health check.",
+    "Typical reasons to reach for this: something feels off, an update failed weirdly, you manually edited files Homecrew manages, or you want a quick health check.",
   ],
   flags: [
     {
@@ -33,7 +33,7 @@ export const doctorHelp: CommandHelp = {
     },
   ],
   notes: [
-    "`--repair` is conservative — it won't touch skills you've edited, or anything outside crew's own install folders.",
+    "`--repair` is conservative — it won't touch skills you've edited, or anything outside Homecrew's own install folders.",
   ],
   seeAlso: ["cache", "list"],
 };

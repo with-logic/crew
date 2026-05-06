@@ -176,7 +176,9 @@ describe("platform guard", () => {
       return { tag: "v1", assets: {} };
     });
     try {
-      expect(() => runSelfUpdateCheck(makeCrewHome())).toThrow(/crew ships macOS binaries only/);
+      expect(() => runSelfUpdateCheck(makeCrewHome())).toThrow(
+        /Homecrew ships macOS binaries only/,
+      );
       expect(fetcherCalled).toBe(false);
     } finally {
       Object.defineProperty(process, "platform", { value: "darwin", configurable: true });

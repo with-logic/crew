@@ -48,14 +48,14 @@ describe("autoupdate commands", () => {
     expect(loadedArgs.some((a) => a[0] === "bootstrap")).toBe(true);
   });
 
-  test("enable writes the attribution bundle so Login Items shows 'Crew Skill Autoupdate'", () => {
+  test("enable writes the attribution bundle so Login Items shows 'Homecrew Skill Autoupdate'", () => {
     const crewHome = makeCrewHome();
     setLaunchctlRunner(() => true);
     runCli(["autoupdate", "enable"], { home: crewHome, streams: captureStreams().streams });
     const infoPlistPath = join(bundlePath(crewHome), "Contents", "Info.plist");
     expect(existsSync(infoPlistPath)).toBe(true);
     const infoPlist = readFileSync(infoPlistPath, "utf8");
-    expect(infoPlist).toContain("<string>Crew Skill Autoupdate</string>");
+    expect(infoPlist).toContain("<string>Homecrew Skill Autoupdate</string>");
     expect(infoPlist).toContain("<string>sh.crew.autoupdater</string>");
 
     // The launchd plist must also reference the bundle identifier.

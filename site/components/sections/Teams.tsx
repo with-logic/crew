@@ -15,9 +15,9 @@ const CARDS: readonly {
     title: "Your team's skills repo is your registry.",
     body: (
       <>
-        Point crew at a private GitHub repo once. Every new skill that lands on <code>main</code>{" "}
-        shows up in everyone's <code>crew search</code>. No internal tool to build. No package
-        server to run.
+        Point Homecrew at a private GitHub repo once. Every new skill that lands on{" "}
+        <code>main</code> shows up in everyone's <code>crew search</code>. No internal tool to
+        build. No package server to run.
       </>
     ),
   },
@@ -48,9 +48,9 @@ const CARDS: readonly {
     title: "Internal stays internal.",
     body: (
       <>
-        Crew clones taps with whatever git credentials you already have. Your private repo stays
-        private — crew never phones home, never uploads, never indexes anything outside the machines
-        you install it on.
+        Homecrew clones taps with whatever git credentials you already have. Your private repo stays
+        private — Homecrew never phones home, never uploads, never indexes anything outside the
+        machines you install it on.
       </>
     ),
   },
@@ -64,7 +64,7 @@ export function Teams() {
           number="08"
           label="For teams"
           title="Turn team know-how into installable skills."
-          description="Your team's best agent playbooks should not be trapped on one engineer's laptop. Crew turns a private git repo into a shared package source that people install from, review in PRs, and keep in sync without another internal service."
+          description="Your team's best agent playbooks should not be trapped on one engineer's laptop. Homecrew turns a private git repo into a shared package source that people install from, review in PRs, and keep in sync without another internal service."
         />
 
         <div className={styles.grid}>

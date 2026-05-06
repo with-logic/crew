@@ -22,7 +22,7 @@ export function Install() {
           <div className={styles.num}>
             § 02&nbsp;&nbsp;<strong>Installation</strong>
           </div>
-          <h2 className={styles.title}>Install Crew</h2>
+          <h2 className={styles.title}>Install Homecrew</h2>
         </header>
 
         <div className={styles.card}>
