@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0] — 2026-05-06
+
+### Changed
+
+- Rebranded the product from Crew to **Homecrew** across the website, README, CLI help text, installer script, and macOS autoupdate service label (`Homecrew Skill Autoupdate`). The `crew` executable, `~/.crew` directory, `.crew.json`, and `metadata.crew` file names are unchanged.
+- Added Logic App, Inc. copyright attribution to the MIT license and package metadata.
+
 ## [0.6.0] — 2026-04-23
 
 ### Added
