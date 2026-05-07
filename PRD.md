@@ -1320,6 +1320,34 @@ Each known tap entry has:
   `namespace` (`string | null`), `description`, and `path` (POSIX path relative
   to the tap root).
 
+Example registry sliver:
+
+```json
+[
+  {
+    "name": "supabase",
+    "url": "https://github.com/example/supabase-skills.git",
+    "subpath": "skills",
+    "description": "Supabase database, auth, storage, and edge function workflows.",
+    "trust": "curated",
+    "skills": [
+      {
+        "name": "schema-review",
+        "namespace": "database",
+        "description": "Review SQL migrations and RLS policies for correctness.",
+        "path": "database/schema-review"
+      },
+      {
+        "name": "auth-policy-audit",
+        "namespace": null,
+        "description": "Audit auth flows and access-control assumptions.",
+        "path": "auth-policy-audit"
+      }
+    ]
+  }
+]
+```
+
 Known-tap registry data is a hint. Before installing anything from a known tap,
 Homecrew still adds/clones the tap and resolves the skill from the cloned tap
 contents using the normal tap rules. If the upstream repo changed or disappeared
