@@ -925,7 +925,8 @@ Both endpoints emit the same JSON shape:
   "tag_name": "v0.4.0",
   "assets": [
     { "name": "crew-macos-arm64", "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.4.0/crew-macos-arm64" },
-    { "name": "crew-macos-x64",   "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.4.0/crew-macos-x64" }
+    { "name": "crew-macos-x64",   "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.4.0/crew-macos-x64" },
+    { "name": "SHA256SUMS",       "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.4.0/SHA256SUMS" }
   ]
 }
 ```
@@ -934,6 +935,12 @@ The shape matches GitHub's native release response so implementations
 don't need to branch on which endpoint returned the data. The static
 file's asset URLs point at GitHub release downloads (GitHub hosts the
 binaries, the site just advertises the pointer).
+
+Every release MUST publish a `SHA256SUMS` asset containing SHA-256 hashes
+for `crew-macos-arm64` and `crew-macos-x64`. The hosted installer
+(`https://crew.logic.inc/install.sh`) MUST download this file from the same
+release as the selected binary and verify the chosen asset before installing
+it. A checksum mismatch or missing checksum is a failed install.
 
 Implementations MAY accept `CREW_SELF_UPDATE_RELEASES_URL` to override
 the latest-release URL (used by tests and private forks).

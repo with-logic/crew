@@ -8,10 +8,11 @@
 # What it does:
 #   1. Detects your macOS CPU architecture (arm64 or x86_64).
 #   2. Downloads the latest crew release from GitHub.
-#   3. Installs to $CREW_INSTALL_PREFIX (default: ~/.local/bin).
-#   4. Clears the macOS quarantine attribute so Gatekeeper doesn't
+#   3. Verifies the binary against the release SHA256SUMS file.
+#   4. Installs to $CREW_INSTALL_PREFIX (default: ~/.local/bin).
+#   5. Clears the macOS quarantine attribute so Gatekeeper doesn't
 #      block the first run.
-#   5. Tells you how to put the install dir on your PATH if it isn't.
+#   6. Tells you how to put the install dir on your PATH if it isn't.
 #
 # Safe to re-run — upgrades in place.
 #
@@ -37,6 +38,7 @@ die()  { warn "$*"; exit 1; }
 [ "$(uname -s)" = "Darwin" ] || die "Homecrew is macOS-only for now. Linux and Windows are tracked but not yet shipping."
 
 command -v curl >/dev/null 2>&1 || die "\`curl\` is required but not on PATH."
+command -v shasum >/dev/null 2>&1 || die "\`shasum\` is required but not on PATH."
 
 arch="$(uname -m)"
 case "$arch" in
@@ -59,18 +61,35 @@ if [ -z "$version" ]; then
   [ -n "$version" ] || die "could not determine the latest release"
 fi
 
-url="https://github.com/$repo/releases/download/$version/$asset"
+base_url="https://github.com/$repo/releases/download/$version"
+url="$base_url/$asset"
+checksums_url="$base_url/SHA256SUMS"
 log "Downloading $asset ($version)"
 
-# ---------- Download to a tmp file --------------------------------------
+# ---------- Download and verify -----------------------------------------
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 tmpfile="$tmpdir/crew"
+checksums="$tmpdir/SHA256SUMS"
 
 if ! curl -fsSL -o "$tmpfile" "$url"; then
   die "download failed — $url was not reachable. Check the release page at https://github.com/$repo/releases for available versions."
 fi
+
+log "Verifying checksum"
+if ! curl -fsSL -o "$checksums" "$checksums_url"; then
+  die "checksum download failed — $checksums_url was not reachable. Refusing to install an unverified binary."
+fi
+
+expected="$(awk -v asset="$asset" '$2 == asset { print $1; found = 1 } END { if (!found) exit 1 }' "$checksums")" || {
+  die "checksum file did not contain an entry for $asset. Refusing to install."
+}
+actual="$(shasum -a 256 "$tmpfile" | awk '{ print $1 }')"
+if [ "$actual" != "$expected" ]; then
+  die "checksum mismatch for $asset. Expected $expected but got $actual. Refusing to install."
+fi
+ok "checksum verified"
 
 chmod +x "$tmpfile"
 
