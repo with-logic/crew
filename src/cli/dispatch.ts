@@ -40,15 +40,22 @@ export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   version: versionCommand,
 };
 
-const COMMAND_ALIASES: Record<string, string> = {
-  skills: "list",
-  taps: "tap",
+type CommandAlias = readonly [canonical: string, ...positionalPrefix: string[]];
+
+const COMMAND_ALIASES: Record<string, CommandAlias> = {
+  skills: ["list"],
+  taps: ["tap", "list"],
 };
 
 /** Dispatch a command name to its handler, returning the result. */
 export function dispatch(command: string, ctx: CommandContext): CommandOutput {
-  const canonical = COMMAND_ALIASES[command] ?? command;
-  const aliasCtx = command === "taps" ? { ...ctx, positional: ["list", ...ctx.positional] } : ctx;
+  const alias = COMMAND_ALIASES[command];
+  const canonical = alias?.[0] ?? command;
+  const positionalPrefix = alias?.slice(1) ?? [];
+  const aliasCtx =
+    positionalPrefix.length === 0
+      ? ctx
+      : { ...ctx, positional: [...positionalPrefix, ...ctx.positional] };
   const handler = COMMAND_HANDLERS[canonical];
   if (!handler) {
     throw new CrewError(

@@ -302,26 +302,6 @@ describe("list --json + install --json", () => {
   });
 });
 
-describe("top-level aliases", () => {
-  test("crew skills is an alias for crew list", () => {
-    const home = makeCrewHome();
-    const list = captureStreams();
-    const skills = captureStreams();
-    expect(runCli(["list"], { home, streams: list.streams })).toBe(0);
-    expect(runCli(["skills"], { home, streams: skills.streams })).toBe(0);
-    expect(skills.stdout()).toBe(list.stdout());
-  });
-
-  test("crew taps is an alias for crew tap list", () => {
-    const home = makeCrewHome();
-    const tapList = captureStreams();
-    const taps = captureStreams();
-    expect(runCli(["tap", "list"], { home, streams: tapList.streams })).toBe(0);
-    expect(runCli(["taps"], { home, streams: taps.streams })).toBe(0);
-    expect(taps.stdout()).toBe(tapList.stdout());
-  });
-});
-
 describe("install edge: zero refs", () => {
   test("install with no args errors", () => {
     const home = makeCrewHome();

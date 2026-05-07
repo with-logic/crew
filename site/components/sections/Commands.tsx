@@ -48,6 +48,15 @@ const GROUPS: readonly Group[] = [
         description: "List installed skills, grouped by scope, with sources and resolved SHAs.",
       },
       {
+        name: "skills",
+        signature: <>crew skills</>,
+        description: (
+          <>
+            Alias for <code>crew list</code>.
+          </>
+        ),
+      },
+      {
         name: "info",
         signature: <>crew info &lt;ref-or-name&gt;</>,
         description: "Show details for an installed skill or one available in a tap.",
@@ -86,6 +95,15 @@ const GROUPS: readonly Group[] = [
         name: "tap-list",
         signature: <>crew tap list</>,
         description: "Print each tap's name, URL, and last-fetched timestamp.",
+      },
+      {
+        name: "taps",
+        signature: <>crew taps</>,
+        description: (
+          <>
+            Alias for <code>crew tap list</code>.
+          </>
+        ),
       },
       {
         name: "tap-update",
