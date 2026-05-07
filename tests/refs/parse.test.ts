@@ -206,7 +206,7 @@ describe("parseRef: tap", () => {
     const r = parseRef("foo@bar");
     expect(r).toEqual({ type: "tap", tap: null, namespace: null, name: "foo", ref: "bar" });
   });
-  test("C-REF-21 tap refs are canonicalized to lowercase", () => {
+  test("C-REF-21 bare tap ref is canonicalized to lowercase", () => {
     expect(parseRef("BadName")).toEqual({
       type: "tap",
       tap: null,
@@ -215,7 +215,7 @@ describe("parseRef: tap", () => {
       ref: null,
     });
   });
-  test("C-REF-21 qualified tap refs are canonicalized to lowercase", () => {
+  test("C-REF-21 3-segment tap ref is canonicalized to lowercase", () => {
     expect(parseRef("Core/Tools/BadName@v1.0")).toEqual({
       type: "tap",
       tap: "core",

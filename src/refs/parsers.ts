@@ -15,7 +15,6 @@ import type { PathSource, TapSource } from "../core/types.ts";
 
 /** Matches a canonical Agent Skills name (also used for stored tap names). */
 export const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
-const TAP_REF_NAME_PATTERN = /^[a-z][a-z0-9-]*$/i;
 
 /** True if `ref` should be treated as a path source. */
 export function looksLikePath(ref: string): boolean {
@@ -65,22 +64,25 @@ export function parseTap(ref: string): TapSource {
         { ref },
       );
     }
+    const normalized: string[] = [];
     for (const p of parts) {
-      if (!TAP_REF_NAME_PATTERN.test(p)) {
+      const lower = p.toLowerCase();
+      if (!NAME_PATTERN.test(lower)) {
         throw new CrewError(
           "invalid_ref",
-          `\`${ref}\` isn't a valid tap reference — names must match [a-z][a-z0-9-]*, case-insensitively`,
+          `\`${ref}\` isn't a valid tap reference — names may only contain letters, digits, and hyphens`,
           { ref },
         );
       }
+      normalized.push(lower);
     }
     if (parts.length === 3) {
-      const [tap, namespace, name] = parts as [string, string, string];
+      const [tap, namespace, name] = normalized as [string, string, string];
       return {
         type: "tap",
-        tap: tap.toLowerCase(),
-        namespace: namespace.toLowerCase(),
-        name: name.toLowerCase(),
+        tap,
+        namespace,
+        name,
         ref: gitRef,
       };
     }
@@ -88,21 +90,22 @@ export function parseTap(ref: string): TapSource {
     // the resolver. We store the first segment in `tap` as the common
     // case; the resolver falls back to namespace interpretation if no
     // tap of that name exists.
-    const [first, second] = parts as [string, string];
+    const [first, second] = normalized as [string, string];
     return {
       type: "tap",
-      tap: first.toLowerCase(),
+      tap: first,
       namespace: null,
-      name: second.toLowerCase(),
+      name: second,
       ref: gitRef,
     };
   }
 
   // Bare name.
-  if (!TAP_REF_NAME_PATTERN.test(identifier)) {
+  const name = identifier.toLowerCase();
+  if (!NAME_PATTERN.test(name)) {
     throw new CrewError(
       "invalid_ref",
-      `\`${ref}\` isn't a valid skill name (must match [a-z][a-z0-9-]*, case-insensitively) or a known ref shape`,
+      `\`${ref}\` isn't a valid skill name (names may only contain letters, digits, and hyphens) or a known ref shape`,
       { ref },
     );
   }
@@ -110,7 +113,7 @@ export function parseTap(ref: string): TapSource {
     type: "tap",
     tap: null,
     namespace: null,
-    name: identifier.toLowerCase(),
+    name,
     ref: gitRef,
   };
 }
