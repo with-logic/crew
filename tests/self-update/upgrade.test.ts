@@ -27,6 +27,8 @@ import {
 import { runSelfUpdate, runSelfUpdateCheck } from "../../src/self-update/upgrade.ts";
 import { makeCrewHome } from "../helpers/env.ts";
 import {
+  CHECKSUMS_SIGNATURE_URL,
+  CHECKSUMS_URL,
   checksumTextFor,
   currentAssetName,
   downloaderForBinary,
@@ -161,6 +163,26 @@ describe("runSelfUpdate", () => {
     expect(() => runSelfUpdate({ home, force: false, execPath: dest })).toThrow(/SHA256SUMS\.sig/);
   });
 
+  test("legacy v0.7.0 release can update without a checksum signature asset", () => {
+    const home = makeCrewHome();
+    const dest = join(home, "crew-bin");
+    writeFileSync(dest, "OLD");
+
+    setReleaseFetcher(() => ({
+      tag: "v0.7.0",
+      assets: {
+        [currentAssetName()]: "https://example.com/asset",
+        SHA256SUMS: CHECKSUMS_URL,
+      },
+    }));
+    setAssetDownloader(downloaderForBinary("NEW"));
+    setXattrClearer(() => {});
+
+    const result = runSelfUpdate({ home, force: true, execPath: dest });
+    expect(result.replaced).toBe(true);
+    expect(readFileSync(dest, "utf8")).toBe("NEW");
+  });
+
   test("checksum mismatch leaves the old binary in place", () => {
     const home = makeCrewHome();
     const dest = join(home, "crew-bin");
@@ -168,7 +190,10 @@ describe("runSelfUpdate", () => {
 
     setReleaseFetcher(() => ({ tag: "v99.99.99", assets: releaseAssets() }));
     setAssetDownloader((url, destPath) => {
-      const body = url.includes("SHA256SUMS") ? checksumTextFor("EXPECTED") : "TAMPERED";
+      const body =
+        url === CHECKSUMS_URL || url === CHECKSUMS_SIGNATURE_URL
+          ? checksumTextFor("EXPECTED")
+          : "TAMPERED";
       writeFileSync(destPath, body);
     });
     setReleaseSignatureVerifier(() => true);
