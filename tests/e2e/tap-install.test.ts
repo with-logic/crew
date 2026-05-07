@@ -127,7 +127,7 @@ describe("tap source install", () => {
     const code = runCli(["install", "alpha"], {
       home,
       streams: c.streams,
-      prompt: () => "abort",
+      promptChoice: () => "abort",
     });
     expect(code).toBe(4);
     expect(c.stderr()).toContain("ambiguous across taps");
