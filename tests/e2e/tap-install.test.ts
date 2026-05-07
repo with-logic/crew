@@ -148,8 +148,14 @@ describe("tap source install", () => {
       streams: captureStreams().streams,
     });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
-    const code = runCli(["install", "alpha"], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    const code = runCli(["install", "alpha"], {
+      home,
+      streams: c.streams,
+      promptChoice: () => "abort",
+    });
     expect(code).toBe(4);
+    expect(c.stderr()).toContain("ambiguous across taps");
   });
 
   test("bare dependency falls back to parent's tap", () => {
