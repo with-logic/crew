@@ -206,11 +206,23 @@ describe("parseRef: tap", () => {
     const r = parseRef("foo@bar");
     expect(r).toEqual({ type: "tap", tap: null, namespace: null, name: "foo", ref: "bar" });
   });
-  test("invalid name fails", () => {
-    expect(() => parseRef("BadName")).toThrow();
+  test("C-REF-21 bare tap ref is canonicalized to lowercase", () => {
+    expect(parseRef("BadName")).toEqual({
+      type: "tap",
+      tap: null,
+      namespace: null,
+      name: "badname",
+      ref: null,
+    });
   });
-  test("invalid qualified name fails", () => {
-    expect(() => parseRef("tap/BadName")).toThrow();
+  test("C-REF-21 3-segment tap ref is canonicalized to lowercase", () => {
+    expect(parseRef("Core/Tools/BadName@v1.0")).toEqual({
+      type: "tap",
+      tap: "core",
+      namespace: "tools",
+      name: "badname",
+      ref: "v1.0",
+    });
   });
   test("3-segment tap/namespace/skill parses unambiguously", () => {
     const r = parseRef("acme/marketing/copy-review");
@@ -236,7 +248,7 @@ describe("parseRef: tap", () => {
     expect(() => parseRef("a/b/c/d")).toThrow(/too many/);
   });
   test("3-segment with an invalid part fails", () => {
-    expect(() => parseRef("tap/Namespace/skill")).toThrow();
+    expect(() => parseRef("tap/bad_name/skill")).toThrow();
   });
   test("C-REF-17 empty string fails", () => {
     expect(() => parseRef("")).toThrow(CrewError);
