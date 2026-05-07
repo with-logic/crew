@@ -472,8 +472,9 @@ without disturbing your real `~/.crew`.
 
 ### Contributing
 
-Please read [`CLAUDE.md`](./CLAUDE.md) before making changes — it's the
-briefing for anyone (human or AI) working on the code. Highlights:
+Please read [`CONTRIBUTING.md`](./CONTRIBUTING.md) first. If you're changing
+code, also read [`CLAUDE.md`](./CLAUDE.md) — it's the implementation briefing
+for anyone (human or AI) working in this repository. Highlights:
 
 - [`PRD.md`](./PRD.md) is the spec and the contract. If a change is
   observable by an external observer (new command, new flag, new error
@@ -490,6 +491,11 @@ briefing for anyone (human or AI) working on the code. Highlights:
 - Errors are `CrewError(code, message, details)` with a stable machine name
   (PRD §13) and a fixed exit code (PRD §15). Never `throw new Error(...)`
   for a user-visible failure.
+
+### Security
+
+Please report security issues privately to security@logic.inc. See
+[`SECURITY.md`](./SECURITY.md) for scope and reporting details.
 
 ### License
 
