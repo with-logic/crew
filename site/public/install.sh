@@ -77,6 +77,8 @@ if ! curl -fsSL -o "$tmpfile" "$url"; then
   die "download failed — $url was not reachable. Check the release page at https://github.com/$repo/releases for available versions."
 fi
 
+# Integrity check: same-source means this catches corruption in transit,
+# not a compromised release. Signature verification is planned next.
 log "Verifying checksum"
 if ! curl -fsSL -o "$checksums" "$checksums_url"; then
   die "checksum download failed — $checksums_url was not reachable. Refusing to install an unverified binary."
