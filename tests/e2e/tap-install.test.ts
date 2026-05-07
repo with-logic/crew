@@ -81,6 +81,19 @@ describe("tap source install", () => {
     expect(existsSync(join(ccRoot, "alpha"))).toBe(true);
   });
 
+  test("bare skill install is case-insensitive", () => {
+    const home = makeCrewHome();
+    const repo = buildTapRepo();
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "Alpha"], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+    expect(existsSync(join(ccRoot, "alpha"))).toBe(true);
+  });
+
   test("qualified tap ref", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
@@ -90,6 +103,18 @@ describe("tap source install", () => {
     });
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const code = runCli(["install", "mytap/alpha"], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+  });
+
+  test("qualified tap ref is case-insensitive", () => {
+    const home = makeCrewHome();
+    const repo = buildTapRepo();
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "MyTap/Alpha"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
   });
 

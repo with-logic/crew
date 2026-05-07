@@ -13,8 +13,9 @@ import { isAbsolute, resolve } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { PathSource, TapSource } from "../core/types.ts";
 
-/** Matches an Agent Skills name (also used for tap names). */
+/** Matches a canonical Agent Skills name (also used for stored tap names). */
 export const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
+const TAP_REF_NAME_PATTERN = /^[a-z][a-z0-9-]*$/i;
 
 /** True if `ref` should be treated as a path source. */
 export function looksLikePath(ref: string): boolean {
@@ -65,33 +66,51 @@ export function parseTap(ref: string): TapSource {
       );
     }
     for (const p of parts) {
-      if (!NAME_PATTERN.test(p)) {
+      if (!TAP_REF_NAME_PATTERN.test(p)) {
         throw new CrewError(
           "invalid_ref",
-          `\`${ref}\` isn't a valid tap reference — names must match [a-z][a-z0-9-]*`,
+          `\`${ref}\` isn't a valid tap reference — names must match [a-z][a-z0-9-]*, case-insensitively`,
           { ref },
         );
       }
     }
     if (parts.length === 3) {
       const [tap, namespace, name] = parts as [string, string, string];
-      return { type: "tap", tap, namespace, name, ref: gitRef };
+      return {
+        type: "tap",
+        tap: tap.toLowerCase(),
+        namespace: namespace.toLowerCase(),
+        name: name.toLowerCase(),
+        ref: gitRef,
+      };
     }
     // 2-segment: leave disambiguation (tap/skill vs namespace/skill) to
     // the resolver. We store the first segment in `tap` as the common
     // case; the resolver falls back to namespace interpretation if no
     // tap of that name exists.
     const [first, second] = parts as [string, string];
-    return { type: "tap", tap: first, namespace: null, name: second, ref: gitRef };
+    return {
+      type: "tap",
+      tap: first.toLowerCase(),
+      namespace: null,
+      name: second.toLowerCase(),
+      ref: gitRef,
+    };
   }
 
   // Bare name.
-  if (!NAME_PATTERN.test(identifier)) {
+  if (!TAP_REF_NAME_PATTERN.test(identifier)) {
     throw new CrewError(
       "invalid_ref",
-      `\`${ref}\` isn't a valid skill name (must match [a-z][a-z0-9-]*) or a known ref shape`,
+      `\`${ref}\` isn't a valid skill name (must match [a-z][a-z0-9-]*, case-insensitively) or a known ref shape`,
       { ref },
     );
   }
-  return { type: "tap", tap: null, namespace: null, name: identifier, ref: gitRef };
+  return {
+    type: "tap",
+    tap: null,
+    namespace: null,
+    name: identifier.toLowerCase(),
+    ref: gitRef,
+  };
 }
