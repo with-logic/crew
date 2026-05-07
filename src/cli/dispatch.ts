@@ -40,9 +40,23 @@ export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   version: versionCommand,
 };
 
+type CommandAlias = readonly [canonical: string, ...positionalPrefix: string[]];
+
+const COMMAND_ALIASES: Record<string, CommandAlias> = {
+  skills: ["list"],
+  taps: ["tap", "list"],
+};
+
 /** Dispatch a command name to its handler, returning the result. */
 export function dispatch(command: string, ctx: CommandContext): CommandOutput {
-  const handler = COMMAND_HANDLERS[command];
+  const alias = COMMAND_ALIASES[command];
+  const canonical = alias?.[0] ?? command;
+  const positionalPrefix = alias?.slice(1) ?? [];
+  const aliasCtx =
+    positionalPrefix.length === 0
+      ? ctx
+      : { ...ctx, positional: [...positionalPrefix, ...ctx.positional] };
+  const handler = COMMAND_HANDLERS[canonical];
   if (!handler) {
     throw new CrewError(
       "usage_error",
@@ -50,5 +64,5 @@ export function dispatch(command: string, ctx: CommandContext): CommandOutput {
       { command },
     );
   }
-  return handler(ctx);
+  return handler(aliasCtx);
 }

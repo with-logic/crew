@@ -14,7 +14,9 @@ import { installHelp } from "./install.ts";
 import { listHelp } from "./list.ts";
 import { searchHelp } from "./search.ts";
 import { selfUpdateHelp } from "./self-update.ts";
+import { skillsHelp } from "./skills.ts";
 import { tapHelp } from "./tap.ts";
+import { tapsHelp } from "./taps.ts";
 import type { CommandHelp } from "./types.ts";
 import { uninstallHelp } from "./uninstall.ts";
 import { updateHelp } from "./update.ts";
@@ -29,8 +31,11 @@ export interface CommandGroup {
 }
 
 export const GROUPS: readonly CommandGroup[] = [
-  { title: "Managing skills", commands: ["install", "uninstall", "update", "list", "info"] },
-  { title: "Discovery", commands: ["search", "tap"] },
+  {
+    title: "Managing skills",
+    commands: ["install", "uninstall", "update", "list", "skills", "info"],
+  },
+  { title: "Discovery", commands: ["search", "tap", "taps"] },
   { title: "Agents & automation", commands: ["agents", "autoupdate"] },
   { title: "Housekeeping", commands: ["doctor", "cache", "self-update"] },
   { title: "Meta", commands: ["help", "version"] },
@@ -41,9 +46,11 @@ export const COMMANDS: Record<string, CommandHelp> = {
   uninstall: uninstallHelp,
   update: updateHelp,
   list: listHelp,
+  skills: skillsHelp,
   info: infoHelp,
   search: searchHelp,
   tap: tapHelp,
+  taps: tapsHelp,
   agents: agentsHelp,
   autoupdate: autoupdateHelp,
   doctor: doctorHelp,
@@ -59,9 +66,11 @@ export const ONELINERS: Record<string, string> = {
   uninstall: "Remove a skill (use --prune to tidy up leftovers).",
   update: "Catch installed skills up to the latest.",
   list: "See what you have installed.",
+  skills: "Alias for `list`.",
   info: "Get the details on a skill.",
   search: "Look for a skill by name or description.",
   tap: "Manage the collections you install from.",
+  taps: "Alias for `tap list`.",
   agents: "See or adjust which agent coders Homecrew touches.",
   autoupdate: "Keep skills up to date in the background.",
   doctor: "Check Homecrew's health; fix what's fixable.",
