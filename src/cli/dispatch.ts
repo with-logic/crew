@@ -13,7 +13,7 @@ import { helpCommand, versionCommand } from "../commands/help/index.ts";
 import { infoCommand } from "../commands/info/index.ts";
 import { installCommand } from "../commands/install/index.ts";
 import { listCommand } from "../commands/list.ts";
-import { searchCommand } from "../commands/search.ts";
+import { searchCommand } from "../commands/search/index.ts";
 import { selfUpdateCommand } from "../commands/self-update.ts";
 import { tapCommand } from "../commands/tap/index.ts";
 import type { CommandContext, CommandOutput } from "../commands/types.ts";
