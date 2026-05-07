@@ -12,6 +12,7 @@ export function searchKnownTaps(
   const normalized = query.trim().toLowerCase();
   const hits: KnownTapHit[] = [];
   for (const tap of registry) {
+    // A tap-level match deliberately includes every skill in that tap.
     const tapMatches = knownTapMatches(tap, normalized);
     for (const skill of tap.skills) {
       if (tapMatches || knownTapSkillMatches(skill, normalized)) hits.push({ tap, skill });
@@ -25,8 +26,9 @@ export function findKnownTapByName(
   name: string,
   registry: readonly KnownTap[] = KNOWN_TAPS,
 ): KnownTap | null {
+  // Case-insensitive exact lookup; use searchKnownTaps for fuzzy queries.
   for (const tap of registry) {
-    if (tap.name === name) return tap;
+    if (sameText(tap.name, name)) return tap;
   }
   return null;
 }
@@ -36,8 +38,9 @@ export function findKnownTapSkill(
   name: string,
   namespace: string | null = null,
 ): KnownTapSkill | null {
+  // Case-insensitive exact lookup; use searchKnownTaps for fuzzy queries.
   for (const skill of tap.skills) {
-    if (skill.name === name && skill.namespace === namespace) return skill;
+    if (sameText(skill.name, name) && sameNullableText(skill.namespace, namespace)) return skill;
   }
   return null;
 }
@@ -58,6 +61,15 @@ function knownTapMatches(tap: KnownTap, query: string): boolean {
 function knownTapSkillMatches(skill: KnownTapSkill, query: string): boolean {
   const label = knownTapSkillLabel(skill).toLowerCase();
   return query === "" || skill.description.toLowerCase().includes(query) || label.includes(query);
+}
+
+function sameText(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+function sameNullableText(a: string | null, b: string | null): boolean {
+  if (a === null || b === null) return a === b;
+  return sameText(a, b);
 }
 
 function compareKnownTapHits(a: KnownTapHit, b: KnownTapHit): number {

@@ -1310,9 +1310,10 @@ populate the registry.
 Each known tap entry has:
 
 - `name` — the tap name crew would use if the user chooses to add it.
-- `url` — git clone URL.
+- `url` — git clone URL. All known taps are git taps; path-kind taps are local
+  user state and are never shipped in the known-tap registry.
 - `subpath` — POSIX path inside the repo that forms the tap root; empty for repo
-  root.
+  root, represented as the empty string `""`.
 - `description` — short human-readable tap description.
 - `trust` — either `official` (published by the owner of the tool/service the tap
   represents) or `curated` (reviewed and selected by the Homecrew maintainers).
@@ -1347,6 +1348,11 @@ Example registry sliver:
   }
 ]
 ```
+
+When a command searches the known-tap registry, matching is case-insensitive. If
+the query matches a tap's `name` or `description`, every skill in that tap is
+included in the result set; if it matches only skill metadata, only matching
+skills are included.
 
 Known-tap registry data is a hint. Before installing anything from a known tap,
 Homecrew still adds/clones the tap and resolves the skill from the cloned tap

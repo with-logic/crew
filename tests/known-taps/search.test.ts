@@ -72,7 +72,7 @@ describe("searchKnownTaps", () => {
     ]);
   });
 
-  test("name and label matching is case-insensitive", () => {
+  test("tap name matching is case-insensitive", () => {
     const mixedCaseRegistry: readonly KnownTap[] = [
       {
         name: "OpenAI",
@@ -94,6 +94,27 @@ describe("searchKnownTaps", () => {
     expect(searchKnownTaps("openai", mixedCaseRegistry).map((h) => h.skill.name)).toEqual([
       "Prompt-Eval",
     ]);
+  });
+
+  test("namespaced skill label matching is case-insensitive", () => {
+    const mixedCaseRegistry: readonly KnownTap[] = [
+      {
+        name: "OpenAI",
+        url: "https://github.com/openai/agent-skills.git",
+        subpath: "",
+        description: "API workflows",
+        trust: "official",
+        skills: [
+          {
+            name: "Prompt-Eval",
+            namespace: "Evals",
+            description: "Run checks",
+            path: "Evals/Prompt-Eval",
+          },
+        ],
+      },
+    ];
+
     expect(searchKnownTaps("evals/prompt", mixedCaseRegistry).map((h) => h.skill.name)).toEqual([
       "Prompt-Eval",
     ]);
@@ -105,17 +126,23 @@ describe("searchKnownTaps", () => {
 });
 
 describe("known tap lookup", () => {
-  test("findKnownTapByName returns exact matches only", () => {
-    expect(findKnownTapByName("openai", registry)?.url).toContain("openai");
-    expect(findKnownTapByName("OpenAI", registry)).toBeNull();
+  test("findKnownTapByName returns null when the registry is empty", () => {
+    expect(findKnownTapByName("anything", [])).toBeNull();
   });
 
-  test("findKnownTapSkill respects namespace", () => {
+  test("findKnownTapByName returns case-insensitive exact matches only", () => {
+    expect(findKnownTapByName("openai", registry)?.url).toContain("openai");
+    expect(findKnownTapByName("OpenAI", registry)?.url).toContain("openai");
+    expect(findKnownTapByName("open", registry)).toBeNull();
+  });
+
+  test("findKnownTapSkill uses case-insensitive exact name and namespace", () => {
     const tap = registry[0]!;
-    expect(findKnownTapSkill(tap, "schema-review", "database")?.path).toBe(
+    expect(findKnownTapSkill(tap, "Schema-Review", "Database")?.path).toBe(
       "skills/database/schema-review",
     );
     expect(findKnownTapSkill(tap, "schema-review")).toBeNull();
+    expect(findKnownTapSkill(tap, "schema", "database")).toBeNull();
   });
 
   test("tapConfigFromKnownTap creates a registered git tap config", () => {
