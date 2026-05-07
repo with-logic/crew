@@ -1,13 +1,19 @@
-# Claude Code PR review — runs automatically on every opened PR.
+# Claude Code PR review + mention responder.
 #
-# Posts a review with inline comments grounded in CLAUDE.md's working
-# agreement and standards. Uses sonnet (fast, cheap, plenty capable
-# for code review).
+# On PR open, posts a review grounded in CLAUDE.md's working agreement
+# and standards. On @claude mentions in PR comments/reviews/inline
+# review comments, lets Claude respond to the user's request directly.
 name: Claude Code
 
 on:
   pull_request:
     types: [opened]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
 
 jobs:
   claude-review-pr:
@@ -53,3 +59,53 @@ jobs:
           claude_args: |
             --model claude-sonnet-4-6
             --allowedTools Bash,View,WebFetch,WebSearch,Glob,Grep
+
+  claude-mention:
+    name: "Claude: Respond to mention"
+    if: |
+      (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' &&
+        contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' &&
+        contains(github.event.review.body, '@claude'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Resolve PR head
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          gh pr view "$PR_NUMBER" \
+            --json headRepository,headRefName \
+            --jq '"repo=\(.headRepository.nameWithOwner)\nref=\(.headRefName)"' >> "$GITHUB_OUTPUT"
+
+      - name: Checkout PR head
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ steps.pr.outputs.repo }}
+          ref: ${{ steps.pr.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          path_to_bun_executable: ~/.bun/bin/bun
+          claude_args: |
+            --model claude-sonnet-4-6
+            --allowedTools Bash,Read,View,Edit,Write,MultiEdit,WebFetch,WebSearch,Glob,Grep
