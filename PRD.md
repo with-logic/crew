@@ -1293,6 +1293,38 @@ acme-skills/
 
 Homecrew ships with a registered default tap named `core` at a URL specified by the implementation's build. The default tap is always listed first in `crew tap list` and cannot be removed via `crew tap remove core` unless `--force` is used.
 
+### 16.2.1 Known tap registry
+
+Homecrew MAY ship a bundled registry of known-but-untapped skill taps. This
+registry is a local discovery artifact, not a configured tap list: entries do
+not appear in `crew tap list`, are not cloned automatically, and do not affect
+install/search behavior unless a command section explicitly says it consults the
+known-tap registry.
+
+The registry exists to solve the blank-canvas problem without cloning many repos
+on first run. Implementations SHOULD build it ahead of release by indexing a
+curated set of trusted taps, then ship the resulting compact snapshot in the
+binary/site assets. A client MUST NOT clone or fetch every known tap merely to
+populate the registry.
+
+Each known tap entry has:
+
+- `name` — the tap name crew would use if the user chooses to add it.
+- `url` — git clone URL.
+- `subpath` — POSIX path inside the repo that forms the tap root; empty for repo
+  root.
+- `description` — short human-readable tap description.
+- `trust` — either `official` (published by the owner of the tool/service the tap
+  represents) or `curated` (reviewed and selected by the Homecrew maintainers).
+- `skills` — precomputed skill summaries. Each skill summary has `name`,
+  `namespace` (`string | null`), `description`, and `path` (POSIX path relative
+  to the tap root).
+
+Known-tap registry data is a hint. Before installing anything from a known tap,
+Homecrew still adds/clones the tap and resolves the skill from the cloned tap
+contents using the normal tap rules. If the upstream repo changed or disappeared
+since the registry was built, the normal tap-add or install error applies.
+
 ### 16.3 Tap management
 
 - `crew tap add <url-or-path> [<name>]` registers a tap.
