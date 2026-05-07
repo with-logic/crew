@@ -112,6 +112,24 @@ describe("C-NS-03 3-segment install", () => {
     expect(state.installations.length).toBe(1);
     expect(state.installations[0]!.name).toBe("email-outreach");
   });
+
+  test("tap/ns/skill is case-insensitive", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repo = buildNamespacedTap("ns-3seg-case-", {
+      marketing: ["email-outreach"],
+    });
+    runCli(["tap", "add", `file://${repo}`, "acme"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    const code = runCli(["install", "Acme/Marketing/Email-Outreach"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(code).toBe(0);
+    expect(readState(home).installations[0]!.name).toBe("email-outreach");
+  });
 });
 
 describe("C-NS-04 2-segment ns/skill", () => {

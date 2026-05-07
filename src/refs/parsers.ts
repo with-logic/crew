@@ -13,7 +13,7 @@ import { isAbsolute, resolve } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { PathSource, TapSource } from "../core/types.ts";
 
-/** Matches an Agent Skills name (also used for tap names). */
+/** Matches a canonical Agent Skills name (also used for stored tap names). */
 export const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
 
 /** True if `ref` should be treated as a path source. */
@@ -64,34 +64,56 @@ export function parseTap(ref: string): TapSource {
         { ref },
       );
     }
+    const normalized: string[] = [];
     for (const p of parts) {
-      if (!NAME_PATTERN.test(p)) {
+      const lower = p.toLowerCase();
+      if (!NAME_PATTERN.test(lower)) {
         throw new CrewError(
           "invalid_ref",
-          `\`${ref}\` isn't a valid tap reference — names must match [a-z][a-z0-9-]*`,
+          `\`${ref}\` isn't a valid tap reference — names may only contain letters, digits, and hyphens`,
           { ref },
         );
       }
+      normalized.push(lower);
     }
     if (parts.length === 3) {
-      const [tap, namespace, name] = parts as [string, string, string];
-      return { type: "tap", tap, namespace, name, ref: gitRef };
+      const [tap, namespace, name] = normalized as [string, string, string];
+      return {
+        type: "tap",
+        tap,
+        namespace,
+        name,
+        ref: gitRef,
+      };
     }
     // 2-segment: leave disambiguation (tap/skill vs namespace/skill) to
     // the resolver. We store the first segment in `tap` as the common
     // case; the resolver falls back to namespace interpretation if no
     // tap of that name exists.
-    const [first, second] = parts as [string, string];
-    return { type: "tap", tap: first, namespace: null, name: second, ref: gitRef };
+    const [first, second] = normalized as [string, string];
+    return {
+      type: "tap",
+      tap: first,
+      namespace: null,
+      name: second,
+      ref: gitRef,
+    };
   }
 
   // Bare name.
-  if (!NAME_PATTERN.test(identifier)) {
+  const name = identifier.toLowerCase();
+  if (!NAME_PATTERN.test(name)) {
     throw new CrewError(
       "invalid_ref",
-      `\`${ref}\` isn't a valid skill name (must match [a-z][a-z0-9-]*) or a known ref shape`,
+      `\`${ref}\` isn't a valid skill name (names may only contain letters, digits, and hyphens) or a known ref shape`,
       { ref },
     );
   }
-  return { type: "tap", tap: null, namespace: null, name: identifier, ref: gitRef };
+  return {
+    type: "tap",
+    tap: null,
+    namespace: null,
+    name,
+    ref: gitRef,
+  };
 }

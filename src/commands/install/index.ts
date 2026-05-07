@@ -123,6 +123,7 @@ function resolveCollisions(ctx: CommandContext, config: Config): string[] {
   const kindHint = readKindHint(ctx);
   for (const raw of ctx.positional) {
     const trimmed = raw.trim();
+    const canonical = trimmed.toLowerCase();
     if (!isBareName(trimmed)) {
       refs.push(raw);
       continue;
@@ -132,9 +133,9 @@ function resolveCollisions(ctx: CommandContext, config: Config): string[] {
       refs.push(raw);
       continue;
     }
-    const collision = detectCollision(trimmed, config, ctx.home);
+    const collision = detectCollision(canonical, config, ctx.home);
     if (collision && !ctx.flags.yes) {
-      refs.push(promptForCollision(ctx, collision, trimmed, raw));
+      refs.push(promptForCollision(ctx, collision, canonical, raw));
       continue;
     }
     if (collision) {
@@ -143,7 +144,7 @@ function resolveCollisions(ctx: CommandContext, config: Config): string[] {
     }
     // No tap-vs-other-tap-skill collision. Check for bare-name
     // ambiguity across skills and namespaces (§8.3).
-    refs.push(promptBareNameAmbiguity(ctx, config, trimmed, raw));
+    refs.push(promptBareNameAmbiguity(ctx, config, canonical, raw));
   }
   return refs;
 }
