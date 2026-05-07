@@ -15,6 +15,8 @@ import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
 import { runCli } from "../../src/cli/main.ts";
+import { resetKnownTapsForTest, setKnownTapsForTest } from "../../src/known-taps/registry.ts";
+import type { KnownTap } from "../../src/known-taps/types.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
   commitAll,
@@ -54,9 +56,51 @@ beforeEach(() => {
     (geminiCliAdapter as { detect: () => boolean }).detect = originals.ge.d;
   };
 });
-afterEach(() => restoreAdapters());
+afterEach(() => {
+  restoreAdapters();
+  resetKnownTapsForTest();
+});
 
 describe("crew search output", () => {
+  const knownRegistry: readonly KnownTap[] = [
+    {
+      name: "supabase",
+      url: "https://github.com/example/supabase-skills.git",
+      subpath: "skills",
+      description: "Supabase database workflows.",
+      trust: "curated",
+      skills: [
+        {
+          name: "schema-review",
+          namespace: "database",
+          description: "Review SQL migrations and RLS policies.",
+          path: "database/schema-review",
+        },
+        {
+          name: "auth-audit",
+          namespace: null,
+          description: "Audit auth flows.",
+          path: "auth-audit",
+        },
+      ],
+    },
+    {
+      name: "openai",
+      url: "https://github.com/example/openai-skills.git",
+      subpath: "",
+      description: "OpenAI prompt workflows.",
+      trust: "official",
+      skills: [
+        {
+          name: "prompt-eval",
+          namespace: null,
+          description: "Evaluate prompt behavior.",
+          path: "prompt-eval",
+        },
+      ],
+    },
+  ];
+
   function makeTestTap(prefix: string, skills: readonly { name: string; desc: string }[]): string {
     const repo = makeTempDir(prefix);
     makeGitRepo(repo);
@@ -142,6 +186,155 @@ describe("crew search output", () => {
     expect(code).toBe(0);
     expect(c.stdout()).toContain("No skills match");
     expect(c.stdout()).toContain("no-such-thing");
+  });
+
+  test("C-TAP-23 search miss suggests known taps without adding them", () => {
+    const home = makeCrewHome();
+    setKnownTapsForTest(knownRegistry);
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    const code = runCli(["search", "schema"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    const out = c.stdout();
+    expect(out).toContain('No skills match "schema" in configured taps.');
+    expect(out).toContain("Known taps not added yet");
+    expect(out).toContain("supabase");
+    expect(out).toContain("database/schema-review");
+    expect(out).toContain(
+      "tap with: crew tap add https://github.com/example/supabase-skills.git//skills supabase",
+    );
+    expect(out).toContain("crew install supabase/database/schema-review");
+
+    const listed = captureStreams();
+    runCli(["tap", "list"], { home, streams: listed.streams });
+    expect(listed.stdout()).not.toContain("supabase");
+  });
+
+  test("C-TAP-23 search miss reports known hits in JSON", () => {
+    const home = makeCrewHome();
+    setKnownTapsForTest(knownRegistry);
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    runCli(["search", "--json", "schema"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout()) as {
+      hits: unknown[];
+      known_hits: {
+        tap: string;
+        url: string;
+        subpath: string;
+        trust: string;
+        name: string;
+        namespace: string | null;
+        description: string;
+      }[];
+      warnings: string[];
+    };
+    expect(parsed.hits).toEqual([]);
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.known_hits).toEqual([
+      {
+        tap: "supabase",
+        url: "https://github.com/example/supabase-skills.git",
+        subpath: "skills",
+        trust: "curated",
+        name: "schema-review",
+        namespace: "database",
+        description: "Review SQL migrations and RLS policies.",
+      },
+    ]);
+  });
+
+  test("C-TAP-23 known root taps render add commands without subpath", () => {
+    const home = makeCrewHome();
+    setKnownTapsForTest(knownRegistry);
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const c = captureStreams();
+    runCli(["search", "openai"], { home, streams: c.streams });
+    expect(c.stdout()).toContain(
+      "tap with: crew tap add https://github.com/example/openai-skills.git openai",
+    );
+  });
+
+  test("C-TAP-23 configured matches are followed by known-tap suggestions", () => {
+    const home = makeCrewHome();
+    setKnownTapsForTest(knownRegistry);
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repo = makeTestTap("crew-search-configured-first-", [
+      { name: "schema-local", desc: "configured schema helper" },
+    ]);
+    runCli(["tap", "add", `file://${repo}`, "local"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    const c = captureStreams();
+    runCli(["search", "--json", "schema"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout()) as {
+      hits: unknown[];
+      known_hits: { tap: string; name: string }[];
+    };
+    expect(parsed.hits).toHaveLength(1);
+    expect(parsed.known_hits.map((h) => ({ tap: h.tap, name: h.name }))).toEqual([
+      { tap: "supabase", name: "schema-review" },
+    ]);
+  });
+
+  test("C-TAP-23 configured known taps are not suggested", () => {
+    const home = makeCrewHome();
+    setKnownTapsForTest(knownRegistry);
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repo = makeTestTap("crew-search-known-configured-", [
+      { name: "schema-local", desc: "configured schema helper" },
+    ]);
+    runCli(["tap", "add", `file://${repo}`, "supabase"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    const c = captureStreams();
+    runCli(["search", "--json", "schema"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout()) as { hits: unknown[]; known_hits: unknown[] };
+    expect(parsed.hits).toHaveLength(1);
+    expect(parsed.known_hits).toEqual([]);
+  });
+
+  test("C-TAP-23 configured known tap sources are not suggested under another name", () => {
+    const home = makeCrewHome();
+    setKnownTapsForTest(knownRegistry);
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repo = makeTempDir("crew-search-known-source-configured-");
+    makeGitRepo(repo);
+    const skillsDir = join(repo, "skills");
+    mkdirSync(skillsDir);
+    makeSkill(
+      skillsDir,
+      "schema-local",
+      skillFrontmatter({ name: "schema-local", description: "configured schema helper" }),
+    );
+    commitAll(repo, "init");
+    runCli(["tap", "add", `file://${repo}//skills`, "renamed-supabase"], {
+      home,
+      streams: captureStreams().streams,
+    });
+
+    const { readConfig, writeConfig } =
+      require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
+    const cfg = readConfig(home);
+    writeConfig(
+      {
+        ...cfg,
+        taps: cfg.taps.map((tap) =>
+          tap.name === "renamed-supabase" && tap.kind === "git"
+            ? { ...tap, url: "https://github.com/example/supabase-skills.git" }
+            : tap,
+        ),
+      },
+      home,
+    );
+
+    const c = captureStreams();
+    runCli(["search", "--json", "schema"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout()) as { hits: unknown[]; known_hits: unknown[] };
+    expect(parsed.hits).toHaveLength(1);
+    expect(parsed.known_hits).toEqual([]);
   });
 
   test("long descriptions are truncated to fit the terminal width", () => {
@@ -290,13 +483,15 @@ describe("crew search output", () => {
     expect(parsed.hits[0]!.namespace).toBe("marketing");
   });
 
-  test("empty config: no-query reports 'No skills in any configured tap'", () => {
+  test("C-TAP-23 no-query ignores the known-tap registry", () => {
     const home = makeCrewHome();
+    setKnownTapsForTest(knownRegistry);
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const c = captureStreams();
     const code = runCli(["search"], { home, streams: c.streams });
     expect(code).toBe(0);
     expect(c.stdout()).toContain("No skills in any configured tap");
+    expect(c.stdout()).not.toContain("Known taps not added yet");
   });
 
   test("unreachable tap produces a warning", () => {

@@ -2,12 +2,12 @@
  * Search helpers for the bundled known-tap registry (§16.2.1).
  */
 
-import { KNOWN_TAPS } from "./registry.ts";
+import { getKnownTaps } from "./registry.ts";
 import type { KnownTap, KnownTapHit, KnownTapSkill } from "./types.ts";
 
 export function searchKnownTaps(
   query: string,
-  registry: readonly KnownTap[] = KNOWN_TAPS,
+  registry: readonly KnownTap[] = getKnownTaps(),
 ): readonly KnownTapHit[] {
   const normalized = query.trim().toLowerCase();
   const hits: KnownTapHit[] = [];
@@ -24,7 +24,7 @@ export function searchKnownTaps(
 
 export function findKnownTapByName(
   name: string,
-  registry: readonly KnownTap[] = KNOWN_TAPS,
+  registry: readonly KnownTap[] = getKnownTaps(),
 ): KnownTap | null {
   // Case-insensitive exact lookup; use searchKnownTaps for fuzzy queries.
   for (const tap of registry) {

@@ -71,7 +71,8 @@ Four everyday motions. No manifest to learn, no plugins to configure —
 commands that do what they say, across every agent you use.
 
 1. **Find great skills.** `crew search` across the default `core` collection
-   and anything else you've added.
+   and anything else you've added. It can also point you to known taps you
+   haven't added yet.
 2. **Tap into more sources.** A _tap_ is any git repo full of skills. Add
    your team's repo, a community collection, your own private one —
    `crew tap add` once, and every skill inside is searchable and installable.
@@ -161,7 +162,7 @@ for examples.
 
 | Command | What it does |
 |---|---|
-| `crew search [<query>]` | Case-insensitive substring match across every configured tap. With no query, lists every installable skill; installed ones are marked `✓`. |
+| `crew search [<query>]` | Case-insensitive substring match across every configured tap. With no query, lists every installable skill; installed ones are marked `✓`. With a query, also suggests matching known taps to add. |
 | `crew tap add <git-url> [name]` | Clone a registry into `~/.crew/taps/`. Name defaults to the repo name. |
 | `crew tap remove <name>` | Delete a local tap clone and drop it from config. |
 | `crew tap list` | Print each tap's name, URL, and last-fetched timestamp. |

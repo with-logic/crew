@@ -8,4 +8,18 @@
 
 import type { KnownTap } from "./types.ts";
 
-export const KNOWN_TAPS: readonly KnownTap[] = [];
+const BUNDLED_KNOWN_TAPS: readonly KnownTap[] = [];
+
+let activeKnownTaps: readonly KnownTap[] = BUNDLED_KNOWN_TAPS;
+
+export function getKnownTaps(): readonly KnownTap[] {
+  return activeKnownTaps;
+}
+
+export function setKnownTapsForTest(taps: readonly KnownTap[]): void {
+  activeKnownTaps = taps;
+}
+
+export function resetKnownTapsForTest(): void {
+  activeKnownTaps = BUNDLED_KNOWN_TAPS;
+}
