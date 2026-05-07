@@ -47,8 +47,9 @@ export function Install() {
 
         <p className={styles.footnote}>
           A single binary. Drops itself in <code>~/.local/bin/crew</code>, plus whatever skills you
-          install go under <code>~/.crew/</code> and into your agents' skills directories. Nothing
-          else. Uninstall with <code>rm -rf ~/.crew &amp;&amp; rm ~/.local/bin/crew</code>.
+          install go under <code>~/.crew/</code> and into your agents' skills directories. The
+          installer verifies the release checksum before installing. Uninstall with{" "}
+          <code>rm -rf ~/.crew &amp;&amp; rm ~/.local/bin/crew</code>.
         </p>
 
         <BuildItYourself prompt={SAAP_FULL_PROMPT} />

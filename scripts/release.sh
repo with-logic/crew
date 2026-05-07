@@ -264,6 +264,10 @@ if [ -d site/public ]; then
     {
       "name": "crew-macos-x64",
       "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/crew-macos-x64"
+    },
+    {
+      "name": "SHA256SUMS",
+      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/SHA256SUMS"
     }
   ]
 }

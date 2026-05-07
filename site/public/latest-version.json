@@ -8,6 +8,10 @@
     {
       "name": "crew-macos-x64",
       "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.7.0/crew-macos-x64"
+    },
+    {
+      "name": "SHA256SUMS",
+      "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.7.0/SHA256SUMS"
     }
   ]
 }

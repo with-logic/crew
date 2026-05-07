@@ -22,6 +22,12 @@ import {
 import { resetReleaseFetcher, setReleaseFetcher } from "../../src/self-update/github.ts";
 import { runSelfUpdate, runSelfUpdateCheck } from "../../src/self-update/upgrade.ts";
 import { makeCrewHome } from "../helpers/env.ts";
+import {
+  checksumTextFor,
+  currentAssetName,
+  downloaderForBinary,
+  releaseAssets,
+} from "./helpers.ts";
 
 // Force `process.platform === "darwin"` for the duration of this file.
 // `runSelfUpdate`'s platform guard rejects non-macOS hosts (§10.3), so
@@ -42,12 +48,6 @@ afterEach(() => {
   resetXattrClearer();
 });
 
-/** The fake asset name that assetNameForArch returns on this machine. */
-function currentAssetName(): string {
-  if (process.arch === "arm64") return "crew-macos-arm64";
-  return "crew-macos-x64";
-}
-
 describe("runSelfUpdate", () => {
   test("downloads + swaps + refreshes version-check when newer", () => {
     const home = makeCrewHome();
@@ -56,9 +56,9 @@ describe("runSelfUpdate", () => {
 
     setReleaseFetcher(() => ({
       tag: "v99.99.99",
-      assets: { [currentAssetName()]: "https://example.com/asset" },
+      assets: releaseAssets(),
     }));
-    setAssetDownloader((_url, destPath) => writeFileSync(destPath, "NEW"));
+    setAssetDownloader(downloaderForBinary("NEW"));
     setXattrClearer(() => {});
 
     const result = runSelfUpdate({ home, force: false, execPath: dest });
@@ -79,7 +79,7 @@ describe("runSelfUpdate", () => {
     // Stub a release that matches the running CREW_VERSION.
     setReleaseFetcher(() => ({
       tag: `v${CREW_VERSION}`,
-      assets: { [currentAssetName()]: "https://example.com/asset" },
+      assets: releaseAssets(),
     }));
     let downloaderCalled = false;
     setAssetDownloader(() => {
@@ -102,9 +102,9 @@ describe("runSelfUpdate", () => {
 
     setReleaseFetcher(() => ({
       tag: `v${CREW_VERSION}`,
-      assets: { [currentAssetName()]: "https://example.com/asset" },
+      assets: releaseAssets(),
     }));
-    setAssetDownloader((_url, destPath) => writeFileSync(destPath, "FORCED"));
+    setAssetDownloader(downloaderForBinary("FORCED"));
     setXattrClearer(() => {});
 
     const result = runSelfUpdate({ home, force: true, execPath: dest });
@@ -124,6 +124,36 @@ describe("runSelfUpdate", () => {
     );
   });
 
+  test("self_update_unavailable when release has no checksum asset", () => {
+    const home = makeCrewHome();
+    const dest = join(home, "crew-bin");
+    writeFileSync(dest, "OLD");
+
+    setReleaseFetcher(() => ({
+      tag: "v99.99.99",
+      assets: { [currentAssetName()]: "https://example.com/asset" },
+    }));
+
+    expect(() => runSelfUpdate({ home, force: false, execPath: dest })).toThrow(/SHA256SUMS/);
+  });
+
+  test("checksum mismatch leaves the old binary in place", () => {
+    const home = makeCrewHome();
+    const dest = join(home, "crew-bin");
+    writeFileSync(dest, "OLD");
+
+    setReleaseFetcher(() => ({ tag: "v99.99.99", assets: releaseAssets() }));
+    setAssetDownloader((url, destPath) => {
+      const body = url.includes("SHA256SUMS") ? checksumTextFor("EXPECTED") : "TAMPERED";
+      writeFileSync(destPath, body);
+    });
+
+    expect(() => runSelfUpdate({ home, force: false, execPath: dest })).toThrow(
+      /checksum mismatch/,
+    );
+    expect(readFileSync(dest, "utf8")).toBe("OLD");
+  });
+
   test("accepts an explicit tag", () => {
     const home = makeCrewHome();
     const dest = join(home, "crew-bin");
@@ -132,9 +162,9 @@ describe("runSelfUpdate", () => {
     let requestedUrl = "";
     setReleaseFetcher((url) => {
       requestedUrl = url;
-      return { tag: "v0.5.0", assets: { [currentAssetName()]: "https://example.com/asset" } };
+      return { tag: "v0.5.0", assets: releaseAssets() };
     });
-    setAssetDownloader((_url, destPath) => writeFileSync(destPath, "NEW"));
+    setAssetDownloader(downloaderForBinary("NEW"));
     setXattrClearer(() => {});
 
     runSelfUpdate({ home, force: false, execPath: dest, tag: "v0.5.0" });

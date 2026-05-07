@@ -9,6 +9,7 @@
 import { CrewError } from "../core/errors.ts";
 import { CREW_VERSION } from "../core/version.ts";
 import { writeVersionCheck } from "./check.ts";
+import { checksumAssetUrl, downloadChecksums, verifyAssetChecksum } from "./checksum.ts";
 import { assetNameForArch, downloadAssetToTemp, installBinary } from "./download.ts";
 import { fetchRelease, releasesByTagUrl, releasesLatestUrl } from "./github.ts";
 
@@ -58,7 +59,10 @@ export function runSelfUpdate(options: SelfUpdateOptions): SelfUpdateResult {
     );
   }
 
+  const checksumUrl = checksumAssetUrl(release.assets, release.tag);
+  const checksumsText = downloadChecksums(checksumUrl, DOWNLOAD_TIMEOUT_SECONDS);
   const tempPath = downloadAssetToTemp(downloadUrl, DOWNLOAD_TIMEOUT_SECONDS);
+  verifyAssetChecksum(tempPath, assetName, checksumsText);
   installBinary(tempPath, resolveDest(options.execPath));
   writeVersionCheck(release.tag, options.home);
   return { currentVersion, latestTag: release.tag, replaced: true };

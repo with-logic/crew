@@ -24,6 +24,7 @@ import {
 } from "../../src/self-update/download.ts";
 import { resetReleaseFetcher, setReleaseFetcher } from "../../src/self-update/github.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
+import { currentAssetName, downloaderForBinary, releaseAssets } from "./helpers.ts";
 
 // Force darwin for the happy-path tests — `runSelfUpdate`'s platform
 // guard rejects non-macOS hosts. Without this override every test in
@@ -57,10 +58,6 @@ afterEach(() => {
   resetAssetDownloader();
   resetXattrClearer();
 });
-
-function currentAssetName(): string {
-  return process.arch === "arm64" ? "crew-macos-arm64" : "crew-macos-x64";
-}
 
 const RUNNING_TAG = `v${CREW_VERSION}`;
 
@@ -113,9 +110,9 @@ describe("crew self-update (full upgrade)", () => {
 
     setReleaseFetcher(() => ({
       tag: "v99.99.99",
-      assets: { [currentAssetName()]: "https://example.com/asset" },
+      assets: releaseAssets(),
     }));
-    setAssetDownloader((_url, path) => writeFileSync(path, "NEW"));
+    setAssetDownloader(downloaderForBinary("NEW"));
     setXattrClearer(() => {});
 
     const savedTarget = process.env["CREW_SELF_UPDATE_TARGET"];

@@ -56,8 +56,9 @@ curl -fsSL https://crew.logic.inc/install.sh | sh
 
 A single binary. Drops itself at `~/.local/bin/crew`, plus whatever skills you
 install go under `~/.crew/` and into your agents' skills directories. Nothing
-else. Safe to re-run — upgrades in place. Set `CREW_INSTALL_PREFIX` to pick a
-different location.
+else. The installer verifies the downloaded binary against the release
+`SHA256SUMS` file before installing. Safe to re-run — upgrades in place. Set
+`CREW_INSTALL_PREFIX` to pick a different location.
 
 Uninstall with `rm -rf ~/.crew && rm ~/.local/bin/crew`.
 
@@ -179,7 +180,7 @@ for examples.
 |---|---|
 | `crew doctor [--verify] [--repair]` | Check integrity between state, markers, and agent directories. `--repair` fixes recoverable drift without ever touching customized files. |
 | `crew cache clean` | Remove ephemeral caches and unreferenced store entries. |
-| `crew self-update [--check]` | Replace the running binary with the latest release. `--check` reports without downloading. |
+| `crew self-update [--check]` | Replace the running binary with the latest verified release. `--check` reports without downloading. |
 
 **Meta**
 
