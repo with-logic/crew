@@ -12,6 +12,11 @@ import { writeVersionCheck } from "./check.ts";
 import { checksumAssetUrl, downloadChecksums, verifyAssetChecksum } from "./checksum.ts";
 import { assetNameForArch, downloadAssetToTemp, installBinary } from "./download.ts";
 import { fetchRelease, releasesByTagUrl, releasesLatestUrl } from "./github.ts";
+import {
+  checksumSignatureAssetUrl,
+  downloadChecksumSignature,
+  verifyChecksumsSignature,
+} from "./signature.ts";
 
 /** Timeout for the release-feed query. Short because we're on the foreground. */
 const RELEASE_FETCH_TIMEOUT_SECONDS = 10;
@@ -61,6 +66,11 @@ export function runSelfUpdate(options: SelfUpdateOptions): SelfUpdateResult {
 
   const checksumUrl = checksumAssetUrl(release.assets, release.tag);
   const checksumsText = downloadChecksums(checksumUrl, DOWNLOAD_TIMEOUT_SECONDS);
+  const signatureUrl = checksumSignatureAssetUrl(release.assets, release.tag);
+  if (signatureUrl) {
+    const signature = downloadChecksumSignature(signatureUrl, DOWNLOAD_TIMEOUT_SECONDS);
+    verifyChecksumsSignature(checksumsText, signature);
+  }
   const tempPath = downloadAssetToTemp(downloadUrl, DOWNLOAD_TIMEOUT_SECONDS);
   verifyAssetChecksum(tempPath, assetName, checksumsText);
   installBinary(tempPath, resolveDest(options.execPath));

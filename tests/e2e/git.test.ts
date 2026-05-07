@@ -197,9 +197,10 @@ describe("git sources via file:// URL", () => {
     expect(code).toBe(4);
   });
 
-  test("invalid git URL -> source_unreachable", () => {
+  test("unreachable git URL -> source_unreachable", () => {
     const home = makeCrewHome();
-    const code = runCli(["install", "https://nonexistent.invalid/a/b.git"], {
+    const missingRepo = join(makeTempDir("crew-missing-"), "missing.git");
+    const code = runCli(["install", `file://${missingRepo}`], {
       home,
       streams: captureStreams().streams,
     });

@@ -9,3 +9,7 @@ bun.lockb
 .*.bun-build
 # Claude Code runtime files.
 .claude/
+
+# Local release-signing private key. The public key is committed in
+# src/self-update/signing-key.ts and site/public/install.sh.
+.crew-release-signing-key.pem

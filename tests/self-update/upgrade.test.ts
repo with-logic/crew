@@ -20,6 +20,10 @@ import {
   setXattrClearer,
 } from "../../src/self-update/download.ts";
 import { resetReleaseFetcher, setReleaseFetcher } from "../../src/self-update/github.ts";
+import {
+  resetReleaseSignatureVerifier,
+  setReleaseSignatureVerifier,
+} from "../../src/self-update/signature.ts";
 import { runSelfUpdate, runSelfUpdateCheck } from "../../src/self-update/upgrade.ts";
 import { makeCrewHome } from "../helpers/env.ts";
 import {
@@ -46,6 +50,7 @@ afterEach(() => {
   resetReleaseFetcher();
   resetAssetDownloader();
   resetXattrClearer();
+  resetReleaseSignatureVerifier();
 });
 
 describe("runSelfUpdate", () => {
@@ -59,6 +64,7 @@ describe("runSelfUpdate", () => {
       assets: releaseAssets(),
     }));
     setAssetDownloader(downloaderForBinary("NEW"));
+    setReleaseSignatureVerifier(() => true);
     setXattrClearer(() => {});
 
     const result = runSelfUpdate({ home, force: false, execPath: dest });
@@ -105,6 +111,7 @@ describe("runSelfUpdate", () => {
       assets: releaseAssets(),
     }));
     setAssetDownloader(downloaderForBinary("FORCED"));
+    setReleaseSignatureVerifier(() => true);
     setXattrClearer(() => {});
 
     const result = runSelfUpdate({ home, force: true, execPath: dest });
@@ -137,6 +144,23 @@ describe("runSelfUpdate", () => {
     expect(() => runSelfUpdate({ home, force: false, execPath: dest })).toThrow(/SHA256SUMS/);
   });
 
+  test("self_update_unavailable when future release has no checksum signature asset", () => {
+    const home = makeCrewHome();
+    const dest = join(home, "crew-bin");
+    writeFileSync(dest, "OLD");
+
+    setReleaseFetcher(() => ({
+      tag: "v99.99.99",
+      assets: {
+        [currentAssetName()]: "https://example.com/asset",
+        SHA256SUMS: "https://example.com/SHA256SUMS",
+      },
+    }));
+    setAssetDownloader((_, destPath) => writeFileSync(destPath, checksumTextFor("NEW")));
+
+    expect(() => runSelfUpdate({ home, force: false, execPath: dest })).toThrow(/SHA256SUMS\.sig/);
+  });
+
   test("checksum mismatch leaves the old binary in place", () => {
     const home = makeCrewHome();
     const dest = join(home, "crew-bin");
@@ -147,6 +171,7 @@ describe("runSelfUpdate", () => {
       const body = url.includes("SHA256SUMS") ? checksumTextFor("EXPECTED") : "TAMPERED";
       writeFileSync(destPath, body);
     });
+    setReleaseSignatureVerifier(() => true);
 
     expect(() => runSelfUpdate({ home, force: false, execPath: dest })).toThrow(
       /checksum mismatch/,
@@ -165,6 +190,7 @@ describe("runSelfUpdate", () => {
       return { tag: "v0.5.0", assets: releaseAssets() };
     });
     setAssetDownloader(downloaderForBinary("NEW"));
+    setReleaseSignatureVerifier(() => true);
     setXattrClearer(() => {});
 
     runSelfUpdate({ home, force: false, execPath: dest, tag: "v0.5.0" });

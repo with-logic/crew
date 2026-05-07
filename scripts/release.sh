@@ -268,6 +268,10 @@ if [ -d site/public ]; then
     {
       "name": "SHA256SUMS",
       "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/SHA256SUMS"
+    },
+    {
+      "name": "SHA256SUMS.sig",
+      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/SHA256SUMS.sig"
     }
   ]
 }
