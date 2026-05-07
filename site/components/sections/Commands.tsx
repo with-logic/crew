@@ -177,7 +177,7 @@ const GROUPS: readonly Group[] = [
         ),
         description: (
           <>
-            Upgrade the <code>crew</code> binary itself to the latest release.{" "}
+            Upgrade the <code>crew</code> binary itself to the latest verified release.{" "}
             <span className={styles.flag}>--check</span> reports without downloading.
           </>
         ),

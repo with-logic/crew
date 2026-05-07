@@ -180,7 +180,7 @@ for examples.
 |---|---|
 | `crew doctor [--verify] [--repair]` | Check integrity between state, markers, and agent directories. `--repair` fixes recoverable drift without ever touching customized files. |
 | `crew cache clean` | Remove ephemeral caches and unreferenced store entries. |
-| `crew self-update [--check]` | Replace the running binary with the latest release. `--check` reports without downloading. |
+| `crew self-update [--check]` | Replace the running binary with the latest verified release. `--check` reports without downloading. |
 
 **Meta**
 

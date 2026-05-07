@@ -938,9 +938,10 @@ binaries, the site just advertises the pointer).
 
 Every release MUST publish a `SHA256SUMS` asset containing SHA-256 hashes
 for `crew-macos-arm64` and `crew-macos-x64`. The hosted installer
-(`https://crew.logic.inc/install.sh`) MUST download this file from the same
-release as the selected binary and verify the chosen asset before installing
-it. A checksum mismatch or missing checksum is a failed install.
+(`https://crew.logic.inc/install.sh`) and `crew self-update` MUST download
+this file from the same release as the selected binary and verify the chosen
+asset before installing it. A checksum mismatch or missing checksum is a
+failed install/update.
 
 Implementations MAY accept `CREW_SELF_UPDATE_RELEASES_URL` to override
 the latest-release URL (used by tests and private forks).
@@ -952,14 +953,20 @@ the latest-release URL (used by tests and private forks).
    - Otherwise fetch the latest-release URL.
 2. If the resolved tag matches the running `CREW_VERSION` and `--force`
    is not set, print "already on the latest version" and exit 0.
-3. Download the asset matching the current CPU architecture
+3. Resolve the asset matching the current CPU architecture
    (`arm64` → `crew-macos-arm64`, `x86_64` → `crew-macos-x64`).
-4. Mark the downloaded file executable. On macOS, clear the
+4. Download both the `SHA256SUMS` asset and the selected binary asset from
+   the resolved release.
+5. Verify that the downloaded binary's SHA-256 digest matches the entry for
+   its asset name in `SHA256SUMS`. If the checksum file is missing,
+   unreachable, malformed for the selected asset, lacks the selected asset,
+   or the digest does not match, fail with `self_update_unavailable`.
+6. Mark the downloaded file executable. On macOS, clear the
    `com.apple.quarantine` extended attribute.
-5. Atomically rename the downloaded file over `process.execPath`. The
+7. Atomically rename the downloaded file over `process.execPath`. The
    running process keeps executing on the old inode; subsequent
    invocations run the new binary.
-6. Record the new version in the version-check file (§10.4) so the
+8. Record the new version in the version-check file (§10.4) so the
    update notice doesn't nag the user about a version they already
    installed.
 
@@ -976,9 +983,12 @@ the latest-release URL (used by tests and private forks).
 
 **Errors.**
 
-- `self_update_unavailable` (exit 5) — the release feed or the asset
-  download couldn't be reached, the release doesn't have an asset for
-  the current arch, or the named `--version` doesn't exist.
+- `self_update_unavailable` (exit 5) — the release feed, checksum asset,
+  or binary asset couldn't be reached; the release doesn't have an asset
+  for the current arch; the release doesn't have a `SHA256SUMS` asset; the
+  checksum file doesn't contain a valid entry for the selected asset; the
+  downloaded binary doesn't match its checksum; or the named `--version`
+  doesn't exist.
 - `self_update_failed` (exit 8) — the replacement step failed (e.g. the
   binary path isn't writable). The old binary is left in place.
 
@@ -1647,8 +1657,8 @@ Implementations and test suites refer to criteria by ID.
 |---|---|---|
 | C-SELF-01 | §10.3 | `crew self-update --check` queries the release feed, prints the latest tag, and makes no filesystem changes. |
 | C-SELF-02 | §10.3 | `crew self-update` on a version equal to `latest_tag` prints "already on the latest version" and exits 0. |
-| C-SELF-03 | §10.3 | `crew self-update` downloads the asset for the current arch, `chmod +x`s it, and atomically renames over the running binary. |
-| C-SELF-04 | §10.3 | A release-feed or asset-download failure produces `self_update_unavailable`, exit 5. |
+| C-SELF-03 | §10.3 | `crew self-update` downloads `SHA256SUMS` and the asset for the current arch, verifies the asset digest, `chmod +x`s it, and atomically renames over the running binary. |
+| C-SELF-04 | §10.3 | A release-feed, asset-download, or checksum-verification failure produces `self_update_unavailable`, exit 5. |
 | C-SELF-05 | §10.3 | A failure to replace the binary produces `self_update_failed`, exit 8. The old binary is left in place. |
 | C-SELF-06 | §10.3 | `crew self-update --version v0.1.0` targets the named tag instead of the latest, and errors `self_update_unavailable` if the tag does not exist. |
 | C-SELF-07 | §10.4 | A human `crew` invocation whose stderr is a TTY and whose cached `latest_tag` differs from `CREW_VERSION` emits exactly one stderr notice naming both versions. |
