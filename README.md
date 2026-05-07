@@ -154,6 +154,7 @@ for examples.
 | `crew uninstall <name>…` | Remove installed skills from every agent they were installed into. |
 | `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. |
 | `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. |
+| `crew skills` | Alias for `crew list`. |
 | `crew info <ref-or-name>` | Show details for an installed skill or one available in a tap. |
 
 **Discovery**
@@ -164,6 +165,7 @@ for examples.
 | `crew tap add <git-url> [name]` | Clone a registry into `~/.crew/taps/`. Name defaults to the repo name. |
 | `crew tap remove <name>` | Delete a local tap clone and drop it from config. |
 | `crew tap list` | Print each tap's name, URL, and last-fetched timestamp. |
+| `crew taps` | Alias for `crew tap list`. |
 
 **Agents & automation**
 

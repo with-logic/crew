@@ -100,6 +100,7 @@ crew install <ref> [<ref>...]     Install one or more skills.
 crew uninstall <name> [<name>...] Remove installed skills from every agent.
 crew update [<name>...]           Update all installed skills, or only those named.
 crew list                         List installed skills.
+crew skills                       Alias for `crew list`.
 crew search <query>               Search across configured taps.
 crew info <ref-or-name>           Show details for an installed or searchable skill.
 
@@ -107,6 +108,7 @@ crew tap add <git-url> [<name>]   Add a registry (name defaults to repo name).
 crew tap <git-url> [<name>]       Shorthand for `crew tap add`.
 crew tap remove <name>            Remove a registry.
 crew tap list                     List configured registries.
+crew taps                         Alias for `crew tap list`.
 
 crew agents                      List detected agents and their status.
 crew agents enable <name>        Force-enable an otherwise-undetected agent.
@@ -648,6 +650,13 @@ tap-ref     := any non-empty string not containing "/" or whitespace
 subpath     := any POSIX relative path not starting with "/"
 ```
 
+Tap-source identifiers are matched case-insensitively and canonicalized to
+lowercase before lookup. For example, `crew install Core/Python-Testing`
+resolves identically to `crew install core/python-testing`. This
+case-insensitivity applies only to tap-source identifiers (`tap-name`,
+`namespace-name`, and `skill-name`); path sources and git URLs keep their
+normal filesystem/source semantics.
+
 ### 8.5 Disambiguation precedence
 
 When the argument could match multiple forms, crew applies these rules in order:
@@ -673,6 +682,7 @@ shift which form applies.
 Given one or more skill references on the command line, `crew install` proceeds as follows. Every step is mandatory.
 
 1. **Parse each reference** per §8 into a structured source.
+   Tap-source names are canonicalized to lowercase during parsing.
 2. **Acquire the source contents** by attributing the install to a tap (§16):
    - Bare-name reference (`foo`) or qualified reference (`<tap>/foo`): use the named (or matching) registered/auto tap. Clone its repo if absent; never fetches per the network policy in §16.6.
    - Tap-name reference (`<tap-name>` with no slash) where `<tap-name>` matches a configured tap: install the entire tap (every skill it currently exposes).
@@ -1517,6 +1527,7 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-18 | §8.2 | `@owner/repo` is parsed as a git source and expanded to `https://github.com/owner/repo.git` (identical handling to `gh:owner/repo`). |
 | C-REF-19 | §8.2 | `@owner/repo@v1.0.0` is parsed as a git source with ref `v1.0.0` (leading `@` is the shorthand, infix `@` is the ref separator). |
 | C-REF-20 | §8.2 | `@owner/repo//sub/path` is parsed as a git source with subpath `sub/path`. |
+| C-REF-21 | §8.4 | Tap-source identifiers are case-insensitive and canonicalized to lowercase before lookup; path sources and git URLs are not case-normalized. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 

@@ -120,7 +120,7 @@ describe("crew tap", () => {
     // the shorthand's `looksLikeGitSource` guard.
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["tap", "NotAValidName"], { home, streams: c.streams });
+    const code = runCli(["tap", "not_a_valid_name"], { home, streams: c.streams });
     expect(code).toBe(4);
     expect(c.stderr()).toContain("crew help tap");
   });

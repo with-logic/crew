@@ -31,7 +31,7 @@ export function tapCommand(ctx: CommandContext): CommandOutput {
   const rest = ctx.positional.slice(1);
   if (sub === "add") return tapAdd(ctx, rest);
   if (sub === "remove") return tapRemove(ctx, rest);
-  if (sub === "list") return tapList(ctx);
+  if (sub === "list") return tapList(ctx, rest);
   if (sub === "update") return tapUpdate(ctx, rest);
   // Shorthand: `crew tap <ref> [<name>]` → `crew tap add <ref> [<name>]`.
   // Only dispatch when the first positional parses as a git source or
@@ -127,7 +127,12 @@ function tapsMatching(all: readonly TapConfig[], names: readonly string[]): TapC
   return out;
 }
 
-function tapList(ctx: CommandContext): CommandOutput {
+function tapList(ctx: CommandContext, args: readonly string[]): CommandOutput {
+  if (args.length !== 0)
+    throw new CrewError(
+      "usage_error",
+      "`crew tap list` takes no arguments — run `crew help tap` to see what's available",
+    );
   const config = readConfig(ctx.home);
   const rows: TapListRow[] = config.taps.map((t) => {
     let lastFetched: string | null = null;
