@@ -11,5 +11,5 @@ bun.lockb
 .claude/
 
 # Local release-signing private key. The public key is committed in
-# src/self-update/signing-key.ts and site/public/install.sh.
+# release/signing-public-key.pem and embedded into release assets from there.
 .crew-release-signing-key.pem

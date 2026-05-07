@@ -86,19 +86,24 @@ log "Verifying checksum signature"
 if ! curl -fsSL -o "$checksums" "$checksums_url"; then
   die "checksum download failed — $checksums_url was not reachable. Refusing to install an unverified binary."
 fi
+# BEGIN CREW RELEASE SIGNING PUBLIC KEY
 cat > "$public_key" <<'PEM'
 -----BEGIN PUBLIC KEY-----
-MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEArgeaoEjGS/rIJ/VYsKaE
-PnWIsOYzj6pKueJSceWK4/AM2ar06S9z3BKs5J8FBO86h3scJU10lTS1YHsoCIJB
-XU1PmJXTyNOcx4OSKfz28Y4Ym8yX7kLni4WhHP2XzGOevy5v/6IkPOqq5xmcND+e
-TF5a84UhHqtdwtn4rzHeHitk7h2f6QzBW/LfI3uGfZnBuc+BLI+RRxN8BEv/iGMN
-3RJK2HkG7wZ2F18XtxRygCnHdNNfJ29PzoOKnbO94xDbQcgKLLbNS3/cJ4JPZpiK
-40dEs0FHv0wnN4qxtJ2YZTcBkiR5Hc0TcrsK4kAKK84qdEu3QuukRHlxkQLMtJFZ
-I3DjV6UXztb/rzNDJ7K1KrJd7w7wtYXFnYxTJr5PITgm1zR/eoWCBywP7Hlv8Hvh
-+qyVkc7Sagekp+Oh9np0enjZElgv/aaOilDZ462+cq2AKz64diEXaXU3hw6nNItf
-BtMQVHfviRiPH0EpGPNqq5lflTvBJUU8e0A91H7SdsGfAgMBAAE=
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAod92K5Z0pJfn4pje6Oed
+VPWNC785K817S+bviqjsOWqqlUrffVDbBxgshQe96/4LTgo/iESTucuLfQmOHKxz
+P1OyPlN6je1meCcuBZW6g2NZgSB1xAznOs0xnkfRPGDq17buu40kqpNhYNIqCMMa
+olL5hcfL/yptWPTDHrbc5zYOXkF/GFrWGDJtYtM2SH57isQholajbmkjQXCw9Ysj
+WhYJ2rRuVL+6mCvEseQ8CnqEaxgjIkJSlcqJ506VZ67EW/Ice1T7/JUtVD2E/xUo
+ns7LB+XQZ6JBjSUJt9jeyPd0hI3v8Ssf1eTmDgRyG4s/ZdIPqJU3ldPry09u4wzK
+w6l+oKr4IXOV3O5jaM8lI40KCoLTo7Xdlthw8H3mGsTxQdeQEozH2eOIiujSXOaV
+2eHO8cf4dsy+EIQFoOqywv/epS2lloL7xrmaEhQ61RR7ZPQBRYKyuM/dtr2av96h
+8r62VqCzkiCawJYmPCGmmdrziHH8kL7kD+XfV/761RgkgnX2swFsPRq263uwobCP
+KzZjRgI8VAEULi0dnwW62ocF3mjhPyQESsYnoAe4VEPy13G38dVuxrrkR7cJkNjF
+sJk0KVstYXCtyVOq4d89d4IR+WfgW2gZZAyuXICvcTZqAj95poqEMU04HrfRU1kp
+8FDq50Bp7KwjHIImYWbyjesCAwEAAQ==
 -----END PUBLIC KEY-----
 PEM
+# END CREW RELEASE SIGNING PUBLIC KEY
 
 requires_signature() {
   case "$1" in
