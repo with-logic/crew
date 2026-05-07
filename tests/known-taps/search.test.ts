@@ -3,13 +3,14 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { tapConfigFromKnownTap } from "../../src/known-taps/convert.ts";
 import {
   findKnownTapByName,
   findKnownTapSkill,
   knownTapSkillLabel,
   searchKnownTaps,
 } from "../../src/known-taps/search.ts";
-import { type KnownTap, tapConfigFromKnownTap } from "../../src/known-taps/types.ts";
+import type { KnownTap } from "../../src/known-taps/types.ts";
 
 const registry: readonly KnownTap[] = [
   {
@@ -57,6 +58,10 @@ describe("searchKnownTaps", () => {
   });
 
   test("query matches tap metadata, skill metadata, and namespaced labels", () => {
+    expect(searchKnownTaps("supa", registry).map((h) => h.skill.name)).toEqual([
+      "schema-review",
+      "edge-functions",
+    ]);
     expect(searchKnownTaps("auth", registry).map((h) => h.skill.name)).toEqual([
       "schema-review",
       "edge-functions",
@@ -64,6 +69,33 @@ describe("searchKnownTaps", () => {
     expect(searchKnownTaps("sql", registry).map((h) => h.skill.name)).toEqual(["schema-review"]);
     expect(searchKnownTaps("database/schema", registry).map((h) => h.skill.name)).toEqual([
       "schema-review",
+    ]);
+  });
+
+  test("name and label matching is case-insensitive", () => {
+    const mixedCaseRegistry: readonly KnownTap[] = [
+      {
+        name: "OpenAI",
+        url: "https://github.com/openai/agent-skills.git",
+        subpath: "",
+        description: "API workflows",
+        trust: "official",
+        skills: [
+          {
+            name: "Prompt-Eval",
+            namespace: "Evals",
+            description: "Run checks",
+            path: "Evals/Prompt-Eval",
+          },
+        ],
+      },
+    ];
+
+    expect(searchKnownTaps("openai", mixedCaseRegistry).map((h) => h.skill.name)).toEqual([
+      "Prompt-Eval",
+    ]);
+    expect(searchKnownTaps("evals/prompt", mixedCaseRegistry).map((h) => h.skill.name)).toEqual([
+      "Prompt-Eval",
     ]);
   });
 

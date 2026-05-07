@@ -2,8 +2,6 @@
  * Types for the bundled known-tap registry (§16.2.1).
  */
 
-import type { TapConfig } from "../core/types.ts";
-
 export type KnownTapTrust = "official" | "curated";
 
 export interface KnownTapSkill {
@@ -26,15 +24,4 @@ export interface KnownTap {
 export interface KnownTapHit {
   readonly tap: KnownTap;
   readonly skill: KnownTapSkill;
-}
-
-export function tapConfigFromKnownTap(tap: KnownTap): TapConfig {
-  return {
-    name: tap.name,
-    kind: "git",
-    registered: true,
-    url: tap.url,
-    subpath: tap.subpath,
-    path: "",
-  };
 }

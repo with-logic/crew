@@ -48,16 +48,16 @@ export function knownTapSkillLabel(skill: KnownTapSkill): string {
 }
 
 function knownTapMatches(tap: KnownTap, query: string): boolean {
-  return query === "" || tap.name.includes(query) || tap.description.toLowerCase().includes(query);
+  return (
+    query === "" ||
+    tap.name.toLowerCase().includes(query) ||
+    tap.description.toLowerCase().includes(query)
+  );
 }
 
 function knownTapSkillMatches(skill: KnownTapSkill, query: string): boolean {
-  return (
-    query === "" ||
-    skill.name.includes(query) ||
-    skill.description.toLowerCase().includes(query) ||
-    knownTapSkillLabel(skill).includes(query)
-  );
+  const label = knownTapSkillLabel(skill).toLowerCase();
+  return query === "" || skill.description.toLowerCase().includes(query) || label.includes(query);
 }
 
 function compareKnownTapHits(a: KnownTapHit, b: KnownTapHit): number {
