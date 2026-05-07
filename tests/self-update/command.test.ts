@@ -23,6 +23,10 @@ import {
   setXattrClearer,
 } from "../../src/self-update/download.ts";
 import { resetReleaseFetcher, setReleaseFetcher } from "../../src/self-update/github.ts";
+import {
+  resetReleaseSignatureVerifier,
+  setReleaseSignatureVerifier,
+} from "../../src/self-update/signature.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { currentAssetName, downloaderForBinary, releaseAssets } from "./helpers.ts";
 
@@ -57,6 +61,7 @@ afterEach(() => {
   resetReleaseFetcher();
   resetAssetDownloader();
   resetXattrClearer();
+  resetReleaseSignatureVerifier();
 });
 
 const RUNNING_TAG = `v${CREW_VERSION}`;
@@ -113,6 +118,7 @@ describe("crew self-update (full upgrade)", () => {
       assets: releaseAssets(),
     }));
     setAssetDownloader(downloaderForBinary("NEW"));
+    setReleaseSignatureVerifier(() => true);
     setXattrClearer(() => {});
 
     const savedTarget = process.env["CREW_SELF_UPDATE_TARGET"];

@@ -11,16 +11,18 @@
   },
   "scripts": {
     "start": "bun run src/index.ts",
-    "build": "bun build --compile --minify --sourcemap --target=bun src/index.ts --outfile dist/crew",
+    "build": "bun run check-release-signing-key && bun build --compile --minify --sourcemap --target=bun src/index.ts --outfile dist/crew",
     "install-bin": "./scripts/install.sh",
     "uninstall-bin": "rm -fv \"${CREW_INSTALL_PREFIX:-$HOME/.local/bin}/crew\"",
     "release": "./scripts/release.sh",
+    "sync-release-signing-key": "bun run scripts/sync-release-signing-key.ts --write",
+    "check-release-signing-key": "bun run scripts/sync-release-signing-key.ts --check",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "check": "bun run typecheck && bun run lint && bun test"
+    "check": "bun run check-release-signing-key && bun run typecheck && bun run lint && bun test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.14",

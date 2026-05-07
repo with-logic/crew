@@ -167,13 +167,40 @@ jobs:
         working-directory: dist
         run: sha256sum crew-macos-arm64 crew-macos-x64 > SHA256SUMS
 
-      - name: Create GitHub release
+      - name: Sign checksums
+        working-directory: dist
+        env:
+          CREW_RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.CREW_RELEASE_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CREW_RELEASE_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::CREW_RELEASE_SIGNING_PRIVATE_KEY secret is required"
+            exit 1
+          fi
+          key_file="$(mktemp)"
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s\n' "$CREW_RELEASE_SIGNING_PRIVATE_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          openssl dgst -sha256 -sign "$key_file" -out SHA256SUMS.sig SHA256SUMS
+
+      # Immutable releases require all assets to be attached before the
+      # release is published. Create a draft, upload every asset, then
+      # publish it as the final step.
+      - name: Create draft GitHub release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
           name: ${{ needs.resolve.outputs.tag }}
+          draft: true
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
             dist/crew-macos-arm64
             dist/crew-macos-x64
             dist/SHA256SUMS
+            dist/SHA256SUMS.sig
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${{ needs.resolve.outputs.tag }}" --draft=false

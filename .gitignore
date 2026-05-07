@@ -9,3 +9,7 @@ bun.lockb
 .*.bun-build
 # Claude Code runtime files.
 .claude/
+
+# Local release-signing private key. The public key is committed in
+# release/signing-public-key.pem and embedded into release assets from there.
+.crew-release-signing-key.pem

@@ -8,6 +8,7 @@ import { type AssetDownloader, assetNameForArch } from "../../src/self-update/do
 
 export const ASSET_URL = "https://example.com/asset";
 export const CHECKSUMS_URL = "https://example.com/SHA256SUMS";
+export const CHECKSUMS_SIGNATURE_URL = "https://example.com/SHA256SUMS.sig";
 
 export function currentAssetName(): string {
   return assetNameForArch();
@@ -18,7 +19,11 @@ export function sha256Hex(bytes: string): string {
 }
 
 export function releaseAssets(bytesUrl: string = ASSET_URL): Record<string, string> {
-  return { [currentAssetName()]: bytesUrl, SHA256SUMS: CHECKSUMS_URL };
+  return {
+    [currentAssetName()]: bytesUrl,
+    SHA256SUMS: CHECKSUMS_URL,
+    "SHA256SUMS.sig": CHECKSUMS_SIGNATURE_URL,
+  };
 }
 
 export function checksumTextFor(bytes: string, assetName: string = currentAssetName()): string {
@@ -27,7 +32,12 @@ export function checksumTextFor(bytes: string, assetName: string = currentAssetN
 
 export function downloaderForBinary(bytes: string): AssetDownloader {
   return (url, destPath) => {
-    const body = url === CHECKSUMS_URL ? checksumTextFor(bytes) : bytes;
+    const body =
+      url === CHECKSUMS_URL
+        ? checksumTextFor(bytes)
+        : url === CHECKSUMS_SIGNATURE_URL
+          ? "SIG"
+          : bytes;
     writeFileSync(destPath, body);
   };
 }

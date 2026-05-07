@@ -8,7 +8,8 @@
 # What it does:
 #   1. Detects your macOS CPU architecture (arm64 or x86_64).
 #   2. Downloads the latest crew release from GitHub.
-#   3. Verifies the binary against the release SHA256SUMS file.
+#   3. Verifies the signed release SHA256SUMS file, then verifies
+#      the binary against it.
 #   4. Installs to $CREW_INSTALL_PREFIX (default: ~/.local/bin).
 #   5. Clears the macOS quarantine attribute so Gatekeeper doesn't
 #      block the first run.
@@ -39,6 +40,7 @@ die()  { warn "$*"; exit 1; }
 
 command -v curl >/dev/null 2>&1 || die "\`curl\` is required but not on PATH."
 command -v shasum >/dev/null 2>&1 || die "\`shasum\` is required but not on PATH."
+command -v openssl >/dev/null 2>&1 || die "\`openssl\` is required but not on PATH."
 
 arch="$(uname -m)"
 case "$arch" in
@@ -64,6 +66,7 @@ fi
 base_url="https://github.com/$repo/releases/download/$version"
 url="$base_url/$asset"
 checksums_url="$base_url/SHA256SUMS"
+signature_url="$base_url/SHA256SUMS.sig"
 log "Downloading $asset ($version)"
 
 # ---------- Download and verify -----------------------------------------
@@ -72,18 +75,55 @@ tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 tmpfile="$tmpdir/crew"
 checksums="$tmpdir/SHA256SUMS"
+signature="$tmpdir/SHA256SUMS.sig"
+public_key="$tmpdir/release-signing-public.pem"
 
 if ! curl -fsSL -o "$tmpfile" "$url"; then
   die "download failed — $url was not reachable. Check the release page at https://github.com/$repo/releases for available versions."
 fi
 
-# Integrity check: same-source means this catches corruption in transit,
-# not a compromised release. Signature verification is planned next.
-log "Verifying checksum"
+log "Verifying checksum signature"
 if ! curl -fsSL -o "$checksums" "$checksums_url"; then
   die "checksum download failed — $checksums_url was not reachable. Refusing to install an unverified binary."
 fi
+# BEGIN CREW RELEASE SIGNING PUBLIC KEY
+cat > "$public_key" <<'PEM'
+-----BEGIN PUBLIC KEY-----
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAod92K5Z0pJfn4pje6Oed
+VPWNC785K817S+bviqjsOWqqlUrffVDbBxgshQe96/4LTgo/iESTucuLfQmOHKxz
+P1OyPlN6je1meCcuBZW6g2NZgSB1xAznOs0xnkfRPGDq17buu40kqpNhYNIqCMMa
+olL5hcfL/yptWPTDHrbc5zYOXkF/GFrWGDJtYtM2SH57isQholajbmkjQXCw9Ysj
+WhYJ2rRuVL+6mCvEseQ8CnqEaxgjIkJSlcqJ506VZ67EW/Ice1T7/JUtVD2E/xUo
+ns7LB+XQZ6JBjSUJt9jeyPd0hI3v8Ssf1eTmDgRyG4s/ZdIPqJU3ldPry09u4wzK
+w6l+oKr4IXOV3O5jaM8lI40KCoLTo7Xdlthw8H3mGsTxQdeQEozH2eOIiujSXOaV
+2eHO8cf4dsy+EIQFoOqywv/epS2lloL7xrmaEhQ61RR7ZPQBRYKyuM/dtr2av96h
+8r62VqCzkiCawJYmPCGmmdrziHH8kL7kD+XfV/761RgkgnX2swFsPRq263uwobCP
+KzZjRgI8VAEULi0dnwW62ocF3mjhPyQESsYnoAe4VEPy13G38dVuxrrkR7cJkNjF
+sJk0KVstYXCtyVOq4d89d4IR+WfgW2gZZAyuXICvcTZqAj95poqEMU04HrfRU1kp
+8FDq50Bp7KwjHIImYWbyjesCAwEAAQ==
+-----END PUBLIC KEY-----
+PEM
+# END CREW RELEASE SIGNING PUBLIC KEY
 
+requires_signature() {
+  case "$1" in
+    v0.7.0|0.7.0) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+if curl -fsSL -o "$signature" "$signature_url"; then
+  if ! openssl dgst -sha256 -verify "$public_key" -signature "$signature" "$checksums" >/dev/null 2>&1; then
+    die "checksum signature verification failed. Refusing to install."
+  fi
+  ok "checksum signature verified"
+elif requires_signature "$version"; then
+  die "checksum signature download failed — $signature_url was not reachable. Refusing to install an unverified binary."
+else
+  warn "legacy release has no checksum signature; falling back to checksum-only verification."
+fi
+
+log "Verifying checksum"
 expected="$(awk -v asset="$asset" '$2 == asset { print $1; found = 1 } END { if (!found) exit 1 }' "$checksums")" || {
   die "checksum file did not contain an entry for $asset. Refusing to install."
 }

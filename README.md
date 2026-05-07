@@ -56,13 +56,14 @@ curl -fsSL https://crew.logic.inc/install.sh | sh
 
 A single binary. Drops itself at `~/.local/bin/crew`, plus whatever skills you
 install go under `~/.crew/` and into your agents' skills directories. Nothing
-else. The installer verifies the downloaded binary against the release
-`SHA256SUMS` file before installing. Safe to re-run — upgrades in place. Set
-`CREW_INSTALL_PREFIX` to pick a different location.
+else. The installer verifies the signed release checksum file, then verifies
+the downloaded binary against it before installing. Safe to re-run — upgrades
+in place. Set `CREW_INSTALL_PREFIX` to pick a different location.
 
 Uninstall with `rm -rf ~/.crew && rm ~/.local/bin/crew`.
 
-**Requires:** macOS 13+ (Apple Silicon or Intel), `git` on `PATH`.
+**Requires:** macOS 13+ (Apple Silicon or Intel), `git` on `PATH`. The
+installer also uses macOS-standard `curl`, `shasum`, and `openssl`.
 
 ## How it works
 
