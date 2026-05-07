@@ -12,7 +12,8 @@ export const GROUPS: readonly CommandGroup[] = [
       {
         name: "install",
         signature: <>crew install &lt;ref&gt;…</>,
-        description: "Install one or more skills into every detected agent.",
+        description:
+          "Install one or more skills into every detected agent; on misses, may suggest skills from trusted known taps you haven't added yet.",
       },
       {
         name: "uninstall",
