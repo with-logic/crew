@@ -100,6 +100,7 @@ crew install <ref> [<ref>...]     Install one or more skills.
 crew uninstall <name> [<name>...] Remove installed skills from every agent.
 crew update [<name>...]           Update all installed skills, or only those named.
 crew list                         List installed skills.
+crew skills                       Alias for `crew list`.
 crew search <query>               Search across configured taps.
 crew info <ref-or-name>           Show details for an installed or searchable skill.
 
@@ -107,6 +108,7 @@ crew tap add <git-url> [<name>]   Add a registry (name defaults to repo name).
 crew tap <git-url> [<name>]       Shorthand for `crew tap add`.
 crew tap remove <name>            Remove a registry.
 crew tap list                     List configured registries.
+crew taps                         Alias for `crew tap list`.
 
 crew agents                      List detected agents and their status.
 crew agents enable <name>        Force-enable an otherwise-undetected agent.
