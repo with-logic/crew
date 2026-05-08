@@ -83,10 +83,11 @@ jobs:
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
         run: |
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          gh pr view "$PR_NUMBER" \
+          gh pr view "$PR_NUMBER" --repo "$GH_REPO" \
             --json headRepository,headRefName \
             --jq '"repo=\(.headRepository.nameWithOwner)\nref=\(.headRefName)"' >> "$GITHUB_OUTPUT"
 
