@@ -689,6 +689,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Git URL or shorthand (`@org/repo`, `gh:org/repo`, etc.): if any configured tap already points at the same URL+subpath, use it; otherwise create an auto tap (§16.5) and use it. The new tap is cloned and refreshed.
    - Path reference (`./foo`, `/abs/foo`): if any configured tap already points at the same path, use it; otherwise create a path-kind auto tap and use it.
    In all cases, the resolved `state.installations[i].source` is `{ tap: <tap-name>, path: <skill-relative-path-inside-tap> }`. The URL/path of the tap itself lives in `config.yaml`.
+   - If a tap-source reference cannot be resolved from configured taps, Homecrew consults the known-tap registry (§16.2.1) before returning `invalid_ref`. Exact known-tap matches are suggestions only: Homecrew MUST NOT clone, fetch, add a tap to config, or install anything from a known tap until the user explicitly runs `crew tap add <url>[//<subpath>] <name>` (or a future interactive flow confirms that same action). The error MUST include the tap-add command and the follow-up `crew install <tap>/<skill>` or `crew install <tap>` command.
 3. **Resolve refs to SHAs.** For git sources and tap sources, the ref (tag, branch, or `HEAD`) is resolved to a full commit SHA. This SHA is what's recorded in state and markers, even if the user specified a tag or branch.
 4. **Validate each candidate skill** against the Agent Skills specification:
    - `SKILL.md` exists at the expected location.
@@ -1734,6 +1735,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-21 | §16.5 | `crew install <local-path>` creates an auto tap with `kind: path`, `registered: false`, `path: <abs-path>`. `crew tap update` skips path-kind taps; `crew search` walks them when reachable. |
 | C-TAP-22 | §16.5 | Running `crew tap add <url>` against a URL that already backs an auto tap promotes it (`registered` flips to `true`) without re-cloning, and applies any user-supplied `<name>` argument. |
 | C-TAP-23 | §16.2.1 / §16.6 | `crew search <query>` surfaces matching known-tap registry entries that are not already configured as suggestions after configured-tap hits, without cloning, fetching, mutating config, or listing them for `crew search` with no query. JSON includes those suggestions in `known_hits`. |
+| C-TAP-24 | §9 / §16.2.1 | `crew install <tap-source>` that cannot resolve from configured taps surfaces exact known-tap registry matches in the `invalid_ref` error, including `crew tap add` and follow-up install commands, without cloning, fetching, mutating config, or installing from the known tap. JSON errors include `known_tap_suggestions`. |
 
 #### C-STATE: State and markers (§11)
 

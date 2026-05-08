@@ -78,7 +78,8 @@ commands that do what they say, across every agent you use.
    `crew tap add` once, and every skill inside is searchable and installable.
 3. **Install into every agent.** One `crew install` copies the skill into
    Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Goose, and every
-   other supported agent on your machine.
+   other supported agent on your machine. If the name is only in a known tap,
+   Homecrew shows the tap to add first.
 4. **Dependencies, handled.** Skills can depend on other skills. Homecrew walks
    the graph and installs everything they need. A single "team baseline"
    meta-skill can pull in a dozen others in one command.
@@ -93,7 +94,7 @@ skill can list as a dependency. Three shapes:
 
 | Kind | Example | What it is |
 |---|---|---|
-| **Tap source** | `crew install founding-engineer` | A skill, namespace, or tap known to a configured tap. Bare names search every tap, including the default `core` tap. Qualify with `tap/skill`, `tap/namespace/skill`, or `namespace/skill`. Pin with `@v1.0`. |
+| **Tap source** | `crew install founding-engineer` | A skill, namespace, or tap known to a configured tap. Bare names search every tap, including the default `core` tap. Qualify with `tap/skill`, `tap/namespace/skill`, or `namespace/skill`. Pin with `@v1.0`. If a miss exactly matches a known-but-untapped source, Homecrew suggests the `crew tap add` command. |
 | **Git source** | `crew install @acme/skills@v1.2.0//engineers/founding` | Any reachable git URL. `@owner/repo` is GitHub shorthand; full `https://` and `git@` URLs work too. Append `@ref` to pin, `//subpath` to scope. |
 | **Local path** | `crew install ./my-skill` | A directory on your machine. Detected by a leading `./`, `../`, `/`, or `~`. |
 
@@ -151,7 +152,7 @@ for examples.
 
 | Command | What it does |
 |---|---|
-| `crew install <ref>…` | Install one or more skills into every detected agent. |
+| `crew install <ref>…` | Install one or more skills into every detected agent; on name misses, may suggest skills from trusted known taps you haven't added yet. |
 | `crew uninstall <name>…` | Remove installed skills from every agent they were installed into. |
 | `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. |
 | `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. |

@@ -7,6 +7,7 @@ export const installHelp: CommandHelp = {
     "Install a skill and make it available in every agent coder on your machine.",
     "Homecrew installs the same skill into every supported agent coder you have — Claude Code, Codex, Cursor, Gemini, and more. One command, all your agents. You don't have to think about where the skill goes; Homecrew figures out the right place for each tool.",
     "You can install by name (from a collection you've already added), by GitHub URL, from any git repo, or from a local folder — see REFERENCE FORMS below for the full list of shapes you can pass.",
+    "If a name isn't in your configured taps but is known to Homecrew, install tells you which tap to add first.",
     "Point at a folder full of skills and you get all of them at once. New ones added later show up automatically when you run `crew update`.",
   ],
   flags: [
@@ -111,6 +112,7 @@ export const installHelp: CommandHelp = {
   ],
   notes: [
     "Pinning keeps a skill put. Anything with `@<tag>` or `@<sha>` is treated as pinned — `crew update` leaves it alone unless you ask for `--force`.",
+    "Known-tap suggestions are local hints. Homecrew won't clone or add the suggested tap until you run the shown `crew tap add` command.",
     "How Homecrew tells names apart: a plain word is a skill name. Paths start with `./`, `../`, `/`, or `~`. Git URLs start with `https://`, `git@`, `ssh://`, `file://`, `gh:`, `gl:`, `bb:`, or `@<owner>/<repo>`. Anything containing `//` is always treated as a git reference (that's the subfolder syntax).",
   ],
   seeAlso: ["uninstall", "update", "info", "search"],

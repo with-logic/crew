@@ -15,6 +15,7 @@ import type { KindHint } from "../../install/resolve-ref/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promptBareNameAmbiguity } from "./ambiguity-prompt.ts";
 import { promptForCollision } from "./collision-prompt.ts";
+import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { renderInstall } from "./render/index.ts";
 
 /** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
@@ -45,7 +46,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const kindHint = readKindHint(ctx);
   const config = readConfig(ctx.home);
   const refs = resolveCollisions(ctx, config);
-  const result = runInstall(config, {
+  const installOptions = {
     refs,
     scope: ctx.flags.scope,
     force: ctx.flags.force,
@@ -54,7 +55,14 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     cwd: ctx.cwd,
     home: ctx.home,
     kindHint,
-  });
+  };
+  let result: ReturnType<typeof runInstall>;
+  try {
+    result = runInstall(config, installOptions);
+  } catch (err) {
+    if (!(err instanceof CrewError)) throw err;
+    throw withKnownTapInstallSuggestions(err, refs, config, ctx.cwd, kindHint);
+  }
 
   // Exit-code rules (PRD §9 step 9). Per-skill outcome is
   // "succeeded" iff the skill validated AND at least one agent

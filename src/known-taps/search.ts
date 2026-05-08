@@ -3,6 +3,7 @@
  */
 
 import { getKnownTaps } from "./registry.ts";
+import { sameNullableText, sameText } from "./text.ts";
 import type { KnownTap, KnownTapHit, KnownTapSkill } from "./types.ts";
 
 export function searchKnownTaps(
@@ -61,15 +62,6 @@ function knownTapMatches(tap: KnownTap, query: string): boolean {
 function knownTapSkillMatches(skill: KnownTapSkill, query: string): boolean {
   const label = knownTapSkillLabel(skill).toLowerCase();
   return query === "" || skill.description.toLowerCase().includes(query) || label.includes(query);
-}
-
-function sameText(a: string, b: string): boolean {
-  return a.toLowerCase() === b.toLowerCase();
-}
-
-function sameNullableText(a: string | null, b: string | null): boolean {
-  if (a === null || b === null) return a === b;
-  return sameText(a, b);
 }
 
 function compareKnownTapHits(a: KnownTapHit, b: KnownTapHit): number {
