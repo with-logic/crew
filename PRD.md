@@ -1333,8 +1333,13 @@ known-tap registry.
 The registry exists to solve the blank-canvas problem without cloning many repos
 on first run. Implementations SHOULD build it ahead of release by indexing a
 curated set of trusted taps, then ship the resulting compact snapshot in the
-binary/site assets. A client MUST NOT clone or fetch every known tap merely to
-populate the registry.
+binary/site assets. Release builds SHOULD verify that the shipped snapshot was
+generated from the curated source manifest. Source manifests SHOULD pin each tap
+to a reviewed commit SHA for deterministic release artifacts; a tracking branch
+or tag may be recorded only as refresh metadata. These build-time pins do not
+pin the user's eventual tap: once the user runs `crew tap add`, Homecrew clones
+and updates that tap using the normal tap rules. A client MUST NOT clone or fetch
+every known tap merely to populate the registry.
 
 Each known tap entry has:
 
