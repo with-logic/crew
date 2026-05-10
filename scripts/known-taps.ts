@@ -5,13 +5,11 @@
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { addKnownTapSource } from "../src/known-taps/build/add.ts";
-import { buildKnownTapRegistry } from "../src/known-taps/build/index.ts";
 import { parseKnownTapManifest } from "../src/known-taps/build/manifest.ts";
 import { updateKnownTapPins } from "../src/known-taps/build/pins.ts";
-import { renderKnownTapRegistry } from "../src/known-taps/build/render.ts";
 import type { KnownTapManifest } from "../src/known-taps/build/types.ts";
-import { readText, rmrf, writeText } from "../src/util/fs.ts";
-import { readJson, writeJson } from "../src/util/json.ts";
+import { rmrf } from "../src/util/fs.ts";
+import { readJson } from "../src/util/json.ts";
 import {
   COMMON_FLAGS,
   ensureFlags,
@@ -24,6 +22,8 @@ import {
   updateSelection,
   usage,
 } from "./known-taps/args.ts";
+import { writeKnownTapManifest } from "./known-taps/manifest.ts";
+import { checkRegistryFiles, renderRegistry, writeRegistryFiles } from "./known-taps/registry.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_WORK_DIR = join(ROOT, ".crew-known-taps-work");
@@ -70,12 +70,7 @@ function build(paths: Paths): void {
 
 function check(paths: Paths): void {
   const manifest = readManifest(paths.manifestPath);
-  const expected = renderRegistry(manifest, paths.workDir);
-  const actual = readText(paths.outPath);
-  if (actual === expected) {
-    return;
-  }
-  throw new Error(staleMessage(actual, expected));
+  checkRegistryFiles(paths.outPath, renderRegistry(manifest, paths.workDir));
 }
 
 function update(parsed: ParsedArgs, paths: Paths): void {
@@ -84,8 +79,8 @@ function update(parsed: ParsedArgs, paths: Paths): void {
   const selection = updateSelection(parsed);
   const updated = updateKnownTapPins(manifest, selection);
   const rendered = renderRegistry(updated.manifest, paths.workDir);
-  writeJson(paths.manifestPath, updated.manifest);
-  writeText(paths.outPath, rendered);
+  writeKnownTapManifest(paths.manifestPath, updated.manifest);
+  writeRegistryFiles(paths.outPath, rendered);
   printUpdates(updated.updates);
 }
 
@@ -104,8 +99,8 @@ function add(parsed: ParsedArgs, paths: Paths): void {
     trackingRef: flagValue(parsed, "tracking-ref") ?? "main",
   });
   const rendered = renderRegistry(result.manifest, paths.workDir);
-  writeJson(paths.manifestPath, result.manifest);
-  writeText(paths.outPath, rendered);
+  writeKnownTapManifest(paths.manifestPath, result.manifest);
+  writeRegistryFiles(paths.outPath, rendered);
   process.stdout.write(`added ${result.source.name} at ${result.source.commit.slice(0, 8)}\n`);
 }
 
@@ -114,11 +109,7 @@ function readManifest(path: string): KnownTapManifest {
 }
 
 function writeRegistry(outPath: string, manifest: KnownTapManifest, workDir: string): void {
-  writeText(outPath, renderRegistry(manifest, workDir));
-}
-
-function renderRegistry(manifest: KnownTapManifest, workDir: string): string {
-  return renderKnownTapRegistry(buildKnownTapRegistry(manifest, { workDir }));
+  writeRegistryFiles(outPath, renderRegistry(manifest, workDir));
 }
 
 function printUpdates(updates: readonly { name: string; from: string; to: string }[]): void {
@@ -155,16 +146,4 @@ function assertSafeWorkDir(workDir: string): void {
   if (forbidden.has(resolved) || !basename(resolved).includes("known-taps-work")) {
     throw new Error("--work-dir must point at a disposable known-taps work directory");
   }
-}
-
-function staleMessage(actual: string, expected: string): string {
-  const actualLines = actual.split("\n");
-  const expectedLines = expected.split("\n");
-  const max = Math.max(actualLines.length, expectedLines.length);
-  for (let i = 0; i < max; i++) {
-    if (actualLines[i] !== expectedLines[i]) {
-      return `known-tap registry is stale at line ${i + 1}; run \`bun run known-taps build\``;
-    }
-  }
-  return "known-tap registry is stale; run `bun run known-taps build`";
 }

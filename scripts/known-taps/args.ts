@@ -45,7 +45,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 export function pathsFrom(root: string, defaultWorkDir: string, parsed: ParsedArgs): Paths {
   return {
     manifestPath: flagValue(parsed, "manifest") ?? join(root, "known-taps", "manifest.json"),
-    outPath: flagValue(parsed, "out") ?? join(root, "src", "known-taps", "generated.ts"),
+    outPath: flagValue(parsed, "out") ?? join(root, "src", "known-taps", "generated"),
     workDir: flagValue(parsed, "work-dir") ?? defaultWorkDir,
   };
 }

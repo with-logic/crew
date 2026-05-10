@@ -1,7 +1,7 @@
 # Known Tap Registry
 
 The bundled known-tap registry is generated from `known-taps/manifest.json` and
-committed at `src/known-taps/generated.ts`.
+committed under `src/known-taps/generated/`.
 
 Each manifest entry pins a tap source to a reviewed commit SHA. `trackingRef` is
 only a human/automation hint for refreshing the pin; release builds must not
@@ -12,7 +12,7 @@ There are two different update actions:
 
 - **Regenerate the snapshot**: read the current pinned commits in
   `known-taps/manifest.json`, clone those exact commits, and rewrite
-  `src/known-taps/generated.ts`. This is deterministic and safe to do during
+  `src/known-taps/generated/`. This is deterministic and safe to do during
   release.
 - **Advance a pin**: inspect a newer upstream commit, decide that Homecrew still
   trusts that tap content, update the manifest's `commit`, and regenerate the
@@ -35,7 +35,7 @@ bun run check
 suite, so CI and the release workflow fail if the generated snapshot is stale.
 
 `bun run release` also runs `bun run known-taps build` on the release branch
-before committing. That refreshes `src/known-taps/generated.ts` from the
+before committing. That refreshes `src/known-taps/generated/` from the
 reviewed manifest, but it does not advance manifest pins from `trackingRef`.
 Refreshing pins should happen in a normal reviewed PR.
 
@@ -50,10 +50,23 @@ Routine workflows:
    `commit` after reviewing the upstream diff, then open a PR. Use
    `bun run known-taps update <tap-name> [<tap-name>...]` to resolve each
    selected tap's `trackingRef`, update the manifest pin, and regenerate
-   `src/known-taps/generated.ts`. Use `bun run known-taps update --all` to
+   `src/known-taps/generated/`. Use `bun run known-taps update --all` to
    refresh every manifest entry that has a `trackingRef`.
 3. **Cut a Homecrew release**: run `bun run release`; it regenerates the
    snapshot from already-reviewed pins as part of the release PR.
+
+Initial seed criteria:
+
+- Prefer official, first-party skill repositories from product/tool owners.
+- Keep each source scoped to the tap root that Homecrew can index cleanly; use
+  `subpath` to avoid unrelated repo content or alternate package/plugin shapes.
+- Do not include a source if any indexed skill fails Homecrew's skill
+  validation. Ask the upstream project to fix the skill shape, or add a narrower
+  subpath that validates.
+- Keep the seed small enough to review by reading the manifest diff and the
+  generated skill list.
+- Use `trust: "official"` only for first-party repos. Use `trust: "curated"`
+  for useful third-party repos that Homecrew maintainers have reviewed.
 
 Adding a tap source:
 

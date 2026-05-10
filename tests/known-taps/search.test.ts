@@ -120,8 +120,9 @@ describe("searchKnownTaps", () => {
     ]);
   });
 
-  test("default registry is currently empty", () => {
-    expect(searchKnownTaps("anything")).toEqual([]);
+  test("default registry includes seeded official taps", () => {
+    expect(findKnownTapByName("supabase")?.trust).toBe("official");
+    expect(searchKnownTaps("postgres").some((hit) => hit.tap.name === "supabase")).toBe(true);
   });
 });
 

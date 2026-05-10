@@ -331,7 +331,7 @@ git add package.json CHANGELOG.md
 [ -f src/core/version.ts ] && git add src/core/version.ts
 [ -f PRD.md ] && git add PRD.md
 [ -f site/public/latest-version.json ] && git add site/public/latest-version.json
-[ -f src/known-taps/generated.ts ] && git add src/known-taps/generated.ts
+[ -d src/known-taps/generated ] && git add src/known-taps/generated
 git commit -q -m "Release ${next_tag}"
 
 echo "==> Pushing branch"

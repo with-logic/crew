@@ -8,7 +8,6 @@ import { join } from "node:path";
 import { buildKnownTapRegistry } from "../../src/known-taps/build/index.ts";
 import { parseKnownTapManifest } from "../../src/known-taps/build/manifest.ts";
 import { assertRelativePosixPath } from "../../src/known-taps/build/paths.ts";
-import { renderKnownTapRegistry } from "../../src/known-taps/build/render.ts";
 import type { KnownTapManifest } from "../../src/known-taps/build/types.ts";
 import {
   commitAll,
@@ -151,10 +150,6 @@ describe("known tap registry builder", () => {
       ),
     ).toThrow("has an invalid skill");
   });
-});
-
-test("renderKnownTapRegistry writes the generated module", () => {
-  expect(renderKnownTapRegistry([])).toContain("GENERATED_KNOWN_TAPS = []");
 });
 
 function validSource(): Record<string, unknown> {
