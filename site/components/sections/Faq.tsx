@@ -153,6 +153,16 @@ const QAS: readonly QA[] = [
     ),
   },
   {
+    id: "logic",
+    q: "Who builds Homecrew?",
+    a: (
+      <>
+        Homecrew is an open-source project by <a href="https://logic.inc">Logic, Inc</a>. Logic is a
+        platform for building and operating fleets of production agents reliably at scale.
+      </>
+    ),
+  },
+  {
     id: "platforms",
     q: "What about Linux? Windows?",
     a: "Future work. The v1 spec is macOS-only because launchd is the autoupdate mechanism and each agent adapter encodes platform-specific paths. Nothing in the core design is Mac-specific; it's a scope decision, not a technical one.",

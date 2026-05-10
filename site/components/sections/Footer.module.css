@@ -18,6 +18,18 @@
   max-width: 340px;
 }
 
+.lede a,
+.bot a {
+  color: inherit;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 3px;
+}
+
+.lede a:hover,
+.bot a:hover {
+  color: var(--ink);
+}
+
 .h5 {
   font-family: var(--font-mono);
   font-size: 12px;
