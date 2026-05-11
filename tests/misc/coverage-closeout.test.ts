@@ -635,7 +635,7 @@ describe("targets/install — uninstall tolerates inconsistent marker with --for
     const { claudeCodeAdapter } =
       require("../../src/agents/claude-code.ts") as typeof import("../../src/agents/claude-code.ts");
     const { uninstallSkillFromAgents } =
-      require("../../src/agents/install.ts") as typeof import("../../src/agents/install.ts");
+      require("../../src/agents/uninstall.ts") as typeof import("../../src/agents/uninstall.ts");
     const projCwd = makeTempDir();
     const dir = join(projCwd, ".claude", "skills", "demo");
     require("node:fs").mkdirSync(dir, { recursive: true });

@@ -85,7 +85,7 @@ metadata:
 
 **Versions are git commit SHAs.** Homecrew does not define a version field. Every installed skill is identified by the SHA of the commit it was resolved from. Tags and branches resolve to SHAs at install time. Users pin with `@<sha>`, `@<tag>`, or `@<branch>`.
 
-**Multi-skill directories.** A directory containing more than one skill has no special designation. When `crew install` is pointed at a source, Homecrew looks for a `SKILL.md` at the root. If present, one skill is installed. If not, Homecrew walks one level deep and installs every valid child skill (§9 step 5). A skill's install name always comes from the `name` field in its `SKILL.md`; the source directory name is only a filesystem location and need not match.
+**Multi-skill directories.** A directory containing more than one skill has no special designation. When `crew install` is pointed at a source, Homecrew looks for a `SKILL.md` at the root. If present, one skill is installed. If not, Homecrew walks the standard tap layouts (§9 step 5). Trusted non-standard repositories can opt into bounded recursive fallback discovery. A skill's install name always comes from the `name` field in its `SKILL.md`; the source directory name is only a filesystem location and need not match.
 
 **Meta-skills** (a skill whose purpose is pulling in a set of others) are ordinary skills with `dependencies` and an optional descriptive body. They require no special frontmatter.
 
@@ -104,8 +104,9 @@ crew skills                       Alias for `crew list`.
 crew search <query>               Search across configured taps.
 crew info <ref-or-name>           Show details for an installed or searchable skill.
 
-crew tap add <git-url> [<name>]   Add a registry (name defaults to repo name).
-crew tap <git-url> [<name>]       Shorthand for `crew tap add`.
+crew tap add [--recursive] <url-or-path> [<name>]
+                                   Add a registry (name defaults to repo/path name).
+crew tap <url-or-path> [<name>]   Shorthand for `crew tap add`.
 crew tap remove <name>            Remove a registry.
 crew tap list                     List configured registries.
 crew taps                         Alias for `crew tap list`.
@@ -143,6 +144,7 @@ Accepted on any command where they apply:
 ### 5.3 Install-time flags
 
 - `--from-git <url>[@<ref>]` — explicit git source, equivalent to passing the URL as the ref but disambiguates when the argument might look like a tap name.
+- `--recursive` — for direct git/path installs only, fall back to bounded recursive discovery when standard layouts find no skill candidates. Tap-name installs use the tap's configured discovery mode; combining `--recursive` with a tap-name ref is a `usage_error`. Dependencies declared by a skill installed with `--recursive` do not inherit the flag; each dependency resolves with its own standard discovery unless its source is already a recursive tap.
 
 ### 5.3.1 Uninstall-time flags
 
@@ -257,6 +259,7 @@ FLAGS
   --agent <name>          Restrict to named agent(s). Repeatable.
   --dry-run                Show what would be installed.
   --force                  Overwrite a customized destination.
+  --recursive              Fall back to bounded recursive discovery.
 
 EXAMPLES
   $ crew install python-testing
@@ -335,6 +338,15 @@ taps:
     registered: true
     url: https://github.com/with-logic/backend.git
     subpath: skills
+  # `discovery` may be omitted or set to `standard` for standard layouts.
+  # `discovery: recursive` keeps standard discovery first, but if the
+  # standard tap layouts find no skill candidates, Homecrew searches
+  # recursively with bounded depth and skip rules.
+  - name: acme-monorepo
+    kind: git
+    registered: true
+    url: https://github.com/acme/monorepo.git
+    discovery: recursive
   # Auto-taps are created implicitly when the user runs `crew install`
   # against a source crew hasn't seen before. They behave like
   # registered taps for update/search purposes, but are garbage-
@@ -508,6 +520,7 @@ Written into every Homecrew-installed skill directory. JSON, UTF-8, trailing new
   "tap_kind": "git",
   "tap_url": "https://github.com/with-logic/crew-skills.git",
   "tap_subpath": "",
+  "tap_path": "",
   "path": "python-testing",
   "ref": "main",
   "resolved_sha": "a1b2c3d4e5f6789abcdef0123456789abcdef012",
@@ -520,7 +533,7 @@ Written into every Homecrew-installed skill directory. JSON, UTF-8, trailing new
 
 **Field contract:**
 
-- `schema_version` — integer, currently `1`. Bumped when the marker schema changes incompatibly.
+- `schema_version` — integer, currently `1`. Bumped when the marker schema changes incompatibly. Optional additive fields that older implementations can ignore do not require a bump.
 - `name` — the skill's `name` from `SKILL.md` frontmatter.
 - `agents` — the list of agent names (§7.2) that own this install. Most installs are owned by a single agent, but when N agents resolve to the same `dest` (path-sharing, §7.2) all N are recorded here. Always non-empty; alphabetically sorted.
 - `tap_name` — the configured tap that owns this skill at install time. May not exist in `config.yaml` later (user removed it manually); doctor uses the rest of the marker to rebuild a tap entry.
@@ -528,6 +541,7 @@ Written into every Homecrew-installed skill directory. JSON, UTF-8, trailing new
 - `tap_url` — for `tap_kind: git`, the clone URL. Empty string for `tap_kind: path`.
 - `tap_subpath` — for `tap_kind: git`, an optional directory inside the repo (empty string when none). Empty string for `tap_kind: path`.
 - `tap_path` — for `tap_kind: path`, the absolute filesystem path to the tap. Empty string for `tap_kind: git`.
+- `tap_discovery` — optional. When `"recursive"`, `doctor --repair` reconstructs the tap with recursive fallback discovery. Absent means standard discovery.
 - `path` — the skill's source location relative to the tap's root (after subpath is applied for git taps). Empty string when the tap itself is one skill (root SKILL.md). This path need not end in the skill's declared `name`.
 - `ref` — the ref the user asked for (`main`, `v1.2.0`, a SHA, or `null` if the default branch was used and no ref was specified).
 - `resolved_sha` — the full 40-char commit SHA the install came from, or `null` for path-kind taps.
@@ -708,6 +722,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
       - Exactly one level of namespace nesting is recognized. Deeper nesting is ignored.
       - The source root itself is NOT walked in this case — `skills/` is the authoritative index.
    3. Else, crew walks **exactly one directory level deep** under the resolved location and adds every subdirectory containing a `SKILL.md` to the install set. Deeper nesting is ignored.
+   4. If, and only if, the standard cases above find zero skill candidates and the owning tap has `discovery: recursive` (or the user supplied `--recursive` for a direct git/path install), crew performs bounded recursive fallback discovery. It searches descendant directories up to depth 5 for `SKILL.md`, skips hidden directories and common non-source/vendor directories (`.git`, `.hg`, `.svn`, `.crew`, `node_modules`, `vendor`, `dist`, `build`, `coverage`, `.next`), never descends inside a directory once it has found that directory's `SKILL.md`, and records each discovered skill with its POSIX path relative to the tap root. Recursive fallback never runs when a standard layout produced any valid or invalid skill candidate; invalid standard candidates are surfaced as validation failures instead of being bypassed by deeper search.
 
    A location that produces zero valid skills through the applicable case aborts with `no_skills_found`.
    - Multi-skill expansions are how the user gets every skill in a tap installed at once. Each child becomes an independent state entry attributed to the same tap (`source.tap`); upstream additions to that tap are picked up automatically by `crew update` (§10.1.1).
@@ -809,12 +824,13 @@ On every `crew update` run, for each group of state entries sharing
 (tap, scope, project_root) where **at least one member** has
 `tracks_tap: true`, crew:
 
-1. Walks one level deep under the tap's resolved root (§9 step 5) and
-   builds the current child set. If the current child set contains the
-   same declared `name` at more than one tap-relative source path,
-   re-expansion records `conflicting_dependencies` for that name,
-   leaves existing state entries pointed at their previous source path,
-   and the update run exits 1.
+1. Expands the tap's resolved root using the tap's configured discovery
+   mode (§9 step 5) and builds the current child set. If the current
+   child set contains the same declared `name` at more than one
+   tap-relative source path, re-expansion records
+   `conflicting_dependencies` for that name, leaves existing state
+   entries pointed at their previous source path, and the update run
+   exits 1.
 2. For each child that is **not** already in state (a skill the
    maintainer added upstream since the user's last update): runs the
    install algorithm (§7.3) for every agent in the current agent
@@ -1294,7 +1310,7 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
 
 ### 16.1 What a tap is
 
-A **tap** is any directory whose immediate children are skills (each containing a `SKILL.md`). It can be a git-managed directory (a clone of a git repo, optionally rooted at a subdirectory via `subpath`) or a local filesystem directory. Every tap has a unique short name in `config.yaml`. Every installed skill belongs to exactly one tap, recorded as `state.installations[i].source.tap`.
+A **tap** is any directory that exposes skills through the standard layouts in §9 step 5. It can be a git-managed directory (a clone of a git repo, optionally rooted at a subdirectory via `subpath`) or a local filesystem directory. Every tap has a unique short name in `config.yaml`. Every installed skill belongs to exactly one tap, recorded as `state.installations[i].source.tap`.
 
 Taps come in two flavors that differ only in lifecycle, not in structure or behavior:
 
@@ -1305,7 +1321,7 @@ A user can promote an auto tap to registered by running `crew tap add` against t
 
 Both kinds can be either git-backed or path-backed. Path-backed taps don't fetch (there's no upstream); `crew tap update` skips them.
 
-A tap directory may contain non-skill files and subdirectories — only immediate children with a valid `SKILL.md` are recognized. Example tap:
+A tap directory may contain non-skill files and subdirectories — Homecrew recognizes the standard root, `skills/`, namespace, and immediate-child layouts from §9 step 5. Example tap:
 
 ```
 acme-skills/
@@ -1408,10 +1424,11 @@ since the registry was built, the normal tap-add or install error applies.
   - For git taps, the initial clone runs **before** the tap is written to config. If the clone fails (bad URL, typo, network failure, no access), the tap is not added — neither `crew tap list` nor `config.yaml` shows it, and any partially-materialized clone directory is removed.
   - If the named tap already exists with a matching URL/path/subpath, the call is an idempotent no-op (exit 0). If an existing tap of the same name has a different URL/path/subpath, the call is a `usage_error` — the user must pick a different name.
   - If the URL/path matches an existing **auto** tap, `crew tap add` promotes it: `registered` flips to `true`, and the `<name>` argument (if supplied) renames the tap. No re-clone.
+- `crew tap add --recursive <url-or-path> [<name>]` registers or promotes the tap with `discovery: recursive`. Re-running it against an existing registered tap with the same target upgrades that tap to recursive discovery. Promoting an existing auto tap preserves any recursive discovery mode already recorded for that tap; adding `--recursive` during promotion upgrades it at the same time. This is an explicit trust signal for non-standard repository layouts: standard discovery still runs first, and recursive discovery is only the fallback described in §9 step 5.4. There is no command-level downgrade flag. Editing `config.yaml` to remove `discovery` makes live tap resolution use standard discovery, but existing installed markers retain the discovery mode used at install time; `doctor --repair` can therefore reconstruct recursive discovery from those markers until the affected skills are reinstalled or markers are rewritten by a future command.
 - `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Bare `crew tap` (no positional at all) prints the command's help page (same as `crew help tap`) with exit 0. Any other input — an unknown subcommand, or a word that doesn't parse as a source — is a `usage_error` whose message names the offending input and points at `crew help tap`. Other commands that take subcommands (`crew cache`, `crew autoupdate`) behave the same way; `crew agents` lists agents when bare and errors on an unknown subcommand.
 - Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`). The subpath, URL, or path is entirely internal — it never appears in skill references.
 - `crew tap remove <name>` deletes the local clone and removes the tap from config. Auto taps are also removed automatically when their last associated state entry is uninstalled (see §16.5).
-- `crew tap list` prints each tap's name, kind (`registered` / `auto`), source (URL`//subpath` or path), and last-fetched timestamp (for git-kind taps only). `--json` emits the structured shape.
+- `crew tap list` prints each tap's name, kind (`registered` / `auto`), discovery mode when non-standard, source (URL`//subpath` or path), and last-fetched timestamp (for git-kind taps only). `--json` emits the structured shape.
 - `crew tap update [<name>...]` fetches upstream for every git-kind tap (or only the named ones) and fast-forwards each tap's working tree. Path-kind taps are skipped silently. Per-tap failures are reported per-row and do not abort the run; exit code is 1 if any tap failed, 0 otherwise. It does **not** touch installed skills — contrast with `crew update`, which refreshes taps and updates installed skills.
 
 ### 16.4 `crew install <tap-name>`
@@ -1449,7 +1466,7 @@ When `crew install` is given a reference that resolves to a source not currently
 
 1. Derives a name with the same algorithm as `crew tap add`.
 2. If the derived name is already in use by a tap with a different URL/path/subpath, suffixes the name with `-2`, `-3`, etc. until unique. (Registered-tap-add never silently suffixes — only auto-tap creation does.)
-3. Writes a new tap row with `registered: false` and the appropriate `kind`/`url`/`path`/`subpath` fields.
+3. Writes a new tap row with `registered: false` and the appropriate `kind`/`url`/`path`/`subpath` fields. If the install used `--recursive`, the auto tap also records `discovery: recursive`.
 4. Acquires the source under the new tap name and proceeds with the install.
 
 Auto taps are functionally indistinguishable from registered taps for `crew update`, `crew tap update`, `crew search`, and `crew install <tap-name>` purposes. The only differences are:
@@ -1601,6 +1618,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-07 | §9 step 5 | `crew install gh:owner/repo` pointed at a repo with no root `SKILL.md` but skill subdirectories installs every valid child one level deep. |
 | C-INST-08 | §9 step 5 | Nested skills more than one level deep are NOT installed by directory expansion. |
 | C-INST-08b | §9 step 5 | `crew install gh:owner/repo` pointed at a repo with no root `SKILL.md` but a `skills/` directory containing skill subdirectories installs every valid child of `skills/`. The source root itself is not walked. |
+| C-INST-08c | §9 step 5 | `crew install --recursive gh:owner/repo` pointed at a trusted repo whose standard layouts expose no skill candidates finds valid nested skills up to the bounded recursive depth and records their tap-relative paths. Without `--recursive`, the same source produces `no_skills_found`. |
 | C-INST-09 | §9 | A directory source that expands to zero valid skills produces error `no_skills_found`, exit 4. |
 | C-INST-10 | §9 | `resolved_sha` in state and in the marker is always a 40-character hex commit SHA for git and tap sources. |
 | C-INST-11 | §9 | Installing an already-installed skill at the same SHA prints "already installed" and exits 0. |
@@ -1732,7 +1750,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-01 | §16.3 | `crew tap add <url>` clones the repo into `~/.crew/taps/<name>/`. |
 | C-TAP-02 | §16.3 | `crew tap add <url> <name>` uses the given name instead of the derived one. |
 | C-TAP-03 | §16.3 | `crew tap remove <name>` deletes the local clone and updates config. |
-| C-TAP-04 | §16.3 | `crew tap list` reports every configured tap with name, URL, and last-fetched timestamp. |
+| C-TAP-04 | §16.3 | `crew tap list` reports every configured tap with name, kind/status, source target, recursive discovery mode when non-standard, and last-fetched timestamp for git-kind taps. |
 | C-TAP-05 | §16.2 | The default tap named `core` is present on first run. |
 | C-TAP-06 | §16.2 | `crew tap remove core` is refused without `--force`. |
 | C-TAP-07 | §16.4 | `crew search <skill>` matches case-insensitively against `name` and `description` across every tap. |
@@ -1752,6 +1770,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-20 | §16.5 | `crew install <git-url>` against a URL not matching any configured tap creates a new auto tap (kind: git, registered: false), choosing a unique derived name (suffixing `-2`, `-3`, ... if a name collision exists with a different URL). |
 | C-TAP-21 | §16.5 | `crew install <local-path>` creates an auto tap with `kind: path`, `registered: false`, `path: <abs-path>`. `crew tap update` skips path-kind taps; `crew search` walks them when reachable. |
 | C-TAP-22 | §16.5 | Running `crew tap add <url>` against a URL that already backs an auto tap promotes it (`registered` flips to `true`) without re-cloning, and applies any user-supplied `<name>` argument. |
+| C-TAP-22b | §16.3 / §16.6 | `crew tap add --recursive <url-or-path> <name>` persists recursive discovery for that tap; later `crew search` and `crew install <name>/<skill>` can find skills only reachable through bounded recursive fallback. |
 | C-TAP-23 | §16.2.1 / §16.6 | `crew search <query>` surfaces matching known-tap registry entries that are not already configured as suggestions after configured-tap hits, without cloning, fetching, mutating config, or listing them for `crew search` with no query. Suggestions include the canonical `crew tap add <source-ref> <name>` command. JSON includes those suggestions in `known_hits`. |
 | C-TAP-24 | §9 / §16.2.1 | `crew install <tap-source>` that cannot resolve from configured taps surfaces exact known-tap registry matches in the `invalid_ref` error, including canonical `crew tap add` and follow-up install commands, without cloning, fetching, mutating config, or installing from the known tap. JSON errors include `known_tap_suggestions`. |
 

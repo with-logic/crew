@@ -43,7 +43,9 @@ export function Taps() {
               name comes from the <code>name</code> field inside <code>SKILL.md</code>. Everything
               else is ignored. Prefer to keep skills under a <code>skills/</code> directory? That
               works too — if <code>skills/</code> exists, crew indexes its children instead of the
-              root.
+              root. For trusted repos with non-standard nesting,{" "}
+              <code>crew tap add --recursive</code> keeps those standard layouts first and falls
+              back to bounded recursive discovery.
             </p>
             <p className={styles.note}>
               Group related skills into <strong>namespaces</strong>: <code>skills/marketing/*</code>

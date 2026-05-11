@@ -122,6 +122,16 @@ describe("normalizeConfig", () => {
     );
   });
 
+  test("tap discovery must be standard or recursive", () => {
+    expect(() => normalizeConfig({ taps: [{ name: "a", url: "x", discovery: "deep" }] })).toThrow(
+      CrewError,
+    );
+    const standard = normalizeConfig({ taps: [{ name: "a", url: "x", discovery: "standard" }] });
+    expect(standard.taps[0]!.discovery).toBeUndefined();
+    const recursive = normalizeConfig({ taps: [{ name: "b", url: "x", discovery: "recursive" }] });
+    expect(recursive.taps[0]!.discovery).toBe("recursive");
+  });
+
   test("kind: path tap parses successfully", () => {
     const c = normalizeConfig({
       taps: [{ name: "local", kind: "path", path: "/tmp/skills", registered: true }],

@@ -8,13 +8,8 @@ import { acquireTap } from "../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import { findSiblingDep, type SiblingHit } from "../dep-resolution.ts";
 import { attributeRef } from "../tap-attribution.ts";
-import {
-  enqueueTapRef,
-  expandSkillsAsItems,
-  type PendingItem,
-  sourcePinned,
-  sourceRequestedRef,
-} from "./enqueue.ts";
+import { enqueueTapRef, type PendingItem } from "./enqueue.ts";
+import { expandSkillsAsItems, sourcePinned, sourceRequestedRef } from "./expand-items.ts";
 
 /** Resolve and enqueue items for a dependency reference. */
 export function enqueueDep(

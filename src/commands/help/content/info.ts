@@ -7,6 +7,7 @@ export const infoHelp: CommandHelp = {
     "Get the details on a skill — installed or not.",
     "If you already have it installed, you'll see what's going on locally: where it came from, which version you're on, and which agents it's in. If it's just a reference (a URL, a name in a collection you've added), Homecrew fetches the skill's metadata so you can look before you leap.",
     "Works with every reference shape `crew install` understands — see `crew help install` for the list.",
+    "For non-standard nested repositories, add the source as a recursive tap first (`crew tap add --recursive ...`) and then run `crew info` against that tap.",
   ],
   flags: [{ flag: "--json", description: "Machine-readable output." }],
   examples: [

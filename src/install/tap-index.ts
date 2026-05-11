@@ -18,13 +18,14 @@
  * but contains child directories with a `SKILL.md`.
  */
 
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { tapPath } from "../core/paths.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
-import { isDirectory, listDir } from "../util/fs.ts";
+import { findRecursiveSkillDirs } from "../sources/recursive.ts";
+import { isDirectory, listDir, toPosix } from "../util/fs.ts";
 
 /** Location of one skill inside a tap. */
 export interface SkillLocation {
@@ -79,7 +80,6 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
     }
   };
 
-  // Case 1: root is itself a skill.
   if (hasSkillMd(root)) {
     const skillName = skillNameForIndex(root);
     if (skillName !== null)
@@ -119,7 +119,7 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
         });
       }
     }
-    return { skills, namespaces };
+    return maybeRecursiveIndex(tap, root, skills, namespaces, addSkill);
   }
 
   // Case 3: walk one level under root.
@@ -130,6 +130,23 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
     const skillName = skillNameForIndex(child);
     if (skillName === null) continue;
     addSkill({ name: skillName, namespace: null, path: child, tapRelativePath: name });
+  }
+  return maybeRecursiveIndex(tap, root, skills, namespaces, addSkill);
+}
+
+function maybeRecursiveIndex(
+  tap: TapConfig,
+  root: string,
+  skills: Map<string, SkillLocation[]>,
+  namespaces: Map<string, SkillLocation[]>,
+  addSkill: (loc: SkillLocation) => void,
+): TapIndex {
+  if (skills.size > 0 || tap.discovery !== "recursive") return { skills, namespaces };
+  for (const dir of findRecursiveSkillDirs(root)) {
+    const tapRelativePath = toPosix(relative(root, dir));
+    const skillName = skillNameForIndex(dir);
+    if (skillName === null) continue;
+    addSkill({ name: skillName, namespace: null, path: dir, tapRelativePath });
   }
   return { skills, namespaces };
 }

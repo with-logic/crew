@@ -156,6 +156,22 @@ describe("tap source install", () => {
     expect(code).toBe(0);
   });
 
+  test("install --recursive rejects tap-name refs", () => {
+    const home = makeCrewHome();
+    const repo = buildTapRepo();
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    const capture = captureStreams();
+    const code = runCli(["install", "--recursive", "mytap/alpha"], {
+      home,
+      streams: capture.streams,
+    });
+    expect(code).toBe(4);
+    expect(capture.stderr()).toContain("only applies to direct git or path sources");
+  });
+
   test("qualified tap ref is case-insensitive", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();

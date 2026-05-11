@@ -14,6 +14,7 @@ export interface TapListRow {
   readonly name: string;
   readonly kind: "git" | "path";
   readonly registered: boolean;
+  readonly discovery: "standard" | "recursive";
   readonly target: string;
   readonly last_fetched: string | null;
 }
@@ -30,9 +31,10 @@ export function renderTapList(rows: readonly TapListRow[], style: Styler): strin
 
   const cells: string[][] = rows.map((r) => {
     const sym = r.registered ? style.symbol("ok") : style.symbol("muted");
-    const flag = r.registered ? style.dim("registered") : style.dim("auto");
+    const flag = r.registered ? "registered" : "auto";
+    const mode = r.discovery === "recursive" ? `${flag}, recursive` : flag;
     const fetched = formatFetched(r, style);
-    return [`  ${sym}`, style.bold(r.name), flag, r.target, fetched];
+    return [`  ${sym}`, style.bold(r.name), style.dim(mode), r.target, fetched];
   });
   for (const line of columns(cells, 2)) lines.push(line);
 

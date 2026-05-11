@@ -15,7 +15,7 @@
 
 import { writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
-import type { Config, ResolvedSkill, Scope, StateFile } from "../core/types.ts";
+import type { Config, ResolvedSkill, Scope, StateEntry, StateFile } from "../core/types.ts";
 import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
@@ -24,6 +24,7 @@ import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules.ts
 import { type InstallSummary, performInstall } from "./perform.ts";
 import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
 import type { KindHint } from "./resolve-ref/index.ts";
+import { rewriteTapMarkers } from "./rewrite-tap-markers.ts";
 
 /** Options accepted by `runInstall`. */
 export interface InstallOptions {
@@ -36,6 +37,8 @@ export interface InstallOptions {
   readonly home?: string;
   /** Force a reference interpretation (from `--tap` / `--bundle` / `--skill`). */
   readonly kindHint?: KindHint;
+  /** Opt direct git/path refs into recursive fallback discovery. */
+  readonly recursive?: boolean;
 }
 
 /** Full result: summary plus any "already installed" short-circuit records. */
@@ -71,7 +74,12 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     requiredBy,
     config: configWithAutoTaps,
     skipped,
-  } = resolveInstallSet(options.refs, config, { cwd, home, kindHint: options.kindHint ?? null });
+  } = resolveInstallSet(options.refs, config, {
+    cwd,
+    home,
+    kindHint: options.kindHint ?? null,
+    recursive: options.recursive ?? false,
+  });
 
   // Apply §5.4 — duplicate installs. An install with a new active
   // adapter that didn't previously own the entry still has real work
@@ -104,6 +112,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     if (configWithAutoTaps !== config) writeConfig(configWithAutoTaps, home);
 
     const freshState = readState(home);
+    rewriteDiscoveryUpgradeMarkers(config, configWithAutoTaps, freshState.installations, cwd);
     const result = performInstall(toInstall, agents, options.scope, cwd, freshState, {
       force: options.force,
       dryRun: false,
@@ -122,6 +131,25 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
   }, home);
 
   return { summary, alreadyInstalled, resolved: resolvedAll, skipped };
+}
+
+function rewriteDiscoveryUpgradeMarkers(
+  before: Config,
+  after: Config,
+  stateEntries: readonly StateEntry[],
+  cwd: string,
+): void {
+  const previous = new Map(before.taps.map((tap) => [tap.name, tap]));
+  for (const tap of after.taps) {
+    const old = previous.get(tap.name);
+    if (!old) continue;
+    if (old.discovery === "recursive" || tap.discovery !== "recursive") continue;
+    rewriteTapMarkers(
+      { oldName: tap.name, newName: tap.name, discovery: "recursive" },
+      stateEntries,
+      cwd,
+    );
+  }
 }
 
 /**

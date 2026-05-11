@@ -24,13 +24,8 @@ import type { KindHint } from "../resolve-ref/index.ts";
 import { attributeRef } from "../tap-attribution.ts";
 import { topoSort } from "../topo.ts";
 import { enqueueDep } from "./dep.ts";
-import {
-  enqueueTapRef,
-  expandSkillsAsItems,
-  type PendingItem,
-  sourcePinned,
-  sourceRequestedRef,
-} from "./enqueue.ts";
+import { enqueueTapRef, type PendingItem } from "./enqueue.ts";
+import { expandSkillsAsItems, sourcePinned, sourceRequestedRef } from "./expand-items.ts";
 
 /** Options for resolution. */
 export interface ResolveOptions {
@@ -42,6 +37,8 @@ export interface ResolveOptions {
    * root ref; dependencies never see a hint.
    */
   readonly kindHint: KindHint;
+  /** Opt direct git/path roots into recursive fallback discovery. */
+  readonly recursive: boolean;
 }
 
 /** name → set of names that depend on it. */
@@ -72,6 +69,7 @@ export function resolveInstallSet(
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
   const kindHint: KindHint = options.kindHint ?? null;
+  const recursive = options.recursive ?? false;
 
   let config = startingConfig;
   const byName = new Map<string, ResolvedSkill>();
@@ -81,7 +79,7 @@ export function resolveInstallSet(
 
   // Step 1–5: resolve every root reference.
   for (const raw of refs) {
-    const enqueued = enqueueRoot(raw, config, cwd, home, kindHint);
+    const enqueued = enqueueRoot(raw, config, cwd, home, kindHint, recursive);
     config = enqueued.config;
     pending.push(...enqueued.items);
     skipped.push(...enqueued.skipped);
@@ -157,6 +155,7 @@ function enqueueRoot(
   cwd: string,
   home: string,
   kindHint: KindHint,
+  recursive: boolean,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const source = parseRef(raw, cwd);
 
@@ -168,7 +167,7 @@ function enqueueRoot(
   // Git URL or path: find or create the tap. This is always a
   // whole-tap install — the user pointed at a folder (or repo) and
   // said "install this". Future additions should follow.
-  const attrib = attributeRef(source, config);
+  const attrib = attributeRef(source, config, recursive ? "recursive" : undefined);
   const acquired = acquireTap(attrib.tap, home);
   const expansion = expandSkillsAsItems(
     acquired.rootDir,

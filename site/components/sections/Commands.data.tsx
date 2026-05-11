@@ -64,10 +64,11 @@ export const GROUPS: readonly CommandGroup[] = [
       },
       {
         name: "tap-add",
-        signature: <>crew tap add &lt;git-url&gt; [name]</>,
+        signature: <>crew tap add [--recursive] &lt;url-or-path&gt; [name]</>,
         description: (
           <>
-            Clone a registry into <code>~/.crew/taps/</code>. Name defaults to the repo name.
+            Add a registry from a git source or local folder. Name defaults to the repo/path name.
+            Recursive discovery is opt-in for trusted non-standard layouts.
           </>
         ),
       },
@@ -79,7 +80,8 @@ export const GROUPS: readonly CommandGroup[] = [
       {
         name: "tap-list",
         signature: <>crew tap list</>,
-        description: "Print each tap's name, URL, and last-fetched timestamp.",
+        description:
+          "Print each tap's name, kind/status, source target, recursive discovery marker when set, and last-fetched timestamp for git taps.",
       },
       {
         name: "taps",

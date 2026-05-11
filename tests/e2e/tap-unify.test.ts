@@ -558,6 +558,31 @@ describe("C-TAP-22 auto→registered promotion", () => {
     expect(state.installations[0]!.source.tap).toBe("teamtap");
   });
 
+  test("`crew tap add --recursive <same-url>` promotes and upgrades an auto tap", () => {
+    const home = makeCrewHome();
+    const repo = buildTapRepo("crew-promote-recursive-", ["widget"]);
+    runCli(["install", `file://${repo}`], {
+      home,
+      streams: captureStreams().streams,
+      prompt: alwaysYes,
+    });
+    const before = readConfig(home);
+    const auto = before.taps.find((t) => t.kind === "git" && t.url === `file://${repo}`)!;
+    expect(auto.registered).toBe(false);
+    expect(auto.discovery).toBeUndefined();
+
+    const code = runCli(["tap", "add", "--recursive", `file://${repo}`, "teamtap"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(code).toBe(0);
+    const tap = readConfig(home).taps.find((t) => t.kind === "git" && t.url === `file://${repo}`)!;
+    expect(tap.name).toBe("teamtap");
+    expect(tap.registered).toBe(true);
+    expect(tap.discovery).toBe("recursive");
+    expect(readState(home).installations[0]!.source.tap).toBe("teamtap");
+  });
+
   test("promotion rewrites markers for project-scope installs too", () => {
     const home = makeCrewHome();
     const projectRoot = makeTempDir("crew-proj-");

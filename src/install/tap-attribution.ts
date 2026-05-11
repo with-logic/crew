@@ -17,7 +17,7 @@
  * created (so the caller knows to write config.yaml back).
  */
 
-import type { Config, GitSource, PathSource, TapConfig } from "../core/types.ts";
+import type { Config, GitSource, PathSource, TapConfig, TapDiscovery } from "../core/types.ts";
 import { deriveAutoTapName } from "./tap-naming.ts";
 
 export interface TapAttribution {
@@ -35,16 +35,24 @@ export interface TapAttribution {
  * `resolve.ts`, not here — they don't need an auto-tap (they reference
  * a tap by name).
  */
-export function attributeRef(source: GitSource | PathSource, config: Config): TapAttribution {
-  if (source.type === "git") return findOrCreateGitTap(source, config);
-  return findOrCreatePathTap(source, config);
+export function attributeRef(
+  source: GitSource | PathSource,
+  config: Config,
+  discovery?: TapDiscovery,
+): TapAttribution {
+  if (source.type === "git") return findOrCreateGitTap(source, config, discovery);
+  return findOrCreatePathTap(source, config, discovery);
 }
 
-function findOrCreateGitTap(source: GitSource, config: Config): TapAttribution {
+function findOrCreateGitTap(
+  source: GitSource,
+  config: Config,
+  discovery: TapDiscovery | undefined,
+): TapAttribution {
   const existing = config.taps.find(
     (t) => t.kind === "git" && t.url === source.url && t.subpath === source.subpath,
   );
-  if (existing) return { tap: existing, created: false, config };
+  if (existing) return maybeUpgradeDiscovery(existing, config, discovery);
   const name = uniqueAutoName(deriveAutoTapName(source.url, source.subpath), config);
   const tap: TapConfig = {
     name,
@@ -53,13 +61,18 @@ function findOrCreateGitTap(source: GitSource, config: Config): TapAttribution {
     url: source.url,
     subpath: source.subpath,
     path: "",
+    ...(discovery === "recursive" ? { discovery } : {}),
   };
   return { tap, created: true, config: { ...config, taps: [...config.taps, tap] } };
 }
 
-function findOrCreatePathTap(source: PathSource, config: Config): TapAttribution {
+function findOrCreatePathTap(
+  source: PathSource,
+  config: Config,
+  discovery: TapDiscovery | undefined,
+): TapAttribution {
   const existing = config.taps.find((t) => t.kind === "path" && t.path === source.path);
-  if (existing) return { tap: existing, created: false, config };
+  if (existing) return maybeUpgradeDiscovery(existing, config, discovery);
   const last = source.path.split("/").filter(Boolean).pop() ?? "local";
   const name = uniqueAutoName(last, config);
   const tap: TapConfig = {
@@ -69,8 +82,25 @@ function findOrCreatePathTap(source: PathSource, config: Config): TapAttribution
     url: "",
     subpath: "",
     path: source.path,
+    ...(discovery === "recursive" ? { discovery } : {}),
   };
   return { tap, created: true, config: { ...config, taps: [...config.taps, tap] } };
+}
+
+function maybeUpgradeDiscovery(
+  tap: TapConfig,
+  config: Config,
+  discovery: TapDiscovery | undefined,
+): TapAttribution {
+  if (discovery !== "recursive" || tap.discovery === "recursive") {
+    return { tap, created: false, config };
+  }
+  const upgraded: TapConfig = { ...tap, discovery: "recursive" };
+  return {
+    tap: upgraded,
+    created: false,
+    config: { ...config, taps: config.taps.map((t) => (t.name === tap.name ? upgraded : t)) },
+  };
 }
 
 /** Append `-2`, `-3`, ... until the name doesn't collide with an existing tap. */

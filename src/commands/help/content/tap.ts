@@ -11,6 +11,11 @@ export const tapHelp: CommandHelp = {
   ],
   flags: [
     { flag: "--force", description: "Allow removing the default `core` tap." },
+    {
+      flag: "--recursive",
+      description:
+        "With `tap add`, enable bounded recursive fallback when standard layouts find no skills.",
+    },
     { flag: "--json", description: "Machine-readable output for `tap list`." },
   ],
   examples: [
@@ -30,6 +35,10 @@ export const tapHelp: CommandHelp = {
       command: "crew tap add ./my-skills local-skills",
       description:
         "Add a local folder — great when you're developing your own skills alongside everything else.",
+    },
+    {
+      command: "crew tap add --recursive @acme/monorepo acme",
+      description: "Add a trusted repo whose skills are nested outside standard tap layouts.",
     },
     {
       command: "crew tap @with-logic/backend//skills",
@@ -100,6 +109,7 @@ export const tapHelp: CommandHelp = {
   notes: [
     "Adding a tap is safe — Homecrew just clones (or points at) the folder and reads the skills inside. Nothing is installed until you ask for it.",
     "Re-adding the same thing is fine; Homecrew notices and doesn't do extra work. If you try to add a different URL under a name that's taken, Homecrew asks you to pick another name.",
+    "Promoting an auto tap keeps its existing discovery mode; pass `--recursive` while promoting to upgrade it if needed.",
     "If a skill name exists in two different collections, you can be specific with `collection/skill` to pick which one.",
     "If a name is both a collection AND a skill in another collection, Homecrew asks you which you meant. Pass `--yes` in scripts, or use `other-collection/name` to be unambiguous.",
     "`crew tap update` is the lightweight cousin of `crew update`: it refreshes what's available to search and install, without touching skills you already have. Use `crew update` when you also want installed skills to catch up.",
