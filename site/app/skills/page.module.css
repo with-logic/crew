@@ -1,0 +1,35 @@
+.hero {
+  padding-top: 72px;
+  padding-bottom: 28px;
+}
+
+.catalogSection {
+  padding-top: 0;
+}
+
+.kicker {
+  color: var(--mute);
+  font: 12px var(--font-mono);
+  margin-bottom: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: 56px;
+  line-height: 1;
+  letter-spacing: -0.025em;
+}
+
+.hero p {
+  margin: 22px 0 0;
+  color: var(--ink-2);
+  font-size: 18px;
+}
+
+@media (max-width: 860px) {
+  .hero h1 {
+    font-size: 42px;
+  }
+}

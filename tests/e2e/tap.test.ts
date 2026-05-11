@@ -353,6 +353,23 @@ describe("crew tap", () => {
     expect(names).not.toContain("decoy");
   });
 
+  test("root tap search indexes skills directory before root children", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repo = buildSubpathRepo();
+    runCli(["tap", "add", `file://${repo}`, "root-skills"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    const c = captureStreams();
+    runCli(["search", "--json", ""], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout()) as { hits: { name: string }[] };
+    const names = parsed.hits.map((h) => h.name).sort();
+    expect(names).toContain("gamma");
+    expect(names).toContain("delta");
+    expect(names).not.toContain("decoy");
+  });
+
   test("C-TAP-13 default name derivation uses <repo>-<subpath> for subpath taps", () => {
     const home = makeCrewHome();
     const repo = buildSubpathRepo();

@@ -1,7 +1,9 @@
 # Known Tap Registry
 
 The bundled known-tap registry is generated from `known-taps/manifest.json` and
-committed under `src/known-taps/generated/`.
+committed under `src/known-taps/generated/`. The generated site skill catalog is
+committed under `site/lib/generated/skillCatalog.ts`; it includes the bundled
+known taps plus the default `core` tap at the current `crew-skills` `main`.
 
 Each manifest entry pins a tap source to a reviewed commit SHA. `trackingRef` is
 only a human/automation hint for refreshing the pin; release builds must not
@@ -11,9 +13,9 @@ default branch moves between PR review and release.
 There are two different update actions:
 
 - **Regenerate the snapshot**: read the current pinned commits in
-  `known-taps/manifest.json`, clone those exact commits, and rewrite
-  `src/known-taps/generated/`. This is deterministic and safe to do during
-  release.
+  `known-taps/manifest.json`, clone those exact commits, resolve the default
+  `core` tap from `crew-skills` `main`, and rewrite `src/known-taps/generated/`
+  and `site/lib/generated/skillCatalog.ts`.
 - **Advance a pin**: inspect a newer upstream commit, decide that Homecrew still
   trusts that tap content, update the manifest's `commit`, and regenerate the
   snapshot. This changes what future Homecrew users may discover, so it should
@@ -23,6 +25,12 @@ The practical implication: `bun run release` can keep the generated index fresh
 with the reviewed manifest, but it will not pull new upstream skill changes by
 itself. To ship upstream changes from a known tap, first merge a PR that updates
 that tap's pinned `commit`.
+
+The default `core` tap is not listed in `known-taps/manifest.json` because it is
+already configured by default, not known-but-untapped. It deliberately follows
+`crew-skills` `main` at generation time: if a `crew-skills` change has been
+reviewed and merged, the next `bun run known-taps build` or release build picks
+it up automatically.
 
 To refresh the generated snapshot:
 
@@ -35,9 +43,10 @@ bun run check
 suite, so CI and the release workflow fail if the generated snapshot is stale.
 
 `bun run release` also runs `bun run known-taps build` on the release branch
-before committing. That refreshes `src/known-taps/generated/` from the
-reviewed manifest, but it does not advance manifest pins from `trackingRef`.
-Refreshing pins should happen in a normal reviewed PR.
+before committing. That refreshes `src/known-taps/generated/` and
+`site/lib/generated/skillCatalog.ts` from the reviewed known-tap pins and the
+current `core` tap. It does not advance manifest pins from `trackingRef`.
+Refreshing known-tap pins should happen in a normal reviewed PR.
 
 Routine workflows:
 
@@ -50,8 +59,8 @@ Routine workflows:
    `commit` after reviewing the upstream diff, then open a PR. Use
    `bun run known-taps update <tap-name> [<tap-name>...]` to resolve each
    selected tap's `trackingRef`, update the manifest pin, and regenerate
-   `src/known-taps/generated/`. Use `bun run known-taps update --all` to
-   refresh every manifest entry that has a `trackingRef`.
+   the generated registry and site catalog. Use `bun run known-taps update --all`
+   to refresh every manifest entry that has a `trackingRef`.
 3. **Cut a Homecrew release**: run `bun run release`; it regenerates the
    snapshot from already-reviewed pins as part of the release PR.
 

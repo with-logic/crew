@@ -1,3 +1,4 @@
+import { Button } from "../primitives/Button";
 import { Acc, Cmt, CodeBlock, Key, Ok, Prompt } from "../primitives/CodeBlock";
 import { Container } from "../primitives/Container";
 import { Eyebrow } from "../primitives/Eyebrow";
@@ -80,6 +81,26 @@ export function Taps() {
             </p>
           </div>
         </div>
+
+        <aside className={styles.catalogCallout} aria-labelledby="catalog-heading">
+          <div className={styles.tagRow}>
+            <span className={styles.catalogTag}>Skill discovery</span>
+          </div>
+
+          <h3 id="catalog-heading" className={styles.heading}>
+            Don't have any skills or taps?
+          </h3>
+
+          <p className={styles.copy}>
+            Homecrew has skills pre-indexed in the catalog to help you get started. Browse the
+            default tap and trusted known taps, find a good first skill, then choose exactly what
+            you want to install.
+          </p>
+
+          <div className={styles.buttonRow}>
+            <Button href="/skills">Open the Skill Catalog</Button>
+          </div>
+        </aside>
       </Container>
     </Section>
   );
