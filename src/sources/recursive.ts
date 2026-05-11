@@ -39,6 +39,7 @@ export function findRecursiveSkillDirs(rootDir: string): string[] {
 
 function shouldDescendInto(entry: WalkedEntry): boolean {
   if (shouldSkipDirectory(entry.relPath)) return false;
+  // Refuse depth-5 dirs so visited entries are bounded at depth 5 (§9 step 5.4).
   if (depthOf(entry.relPath) >= MAX_RECURSIVE_DEPTH) return false;
   return !hasSkillMd(entry.absPath);
 }

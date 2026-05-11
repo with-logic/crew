@@ -514,6 +514,41 @@ describe("crew tap", () => {
     expect(capture.stdout()).toContain("data-connect");
   });
 
+  test("info resolves skills discovered through recursive taps", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const dir = makeTempDir("crew-recursive-info-");
+    const nested = join(dir, "products", "firebase");
+    mkdirSync(nested, { recursive: true });
+    makeSkill(nested, "data-connect", skillFrontmatter({ name: "data-connect" }));
+    runCli(["tap", "add", "--recursive", dir, "deep"], {
+      home,
+      streams: captureStreams().streams,
+    });
+
+    const bare = captureStreams();
+    expect(runCli(["info", "data-connect"], { home, streams: bare.streams })).toBe(0);
+    expect(bare.stdout()).toContain("data-connect");
+
+    const qualified = captureStreams();
+    expect(runCli(["info", "deep/data-connect"], { home, streams: qualified.streams })).toBe(0);
+    expect(qualified.stdout()).toContain("data-connect");
+  });
+
+  test("info resolves namespace candidates through the tap index", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const dir = makeTempDir("crew-info-namespace-");
+    const namespace = join(dir, "skills", "finance");
+    mkdirSync(namespace, { recursive: true });
+    makeSkill(namespace, "budget-review", skillFrontmatter({ name: "budget-review" }));
+    runCli(["tap", "add", dir, "team"], { home, streams: captureStreams().streams });
+
+    const capture = captureStreams();
+    expect(runCli(["info", "finance"], { home, streams: capture.streams })).toBe(0);
+    expect(capture.stdout()).toContain("budget-review");
+  });
+
   test("tap add --recursive upgrades an existing registered tap", () => {
     const home = makeCrewHome();
     const dir = makeTempDir("crew-recursive-upgrade-");

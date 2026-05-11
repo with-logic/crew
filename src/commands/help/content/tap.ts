@@ -14,7 +14,7 @@ export const tapHelp: CommandHelp = {
     {
       flag: "--recursive",
       description:
-        "With `tap add`, remember that this trusted tap may need bounded recursive discovery.",
+        "With `tap add`, enable bounded recursive fallback when standard layouts find no skills.",
     },
     { flag: "--json", description: "Machine-readable output for `tap list`." },
   ],

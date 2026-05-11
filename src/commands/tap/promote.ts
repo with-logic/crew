@@ -14,9 +14,9 @@ import type { readConfig } from "../../config/load.ts";
 import { writeConfig } from "../../config/load.ts";
 import { tapPath } from "../../core/paths.ts";
 import type { StateFile, TapConfig } from "../../core/types.ts";
+import { rewriteTapMarkers } from "../../install/rewrite-tap-markers.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { exists } from "../../util/fs.ts";
-import { rewriteTapMarkers } from "./rewrite-markers.ts";
 
 export function promoteExistingTap(
   home: string,

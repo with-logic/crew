@@ -10,6 +10,7 @@ import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { ensureClone } from "../../git/repo.ts";
+import { rewriteTapMarkers } from "../../install/rewrite-tap-markers.ts";
 import { deriveAutoTapName } from "../../install/tap-naming.ts";
 import { NAME_PATTERN } from "../../refs/parse.ts";
 import { readState } from "../../state/load.ts";
@@ -18,7 +19,6 @@ import { exists, isDirectory, rmrf } from "../../util/fs.ts";
 import type { Styler } from "../../util/term.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promoteExistingTap } from "./promote.ts";
-import { rewriteTapMarkers } from "./rewrite-markers.ts";
 import {
   displayTarget,
   parseTapAddTarget,

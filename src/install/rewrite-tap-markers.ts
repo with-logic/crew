@@ -1,22 +1,15 @@
 /**
- * Rewrite every on-disk marker whose `tap_name` equals a tap being
- * renamed or upgraded.
+ * Rewrite installed markers after tap rename or discovery upgrades (§11.1, §16.3).
  *
- * Called after `crew tap add` renames/promotes an auto tap or upgrades
- * any existing tap to recursive discovery. The tap's identity on disk
- * and/or discovery metadata moves, and markers — which are the ground
- * truth for doctor --repair — must follow.
- *
- * We walk every adapter, both scopes, every known project root, read
- * each marker, and rewrite the file in place when the name matches.
- * Markers for other taps are untouched.
+ * Markers are authoritative for `doctor --repair`, so any tap metadata that
+ * affects reconstruction must be copied into existing installed markers.
  */
 
 import { join } from "node:path";
-import { listInstalledForAgent } from "../../agents/list.ts";
-import { ALL_AGENTS } from "../../agents/registry.ts";
-import type { Marker, StateEntry, TapDiscovery } from "../../core/types.ts";
-import { writeJson } from "../../util/json.ts";
+import { listInstalledForAgent } from "../agents/list.ts";
+import { ALL_AGENTS } from "../agents/registry.ts";
+import type { Marker, StateEntry, TapDiscovery } from "../core/types.ts";
+import { writeJson } from "../util/json.ts";
 
 export interface TapMarkerRewrite {
   readonly oldName: string;
