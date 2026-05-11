@@ -205,6 +205,7 @@ describe("crew search output", () => {
         namespace: string | null;
         description: string;
         installed: boolean;
+        same_name_installed: boolean;
       }[];
     };
     expect(parsed.hits).toEqual([
@@ -214,6 +215,7 @@ describe("crew search output", () => {
         namespace: null,
         description: "Use Firebase Data Connect",
         installed: false,
+        same_name_installed: false,
       },
     ]);
   });
