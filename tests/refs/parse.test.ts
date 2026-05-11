@@ -206,6 +206,15 @@ describe("parseRef: tap", () => {
     const r = parseRef("foo@bar");
     expect(r).toEqual({ type: "tap", tap: null, namespace: null, name: "foo", ref: "bar" });
   });
+  test("bare name may start with a digit", () => {
+    expect(parseRef("3-statement-model")).toEqual({
+      type: "tap",
+      tap: null,
+      namespace: null,
+      name: "3-statement-model",
+      ref: null,
+    });
+  });
   test("C-REF-21 bare tap ref is canonicalized to lowercase", () => {
     expect(parseRef("BadName")).toEqual({
       type: "tap",

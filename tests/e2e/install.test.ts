@@ -276,9 +276,9 @@ describe("install directory expansion", () => {
   test("C-INST-20 invalid skill in a multi-skill source is soft-skipped", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-soft-");
-    // A valid skill alongside an invalid one (name doesn't match dir).
+    // A valid skill alongside an invalid one.
     makeSkill(container, "good-skill", skillFrontmatter({ name: "good-skill" }));
-    makeSkill(container, "bad-dir", skillFrontmatter({ name: "mismatched-name" }));
+    makeSkill(container, "bad-dir", skillFrontmatter({ name: "Bad" }));
     const capture = captureStreams();
     const code = runCli(["install", container], { home, streams: capture.streams });
     // Exit 1: partial success, not 4.
@@ -287,31 +287,30 @@ describe("install directory expansion", () => {
     expect(existsSync(join(redirect.agents["claude-code"]!, "good-skill"))).toBe(true);
     // The invalid one was reported in stdout, not as a hard error.
     expect(capture.stdout()).toContain("Failed");
-    expect(capture.stdout()).toContain("bad-dir");
+    expect(capture.stdout()).toContain("name: Bad");
   });
 
   test("C-INST-21 multi-skill dir where every skill is invalid: exit 4, all listed in Failed", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-all-invalid-");
-    // Two siblings, both have mismatched name/dir.
-    makeSkill(container, "bad-one", skillFrontmatter({ name: "wrong-one" }));
-    makeSkill(container, "bad-two", skillFrontmatter({ name: "wrong-two" }));
+    makeSkill(container, "bad-one", skillFrontmatter({ name: "BadOne" }));
+    makeSkill(container, "bad-two", skillFrontmatter({ name: "BadTwo" }));
     const capture = captureStreams();
     const code = runCli(["install", container], { home, streams: capture.streams });
     // Zero succeeded AND ≥1 validation failure → exit 4.
     expect(code).toBe(4);
     const out = capture.stdout();
     expect(out).toContain("Failed");
-    // Both skills reported.
-    expect(out).toContain("bad-one");
-    expect(out).toContain("bad-two");
+    // Both validation failures were reported.
+    expect(out).toContain("name: BadOne");
+    expect(out).toContain("name: BadTwo");
   });
 
   test("C-INST-20 --json surfaces skipped skills", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-soft-json-");
     makeSkill(container, "good-skill", skillFrontmatter({ name: "good-skill" }));
-    makeSkill(container, "bad-dir", skillFrontmatter({ name: "mismatched-name" }));
+    makeSkill(container, "bad-dir", skillFrontmatter({ name: "Bad" }));
     const capture = captureStreams();
     runCli(["install", "--json", container], { home, streams: capture.streams });
     const parsed = JSON.parse(capture.stdout()) as {
@@ -324,7 +323,7 @@ describe("install directory expansion", () => {
   test("C-INST-21 single-skill source still hard-fails on invalid SKILL.md", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-hard-");
-    const skill = makeSkill(container, "bad-dir", skillFrontmatter({ name: "mismatched-name" }));
+    const skill = makeSkill(container, "bad-dir", skillFrontmatter({ name: "Bad" }));
     const capture = captureStreams();
     const code = runCli(["install", skill], { home, streams: capture.streams });
     // Exit 4: the user asked for that one skill and it's invalid.

@@ -38,9 +38,11 @@ export function Taps() {
               <Cmt># ignored by crew search</Cmt>
             </CodeBlock>
             <p className={styles.note}>
-              Any top-level directory with a valid <code>SKILL.md</code> is a skill. Everything else
-              is ignored. Prefer to keep skills under a <code>skills/</code> directory? That works
-              too — if <code>skills/</code> exists, crew indexes its children instead of the root.
+              Any top-level directory with a valid <code>SKILL.md</code> is a skill; the install
+              name comes from the <code>name</code> field inside <code>SKILL.md</code>. Everything
+              else is ignored. Prefer to keep skills under a <code>skills/</code> directory? That
+              works too — if <code>skills/</code> exists, crew indexes its children instead of the
+              root.
             </p>
             <p className={styles.note}>
               Group related skills into <strong>namespaces</strong>: <code>skills/marketing/*</code>

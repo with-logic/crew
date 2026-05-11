@@ -85,7 +85,7 @@ metadata:
 
 **Versions are git commit SHAs.** Homecrew does not define a version field. Every installed skill is identified by the SHA of the commit it was resolved from. Tags and branches resolve to SHAs at install time. Users pin with `@<sha>`, `@<tag>`, or `@<branch>`.
 
-**Multi-skill directories.** A directory containing more than one skill has no special designation. When `crew install` is pointed at a source, Homecrew looks for a `SKILL.md` at the root. If present, one skill is installed. If not, Homecrew walks one level deep and installs every valid child skill (§9 step 5).
+**Multi-skill directories.** A directory containing more than one skill has no special designation. When `crew install` is pointed at a source, Homecrew looks for a `SKILL.md` at the root. If present, one skill is installed. If not, Homecrew walks one level deep and installs every valid child skill (§9 step 5). A skill's install name always comes from the `name` field in its `SKILL.md`; the source directory name is only a filesystem location and need not match.
 
 **Meta-skills** (a skill whose purpose is pulling in a set of others) are ordinary skills with `dependencies` and an optional descriptive body. They require no special frontmatter.
 
@@ -420,7 +420,7 @@ Adding a new adapter later requires updating this table, adding a file under `sr
 
 **Detection.** Each adapter uses a best-effort signal: the tool's CLI binary on `PATH`, or the tool's user-scope configuration directory (`~/.<tool>/` or `~/.config/<tool>/`). Either signal makes the adapter "detected." A user may force-enable or force-disable any adapter through `forced_agents` / `disabled_agents` in `config.yaml`.
 
-**Install path shape.** Each agent has a base directory for skills (user scope and project scope). A skill named `python-testing` is installed by writing its files under `<base>/python-testing/`. The directory name equals the skill's `name` (spec-guaranteed to match lowercase alphanumerics and hyphens).
+**Install path shape.** Each agent has a base directory for skills (user scope and project scope). A skill named `python-testing` is installed by writing its files under `<base>/python-testing/`. The install directory name equals the skill's declared `name`, which is lowercase alphanumerics and hyphens and may begin with a letter or digit.
 
 **Path sharing.** Most adapters resolve to the same filesystem path: `~/.agents/skills/` (user) and `<project>/.agents/skills/` (project) is the emerging cross-tool convention, read by Codex, Cursor, Command Code, Gemini CLI, GitHub Copilot, Goose, OpenCode, pi, and `agent-skills`. Homecrew writes bytes there once and reports the install to the user under each detected adapter's name, even though only one physical copy exists. The rule: **when a tool reads `~/.agents/skills/`, Homecrew's adapter points there** — one install serves every such tool at once. Adapters whose tools don't support the cross-tool path (Amp user-scope, Autohand, Claude Code, Factory, Junie, Kiro, Mistral Vibe, Nanobot, Roo Code) keep their tool-specific paths.
 
@@ -528,7 +528,7 @@ Written into every Homecrew-installed skill directory. JSON, UTF-8, trailing new
 - `tap_url` — for `tap_kind: git`, the clone URL. Empty string for `tap_kind: path`.
 - `tap_subpath` — for `tap_kind: git`, an optional directory inside the repo (empty string when none). Empty string for `tap_kind: path`.
 - `tap_path` — for `tap_kind: path`, the absolute filesystem path to the tap. Empty string for `tap_kind: git`.
-- `path` — the skill's location relative to the tap's root (after subpath is applied for git taps). Empty string when the tap itself is one skill (root SKILL.md).
+- `path` — the skill's source location relative to the tap's root (after subpath is applied for git taps). Empty string when the tap itself is one skill (root SKILL.md). This path need not end in the skill's declared `name`.
 - `ref` — the ref the user asked for (`main`, `v1.2.0`, a SHA, or `null` if the default branch was used and no ref was specified).
 - `resolved_sha` — the full 40-char commit SHA the install came from, or `null` for path-kind taps.
 - `content_hash` — the hash per §12.1, prefixed `sha256:`.
@@ -609,7 +609,7 @@ acme/python-testing@v1.0.0        # qualified and pinned to a tag
 core/marketing/copy-review        # 3-segment: tap/namespace/skill (always unambiguous)
 ```
 
-A **namespace** is a directory directly under a tap's `skills/` root that contains no `SKILL.md` of its own but contains child directories that do. Namespaces group related skills (`skills/marketing/email-outreach`, `skills/marketing/social-posts`, …). A skill's `name` in its frontmatter remains the leaf directory name; the namespace is NOT part of the skill name.
+A **namespace** is a directory directly under a tap's `skills/` root that contains no `SKILL.md` of its own but contains child directories that do. Namespaces group related skills (`skills/marketing/email-outreach`, `skills/marketing/social-posts`, …). A skill's `name` in its frontmatter is the install/search name; it need not match the leaf directory name. The namespace is NOT part of the skill name.
 
 A bare name `foo` may match any of:
 - a **tap** named `foo` (install the entire tap),
@@ -642,9 +642,9 @@ git-url     := "https://..." | "git@...:..." | shorthand-host ":" owner "/" repo
 shorthand-host := "gh" | "gl" | "bb"
 tap-source  := [ tap-name "/" ] [ namespace-name "/" ] skill-name [ "@" tap-ref ]
              | tap-name [ "@" tap-ref ]                   (whole-tap install)
-tap-name    := [a-z][a-z0-9-]*
-namespace-name := [a-z][a-z0-9-]*
-skill-name  := [a-z][a-z0-9-]*     (matches the Agent Skills spec's name rules)
+tap-name    := [a-z0-9][a-z0-9-]*
+namespace-name := [a-z0-9][a-z0-9-]*
+skill-name  := [a-z0-9][a-z0-9-]*  (matches the Agent Skills spec's name rules)
 git-ref     := any non-empty string not containing "/" or whitespace; must not start with "//"
 tap-ref     := any non-empty string not containing "/" or whitespace
 subpath     := any POSIX relative path not starting with "/"
@@ -694,7 +694,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
 4. **Validate each candidate skill** against the Agent Skills specification:
    - `SKILL.md` exists at the expected location.
    - Frontmatter parses as YAML.
-   - `name` matches `[a-z0-9-]+`, length 1–64, no leading/trailing hyphen, no consecutive hyphens, and matches the parent directory name.
+   - `name` matches `[a-z0-9][a-z0-9-]*`, length 1–64, no leading/trailing hyphen, and no consecutive hyphens. It MAY begin with a digit and need not match the parent directory name.
    - `description` is present, non-empty, length ≤ 1024 characters.
    - If `compatibility` is present, length ≤ 500 characters.
    - Every other spec rule from the Agent Skills specification.
@@ -1551,6 +1551,7 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-19 | §8.2 | `@owner/repo@v1.0.0` is parsed as a git source with ref `v1.0.0` (leading `@` is the shorthand, infix `@` is the ref separator). |
 | C-REF-20 | §8.2 | `@owner/repo//sub/path` is parsed as a git source with subpath `sub/path`. |
 | C-REF-21 | §8.4 | Tap-source identifiers are case-insensitive and canonicalized to lowercase before lookup; path sources and git URLs are not case-normalized. |
+| C-REF-22 | §8.4 | A tap-source skill identifier may begin with a digit, e.g. `3-statement-model`. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -1565,10 +1566,11 @@ Implementations and test suites refer to criteria by ID.
 | C-SPEC-07 | §9 | `name` containing `--` (consecutive hyphens) fails validation. |
 | C-SPEC-08 | §9 | `name` longer than 64 characters fails validation. |
 | C-SPEC-09 | §9 | `description` longer than 1024 characters fails validation. |
-| C-SPEC-10 | §9 | `name` that does not match the parent directory name fails validation. |
+| C-SPEC-10 | §9 | (obsolete) Prior versions required `name` to match the parent directory name; current versions allow the source directory name to differ. |
 | C-SPEC-11 | §9 | `compatibility`, if present and longer than 500 characters, fails validation. |
 | C-SPEC-12 | §9 | Validation errors name the offending field in the human-readable message. |
 | C-SPEC-13 | §9 | No file is written to any agent when validation fails. |
+| C-SPEC-14 | §9 | A skill whose `name` begins with a digit passes validation if the rest of the name is otherwise valid. |
 
 #### C-INST: Install (§9)
 

@@ -20,9 +20,9 @@
 import { join } from "node:path";
 import { tapPath } from "../core/paths.ts";
 import type { LoadedSkill, TapConfig } from "../core/types.ts";
-import { hasSkillMd, loadSkill } from "../skill/load.ts";
+import { hasSkillMd, loadSkill, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
-import { isDirectory } from "../util/fs.ts";
+import { isDirectory, listDir } from "../util/fs.ts";
 
 /** Result of finding a dep as a sibling within the parent's tap. */
 export interface SiblingHit {
@@ -45,16 +45,23 @@ export function findSiblingDep(
   const tapRoot = tapRootDir(tapClone, parent.tap);
   // The parent's own directory inside the tap.
   const parentDir = join(tapRoot, parent.tapRelativePath);
-  // A sibling lives at `<parentDir>/../<depName>`.
-  const siblingDir = join(parentDir, "..", depName);
-  if (!(isDirectory(siblingDir) && hasSkillMd(siblingDir))) return null;
-  const loaded = loadSkill(siblingDir);
-  // Sibling's path relative to the tap root.
-  const tapRelativePath = parent.tapRelativePath
-    .split("/")
-    .slice(0, -1)
-    .concat([depName])
-    .filter(Boolean)
-    .join("/");
-  return { tap: parent.tap, tapRelativePath, loaded };
+  const siblingParent = join(parentDir, "..");
+  const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
+  for (const dirName of listDir(siblingParent)) {
+    const siblingDir = join(siblingParent, dirName);
+    if (!(isDirectory(siblingDir) && hasSkillMd(siblingDir))) continue;
+    if (siblingName(siblingDir) !== depName) continue;
+    const loaded = loadSkill(siblingDir);
+    const tapRelativePath = tapBase.concat([dirName]).filter(Boolean).join("/");
+    return { tap: parent.tap, tapRelativePath, loaded };
+  }
+  return null;
+}
+
+function siblingName(path: string): string | null {
+  try {
+    return loadSkillName(path);
+  } catch {
+    return null;
+  }
 }

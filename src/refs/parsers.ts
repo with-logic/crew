@@ -14,7 +14,7 @@ import { CrewError } from "../core/errors.ts";
 import type { PathSource, TapSource } from "../core/types.ts";
 
 /** Matches a canonical Agent Skills name (also used for stored tap names). */
-export const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
+export const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 /** True if `ref` should be treated as a path source. */
 export function looksLikePath(ref: string): boolean {

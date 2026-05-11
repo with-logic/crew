@@ -1,10 +1,11 @@
 /**
  * Shallow index of a single tap's layout — just what we need for
- * reference resolution (§8.3). Does not load skills or parse
- * frontmatter; just walks the directory tree.
+ * reference resolution (§8.3). It reads only each skill's declared
+ * `name` from SKILL.md; full validation happens later in the install
+ * flow.
  *
  * Given a tap, produces:
- *   - `skills`: every skill name findable under the tap (root,
+ *   - `skills`: every declared skill name findable under the tap (root,
  *     skills/<name>, or skills/<namespace>/<name>).
  *   - `namespaces`: every namespace name and its skill children.
  *
@@ -17,13 +18,13 @@ import { join } from "node:path";
 import { tapPath } from "../core/paths.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo.ts";
-import { hasSkillMd } from "../skill/load.ts";
+import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 
 /** Location of one skill inside a tap. */
 export interface SkillLocation {
-  /** Skill name (leaf directory). */
+  /** Declared skill name from SKILL.md. */
   readonly name: string;
   /** Namespace the skill lives under, or null if at skills/ root or tap root. */
   readonly namespace: string | null;
@@ -92,8 +93,10 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
       const child = join(skillsDir, name);
       if (!isDirectory(child)) continue;
       if (hasSkillMd(child)) {
+        const skillName = skillNameForIndex(child);
+        if (skillName === null) continue;
         addSkill({
-          name,
+          name: skillName,
           namespace: null,
           path: child,
           tapRelativePath: `skills/${name}`,
@@ -105,8 +108,10 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
         const grandchild = join(child, childName);
         if (!isDirectory(grandchild)) continue;
         if (!hasSkillMd(grandchild)) continue;
+        const skillName = skillNameForIndex(grandchild);
+        if (skillName === null) continue;
         addSkill({
-          name: childName,
+          name: skillName,
           namespace: name,
           path: grandchild,
           tapRelativePath: `skills/${name}/${childName}`,
@@ -121,7 +126,17 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
     const child = join(root, name);
     if (!isDirectory(child)) continue;
     if (!hasSkillMd(child)) continue;
-    addSkill({ name, namespace: null, path: child, tapRelativePath: name });
+    const skillName = skillNameForIndex(child);
+    if (skillName === null) continue;
+    addSkill({ name: skillName, namespace: null, path: child, tapRelativePath: name });
   }
   return { skills, namespaces };
+}
+
+function skillNameForIndex(path: string): string | null {
+  try {
+    return loadSkillName(path);
+  } catch {
+    return null;
+  }
 }

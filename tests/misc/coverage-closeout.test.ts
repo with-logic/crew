@@ -272,9 +272,9 @@ describe("skill/validate — compatibility non-string", () => {
   test("compatibility as a number fails (validate.ts)", () => {
     const { validateFrontmatter } =
       require("../../src/skill/validate.ts") as typeof import("../../src/skill/validate.ts");
-    expect(() =>
-      validateFrontmatter({ name: "foo", description: "x", compatibility: 42 }, "/tmp/foo"),
-    ).toThrow(CrewError);
+    expect(() => validateFrontmatter({ name: "foo", description: "x", compatibility: 42 })).toThrow(
+      CrewError,
+    );
   });
 });
 

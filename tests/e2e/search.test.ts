@@ -173,6 +173,51 @@ describe("crew search output", () => {
     expect(c.stdout()).toContain("findme");
   });
 
+  test("search results use SKILL.md name when the source directory differs", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repo = makeTempDir("crew-search-declared-name-");
+    makeGitRepo(repo);
+    makeSkill(
+      repo,
+      "firebase-data-connect-basics",
+      skillFrontmatter({
+        name: "firebase-data-connect",
+        description: "Use Firebase Data Connect",
+      }),
+    );
+    commitAll(repo, "init");
+    runCli(["tap", "add", `file://${repo}`, "firebase"], {
+      home,
+      streams: captureStreams().streams,
+    });
+
+    const c = captureStreams();
+    const code = runCli(["search", "--json", "firebase-data-connect"], {
+      home,
+      streams: c.streams,
+    });
+    expect(code).toBe(0);
+    const parsed = JSON.parse(c.stdout()) as {
+      hits: {
+        tap: string;
+        name: string;
+        namespace: string | null;
+        description: string;
+        installed: boolean;
+      }[];
+    };
+    expect(parsed.hits).toEqual([
+      {
+        tap: "firebase",
+        name: "firebase-data-connect",
+        namespace: null,
+        description: "Use Firebase Data Connect",
+        installed: false,
+      },
+    ]);
+  });
+
   test("empty result set prints a no-match line (still exit 0)", () => {
     const home = makeCrewHome();
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });

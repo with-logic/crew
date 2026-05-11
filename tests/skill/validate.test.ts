@@ -78,10 +78,20 @@ describe("loadSkill", () => {
     expect(() => loadSkill(skill)).toThrow(/description/);
   });
 
-  test("C-SPEC-10 name mismatches parent dir fails", () => {
+  test("C-SPEC-10 obsolete: declared name may differ from parent dir", () => {
     const d = makeTempDir();
     const skill = makeSkill(d, "wrongname", skillFrontmatter({ name: "foo" }));
-    expect(() => loadSkill(skill)).toThrow(/parent/);
+    expect(loadSkill(skill).frontmatter.name).toBe("foo");
+  });
+
+  test("C-SPEC-14 name may start with a digit", () => {
+    const d = makeTempDir();
+    const skill = makeSkill(
+      d,
+      "3-statement-model",
+      skillFrontmatter({ name: "3-statement-model" }),
+    );
+    expect(loadSkill(skill).frontmatter.name).toBe("3-statement-model");
   });
 
   test("C-SPEC-11 compatibility > 500 chars fails", () => {
@@ -189,9 +199,9 @@ describe("extractFrontmatter edge cases", () => {
 
 describe("validateFrontmatter: non-object inputs", () => {
   test("array data fails", () => {
-    expect(() => validateFrontmatter([], "/tmp/foo")).toThrow();
+    expect(() => validateFrontmatter([])).toThrow();
   });
   test("null data fails", () => {
-    expect(() => validateFrontmatter(null, "/tmp/foo")).toThrow();
+    expect(() => validateFrontmatter(null)).toThrow();
   });
 });
