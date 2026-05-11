@@ -9,8 +9,7 @@ import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "homecrew skill catalog",
-  description:
-    "Browse the default Homecrew tap and trusted known taps that can be added with crew tap add.",
+  description: "Browse the default Homecrew tap and trusted taps you can add with crew tap add.",
 };
 
 export default function SkillsPage() {

@@ -13,7 +13,7 @@ export const GROUPS: readonly CommandGroup[] = [
         name: "install",
         signature: <>crew install &lt;ref&gt;…</>,
         description:
-          "Install one or more skills into every detected agent; on misses, may suggest skills from trusted known taps you haven't added yet.",
+          "Install one or more skills into every detected agent; on misses, may suggest trusted taps you haven't added yet.",
       },
       {
         name: "uninstall",
@@ -58,7 +58,7 @@ export const GROUPS: readonly CommandGroup[] = [
           <>
             Case-insensitive substring match across every configured tap. With no query, lists every
             installable skill — installed ones are marked <code>✓</code>. With a query, also
-            suggests matching known taps to add.
+            suggests matching trusted taps to add.
           </>
         ),
       },
@@ -91,12 +91,8 @@ export const GROUPS: readonly CommandGroup[] = [
       {
         name: "tap-update",
         signature: <>crew tap update [&lt;name&gt;…]</>,
-        description: (
-          <>
-            Fetch + fast-forward every git tap (or the named subset). Doesn't touch installed skills
-            — use <code>crew update</code> for that.
-          </>
-        ),
+        description:
+          "Fetch + fast-forward every git tap (or the named subset). Doesn't touch installed skills.",
       },
     ],
   },
@@ -126,12 +122,7 @@ export const GROUPS: readonly CommandGroup[] = [
             crew autoupdate enable <span className={styles.flag}>[--interval]</span>
           </>
         ),
-        description: (
-          <>
-            Install a launchd user agent that runs <code>crew update --quiet</code> on an interval
-            (default 4h).
-          </>
-        ),
+        description: "Install a launchd user agent that runs `crew update --quiet` every 4 hours.",
       },
       {
         name: "autoupdate-disable",

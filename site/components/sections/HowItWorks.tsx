@@ -13,9 +13,9 @@ const STEPS: readonly {
     title: "Find great skills.",
     body: (
       <>
-        Search across your private taps, your team's repo, the default <code>core</code> collection,
-        and anything else you've added. Your personal library and shared team library use the same
-        command.
+        Search across the default <code>core</code> collection, private taps, team repos, and
+        anything else you've added. With a query, Homecrew can also point at trusted taps you
+        haven't added yet.
       </>
     ),
   },

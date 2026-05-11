@@ -16,9 +16,9 @@ export function Taps() {
           title="A tap is just a git repo full of skills."
           description={
             <>
-              No hosted registry, no server, no account. Your personal skills repo, team repo, or
-              public collection <em>is</em> the package index. Fork it, branch it, review it in pull
-              requests, and <code>crew update</code> pulls it like any other.
+              No hosted registry, no server, no account. Your personal repo, team repo, or public
+              collection <em>is</em> the package index. Fork it, branch it, review it in pull
+              requests, and <code>crew update</code> pulls approved changes like any other.
             </>
           }
         />
@@ -94,9 +94,9 @@ export function Taps() {
           </h3>
 
           <p className={styles.copy}>
-            Homecrew has skills pre-indexed in the catalog to help you get started. Browse the
-            default tap and trusted known taps, find a good first skill, then choose exactly what
-            you want to install.
+            Homecrew ships with a small default tap and a catalog of trusted taps to help you find a
+            good first skill. Browsing is read-only: nothing is installed until you explicitly add a
+            tap or install a skill.
           </p>
 
           <div className={styles.buttonRow}>
