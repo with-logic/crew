@@ -110,6 +110,7 @@ crew tap <url-or-path> [<name>]   Shorthand for `crew tap add`.
 crew tap remove <name>            Remove a registry.
 crew tap list                     List configured registries.
 crew taps                         Alias for `crew tap list`.
+crew untap <name>                 Alias for `crew tap remove <name>`.
 
 crew agents                      List detected agents and their status.
 crew agents enable <name>        Force-enable an otherwise-undetected agent.
