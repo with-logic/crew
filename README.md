@@ -170,7 +170,7 @@ for examples.
 | Command | What it does |
 |---|---|
 | `crew search [<query>]` | Case-insensitive substring match across every configured tap. With no query, lists every installable skill; installed ones are marked `✓`. With a query, also suggests matching known taps to add. |
-| `crew tap add <git-url> [name]` | Clone a registry into `~/.crew/taps/`. Name defaults to the repo name. |
+| `crew tap add <git-url> [name]` | Clone a registry into `~/.crew/taps/`. Name defaults to the repo name. Add `--recursive` for trusted repos with non-standard nested layouts. |
 | `crew tap remove <name>` | Delete a local tap clone and drop it from config. |
 | `crew tap list` | Print each tap's name, URL, and last-fetched timestamp. |
 | `crew taps` | Alias for `crew tap list`. |
@@ -224,6 +224,8 @@ Any top-level directory with a valid `SKILL.md` is a skill; the install name
 comes from the `name` field inside `SKILL.md`. Everything else is ignored.
 Prefer to keep skills under a `skills/` directory? That works too — if
 `skills/` exists at the root, Homecrew indexes its children instead of the root.
+For trusted repos that don't follow either layout, `crew tap add --recursive`
+keeps the standard layouts first and falls back to bounded recursive discovery.
 
 ### Namespaces
 

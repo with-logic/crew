@@ -38,6 +38,7 @@ export function repairState(markers: readonly MarkerEntry[], home: string): void
         url: marker.tap_url,
         subpath: marker.tap_subpath,
         path: marker.tap_path,
+        ...(marker.tap_discovery === "recursive" ? { discovery: "recursive" } : {}),
       };
       taps.set(reconstructed.name, reconstructed);
     }

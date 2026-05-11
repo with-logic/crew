@@ -55,6 +55,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     cwd: ctx.cwd,
     home: ctx.home,
     kindHint,
+    recursive: Boolean(ctx.flags.extras["recursive"]),
   };
   let result: ReturnType<typeof runInstall>;
   try {

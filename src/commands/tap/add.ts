@@ -8,25 +8,24 @@
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
-import type { Source, TapConfig } from "../../core/types.ts";
+import type { TapConfig } from "../../core/types.ts";
 import { ensureClone } from "../../git/repo.ts";
 import { deriveAutoTapName } from "../../install/tap-naming.ts";
-import { NAME_PATTERN, parseRef } from "../../refs/parse.ts";
+import { NAME_PATTERN } from "../../refs/parse.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { exists, isDirectory, rmrf } from "../../util/fs.ts";
 import type { Styler } from "../../util/term.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promoteExistingTap } from "./promote.ts";
+import {
+  displayTarget,
+  parseTapAddTarget,
+  payloadOf,
+  sameTap,
+  type TapAddTarget,
+} from "./target.ts";
 
-/** Parsed source of a `tap add` argument: git or path. */
-interface TapAddTarget {
-  readonly kind: "git" | "path";
-  readonly url: string;
-  readonly subpath: string;
-  readonly path: string;
-}
-
-type Outcome = "added" | "no-op" | "promoted";
+type Outcome = "added" | "no-op" | "promoted" | "updated";
 
 export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
   if (args.length < 1)
@@ -38,6 +37,7 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   const target = parseTapAddTarget(rawArg, ctx.cwd);
   const explicitName = args[1];
   const name = explicitName ?? deriveName(target);
+  const recursive = Boolean(ctx.flags.extras["recursive"]);
   if (!NAME_PATTERN.test(name)) {
     throw new CrewError(
       "usage_error",
@@ -50,7 +50,7 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   // TS doesn't trace control flow into closures.
   const out: { value: Outcome } = { value: "added" };
   withStateLock(() => {
-    out.value = performAdd(ctx, name, rawArg, explicitName, target);
+    out.value = performAdd(ctx, name, rawArg, explicitName, target, recursive);
   }, ctx.home);
   return formatOutcome(out.value, name, target, ctx.style);
 }
@@ -62,14 +62,27 @@ function performAdd(
   rawArg: string,
   explicitName: string | undefined,
   target: TapAddTarget,
+  recursive: boolean,
 ): Outcome {
   const config = readConfig(ctx.home);
   const sameTarget = config.taps.find((t) => sameTap(t, target));
   if (sameTarget) {
     if (sameTarget.registered && (explicitName === undefined || explicitName === sameTarget.name)) {
+      if (recursive && sameTarget.discovery !== "recursive") {
+        writeConfig(
+          {
+            ...config,
+            taps: config.taps.map((t) =>
+              t.name === sameTarget.name ? { ...t, discovery: "recursive" } : t,
+            ),
+          },
+          ctx.home,
+        );
+        return "updated";
+      }
       return "no-op";
     }
-    promoteExistingTap(ctx.home, ctx.cwd, config, sameTarget, target.kind, explicitName);
+    promoteExistingTap(ctx.home, ctx.cwd, config, sameTarget, target.kind, explicitName, recursive);
     return "promoted";
   }
   const sameName = config.taps.find((t) => t.name === name);
@@ -81,7 +94,7 @@ function performAdd(
     );
   }
   materializeNewTap(name, target, ctx.home);
-  writeConfig({ ...config, taps: [...config.taps, newTapOf(name, target)] }, ctx.home);
+  writeConfig({ ...config, taps: [...config.taps, newTapOf(name, target, recursive)] }, ctx.home);
   return "added";
 }
 
@@ -110,7 +123,7 @@ function materializeNewTap(name: string, target: TapAddTarget, home: string): vo
     );
 }
 
-function newTapOf(name: string, target: TapAddTarget): TapConfig {
+function newTapOf(name: string, target: TapAddTarget, recursive: boolean): TapConfig {
   return {
     name,
     kind: target.kind,
@@ -118,6 +131,7 @@ function newTapOf(name: string, target: TapAddTarget): TapConfig {
     url: target.url,
     subpath: target.subpath,
     path: target.path,
+    ...(recursive ? { discovery: "recursive" } : {}),
   };
 }
 
@@ -149,6 +163,16 @@ function formatOutcome(
       json: { ...payload, promoted: true },
     };
   }
+  if (outcome === "updated") {
+    return {
+      exitCode: 0,
+      human: [
+        `${style.symbol("ok")} Updated tap ${style.bold(name)}`,
+        style.dim(`  recursive discovery enabled for ${targetStr}`),
+      ],
+      json: { ...payload, updated: true },
+    };
+  }
   return {
     exitCode: 0,
     human: [
@@ -158,38 +182,4 @@ function formatOutcome(
     ],
     json: payload,
   };
-}
-
-function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {
-  const source: Source = parseRef(raw, cwd);
-  if (source.type === "tap")
-    throw new CrewError(
-      "usage_error",
-      `\`${raw}\` looks like a tap reference, not a source — \`crew tap add\` takes a git URL or local path (e.g. \`gh:owner/repo\` or \`./my-skills\`)`,
-      { raw },
-    );
-  if (source.type === "path") return { kind: "path", url: "", subpath: "", path: source.path };
-  if (source.ref !== null)
-    throw new CrewError(
-      "usage_error",
-      `\`${raw}\` carries a \`@${source.ref}\` tail — taps track the default branch and can't be pinned. Drop the \`@${source.ref}\` and try again.`,
-      { raw, ref: source.ref },
-    );
-  return { kind: "git", url: source.url, subpath: source.subpath, path: "" };
-}
-
-function sameTap(a: TapConfig, t: TapAddTarget): boolean {
-  if (a.kind !== t.kind) return false;
-  if (a.kind === "git") return a.url === t.url && a.subpath === t.subpath;
-  return a.path === t.path;
-}
-
-export function displayTarget(t: TapConfig | TapAddTarget): string {
-  if (t.kind === "path") return t.path;
-  return t.subpath.length > 0 ? `${t.url}//${t.subpath}` : t.url;
-}
-
-function payloadOf(t: TapAddTarget): Record<string, string> {
-  if (t.kind === "path") return { kind: "path", path: t.path };
-  return { kind: "git", url: t.url, ...(t.subpath.length > 0 ? { subpath: t.subpath } : {}) };
 }

@@ -36,6 +36,8 @@ export interface InstallOptions {
   readonly home?: string;
   /** Force a reference interpretation (from `--tap` / `--bundle` / `--skill`). */
   readonly kindHint?: KindHint;
+  /** Opt direct git/path refs into recursive fallback discovery. */
+  readonly recursive?: boolean;
 }
 
 /** Full result: summary plus any "already installed" short-circuit records. */
@@ -71,7 +73,12 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     requiredBy,
     config: configWithAutoTaps,
     skipped,
-  } = resolveInstallSet(options.refs, config, { cwd, home, kindHint: options.kindHint ?? null });
+  } = resolveInstallSet(options.refs, config, {
+    cwd,
+    home,
+    kindHint: options.kindHint ?? null,
+    recursive: options.recursive ?? false,
+  });
 
   // Apply §5.4 — duplicate installs. An install with a new active
   // adapter that didn't previously own the entry still has real work

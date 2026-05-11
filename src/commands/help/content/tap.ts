@@ -11,6 +11,11 @@ export const tapHelp: CommandHelp = {
   ],
   flags: [
     { flag: "--force", description: "Allow removing the default `core` tap." },
+    {
+      flag: "--recursive",
+      description:
+        "With `tap add`, remember that this trusted tap may need bounded recursive discovery.",
+    },
     { flag: "--json", description: "Machine-readable output for `tap list`." },
   ],
   examples: [
@@ -30,6 +35,10 @@ export const tapHelp: CommandHelp = {
       command: "crew tap add ./my-skills local-skills",
       description:
         "Add a local folder — great when you're developing your own skills alongside everything else.",
+    },
+    {
+      command: "crew tap add --recursive @acme/monorepo acme",
+      description: "Add a trusted repo whose skills are nested outside standard tap layouts.",
     },
     {
       command: "crew tap @with-logic/backend//skills",

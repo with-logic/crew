@@ -17,6 +17,7 @@ import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
 import { runCli } from "../../src/cli/main.ts";
+import { readConfig } from "../../src/config/load.ts";
 import { readState } from "../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
@@ -271,6 +272,31 @@ describe("install directory expansion", () => {
     expect(existsSync(join(redirect.agents["claude-code"]!, "one"))).toBe(true);
     expect(existsSync(join(redirect.agents["claude-code"]!, "two"))).toBe(true);
     expect(existsSync(join(redirect.agents["claude-code"]!, "ignored"))).toBe(false);
+  });
+
+  test("C-INST-08c --recursive installs nested skills when standard layouts find none", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir("crew-ctr-recursive-");
+    const nested = join(container, "teams", "support");
+    mkdirSync(nested, { recursive: true });
+    makeSkill(nested, "ticket-triage", skillFrontmatter({ name: "ticket-triage" }));
+
+    const first = runCli(["install", container], { home, streams: captureStreams().streams });
+    expect(first).toBe(4);
+    expect(
+      runCli(["tap", "add", container, "nested"], { home, streams: captureStreams().streams }),
+    ).toBe(0);
+
+    const code = runCli(["install", "--recursive", container], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(code).toBe(0);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "ticket-triage"))).toBe(true);
+    const state = readState(home);
+    expect(state.installations[0]!.source.path).toBe("teams/support/ticket-triage");
+    const tap = readConfig(home).taps.find((t) => t.path === container)!;
+    expect(tap.discovery).toBe("recursive");
   });
 
   test("C-INST-20 invalid skill in a multi-skill source is soft-skipped", () => {

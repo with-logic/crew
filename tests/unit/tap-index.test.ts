@@ -20,6 +20,10 @@ function pathTap(path: string, name = "t"): TapConfig {
   };
 }
 
+function recursivePathTap(path: string): TapConfig {
+  return { ...pathTap(path), discovery: "recursive" };
+}
+
 describe("indexTap", () => {
   test("single-skill root: indexes declared skill name", () => {
     const tmp = makeTempDir("ti-root-");
@@ -159,5 +163,17 @@ describe("indexTap", () => {
     const idx = indexTap(pathTap(root), "/unused");
     expect(idx.skills.get("copy-review")!.length).toBe(2);
     expect([...idx.namespaces.keys()].sort()).toEqual(["engineering", "marketing"]);
+  });
+
+  test("recursive tap indexes nested skills when standard layouts expose none", () => {
+    const root = makeTempDir("ti-recursive-");
+    const nested = join(root, "products", "firebase");
+    mkdirSync(nested, { recursive: true });
+    makeSkill(nested, "data-connect", skillFrontmatter({ name: "data-connect" }));
+
+    const idx = indexTap(recursivePathTap(root), "/unused");
+    const loc = idx.skills.get("data-connect")![0]!;
+    expect(loc.namespace).toBeNull();
+    expect(loc.tapRelativePath).toBe("products/firebase/data-connect");
   });
 });

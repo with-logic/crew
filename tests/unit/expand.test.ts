@@ -146,4 +146,30 @@ describe("expandSkills", () => {
       .sort();
     expect(names).toEqual(["real"]);
   });
+
+  test("recursive fallback finds nested skills only when standard layout has no candidates", () => {
+    const root = makeTempDir("expand-recursive-");
+    const nested = join(root, "vendor-team", "workflows");
+    mkdirSync(nested, { recursive: true });
+    makeSkill(nested, "deep-skill", skillFrontmatter({ name: "deep-skill" }));
+
+    expect(() => expandSkills(root)).toThrow(/no valid skills found/);
+
+    const names = expandSkills(root, { recursive: true }).valid.map((s) => s.frontmatter.name);
+    expect(names).toEqual(["deep-skill"]);
+  });
+
+  test("recursive fallback skips hidden and vendor directories", () => {
+    const root = makeTempDir("expand-recursive-skip-");
+    mkdirSync(join(root, ".hidden"), { recursive: true });
+    mkdirSync(join(root, "node_modules"), { recursive: true });
+    makeSkill(join(root, ".hidden"), "hidden-skill", skillFrontmatter({ name: "hidden-skill" }));
+    makeSkill(
+      join(root, "node_modules"),
+      "package-skill",
+      skillFrontmatter({ name: "package-skill" }),
+    );
+
+    expect(() => expandSkills(root, { recursive: true })).toThrow(/no valid skills found/);
+  });
 });

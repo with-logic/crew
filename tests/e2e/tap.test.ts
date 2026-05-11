@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { readConfig } from "../../src/config/load.ts";
@@ -484,6 +484,42 @@ describe("crew tap", () => {
     expect(tap.kind).toBe("path");
     expect(tap.path).toBe(dir);
     expect(tap.registered).toBe(true);
+  });
+
+  test("C-TAP-22b tap add --recursive makes nested skills searchable", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const dir = makeTempDir("crew-recursive-path-tap-");
+    const nested = join(dir, "products", "firebase");
+    mkdirSync(nested, { recursive: true });
+    makeSkill(nested, "data-connect", skillFrontmatter({ name: "data-connect" }));
+
+    const code = runCli(["tap", "add", "--recursive", dir, "deep"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(code).toBe(0);
+    expect(readConfig(home).taps.find((t) => t.name === "deep")!.discovery).toBe("recursive");
+
+    const capture = captureStreams();
+    expect(runCli(["search", "data"], { home, streams: capture.streams })).toBe(0);
+    expect(capture.stdout()).toContain("data-connect");
+  });
+
+  test("tap add --recursive upgrades an existing registered tap", () => {
+    const home = makeCrewHome();
+    const dir = makeTempDir("crew-recursive-upgrade-");
+    makeSkill(dir, "alpha", skillFrontmatter({ name: "alpha" }));
+    expect(runCli(["tap", "add", dir, "local"], { home, streams: captureStreams().streams })).toBe(
+      0,
+    );
+
+    const capture = captureStreams();
+    expect(
+      runCli(["tap", "add", "--recursive", dir, "local"], { home, streams: capture.streams }),
+    ).toBe(0);
+    expect(capture.stdout()).toContain("Updated tap");
+    expect(readConfig(home).taps.find((t) => t.name === "local")!.discovery).toBe("recursive");
   });
 
   test("a tap with a @ref tail is rejected (taps track default branch)", () => {

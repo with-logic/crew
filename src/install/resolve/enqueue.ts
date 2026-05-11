@@ -136,7 +136,7 @@ export function expandSkillsAsItems(
   explicit: boolean,
   tracksTap: boolean,
 ): ExpansionItems {
-  const { valid, skipped } = expandSkills(dir);
+  const { valid, skipped } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
   const items: PendingItem[] = [];
   for (const l of valid) {
     // tap-relative path of this skill's directory inside its tap.

@@ -113,6 +113,8 @@ export interface Marker {
   readonly tap_subpath: string;
   /** Absolute path to the path-kind tap's directory; empty for git taps. */
   readonly tap_path: string;
+  /** Optional non-standard tap discovery mode. Absent means standard discovery. */
+  readonly tap_discovery?: TapDiscovery;
   /** Skill location relative to the tap's root. Empty when the tap is one skill. */
   readonly path: string;
   readonly ref: string | null;
@@ -193,6 +195,7 @@ export interface StateFile {
 // -----------------------------------------------------------------------------
 
 export type TapKind = "git" | "path";
+export type TapDiscovery = "recursive";
 
 /** A tap configured in config.yaml. */
 export interface TapConfig {
@@ -206,6 +209,8 @@ export interface TapConfig {
   readonly subpath: string;
   /** For `kind: "path"`: absolute filesystem path to the tap directory. Empty for git taps. */
   readonly path: string;
+  /** Optional non-standard discovery mode. Absent means standard discovery. */
+  readonly discovery?: TapDiscovery;
 }
 
 /** The parsed, normalized config.yaml. */

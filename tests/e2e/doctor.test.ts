@@ -109,6 +109,26 @@ describe("doctor", () => {
     expect(pathTap!.registered).toBe(false);
   });
 
+  test("--repair preserves recursive tap discovery from markers", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    const nested = join(src, "teams", "support");
+    require("node:fs").mkdirSync(nested, { recursive: true });
+    makeSkill(nested, "ticket-triage", skillFrontmatter({ name: "ticket-triage" }));
+    runCli(["install", "--recursive", src], { home, streams: captureStreams().streams });
+
+    const fs = require("node:fs") as typeof import("node:fs");
+    fs.rmSync(join(home, "state.json"));
+    fs.rmSync(join(home, "config.yaml"));
+    const code = runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+    const { readConfig } =
+      require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
+    const cfg = readConfig(home);
+    const tap = cfg.taps.find((t) => t.kind === "path" && t.path === src);
+    expect(tap!.discovery).toBe("recursive");
+  });
+
   test("--json output", () => {
     const home = makeCrewHome();
     const c = captureStreams();

@@ -119,6 +119,7 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
     tap_url: input.tap.url,
     tap_subpath: input.tap.subpath,
     tap_path: input.tap.path,
+    ...(input.tap.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
     path: input.tapRelativePath,
     ref: input.ref,
     resolved_sha: input.resolvedSha,

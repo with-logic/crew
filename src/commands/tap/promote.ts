@@ -25,9 +25,15 @@ export function promoteExistingTap(
   sameTarget: TapConfig,
   targetKind: "git" | "path",
   explicitName: string | undefined,
+  recursive: boolean,
 ): void {
   const renamedName = explicitName ?? sameTarget.name;
-  const promoted: TapConfig = { ...sameTarget, registered: true, name: renamedName };
+  const promoted: TapConfig = {
+    ...sameTarget,
+    registered: true,
+    name: renamedName,
+    ...(recursive ? { discovery: "recursive" } : {}),
+  };
   const updated = {
     ...config,
     taps: config.taps.map((t) => (t.name === sameTarget.name ? promoted : t)),

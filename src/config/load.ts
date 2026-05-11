@@ -13,10 +13,11 @@
 
 import { CrewError } from "../core/errors.ts";
 import { crewHome, paths } from "../core/paths.ts";
-import type { Config, TapConfig, TapKind } from "../core/types.ts";
+import type { Config, TapConfig } from "../core/types.ts";
 import { exists, readText, writeText } from "../util/fs.ts";
 import { parseYaml, stringifyYaml, type YamlMap, type YamlValue } from "../yaml/parse.ts";
 import { DEFAULT_AUTOUPDATE_INTERVAL_SECONDS, defaultConfig } from "./defaults.ts";
+import { parseTapEntry, serializeTap } from "./taps.ts";
 
 /** Read and normalize the config, or return defaults if absent. */
 export function readConfig(home: string = crewHome()): Config {
@@ -72,77 +73,6 @@ export function normalizeConfig(parsed: YamlValue): Config {
     forced_agents,
     autoupdate,
   };
-}
-
-/** Parse one entry under the top-level `taps:` list. */
-function parseTapEntry(entry: YamlValue): TapConfig {
-  if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
-    throw new CrewError(
-      "config_invalid",
-      "config.yaml: each `taps` entry must be a mapping like `- name: foo\\n  kind: git\\n  url: https://...`",
-    );
-  }
-  const em = entry as YamlMap;
-  const name = em["name"];
-  if (typeof name !== "string" || name.length === 0) {
-    throw new CrewError("config_invalid", "config.yaml: each tap needs a non-empty `name`");
-  }
-  const kind = parseKind(em["kind"]);
-  const registered =
-    em["registered"] === undefined || em["registered"] === null
-      ? true // legacy/default: assume registered when not specified
-      : parseBool(em["registered"], "registered");
-  if (kind === "git") {
-    const url = em["url"];
-    if (typeof url !== "string" || url.length === 0) {
-      throw new CrewError(
-        "config_invalid",
-        `config.yaml: tap \`${name}\` (kind: git) needs a non-empty \`url\``,
-      );
-    }
-    const subpath = parseSubpath(em["subpath"]);
-    return { name, kind: "git", registered, url, subpath, path: "" };
-  }
-  // kind === "path"
-  const path = em["path"];
-  if (typeof path !== "string" || path.length === 0) {
-    throw new CrewError(
-      "config_invalid",
-      `config.yaml: tap \`${name}\` (kind: path) needs a non-empty \`path\``,
-    );
-  }
-  return { name, kind: "path", registered, url: "", subpath: "", path };
-}
-
-function parseKind(raw: YamlValue | undefined): TapKind {
-  if (raw === undefined || raw === null) return "git"; // legacy default
-  if (raw === "git" || raw === "path") return raw;
-  throw new CrewError(
-    "config_invalid",
-    "config.yaml: tap `kind`, when present, must be `git` or `path`",
-  );
-}
-
-function parseBool(raw: YamlValue | undefined, field: string): boolean {
-  if (typeof raw !== "boolean") {
-    throw new CrewError(
-      "config_invalid",
-      `config.yaml: tap \`${field}\` must be \`true\` or \`false\``,
-    );
-  }
-  return raw;
-}
-
-/** Subpath: optional string, normalized to no leading/trailing slashes; empty → empty string. */
-function parseSubpath(raw: YamlValue | undefined): string {
-  if (raw === undefined || raw === null) return "";
-  if (typeof raw !== "string") {
-    throw new CrewError(
-      "config_invalid",
-      "config.yaml: tap `subpath`, when present, must be a string (directory inside the repo)",
-    );
-  }
-  return raw.replace(/^\/+|\/+$/g, "");
 }
 
 function parseAutoupdate(raw: YamlValue | undefined): {
@@ -216,22 +146,4 @@ export function writeConfig(config: Config, home: string = crewHome()): void {
     },
   };
   writeText(paths(home).configFile, stringifyYaml(obj));
-}
-
-function serializeTap(t: TapConfig): YamlValue {
-  if (t.kind === "git") {
-    return {
-      name: t.name,
-      kind: "git",
-      registered: t.registered,
-      url: t.url,
-      ...(t.subpath.length > 0 ? { subpath: t.subpath } : {}),
-    };
-  }
-  return {
-    name: t.name,
-    kind: "path",
-    registered: t.registered,
-    path: t.path,
-  };
 }

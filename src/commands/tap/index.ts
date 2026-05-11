@@ -22,9 +22,10 @@ import { withStateLock } from "../../state/lock.ts";
 import { rmrf } from "../../util/fs.ts";
 import { showCommandHelp } from "../help/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
-import { displayTarget, tapAdd } from "./add.ts";
+import { tapAdd } from "./add.ts";
 import { refreshTaps, type TapRefreshRow } from "./refresh.ts";
 import { renderTapList, renderTapRemove, renderTapUpdate, type TapListRow } from "./render.ts";
+import { displayTarget } from "./target.ts";
 
 export function tapCommand(ctx: CommandContext): CommandOutput {
   const sub = ctx.positional[0];
@@ -148,6 +149,7 @@ function tapList(ctx: CommandContext, args: readonly string[]): CommandOutput {
       name: t.name,
       kind: t.kind,
       registered: t.registered,
+      discovery: t.discovery ?? "standard",
       target: displayTarget(t),
       last_fetched: lastFetched,
     };
