@@ -16,11 +16,12 @@ import { CrewError } from "../../core/errors.ts";
 import type { LoadedSkill, StateEntry, TapConfig } from "../../core/types.ts";
 import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { attributeRef } from "../../install/tap-attribution.ts";
-import { NAME_PATTERN, parseRef } from "../../refs/parse.ts";
+import { parseRef } from "../../refs/parse.ts";
 import { hasSkillMd, loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
 import { expandSkills } from "../../sources/expand.ts";
 import { readState } from "../../state/load.ts";
+import { resolveStateSubject } from "../../state/subjects.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import type { InstalledInfo, SkillInfo } from "./render.ts";
 import { renderInstalled, renderSkills } from "./render.ts";
@@ -35,16 +36,15 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   const arg = ctx.positional[0]!;
 
   const state = readState(ctx.home);
-  const isBareName = NAME_PATTERN.test(arg);
-  const matches = isBareName ? state.installations.filter((e) => e.name === arg) : [];
-  if (matches.length > 0) {
-    const installed = buildInstalledInfo(matches, ctx.cwd);
+  const subject = resolveStateSubject(state, arg);
+  if (subject.entries.length > 0) {
+    const installed = buildInstalledInfo(subject.entries, ctx.cwd);
     return {
       exitCode: 0,
       human: renderInstalled(installed, ctx.style, ctx.width),
       json: {
         installed: installed.primary,
-        entries: matches,
+        entries: subject.entries,
         description: installed.description,
       },
     };

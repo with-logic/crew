@@ -12,6 +12,7 @@ import { agentByName } from "../../agents/registry.ts";
 import { uninstallSkillFromAgents } from "../../agents/uninstall.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
+import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
 import { dropScopedEntryAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
 
@@ -34,12 +35,17 @@ export interface UninstallRecord {
  */
 export function removeOne(
   state: StateFile,
-  name: string,
+  subject: string | StateSubject,
   ctx: CommandContext,
   pruned: boolean,
   agentFilter: readonly string[] | null,
 ): { updatedState: StateFile; rec: UninstallRecord } {
-  const entries = state.installations.filter((e) => e.name === name);
+  const name = typeof subject === "string" ? subject : subject.name;
+  const entries =
+    typeof subject === "string"
+      ? state.installations.filter((e) => e.name === name)
+      : subject.entries;
+  const errorName = typeof subject === "string" ? subject : subject.raw;
   const rec: UninstallRecord = {
     name,
     removedFrom: [],
@@ -51,8 +57,8 @@ export function removeOne(
     if (!(ctx.flags.force || pruned)) {
       throw new CrewError(
         "not_installed_here",
-        `\`${name}\` isn't in Homecrew's state — nothing to remove`,
-        { name },
+        `\`${errorName}\` isn't in Homecrew's state — nothing to remove`,
+        { name: errorName },
       );
     }
     return { updatedState: state, rec };

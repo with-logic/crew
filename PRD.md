@@ -97,12 +97,12 @@ Every command below is mandatory. Exit codes are defined in §15.
 
 ```
 crew install <ref> [<ref>...]     Install one or more skills.
-crew uninstall <name> [<name>...] Remove installed skills from every agent.
-crew update [<name>...]           Update all installed skills, or only those named.
+crew uninstall <selector> [<selector>...] Remove installed skills from every agent.
+crew update [<selector>...]       Update all installed skills, or only those selected.
 crew list                         List installed skills.
 crew skills                       Alias for `crew list`.
 crew search <query>               Search across configured taps.
-crew info <ref-or-name>           Show details for an installed or searchable skill.
+crew info <ref-or-selector>       Show details for an installed or searchable skill.
 
 crew tap add [--recursive] <url-or-path> [<name>]
                                    Add a registry (name defaults to repo/path name).
@@ -128,6 +128,14 @@ crew help [<command>]              Show help.
 crew version                       Print version and exit.
 ```
 
+**Installed skill selectors.** Commands that operate on already-installed
+skills (`crew info`, `crew update`, and `crew uninstall`) accept either the
+stored skill name (`pdf`) or a tap-qualified selector (`<tap>/<skill>` or
+`<tap>/<namespace>/<skill>`) that identifies the installed state entry by
+`state.source.tap`, optional namespace path, and `state.name`.
+User-facing help may describe these values as skill names rather than
+selectors; the distinction is spec terminology, not product language.
+
 ### 5.2 Global flags
 
 Accepted on any command where they apply:
@@ -148,7 +156,7 @@ Accepted on any command where they apply:
 
 ### 5.3.1 Uninstall-time flags
 
-- `--prune` — after removing the named skills, recursively uninstall any
+- `--prune` — after removing the selected skills, recursively uninstall any
   remaining skill that was only installed as a transitive dependency
   (§7.4 step 5) and is no longer required by anything. Equivalent to
   running `crew uninstall` followed by an autoremove pass.
@@ -468,6 +476,14 @@ Install takes a staged skill directory in the store, a skill name, a scope, and 
 
 ### 7.4 Uninstall algorithm
 
+`crew uninstall` arguments are installed-skill selectors. A selector can be the
+stored skill name (`pdf`) or a tap-qualified skill reference
+(`<tap>/<skill>` or `<tap>/<namespace>/<skill>`) that identifies an installed
+state entry by `state.source.tap`, optional namespace path, and `state.name`.
+Tap-qualified selectors are accepted even though `state.json` stores the skill
+under its unqualified name. If no installed state entry matches the selector,
+the command reports `not_installed_here` for the selector the user typed.
+
 **Agent set.** The default is to remove the skill from every agent
 it's recorded against in state. `--agent <name>` (repeatable,
 §5.2) restricts removal to the named agents only — other agents
@@ -764,20 +780,40 @@ Given one or more skill references on the command line, `crew install` proceeds 
 
 Exit code: 0 if every skill succeeded in at least one agent; 1 if any skill failed in every agent; 2 if nothing was attempted (empty install set after expansion when the user explicitly asked for something). Other exit codes per §15.
 
+### 9.1 `crew info`
+
+`crew info` accepts any install reference and, for installed skills, the same
+installed-skill selectors defined in §5.1. It reads `state.json` without taking
+the state lock. If the argument matches one or more installed state entries,
+`crew info` renders the installed view first: source, resolved version, installed
+agents, and local description when available. A tap-qualified selector such as
+`<tap>/<skill>` or `<tap>/<namespace>/<skill>` narrows the installed entries by
+`state.source.tap`, optional namespace path, and `state.name`.
+
+If the argument does not match installed state, `crew info` resolves it as an
+install reference and previews the valid skills available at that source. An
+`@ref` tail is not part of the installed-skill selector grammar; arguments such
+as `<tap>/<skill>@<ref>` therefore follow the reference-preview path rather than
+matching installed state.
+
 ## 10. Update and autoupdate
 
 ### 10.1 `crew update`
 
-With no arguments, updates every installed skill. With arguments, updates only the named skills.
+With no arguments, updates every installed skill. With arguments, updates only
+the selected installed skills. A selector can be the stored skill name (`pdf`)
+or a tap-qualified installed skill reference (`<tap>/<skill>` or
+`<tap>/<namespace>/<skill>`), using the same installed-skill selector rules as
+`crew uninstall` (§7.4).
 
-1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<name>...`, it is the subset of taps that host the named entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run.
+1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<selector>...`, it is the subset of taps that host the selected entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run.
 2. Build the list of skills to consider:
    - `crew update` with no args → every entry in `state.json`.
-   - `crew update <name>...` → the named entries, **plus their transitive dependency closure**. Concretely: for each name, take its state entry's direct deps (from its SKILL.md `metadata.crew.dependencies`, resolved against `required_by` in state), then their deps, and so on. A dep that isn't in state — one that was never installed — is not added; Homecrew does not install new skills during update. Entries pulled in this way appear in the results alongside the named ones, marked `transitively_required_by: [<name>...]` in JSON output so callers can tell them apart. An unknown top-level name (`<name>` not in state) is an error per argument.
+   - `crew update <selector>...` → the selected entries, **plus their transitive dependency closure**. Concretely: for each selected entry, take its direct deps (from its SKILL.md `metadata.crew.dependencies`, resolved against `required_by` in state), then their deps, and so on. A dep that isn't in state — one that was never installed — is not added; Homecrew does not install new skills during update. Entries pulled in this way appear in the results alongside the selected entries, marked `transitively_required_by: [<name>...]` in JSON output so callers can tell them apart. An unknown top-level selector (no matching state entry) is an error per argument.
 2b. **Re-expand taps** per §10.1.1. For every git-kind tap with at
-   least one state entry attributed to it (filtered by the same name-
-   filter rule as step 2 — `crew update <name>` only touches taps that
-   host a named entry or one of its transitive deps), walk the tap one
+   least one state entry attributed to it (filtered by the same selector
+   rule as step 2 — `crew update <selector>` only touches taps that
+   host a selected entry or one of its transitive deps), walk the tap one
    level deep. Any newly-added child skill is added to the list of
    skills to consider as a fresh install; any child skill that has
    disappeared from the tap upstream is reported with `source_gone`
@@ -801,7 +837,7 @@ outcome and leaves the local install, its marker, and its state entry
 untouched. The skill keeps working at its last-resolved SHA. This is a
 soft outcome: exit code stays 0 for an update run whose only
 abnormalities are `source_gone`. Removal of an unwanted local skill is
-always explicit (`crew uninstall <name>`).
+always explicit (`crew uninstall <selector>`).
 
 This rule also applies when a whole source becomes unresolvable: a
 tap's clone URL 404s, or a git repo is gone. Those produce
@@ -1507,7 +1543,7 @@ Add a tap first, then install a suggested skill by qualified name.
 
 The only commands that actively fetch from upstream are:
 
-- `crew update` (§10.1 step 1). Without args: every configured git-kind tap. With `<name>...`: only the taps that back the named entries (after the dependency closure of §10.1 step 2 expands them). Taps hosting only unrelated skills are not touched.
+- `crew update` (§10.1 step 1). Without args: every configured git-kind tap. With `<selector>...`: only the taps that back the selected entries (after the dependency closure of §10.1 step 2 expands them). Taps hosting only unrelated skills are not touched.
 - `crew tap update` — every git-kind tap, or the named subset.
 - `crew tap add` — initial clone of the freshly-added git tap.
 - `crew install <git-url>` and `crew install <tap-name>` against an out-of-date tap — fetches that tap's URL.
@@ -1712,22 +1748,29 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`, its clone deleted. Registered taps are NOT garbage-collected by uninstall. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` on a tap with pending additions lists those additions without installing anything. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
-| C-UPD-23 | §10.1 / §16.6 | `crew update <name>...` restricts fetching to taps that back the named entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
-| C-UPD-24 | §10.1 | `crew update <name>...` includes each named entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the named ones, marked as transitively required in `--json` output. |
+| C-UPD-23 | §10.1 / §16.6 | `crew update <selector>...` restricts fetching to taps that back the selected entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
+| C-UPD-24 | §10.1 | `crew update <selector>...` includes each selected entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the selected entries, marked as transitively required in `--json` output. |
+| C-UPD-25 | §10.1 | `crew update <tap>/<skill>` accepts a tap-qualified selector for an installed skill and updates the matching state entry. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background agent from its launchd-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
+
+#### C-INFO: Info (§9.1)
+
+| ID | Reference | Assertion |
+|---|---|---|
+| C-INFO-01 | §9.1 | `crew info <tap>/<skill>` resolves the argument against installed state first; if matching state entries exist, it renders the installed view rather than walking the tap source. |
 
 #### C-UNINST: Uninstall (§7.4)
 
 | ID | Reference | Assertion |
 |---|---|---|
-| C-UNINST-01 | §7.4 | `crew uninstall <name>` removes the skill directory from every agent the skill was installed in. |
+| C-UNINST-01 | §7.4 | `crew uninstall <selector>` removes the skill directory from every agent the skill was installed in. |
 | C-UNINST-02 | §7.4 | Uninstall updates `state.json` to no longer list the skill. |
 | C-UNINST-03 | §7.4 | Uninstall does not touch sibling skill directories in the same agent. |
 | C-UNINST-04 | §7.4 | `crew uninstall` on a skill that is not installed produces `not_installed_here`, exit 6, without `--force`. |
-| C-UNINST-05 | §7.4 | `crew uninstall <name>` without `--prune` does NOT remove that skill's transitive dependencies, even if they are no longer required by anything else. |
-| C-UNINST-06 | §7.4 | `crew uninstall <name> --prune` removes the named skill, then recursively removes any remaining skill with `explicit: false` and an empty `required_by` at the same scope. |
+| C-UNINST-05 | §7.4 | `crew uninstall <selector>` without `--prune` does NOT remove that skill's transitive dependencies, even if they are no longer required by anything else. |
+| C-UNINST-06 | §7.4 | `crew uninstall <selector> --prune` removes the selected skill, then recursively removes any remaining skill with `explicit: false` and an empty `required_by` at the same scope. |
 | C-UNINST-07 | §7.4 | `--prune` never removes a skill with `explicit: true`, even if no other skill depends on it. |
 | C-UNINST-08 | §11.1 | After `crew uninstall`, every remaining state entry's `required_by` no longer names the uninstalled skill. |
 | C-UNINST-09 | §11.1 | A skill first installed as a dependency (`explicit: false`) and then later installed directly (`crew install <name>`) has `explicit: true` after the second install. |
@@ -1739,6 +1782,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-15 | §11.1 | `crew uninstall --scope project <name>` removes the install at the entry's recorded `project_root`, NOT the user's current working directory. Run from any cwd, it finds and removes the correct files. |
 | C-UNINST-16 | §7.4 | When two agents share a `dest` (e.g. `codex` + `gemini-cli` both at `~/.agents/skills/<name>/`), `crew uninstall --agent codex <name>` removes `codex` from the marker's `agents` list but leaves the bytes on disk; `gemini-cli` continues to work. |
 | C-UNINST-17 | §7.4 | After `crew uninstall --agent codex <name>` in a path-shared install, the marker at `dest` contains every remaining owning adapter and no others. |
+| C-UNINST-18 | §7.4 | `crew uninstall <tap>/<skill>` accepts a tap-qualified selector for an installed skill and removes the matching state entry. |
 | C-SHARE-01 | §7.2, §7.3 | When `codex` and `gemini-cli` are both active, `crew install <name>` writes bytes to `~/.agents/skills/<name>/` exactly once, and the per-agent summary reports both adapter names as installed. |
 | C-SHARE-02 | §7.5 | The `agents` field in `.crew.json` is non-empty, alphabetically sorted, and lists every agent currently owning the install. |
 | C-SHARE-03 | §7.3 | Installing into a path already owned by agent X with agent Y active (and not X) results in a marker whose `agents` contains both X and Y, preserving X's ownership. |

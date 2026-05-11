@@ -2,13 +2,14 @@
  * Entry selection helpers for `crew update` (§10.1).
  *
  * The command entry point orchestrates refresh/re-expand/update work;
- * this module owns the named-entry and dependency-closure selection
- * logic so the command file stays small.
+ * this module owns installed-subject and dependency-closure selection
+ * so the command file stays small.
  */
 
 import { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import type { UpdateRow } from "../../install/update-one.ts";
+import type { StateSubject } from "../../state/subjects.ts";
 
 /** Expanded update set + per-entry "who pulled you in" map. */
 export interface ChosenEntries {
@@ -21,6 +22,11 @@ export interface ChosenEntries {
   readonly transitiveSources: ReadonlyMap<string, readonly string[]>;
 }
 
+interface DependencyClosure {
+  readonly selectedNames: ReadonlySet<string>;
+  readonly transitiveSources: ReadonlyMap<string, readonly string[]>;
+}
+
 /**
  * Compute the set of tap configs whose clones this run needs fresh.
  *
@@ -29,7 +35,7 @@ export interface ChosenEntries {
  *
  * Non-empty `names`: the taps backing every entry in the expanded
  * update set (direct names + dep closure), plus the tap itself if the
- * user named it directly (`crew update <tap-name>`). Other taps
+ * user named it directly (`crew update <tap-name>`). Other taps are
  * untouched.
  */
 export function tapsToRefreshFor(
@@ -42,6 +48,9 @@ export function tapsToRefreshFor(
   for (const e of expandedSelection) {
     wantedTapNames.add(e.source.tap);
   }
+  // `names` are resolved skill names, not raw inputs. Qualified refs
+  // refresh through `expandedSelection`; this preserves bare tap-name
+  // updates.
   for (const n of names) {
     if (config.taps.some((t) => t.name === n)) wantedTapNames.add(n);
   }
@@ -59,36 +68,43 @@ export function withTransitive(
 }
 
 /**
- * Select entries for the update run, expanding named entries with their
- * transitive dependency closure.
- *
- * Deps are derived from state alone: a skill `bar` is a dependency of
- * `foo` iff `bar.required_by` contains `"foo"` (§11.1). This works
- * without reading SKILL.md from disk.
+ * Select entries for the update run, expanding named entries with
+ * their transitive dependency closure.
  */
-export function chooseEntries(state: StateFile, names: readonly string[]): ChosenEntries {
-  if (names.length === 0) {
+export function chooseEntries(state: StateFile, subjects: readonly StateSubject[]): ChosenEntries {
+  if (subjects.length === 0) {
     return { entries: [...state.installations], transitiveSources: new Map() };
   }
-  for (const name of names) {
-    if (!state.installations.some((e) => e.name === name)) {
+  for (const subject of subjects) {
+    if (subject.entries.length === 0) {
       throw new CrewError(
         "unknown_skill",
-        `\`${name}\` isn't installed — run \`crew list\` to see what Homecrew is tracking`,
-        { name },
+        `\`${subject.raw}\` isn't installed — run \`crew list\` to see what Homecrew is tracking`,
+        { name: subject.raw },
       );
     }
   }
 
+  const names = subjects.map((subject) => subject.name);
   const topLevel = new Set(names);
+  const closure = dependencyClosureFor(state, names, topLevel);
+  const entries = orderedEntries(state, subjects, closure.selectedNames, topLevel);
+  return { entries, transitiveSources: closure.transitiveSources };
+}
+
+function dependencyClosureFor(
+  state: StateFile,
+  names: readonly string[],
+  topLevel: ReadonlySet<string>,
+): DependencyClosure {
   const selectedNames = new Set<string>();
   const ancestors = new Map<string, Set<string>>();
-  const queue: { name: string; rootedAt: string }[] = [];
-  for (const name of names) queue.push({ name, rootedAt: name });
-
+  const visited = new Set<string>();
+  const queue = names.map((name) => ({ name, rootedAt: name }));
   while (queue.length > 0) {
     const { name, rootedAt } = queue.shift()!;
-    const firstVisit = !selectedNames.has(name);
+    const firstVisit = !visited.has(name);
+    visited.add(name);
     selectedNames.add(name);
     if (!topLevel.has(name)) {
       if (!ancestors.has(name)) ancestors.set(name, new Set());
@@ -96,44 +112,41 @@ export function chooseEntries(state: StateFile, names: readonly string[]): Chose
     }
     if (!firstVisit) continue;
     for (const candidate of state.installations) {
-      if (candidate.required_by.includes(name)) queue.push({ name: candidate.name, rootedAt });
+      if (candidate.required_by.includes(name)) {
+        queue.push({ name: candidate.name, rootedAt });
+      }
     }
   }
-
-  return {
-    entries: selectedEntries(state.installations, names, selectedNames, topLevel),
-    transitiveSources: transitiveMap(ancestors),
-  };
+  const transitiveSources = new Map<string, readonly string[]>();
+  for (const [name, set] of ancestors) transitiveSources.set(name, [...set].sort());
+  return { selectedNames, transitiveSources };
 }
 
-function selectedEntries(
-  installations: readonly StateEntry[],
-  names: readonly string[],
+/** Preserve the user's requested entries first, then append dependency entries in state order. */
+function orderedEntries(
+  state: StateFile,
+  subjects: readonly StateSubject[],
   selectedNames: ReadonlySet<string>,
   topLevel: ReadonlySet<string>,
-): StateEntry[] {
+): readonly StateEntry[] {
   const entries: StateEntry[] = [];
   const seen = new Set<string>();
-  for (const n of names) {
-    for (const e of installations) {
-      if (e.name === n) pushEntry(entries, seen, e);
-    }
+  const add = (entry: StateEntry) => {
+    const key = entryKey(entry);
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push(entry);
+  };
+  for (const subject of subjects) {
+    for (const entry of subject.entries) add(entry);
   }
-  for (const e of installations) {
-    if (selectedNames.has(e.name) && !topLevel.has(e.name)) pushEntry(entries, seen, e);
+  for (const entry of state.installations) {
+    if (!selectedNames.has(entry.name) || topLevel.has(entry.name)) continue;
+    add(entry);
   }
   return entries;
 }
 
-function pushEntry(entries: StateEntry[], seen: Set<string>, entry: StateEntry): void {
-  const key = `${entry.name}::${entry.scope}::${entry.project_root ?? ""}`;
-  if (seen.has(key)) return;
-  seen.add(key);
-  entries.push(entry);
-}
-
-function transitiveMap(ancestors: ReadonlyMap<string, ReadonlySet<string>>): Map<string, string[]> {
-  const out = new Map<string, string[]>();
-  for (const [name, set] of ancestors) out.set(name, [...set].sort());
-  return out;
+function entryKey(entry: StateEntry): string {
+  return `${entry.name}::${entry.scope}::${entry.project_root ?? ""}`;
 }

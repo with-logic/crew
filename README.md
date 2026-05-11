@@ -154,6 +154,9 @@ Every command accepts `--scope`, `--agent`, `--dry-run`, `--json`, `--quiet`,
 `--verbose`, `--yes`, and `--force` where they apply. Run `crew help <command>`
 for examples.
 
+When a command asks for an installed skill name, you can use the bare name
+(`pdf`) or a tap-qualified name (`anthropic/pdf`).
+
 **Managing skills**
 
 | Command | What it does |
