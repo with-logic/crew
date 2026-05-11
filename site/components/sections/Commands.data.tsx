@@ -86,16 +86,16 @@ export const GROUPS: readonly CommandGroup[] = [
         signature: <>crew taps</>,
         description: ["Alias for ", <code key="crew-tap-list">crew tap list</code>, "."],
       },
-      { name: "untap", signature: <>crew untap &lt;name&gt;</>, description: "Alias for crew tap remove." },
+      {
+        name: "untap",
+        signature: <>crew untap &lt;name&gt;</>,
+        description: ["Alias for ", <code key="crew-untap-tap-remove">crew tap remove</code>, "."],
+      },
       {
         name: "tap-update",
         signature: <>crew tap update [&lt;name&gt;…]</>,
-        description: (
-          <>
-            Fetch + fast-forward every git tap (or the named subset). Doesn't touch installed skills
-            — use <code>crew update</code> for that.
-          </>
-        ),
+        description:
+          "Fetch + fast-forward every git tap (or the named subset). Doesn't touch installed skills.",
       },
     ],
   },

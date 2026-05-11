@@ -13,5 +13,5 @@ export const untapHelp: CommandHelp = {
   ],
   flags: [{ flag: "--force", description: "Allow removing the default `core` tap." }],
   examples: [{ command: "crew untap acme", description: "Stop using the `acme` tap." }],
-  seeAlso: ["tap", "taps", "search"],
+  seeAlso: ["tap", "taps", "install", "search"],
 };
