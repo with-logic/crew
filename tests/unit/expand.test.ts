@@ -161,11 +161,20 @@ describe("expandSkills", () => {
 
   test("recursive fallback skips hidden and vendor directories", () => {
     const root = makeTempDir("expand-recursive-skip-");
-    mkdirSync(join(root, ".hidden"), { recursive: true });
-    mkdirSync(join(root, "node_modules"), { recursive: true });
-    makeSkill(join(root, ".hidden"), "hidden-skill", skillFrontmatter({ name: "hidden-skill" }));
+    const source = join(root, "source-tree");
+    mkdirSync(join(source, ".hidden"), { recursive: true });
+    mkdirSync(join(source, "node_modules"), { recursive: true });
+    writeFileSync(
+      join(source, ".hidden", "SKILL.md"),
+      `---\n${skillFrontmatter({ name: "hidden-root" })}\n---\n`,
+    );
+    writeFileSync(
+      join(source, "node_modules", "SKILL.md"),
+      `---\n${skillFrontmatter({ name: "package-root" })}\n---\n`,
+    );
+    makeSkill(join(source, ".hidden"), "hidden-skill", skillFrontmatter({ name: "hidden-skill" }));
     makeSkill(
-      join(root, "node_modules"),
+      join(source, "node_modules"),
       "package-skill",
       skillFrontmatter({ name: "package-skill" }),
     );

@@ -16,7 +16,7 @@ import { tapPath } from "../../core/paths.ts";
 import type { StateFile, TapConfig } from "../../core/types.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { exists } from "../../util/fs.ts";
-import { rewriteMarkerTapName } from "./rewrite-markers.ts";
+import { rewriteTapMarkers } from "./rewrite-markers.ts";
 
 export function promoteExistingTap(
   home: string,
@@ -44,7 +44,6 @@ export function promoteExistingTap(
     if (exists(oldPath)) renameSync(oldPath, newPath);
   }
   writeConfig(updated, home);
-  if (renamedName === sameTarget.name) return;
   const state = readState(home);
   const rewritten: StateFile = {
     ...state,
@@ -52,6 +51,14 @@ export function promoteExistingTap(
       e.source.tap === sameTarget.name ? { ...e, source: { ...e.source, tap: renamedName } } : e,
     ),
   };
-  writeState(rewritten, home);
-  rewriteMarkerTapName(sameTarget.name, renamedName, rewritten.installations, cwd);
+  if (renamedName !== sameTarget.name) writeState(rewritten, home);
+  rewriteTapMarkers(
+    {
+      oldName: sameTarget.name,
+      newName: renamedName,
+      ...(recursive ? { discovery: "recursive" } : {}),
+    },
+    rewritten.installations,
+    cwd,
+  );
 }

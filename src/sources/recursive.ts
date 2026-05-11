@@ -29,6 +29,7 @@ export function findRecursiveSkillDirs(rootDir: string): string[] {
   const dirs: string[] = [];
   for (const entry of walk(rootDir, { shouldDescend: shouldDescendInto })) {
     if (!entry.isDirectory) continue;
+    if (shouldSkipDirectory(entry.relPath)) continue;
     if (!hasSkillMd(entry.absPath)) continue;
     dirs.push(entry.absPath);
   }

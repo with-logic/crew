@@ -12,11 +12,13 @@ import type { TapConfig } from "../../core/types.ts";
 import { ensureClone } from "../../git/repo.ts";
 import { deriveAutoTapName } from "../../install/tap-naming.ts";
 import { NAME_PATTERN } from "../../refs/parse.ts";
+import { readState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { exists, isDirectory, rmrf } from "../../util/fs.ts";
 import type { Styler } from "../../util/term.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promoteExistingTap } from "./promote.ts";
+import { rewriteTapMarkers } from "./rewrite-markers.ts";
 import {
   displayTarget,
   parseTapAddTarget,
@@ -77,6 +79,11 @@ function performAdd(
             ),
           },
           ctx.home,
+        );
+        rewriteTapMarkers(
+          { oldName: sameTarget.name, newName: sameTarget.name, discovery: "recursive" },
+          readState(ctx.home).installations,
+          ctx.cwd,
         );
         return "updated";
       }

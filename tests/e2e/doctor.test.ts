@@ -129,6 +129,30 @@ describe("doctor", () => {
     expect(tap!.discovery).toBe("recursive");
   });
 
+  test("--repair preserves recursive discovery after tap upgrade rewrites markers", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "alpha", skillFrontmatter({ name: "alpha" }));
+    runCli(["tap", "add", src, "local"], { home, streams: captureStreams().streams });
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    runCli(["install", "local/alpha"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", "--recursive", src, "local"], {
+      home,
+      streams: captureStreams().streams,
+    });
+
+    const fs = require("node:fs") as typeof import("node:fs");
+    fs.rmSync(join(home, "state.json"));
+    fs.rmSync(join(home, "config.yaml"));
+    const code = runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    expect(code).toBe(0);
+    const { readConfig } =
+      require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
+    const cfg = readConfig(home);
+    const tap = cfg.taps.find((t) => t.kind === "path" && t.path === src);
+    expect(tap!.discovery).toBe("recursive");
+  });
+
   test("--json output", () => {
     const home = makeCrewHome();
     const c = captureStreams();

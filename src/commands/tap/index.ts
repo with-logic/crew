@@ -63,6 +63,7 @@ function looksLikeTapSource(ref: string, cwd: string): boolean {
 }
 
 function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput {
+  rejectRecursiveFlag(ctx);
   if (args.length !== 1)
     throw new CrewError(
       "usage_error",
@@ -99,6 +100,7 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
  * Path taps are silently skipped (no upstream to fetch).
  */
 function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput {
+  rejectRecursiveFlag(ctx);
   const config = readConfig(ctx.home);
   const selected: readonly TapConfig[] =
     args.length === 0 ? config.taps : tapsMatching(config.taps, args);
@@ -129,6 +131,7 @@ function tapsMatching(all: readonly TapConfig[], names: readonly string[]): TapC
 }
 
 function tapList(ctx: CommandContext, args: readonly string[]): CommandOutput {
+  rejectRecursiveFlag(ctx);
   if (args.length !== 0)
     throw new CrewError(
       "usage_error",
@@ -155,4 +158,9 @@ function tapList(ctx: CommandContext, args: readonly string[]): CommandOutput {
     };
   });
   return { exitCode: 0, human: renderTapList(rows, ctx.style), json: { taps: rows } };
+}
+
+function rejectRecursiveFlag(ctx: CommandContext): void {
+  if (!ctx.flags.extras["recursive"]) return;
+  throw new CrewError("usage_error", "`--recursive` only applies to `crew tap add`");
 }

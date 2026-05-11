@@ -170,7 +170,7 @@ for examples.
 | Command | What it does |
 |---|---|
 | `crew search [<query>]` | Case-insensitive substring match across every configured tap. With no query, lists every installable skill; installed ones are marked `✓`. With a query, also suggests matching known taps to add. |
-| `crew tap add <git-url> [name]` | Clone a registry into `~/.crew/taps/`. Name defaults to the repo name. Add `--recursive` for trusted repos with non-standard nested layouts. |
+| `crew tap add <url-or-path> [name]` | Add a registry from a git source or local path. Name defaults to the repo/path name. Add `--recursive` for trusted repos with non-standard nested layouts. |
 | `crew tap remove <name>` | Delete a local tap clone and drop it from config. |
 | `crew tap list` | Print each tap's name, URL, and last-fetched timestamp. |
 | `crew taps` | Alias for `crew tap list`. |

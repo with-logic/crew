@@ -3,6 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { chmodSync } from "node:fs";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../src/core/types.ts";
 import { reexpandTaps } from "../../src/install/tap-reexpand.ts";
 import { makeCrewHome } from "../helpers/env.ts";
@@ -53,5 +54,25 @@ describe("reexpandTaps", () => {
     });
     expect([...result.sourceGone]).toEqual(["missing"]);
     expect(result.rows[0]).toMatchObject({ name: "missing", kind: "source_gone" });
+  });
+
+  test("tap expansion rethrows filesystem errors", () => {
+    const home = makeCrewHome();
+    const path = makeTempDir("crew-unreadable-reexpand-");
+    const tap = pathTap(path);
+    const config: Config = {
+      taps: [tap],
+      disabled_agents: [],
+      forced_agents: [],
+      autoupdate: { enabled: false, interval_seconds: 14400 },
+    };
+    const state: StateFile = { schema_version: 1, installations: [trackedEntry()] };
+
+    chmodSync(path, 0);
+    try {
+      expect(() => reexpandTaps(state, config, home, [], () => null)).toThrow();
+    } finally {
+      chmodSync(path, 0o755);
+    }
   });
 });

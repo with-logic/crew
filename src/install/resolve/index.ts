@@ -24,13 +24,8 @@ import type { KindHint } from "../resolve-ref/index.ts";
 import { attributeRef } from "../tap-attribution.ts";
 import { topoSort } from "../topo.ts";
 import { enqueueDep } from "./dep.ts";
-import {
-  enqueueTapRef,
-  expandSkillsAsItems,
-  type PendingItem,
-  sourcePinned,
-  sourceRequestedRef,
-} from "./enqueue.ts";
+import { enqueueTapRef, type PendingItem } from "./enqueue.ts";
+import { expandSkillsAsItems, sourcePinned, sourceRequestedRef } from "./expand-items.ts";
 
 /** Options for resolution. */
 export interface ResolveOptions {

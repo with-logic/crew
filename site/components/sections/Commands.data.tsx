@@ -64,7 +64,7 @@ export const GROUPS: readonly CommandGroup[] = [
       },
       {
         name: "tap-add",
-        signature: <>crew tap add [--recursive] &lt;git-url&gt; [name]</>,
+        signature: <>crew tap add [--recursive] &lt;url-or-path&gt; [name]</>,
         description: (
           <>
             Clone a registry into <code>~/.crew/taps/</code>. Name defaults to the repo name.

@@ -12,6 +12,7 @@ import type { Config } from "../../core/types.ts";
 import { detectCollision } from "../../install/collision-check.ts";
 import { runInstall } from "../../install/flow.ts";
 import type { KindHint } from "../../install/resolve-ref/index.ts";
+import { parseRef } from "../../refs/parse.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promptBareNameAmbiguity } from "./ambiguity-prompt.ts";
 import { promptForCollision } from "./collision-prompt.ts";
@@ -44,6 +45,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     );
   }
   const kindHint = readKindHint(ctx);
+  rejectRecursiveTapRefs(ctx);
   const config = readConfig(ctx.home);
   const refs = resolveCollisions(ctx, config);
   const installOptions = {
@@ -110,6 +112,18 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       dry_run: ctx.flags.dryRun,
     },
   };
+}
+
+function rejectRecursiveTapRefs(ctx: CommandContext): void {
+  if (!ctx.flags.extras["recursive"]) return;
+  for (const raw of ctx.positional) {
+    const source = parseRef(raw, ctx.cwd);
+    if (source.type !== "tap") continue;
+    throw new CrewError(
+      "usage_error",
+      "`--recursive` only applies to direct git or path sources — for tap-name installs, run `crew tap add --recursive <url-or-path> <name>` first",
+    );
+  }
 }
 
 /**

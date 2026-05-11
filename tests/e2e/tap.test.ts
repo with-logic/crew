@@ -80,6 +80,14 @@ describe("crew tap", () => {
     expect(capture.stdout()).toContain("core");
   });
 
+  test("tap subcommands reject --recursive outside tap add", () => {
+    const home = makeCrewHome();
+    const capture = captureStreams();
+    const code = runCli(["tap", "list", "--recursive"], { home, streams: capture.streams });
+    expect(code).toBe(4);
+    expect(capture.stderr()).toContain("only applies to `crew tap add`");
+  });
+
   test("C-TAP-05 core tap present by default", () => {
     const home = makeCrewHome();
     expect(readConfig(home).taps[0]!.name).toBe("core");
