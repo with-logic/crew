@@ -89,6 +89,11 @@ export const GROUPS: readonly CommandGroup[] = [
         description: ["Alias for ", <code key="crew-tap-list">crew tap list</code>, "."],
       },
       {
+        name: "untap",
+        signature: <>crew untap &lt;name&gt;</>,
+        description: ["Alias for ", <code key="crew-untap-tap-remove">crew tap remove</code>, "."],
+      },
+      {
         name: "tap-update",
         signature: <>crew tap update [&lt;name&gt;…]</>,
         description:

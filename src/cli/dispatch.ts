@@ -45,6 +45,7 @@ type CommandAlias = readonly [canonical: string, ...positionalPrefix: string[]];
 const COMMAND_ALIASES: Record<string, CommandAlias> = {
   skills: ["list"],
   taps: ["tap", "list"],
+  untap: ["tap", "remove"],
 };
 
 /** Dispatch a command name to its handler, returning the result. */

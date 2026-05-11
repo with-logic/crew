@@ -21,6 +21,7 @@ const EVERY_COMMAND = [
   "search",
   "tap",
   "taps",
+  "untap",
   "agents",
   "autoupdate",
   "doctor",
