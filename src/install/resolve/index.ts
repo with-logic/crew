@@ -23,14 +23,9 @@ import { stageIntoStore } from "../../sources/store.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
 import { attributeRef } from "../tap-attribution.ts";
 import { topoSort } from "../topo.ts";
-import {
-  enqueueDep,
-  enqueueTapRef,
-  expandSkillsAsItems,
-  type PendingItem,
-  sourcePinned,
-  sourceRequestedRef,
-} from "./enqueue.ts";
+import { enqueueDep } from "./dep.ts";
+import { enqueueTapRef, type PendingItem } from "./enqueue.ts";
+import { expandSkillsAsItems, sourcePinned, sourceRequestedRef } from "./expand-items.ts";
 
 /** Options for resolution. */
 export interface ResolveOptions {
@@ -42,6 +37,8 @@ export interface ResolveOptions {
    * root ref; dependencies never see a hint.
    */
   readonly kindHint: KindHint;
+  /** Opt direct git/path roots into recursive fallback discovery. */
+  readonly recursive: boolean;
 }
 
 /** name → set of names that depend on it. */
@@ -72,6 +69,7 @@ export function resolveInstallSet(
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
   const kindHint: KindHint = options.kindHint ?? null;
+  const recursive = options.recursive ?? false;
 
   let config = startingConfig;
   const byName = new Map<string, ResolvedSkill>();
@@ -81,7 +79,7 @@ export function resolveInstallSet(
 
   // Step 1–5: resolve every root reference.
   for (const raw of refs) {
-    const enqueued = enqueueRoot(raw, config, cwd, home, kindHint);
+    const enqueued = enqueueRoot(raw, config, cwd, home, kindHint, recursive);
     config = enqueued.config;
     pending.push(...enqueued.items);
     skipped.push(...enqueued.skipped);
@@ -93,13 +91,28 @@ export function resolveInstallSet(
     const name = item.loaded.frontmatter.name;
     if (byName.has(name)) {
       const existing = byName.get(name)!;
-      if (existing.resolvedSha !== item.resolvedSha)
+      if (sameInstallSetSource(existing, item) && existing.resolvedSha === item.resolvedSha)
+        continue;
+      const existingSha = existing.resolvedSha ?? "<null>";
+      const incomingSha = item.resolvedSha ?? "<null>";
+      const existingSource = sourceLabel(
+        existing.tap.name,
+        existing.tapRelativePath,
+        existing.resolvedSha,
+      );
+      const incomingSource = sourceLabel(item.tap.name, item.tapRelativePath, item.resolvedSha);
+      if (existing.resolvedSha !== item.resolvedSha) {
         throw new CrewError(
           "conflicting_dependencies",
-          `\`${name}\` appears twice in this install set with different SHAs (${(existing.resolvedSha ?? "<null>").slice(0, 8)} vs ${(item.resolvedSha ?? "<null>").slice(0, 8)}) — pin one to a specific version, or install them separately`,
+          `\`${name}\` appears twice in this install set with different SHAs (${existingSha.slice(0, 8)} vs ${incomingSha.slice(0, 8)}) — pin one to a specific version, or install them separately`,
           { name, existing: existing.resolvedSha, incoming: item.resolvedSha },
         );
-      continue;
+      }
+      throw new CrewError(
+        "conflicting_dependencies",
+        `\`${name}\` appears twice in this install set from different sources (${existingSource} vs ${incomingSource}) — rename one skill or install them separately`,
+        { name, existing: existingSource, incoming: incomingSource },
+      );
     }
 
     const staged = stageIntoStore(item.loaded.path, name, item.resolvedSha, home);
@@ -142,6 +155,7 @@ function enqueueRoot(
   cwd: string,
   home: string,
   kindHint: KindHint,
+  recursive: boolean,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const source = parseRef(raw, cwd);
 
@@ -153,7 +167,7 @@ function enqueueRoot(
   // Git URL or path: find or create the tap. This is always a
   // whole-tap install — the user pointed at a folder (or repo) and
   // said "install this". Future additions should follow.
-  const attrib = attributeRef(source, config);
+  const attrib = attributeRef(source, config, recursive ? "recursive" : undefined);
   const acquired = acquireTap(attrib.tap, home);
   const expansion = expandSkillsAsItems(
     acquired.rootDir,
@@ -166,4 +180,19 @@ function enqueueRoot(
     true,
   );
   return { items: expansion.items, config: attrib.config, skipped: expansion.skipped };
+}
+
+function sameInstallSetSource(existing: ResolvedSkill, incoming: PendingItem): boolean {
+  // Path-kind taps have no resolved SHA; same tap + same relative path
+  // is the source identity that lets duplicate pending refs collapse.
+  return (
+    existing.tap.name === incoming.tap.name && existing.tapRelativePath === incoming.tapRelativePath
+  );
+}
+
+function sourceLabel(tapName: string, tapRelativePath: string, resolvedSha: string | null): string {
+  if (tapRelativePath.length > 0) return `${tapName}/${tapRelativePath}`;
+  return resolvedSha === null
+    ? `${tapName} (root, local)`
+    : `${tapName} (root @ ${resolvedSha.slice(0, 8)})`;
 }

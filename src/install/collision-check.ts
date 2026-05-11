@@ -11,19 +11,17 @@
  * = no prompt, tap wins silently (or bare-name resolution takes over
  * when the name doesn't match a tap at all).
  *
- * This module walks tap clones that are already on disk; it never
- * fetches. Taps that fail to materialize are silently skipped (same
- * policy as search / bare-name install).
+ * Taps that are not already on disk, or fail to materialize, are
+ * silently skipped while checking other taps (same policy as search /
+ * bare-name install). `crew tap add` normally clones taps up front.
  */
 
-import { readdirSync } from "node:fs";
-import { join } from "node:path";
 import { tapPath } from "../core/paths.ts";
 import type { Config, TapConfig } from "../core/types.ts";
-import { ensureClone } from "../git/repo.ts";
-import { hasSkillMd } from "../skill/load.ts";
+import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
 import { isDirectory } from "../util/fs.ts";
+import { indexTap } from "./tap-index.ts";
 
 export interface Collision {
   /** The tap whose name matches the positional. */
@@ -42,13 +40,11 @@ export function detectCollision(name: string, config: Config, home: string): Col
   const otherTaps: TapConfig[] = [];
   for (const other of config.taps) {
     if (other.name === tap.name) continue;
-    const root = tapRootOnDisk(other, home);
-    if (root === null) continue;
-    const candidate = join(root, name);
-    // A skill directory must contain a SKILL.md; directories named
-    // after the positional but lacking SKILL.md aren't skills.
-    if (isDirectory(candidate) && hasSkillMd(candidate)) {
-      otherTaps.push(other);
+    try {
+      const index = indexTap(other, home);
+      if (index.skills.has(name)) otherTaps.push(other);
+    } catch {
+      // Same soft-fail policy as search / bare-name install.
     }
   }
   if (otherTaps.length === 0) return null;
@@ -64,14 +60,19 @@ export function detectCollision(name: string, config: Config, home: string): Col
 export function countSkills(tap: TapConfig, home: string): number | null {
   const root = tapRootOnDisk(tap, home);
   if (root === null) return null;
-  if (hasSkillMd(root)) return 1;
+  if (hasSkillMd(root)) return rootSkillCount(root);
   let count = 0;
-  // Shallow walk — tap-owned skills live one level deep. A deeper
-  // layout is explicitly unsupported (§9.2).
-  for (const child of readdirSync(root)) {
-    if (hasSkillMd(join(root, child))) count++;
-  }
+  for (const locs of indexTap(tap, home).skills.values()) count += locs.length;
   return count;
+}
+
+function rootSkillCount(root: string): number {
+  try {
+    loadSkillName(root);
+    return 1;
+  } catch {
+    return 0;
+  }
 }
 
 /** Non-throwing root-dir lookup for a tap; returns null if not on disk. */
@@ -79,12 +80,6 @@ function tapRootOnDisk(tap: TapConfig, home: string): string | null {
   if (tap.kind === "path") {
     return isDirectory(tap.path) ? tap.path : null;
   }
-  const tp = tapPath(tap.name, home);
-  try {
-    ensureClone(tap.url, tp);
-  } catch {
-    return null;
-  }
-  const root = tapRootDir(tp, tap);
+  const root = tapRootDir(tapPath(tap.name, home), tap);
   return isDirectory(root) ? root : null;
 }

@@ -21,15 +21,29 @@ import type { Config, TapConfig, TapSource } from "../../core/types.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 import { enumerateCandidates } from "../attribute-bare-name.ts";
 import { indexTap, type TapIndex } from "../tap-index.ts";
-import { formatCandidate } from "./format.ts";
+import { ambiguityError, flagFor } from "./errors.ts";
 
 /** Force-one-kind hint from a `--tap` / `--bundle` / `--skill` flag. */
-export type KindHint = "tap" | "namespace" | "skill" | null;
+export type SpecificKindHint = "tap" | "namespace" | "skill";
+export type KindHint = SpecificKindHint | "non-tap" | null;
+export type NonTapNameCandidate = Exclude<NameCandidate, { readonly kind: "tap" }>;
 
 /**
  * Resolve a `TapSource` to the single candidate it refers to. See the
  * disambiguation rules in PRD §8.3.
  */
+export function resolveTapRef(
+  source: TapSource,
+  config: Config,
+  home: string,
+  kindHint: "non-tap",
+): NonTapNameCandidate;
+export function resolveTapRef(
+  source: TapSource,
+  config: Config,
+  home: string,
+  kindHint?: KindHint,
+): NameCandidate;
 export function resolveTapRef(
   source: TapSource,
   config: Config,
@@ -50,7 +64,7 @@ export function resolveTapRef(
   return resolveBare(source.name, config, home, kindHint);
 }
 
-function resolveThreeSegment(source: TapSource, config: Config, home: string): NameCandidate {
+function resolveThreeSegment(source: TapSource, config: Config, home: string): NonTapNameCandidate {
   const tap = config.taps.find((t) => t.name === source.tap);
   if (!tap) {
     throw new CrewError(
@@ -72,7 +86,7 @@ function resolveThreeSegment(source: TapSource, config: Config, home: string): N
   return { kind: "skill", tap, location: match };
 }
 
-function resolveTwoSegment(source: TapSource, config: Config, home: string): NameCandidate {
+function resolveTwoSegment(source: TapSource, config: Config, home: string): NonTapNameCandidate {
   const first = source.tap!;
   const second = source.name;
   const tap = config.taps.find((t) => t.name === first);
@@ -80,7 +94,7 @@ function resolveTwoSegment(source: TapSource, config: Config, home: string): Nam
 
   // Collect namespace candidates: `<first>` is a namespace in some tap
   // that holds a skill named `<second>`.
-  const nsCandidates: NameCandidate[] = [];
+  const nsCandidates: NonTapNameCandidate[] = [];
   for (const t of config.taps) {
     if (t === tap) continue;
     const idx = safeIndex(t, home);
@@ -120,6 +134,20 @@ function resolveBare(
 ): NameCandidate {
   const all = enumerateCandidates(name, config, home);
 
+  if (kindHint === "non-tap") {
+    const filtered = all.filter((c): c is NonTapNameCandidate => c.kind !== "tap");
+    if (filtered.length === 0) {
+      const tapNames = config.taps.map((t) => t.name).join(", ");
+      throw new CrewError(
+        "invalid_ref",
+        `\`${name}\` isn't a skill or namespace in any configured tap (searched: ${tapNames || "<none>"})`,
+        { name },
+      );
+    }
+    if (filtered.length === 1) return filtered[0]!;
+    throw ambiguityError(name, filtered);
+  }
+
   if (kindHint !== null) {
     const filtered = all.filter((c) => c.kind === kindHint);
     if (filtered.length === 0) {
@@ -145,7 +173,7 @@ function resolveBare(
   throw ambiguityError(name, all);
 }
 
-function lookupInTap(tap: TapConfig, home: string, name: string): NameCandidate | null {
+function lookupInTap(tap: TapConfig, home: string, name: string): NonTapNameCandidate | null {
   const idx = safeIndex(tap, home);
   if (!idx) return null;
   const locs = idx.skills.get(name);
@@ -163,31 +191,4 @@ function safeIndex(tap: TapConfig, home: string): TapIndex | null {
   } catch {
     return null;
   }
-}
-
-function flagFor(k: Exclude<KindHint, null>): string {
-  if (k === "tap") return "tap";
-  if (k === "namespace") return "bundle";
-  return "skill";
-}
-
-function ambiguityError(
-  name: string,
-  candidates: readonly NameCandidate[],
-  reason?: string,
-): CrewError {
-  const lines: string[] = [];
-  lines.push(reason ?? `\`${name}\` is ambiguous across taps, skills, and namespaces`);
-  lines.push("");
-  lines.push("  Rerun with one of:");
-  lines.push("");
-  for (const c of candidates) {
-    lines.push(`    ${formatCandidate(c, name)}`);
-  }
-  lines.push("");
-  const detail = candidates.map((c) => formatCandidate(c, name));
-  return new CrewError("ambiguous_reference", lines.join("\n"), {
-    name,
-    candidates: detail,
-  });
 }

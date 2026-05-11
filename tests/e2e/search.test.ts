@@ -173,6 +173,66 @@ describe("crew search output", () => {
     expect(c.stdout()).toContain("findme");
   });
 
+  test("search results use SKILL.md name when the source directory differs", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repo = makeTempDir("crew-search-declared-name-");
+    makeGitRepo(repo);
+    makeSkill(
+      repo,
+      "firebase-data-connect-basics",
+      skillFrontmatter({
+        name: "firebase-data-connect",
+        description: "Use Firebase Data Connect",
+      }),
+    );
+    commitAll(repo, "init");
+    runCli(["tap", "add", `file://${repo}`, "firebase"], {
+      home,
+      streams: captureStreams().streams,
+    });
+
+    const c = captureStreams();
+    const code = runCli(["search", "--json", "firebase-data-connect"], {
+      home,
+      streams: c.streams,
+    });
+    expect(code).toBe(0);
+    const parsed = JSON.parse(c.stdout()) as {
+      hits: {
+        tap: string;
+        name: string;
+        namespace: string | null;
+        description: string;
+        installed: boolean;
+      }[];
+    };
+    expect(parsed.hits).toEqual([
+      {
+        tap: "firebase",
+        name: "firebase-data-connect",
+        namespace: null,
+        description: "Use Firebase Data Connect",
+        installed: false,
+      },
+    ]);
+  });
+
+  test("search indexes root-skill taps by declared SKILL.md name", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repo = makeTempDir("crew-root-skill-");
+    makeSkill(repo, ".", skillFrontmatter({ name: "declared-root", description: "Root skill" }));
+    runCli(["tap", "add", repo, "vendor"], { home, streams: captureStreams().streams });
+
+    const capture = captureStreams();
+    const code = runCli(["search", "declared-root"], { home, streams: capture.streams });
+
+    expect(code).toBe(0);
+    expect(capture.stdout()).toContain("declared-root");
+    expect(capture.stdout()).toContain("Root skill");
+  });
+
   test("empty result set prints a no-match line (still exit 0)", () => {
     const home = makeCrewHome();
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
@@ -201,7 +261,7 @@ describe("crew search output", () => {
     expect(out).toContain("supabase");
     expect(out).toContain("database/schema-review");
     expect(out).toContain(
-      "tap with: crew tap add https://github.com/example/supabase-skills.git//skills supabase",
+      "tap with: crew tap add https://github.com/example/supabase-skills supabase",
     );
     expect(out).toContain("crew install supabase/database/schema-review");
 
@@ -251,7 +311,7 @@ describe("crew search output", () => {
     const c = captureStreams();
     runCli(["search", "openai"], { home, streams: c.streams });
     expect(c.stdout()).toContain(
-      "tap with: crew tap add https://github.com/example/openai-skills.git openai",
+      "tap with: crew tap add https://github.com/example/openai-skills openai",
     );
   });
 

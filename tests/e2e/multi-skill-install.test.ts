@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
@@ -136,7 +136,65 @@ describe("tap re-expansion on update (§10.1.1)", () => {
     expect(existsSync(join(ccRoot, "gamma", "SKILL.md"))).toBe(true);
   });
 
-  test("C-UPD-15 single-skill installs do NOT auto-pull new siblings on update", () => {
+  test("newly-added sibling records source path when directory differs", () => {
+    const home = makeCrewHome();
+    const repo = makeMultiSkillRepo(["alpha"]);
+    runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
+
+    makeSkill(repo, "numeric-source", skillFrontmatter({ name: "3-statement-model" }));
+    commitAll(repo, "add numeric source");
+
+    const first = captureStreams();
+    const firstCode = runCli(["update"], { home, streams: first.streams });
+    expect(firstCode).toBe(0);
+    expect(first.stdout()).toContain("3-statement-model");
+
+    const added = readState(home).installations.find((e) => e.name === "3-statement-model")!;
+    expect(added.source.path).toBe("numeric-source");
+    expect(existsSync(join(ccRoot, "3-statement-model", "SKILL.md"))).toBe(true);
+
+    const second = captureStreams();
+    const secondCode = runCli(["update"], { home, streams: second.streams });
+    expect(secondCode).toBe(0);
+    expect(second.stdout()).not.toContain("removed upstream");
+    expect(second.stdout()).not.toContain("failed");
+  });
+
+  test("renamed sibling directory updates source path by declared name", () => {
+    const home = makeCrewHome();
+    const repo = makeMultiSkillRepo(["alpha"]);
+    runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
+
+    renameSync(join(repo, "alpha"), join(repo, "alpha-renamed"));
+    commitAll(repo, "rename alpha directory");
+
+    const capture = captureStreams();
+    const code = runCli(["update"], { home, streams: capture.streams });
+    expect(code).toBe(0);
+    expect(capture.stdout()).not.toContain("removed upstream");
+
+    const alpha = readState(home).installations.find((e) => e.name === "alpha")!;
+    expect(alpha.source.path).toBe("alpha-renamed");
+  });
+
+  test("duplicate declared sibling name does not re-point existing source path", () => {
+    const home = makeCrewHome();
+    const repo = makeMultiSkillRepo(["alpha"]);
+    runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
+
+    makeSkill(repo, "alpha-copy", skillFrontmatter({ name: "alpha" }));
+    commitAll(repo, "add duplicate alpha");
+
+    const capture = captureStreams();
+    const code = runCli(["update"], { home, streams: capture.streams });
+    expect(code).toBe(1);
+    expect(capture.stdout()).toContain("conflicting");
+
+    const alpha = readState(home).installations.find((e) => e.name === "alpha")!;
+    expect(alpha.source.path).toBe("alpha");
+  });
+
+  test("single-skill installs do NOT auto-pull new siblings on update", () => {
     // Counterpart to the whole-tap case: a user who installed just
     // ONE skill from a tap hasn't opted into the tap's future skills.
     // Adding a new sibling upstream should NOT appear on their

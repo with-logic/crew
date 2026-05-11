@@ -1,0 +1,186 @@
+.button {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 34px;
+  border-radius: 5px;
+  cursor: pointer;
+  font: 600 12px var(--font-mono);
+  padding: 0 10px;
+}
+
+.primaryButton {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.secondaryButton {
+  border: 1px solid var(--line-2);
+  background: #fff;
+  color: var(--ink);
+}
+
+.secondaryButton:hover {
+  background: var(--paper);
+}
+
+.iconButton.secondaryButton:hover {
+  background: #fff;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: auto;
+  max-width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 50%;
+  font-size: 17px;
+  line-height: 1;
+  overflow: hidden;
+  padding: 0;
+  transition:
+    max-width 0.12s ease,
+    border-radius 0.12s ease,
+    background 0.12s ease,
+    padding 0.12s ease;
+}
+
+.action:hover .iconButton,
+.action:has(.iconButton:focus-visible) .iconButton,
+.actionCopied .iconButton {
+  max-width: 160px;
+  border-radius: 999px;
+  padding: 0 12px 0 0;
+}
+
+.iconGlyph {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-width: 28px;
+  line-height: 1;
+  transform: translateX(-1px);
+}
+
+.iconText {
+  max-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  margin-left: 0;
+  opacity: 0;
+  white-space: nowrap;
+  transition:
+    max-width 0.12s ease,
+    margin-left 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.action:hover .iconText,
+.action:has(.iconButton:focus-visible) .iconText,
+.actionCopied .iconText {
+  max-width: 104px;
+  margin-left: 5px;
+  opacity: 1;
+}
+
+.copiedButton {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.failedButton {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.copiedButton.secondaryButton,
+.copiedButton.secondaryButton:hover,
+.failedButton.secondaryButton,
+.failedButton.secondaryButton:hover {
+  background: #fff;
+}
+
+.disabledButton,
+.disabledButton:hover {
+  border-color: var(--line);
+  background: var(--paper);
+  color: var(--mute);
+  cursor: default;
+}
+
+.action,
+.actionCopied,
+.actionSuppressed {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  min-inline-size: 0;
+  position: relative;
+}
+
+.commandHint {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 2;
+  width: min(360px, calc(100vw - 48px));
+  max-width: max-content;
+  padding: 9px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 10px 24px color-mix(in oklab, var(--ink) 14%, transparent);
+  color: var(--mute);
+  font: 11px var(--font-mono);
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  visibility: hidden;
+}
+
+.commandHint::after {
+  position: absolute;
+  right: 0;
+  bottom: -8px;
+  left: 0;
+  height: 8px;
+  content: "";
+}
+
+.action:hover .commandHint,
+.action:has(.button:focus-visible) .commandHint,
+.actionCopied .commandHint {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.commandHint strong,
+.commandHint code,
+.commandHint small {
+  display: block;
+}
+
+.commandHint strong {
+  color: var(--ink);
+}
+
+.actionCopied:has(.failedButton) .commandHint strong {
+  color: var(--warn);
+}
+
+.commandHint code {
+  margin-top: 3px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.commandHint small {
+  margin-top: 5px;
+}

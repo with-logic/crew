@@ -1,3 +1,4 @@
+import { Button } from "../primitives/Button";
 import { Acc, Cmt, CodeBlock, Key, Ok, Prompt } from "../primitives/CodeBlock";
 import { Container } from "../primitives/Container";
 import { Eyebrow } from "../primitives/Eyebrow";
@@ -38,9 +39,13 @@ export function Taps() {
               <Cmt># ignored by crew search</Cmt>
             </CodeBlock>
             <p className={styles.note}>
-              Any top-level directory with a valid <code>SKILL.md</code> is a skill. Everything else
-              is ignored. Prefer to keep skills under a <code>skills/</code> directory? That works
-              too — if <code>skills/</code> exists, crew indexes its children instead of the root.
+              Any top-level directory with a valid <code>SKILL.md</code> is a skill; the install
+              name comes from the <code>name</code> field inside <code>SKILL.md</code>. Everything
+              else is ignored. Prefer to keep skills under a <code>skills/</code> directory? That
+              works too — if <code>skills/</code> exists, crew indexes its children instead of the
+              root. For trusted repos with non-standard nesting,{" "}
+              <code>crew tap add --recursive</code> keeps those standard layouts first and falls
+              back to bounded recursive discovery.
             </p>
             <p className={styles.note}>
               Group related skills into <strong>namespaces</strong>: <code>skills/marketing/*</code>
@@ -78,6 +83,26 @@ export function Taps() {
             </p>
           </div>
         </div>
+
+        <aside className={styles.catalogCallout} aria-labelledby="catalog-heading">
+          <div className={styles.tagRow}>
+            <span className={styles.catalogTag}>Skill discovery</span>
+          </div>
+
+          <h3 id="catalog-heading" className={styles.heading}>
+            Don't have any skills or taps?
+          </h3>
+
+          <p className={styles.copy}>
+            Homecrew has skills pre-indexed in the catalog to help you get started. Browse the
+            default tap and trusted known taps, find a good first skill, then choose exactly what
+            you want to install.
+          </p>
+
+          <div className={styles.buttonRow}>
+            <Button href="/skills">Open the Skill Catalog</Button>
+          </div>
+        </aside>
       </Container>
     </Section>
   );

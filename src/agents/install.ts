@@ -1,11 +1,11 @@
 /**
- * Target install / uninstall operations (§7.3, §7.4).
+ * Target install operations (§7.3).
  *
  * These are adapter-independent and path-centric: multiple adapters
  * may resolve to the same `dest` (path sharing, §7.2), so the unit of
  * work is a group of adapters with the same resolved install path.
- * One physical copy + one marker is written per group, but the
- * per-adapter summary still reports each name as installed.
+ * One physical copy + one marker is written per group, but the per-adapter
+ * summary still reports each name as installed.
  */
 
 import { existsSync } from "node:fs";
@@ -119,6 +119,7 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
     tap_url: input.tap.url,
     tap_subpath: input.tap.subpath,
     tap_path: input.tap.path,
+    ...(input.tap.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
     path: input.tapRelativePath,
     ref: input.ref,
     resolved_sha: input.resolvedSha,
@@ -136,69 +137,4 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
 /** Union of two adapter-name lists, sorted and deduplicated. */
 function mergeAdapters(a: readonly string[], b: readonly string[]): string[] {
   return [...new Set([...a, ...b])].sort();
-}
-
-/** Input to uninstall from one `dest` shared by a group of agents. */
-export interface UninstallInput {
-  /** The agents whose ownership of this dest is being removed. */
-  readonly agents: readonly AgentAdapter[];
-  readonly scope: Scope;
-  readonly cwd: string;
-  readonly skillName: string;
-  readonly force: boolean;
-}
-
-/** Outcome of one uninstall operation on a physical dest. */
-export type UninstallOutcome =
-  /** Bytes removed — this was the last adapter owning the dest. */
-  | { kind: "removed" }
-  /** Ownership removed from the marker; bytes stay because other adapters still own them. */
-  | { kind: "detached"; remaining: readonly string[] }
-  /** No marker existed; nothing to do. */
-  | { kind: "absent" };
-
-/** Remove adapter ownership from a physical dest. Throws on abort. */
-export function uninstallSkillFromAgents(input: UninstallInput): UninstallOutcome {
-  const base = baseFor(input.agents[0]!, input.scope, input.cwd);
-  const dest = join(base, input.skillName);
-  if (!existsSync(dest)) {
-    if (!input.force)
-      throw new CrewError(
-        "not_installed_here",
-        `\`${input.skillName}\` isn't installed in \`${base}\``,
-        { dest },
-      );
-    return { kind: "absent" };
-  }
-  const marker = tryReadJson<Marker>(join(dest, ".crew.json"));
-  if (!marker) {
-    if (!input.force)
-      throw new CrewError(
-        "untracked_directory",
-        `\`${dest}\` exists but isn't crew-managed (no .crew.json) — refusing to remove`,
-        { dest },
-      );
-    rmrf(dest);
-    return { kind: "removed" };
-  }
-  if (marker.name !== input.skillName) {
-    if (!input.force)
-      throw new CrewError(
-        "inconsistent_marker",
-        `\`${dest}\` has a crew marker for \`${marker.name}\`, not \`${input.skillName}\` — investigate before forcing`,
-        { dest, markerName: marker.name, incomingName: input.skillName },
-      );
-    // With --force, blow away bytes and marker both.
-    rmrf(dest);
-    return { kind: "removed" };
-  }
-  const leaving = new Set(input.agents.map((a) => a.name));
-  const remaining = (marker.agents ?? []).filter((a) => !leaving.has(a));
-  if (remaining.length === 0) {
-    rmrf(dest);
-    return { kind: "removed" };
-  }
-  // Rewrite the marker with reduced `agents` — bytes stay.
-  writeJson(join(dest, ".crew.json"), { ...marker, agents: remaining.sort() });
-  return { kind: "detached", remaining };
 }

@@ -12,7 +12,7 @@ import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
 import { exists, readText } from "../util/fs.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
-import { validateFrontmatter } from "./validate.ts";
+import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
 /** Load and validate the skill at `path`. Throws `invalid_skill` on any failure. */
 export function loadSkill(path: string): LoadedSkill {
@@ -26,8 +26,23 @@ export function loadSkill(path: string): LoadedSkill {
   }
   const raw = readText(skillMdPath);
   const { data } = extractFrontmatter(raw);
-  const frontmatter = validateFrontmatter(data, path);
+  const frontmatter = validateFrontmatter(data);
   return { path, frontmatter, skillMd: raw };
+}
+
+/** Load only the declared skill name from `SKILL.md`, for tap indexing. */
+export function loadSkillName(path: string): string {
+  const skillMdPath = join(path, "SKILL.md");
+  if (!exists(skillMdPath)) {
+    throw new CrewError(
+      "invalid_skill",
+      `no SKILL.md in \`${path}\` — every skill directory needs one`,
+      { path },
+    );
+  }
+  const raw = readText(skillMdPath);
+  const { data } = extractFrontmatter(raw);
+  return validateFrontmatterName(data);
 }
 
 /** True iff `path` contains a `SKILL.md`. Does not validate. */

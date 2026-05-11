@@ -27,6 +27,7 @@ import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
+import { findRecursiveSkillDirs } from "./recursive.ts";
 
 /** A skill directory that couldn't be loaded. */
 export interface SkippedSkill {
@@ -44,6 +45,15 @@ export interface ExpansionResult {
   readonly skipped: readonly SkippedSkill[];
 }
 
+/** Options that affect multi-skill discovery. */
+export interface ExpandOptions {
+  /**
+   * If standard expansion finds no candidates, search recursively for
+   * skill-shaped directories.
+   */
+  readonly recursive?: boolean;
+}
+
 /**
  * Expand `rootDir` into loaded skills plus any skipped children.
  * Validation failures (at any level) are recorded in `skipped`
@@ -51,7 +61,7 @@ export interface ExpansionResult {
  * `no_skills_found` is still thrown when neither a valid skill nor
  * a validation failure is present (zero candidates).
  */
-export function expandSkills(rootDir: string): ExpansionResult {
+export function expandSkills(rootDir: string, options: ExpandOptions = {}): ExpansionResult {
   if (hasSkillMd(rootDir)) {
     const valid: LoadedSkill[] = [];
     const skipped: SkippedSkill[] = [];
@@ -62,14 +72,16 @@ export function expandSkills(rootDir: string): ExpansionResult {
   const result = isDirectory(skillsDir)
     ? collectWithNamespaces(skillsDir)
     : collectSkillChildren(rootDir);
-  if (result.valid.length === 0 && result.skipped.length === 0) {
-    throw new CrewError(
-      "no_skills_found",
-      `no valid skills found at \`${rootDir}\` — expected a SKILL.md there, subdirectories that each contain one, or a \`skills/\` directory of either`,
-      { path: rootDir },
-    );
+  if (result.valid.length > 0 || result.skipped.length > 0) return result;
+  if (options.recursive) {
+    const recursive = collectRecursive(rootDir);
+    if (recursive.valid.length > 0 || recursive.skipped.length > 0) return recursive;
   }
-  return result;
+  throw new CrewError(
+    "no_skills_found",
+    `no valid skills found at \`${rootDir}\` — expected a SKILL.md there, subdirectories that each contain one, or a \`skills/\` directory of either`,
+    { path: rootDir },
+  );
 }
 
 /**
@@ -104,6 +116,15 @@ function collectSkillChildren(dir: string): ExpansionResult {
     if (!isDirectory(candidate)) continue;
     if (!hasSkillMd(candidate)) continue;
     pushSoft(candidate, valid, skipped);
+  }
+  return { valid, skipped };
+}
+
+function collectRecursive(rootDir: string): ExpansionResult {
+  const valid: LoadedSkill[] = [];
+  const skipped: SkippedSkill[] = [];
+  for (const dir of findRecursiveSkillDirs(rootDir)) {
+    pushSoft(dir, valid, skipped);
   }
   return { valid, skipped };
 }

@@ -3,11 +3,11 @@ import { Brand } from "../primitives/Brand";
 import styles from "./Nav.module.css";
 
 const LINKS: readonly { readonly href: string; readonly label: string }[] = [
-  { href: "#how", label: "How it works" },
-  { href: "#refs", label: "Skill refs" },
-  { href: "#commands", label: "Commands" },
-  { href: "#taps", label: "Taps" },
-  { href: "#faq", label: "FAQ" },
+  { href: "/#how", label: "How it works" },
+  { href: "/#refs", label: "Skill refs" },
+  { href: "/#commands", label: "Commands" },
+  { href: "/#taps", label: "Taps" },
+  { href: "/#faq", label: "FAQ" },
 ];
 
 export function Nav() {
@@ -32,7 +32,7 @@ export function Nav() {
           <GitHubMark />
           github.com/with-logic/crew
         </a>
-        <a className={styles.cta} href="#install">
+        <a className={styles.cta} href="/#install">
           $ crew install <span className={styles.ctaArrow}>↗</span>
         </a>
       </div>

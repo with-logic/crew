@@ -10,6 +10,57 @@
   font-size: 15px;
 }
 
+.catalogCallout {
+  margin: 56px auto 0;
+  max-width: 820px;
+  padding: 36px 28px 32px;
+  border: 1px dashed var(--line-2);
+  border-radius: 10px;
+  background: var(--paper);
+  text-align: center;
+}
+
+.tagRow {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.catalogTag {
+  display: inline-block;
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  color: var(--accent-ink);
+  font: 11px var(--font-mono);
+  letter-spacing: 0.08em;
+  padding: 4px 11px;
+  text-transform: uppercase;
+}
+
+.heading {
+  margin: 0 0 18px;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.copy {
+  max-width: 680px;
+  margin: 0 auto 24px;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.buttonRow {
+  display: flex;
+  justify-content: center;
+}
+
 @media (max-width: 860px) {
   .grid {
     grid-template-columns: 1fr;
