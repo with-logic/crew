@@ -19,10 +19,9 @@
 
 import type { CrewError } from "../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
-import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
 import { isDirectory } from "../util/fs.ts";
-import { indexTap } from "./tap-index.ts";
+import { currentTapChildren, groupChildrenByName } from "./tap-children.ts";
 
 /** One re-expansion outcome row. */
 export interface TapReexpandRow {
@@ -48,14 +47,9 @@ export type InstallNewChild = (args: {
 export interface TapReexpandResult {
   readonly added: readonly StateEntry[];
   readonly updated: readonly StateEntry[];
+  readonly hardFailure: boolean;
   readonly sourceGone: ReadonlySet<string>;
   readonly rows: readonly TapReexpandRow[];
-}
-
-interface CurrentTapChild {
-  readonly name: string;
-  readonly path: string;
-  readonly tapRelativePath: string;
 }
 
 export function reexpandTaps(
@@ -69,6 +63,7 @@ export function reexpandTaps(
   const updated: StateEntry[] = [];
   const sourceGone = new Set<string>();
   const rows: TapReexpandRow[] = [];
+  let hardFailure = false;
 
   // Group state entries by (tap-name, scope, project_root). Entries
   // sharing all three are managed together: same tap clone, same
@@ -127,11 +122,29 @@ export function reexpandTaps(
     }
 
     const children = currentTapChildren(tap, home, acquired.rootDir);
-    const childByName = new Map(children.map((child) => [child.name, child]));
+    const childrenByName = groupChildrenByName(children);
+    const conflictedNames = new Set<string>();
+    for (const [name, locs] of childrenByName) {
+      if (locs.length < 2) continue;
+      conflictedNames.add(name);
+      hardFailure = true;
+      rows.push({
+        name,
+        scope: first.scope,
+        tap: tap.name,
+        kind: "tap_error",
+        error: {
+          code: "conflicting_dependencies",
+          message: `\`${name}\` appears multiple times in tap \`${tap.name}\` at ${locs.map((loc) => loc.tapRelativePath || "(root)").join(", ")}`,
+        },
+      });
+    }
 
     // SOURCE_GONE: members no longer present upstream.
     for (const m of members) {
-      const child = childByName.get(m.name);
+      if (conflictedNames.has(m.name)) continue;
+      const locs = childrenByName.get(m.name);
+      const child = locs?.[0];
       if (!child) {
         sourceGone.add(m.name);
         rows.push({ name: m.name, scope: m.scope, tap: tap.name, kind: "source_gone" });
@@ -146,6 +159,7 @@ export function reexpandTaps(
     const memberNames = new Set(members.map((m) => m.name));
     const aggregateTargets = [...new Set(members.flatMap((m) => m.agents))];
     for (const child of children) {
+      if (conflictedNames.has(child.name)) continue;
       if (memberNames.has(child.name)) continue;
       const entry = installOne({
         skillDir: child.path,
@@ -164,28 +178,5 @@ export function reexpandTaps(
     }
   }
 
-  return { added, updated, sourceGone, rows };
-}
-
-function currentTapChildren(tap: TapConfig, home: string, rootDir: string): CurrentTapChild[] {
-  const children: CurrentTapChild[] = [];
-  if (!isDirectory(rootDir)) return children;
-  if (hasSkillMd(rootDir)) {
-    pushLoaded(children, rootDir, "");
-    return children;
-  }
-  const index = indexTap(tap, home);
-  for (const locs of index.skills.values()) {
-    for (const loc of locs) pushLoaded(children, loc.path, loc.tapRelativePath);
-  }
-  return children;
-}
-
-function pushLoaded(children: CurrentTapChild[], path: string, tapRelativePath: string): void {
-  try {
-    const skill = loadSkill(path);
-    children.push({ name: skill.frontmatter.name, path, tapRelativePath });
-  } catch {
-    // Skip invalid SKILL.md; same as search/install behavior.
-  }
+  return { added, updated, hardFailure, sourceGone, rows };
 }

@@ -180,11 +180,13 @@ function enqueueRoot(
 }
 
 function sameInstallSetSource(existing: ResolvedSkill, incoming: PendingItem): boolean {
+  // Path-kind taps have no resolved SHA; same tap + same relative path
+  // is the source identity that lets duplicate pending refs collapse.
   return (
     existing.tap.name === incoming.tap.name && existing.tapRelativePath === incoming.tapRelativePath
   );
 }
 
 function sourceLabel(tapName: string, tapRelativePath: string): string {
-  return tapRelativePath.length > 0 ? `${tapName}/${tapRelativePath}` : tapName;
+  return tapRelativePath.length > 0 ? `${tapName}/${tapRelativePath}` : `${tapName} (root)`;
 }

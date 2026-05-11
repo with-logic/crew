@@ -15,7 +15,7 @@ import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateEntry } from "../../core/types.ts";
 import type { NameCandidate } from "../../install/attribute-bare-name.ts";
-import { resolveTapRef } from "../../install/resolve-ref/index.ts";
+import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { attributeRef } from "../../install/tap-attribution.ts";
 import { NAME_PATTERN, parseRef } from "../../refs/parse.ts";
 import { hasSkillMd, loadSkill } from "../../skill/load.ts";
@@ -25,8 +25,6 @@ import { readState } from "../../state/load.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import type { InstalledInfo, SkillInfo } from "./render.ts";
 import { renderInstalled, renderSkills } from "./render.ts";
-
-type SkillInfoCandidate = Extract<NameCandidate, { kind: "skill" | "namespace" }>;
 
 export function infoCommand(ctx: CommandContext): CommandOutput {
   if (ctx.positional.length !== 1) {
@@ -69,10 +67,10 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
       }
       // The tap-name case returned above; remaining bare refs resolve
       // to a skill or namespace candidate.
-      return candidateDirs(resolveTapRef(source, config, ctx.home) as SkillInfoCandidate);
+      return candidateDirs(resolveTapRef(source, config, ctx.home, "non-tap"));
     }
     if (source.type === "tap") {
-      return candidateDirs(resolveTapRef(source, config, ctx.home) as SkillInfoCandidate);
+      return candidateDirs(resolveTapRef(source, config, ctx.home, "non-tap"));
     }
     const matched = config.taps.find((t) => {
       if (source.type === "git")
@@ -96,8 +94,8 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   };
 }
 
-function candidateDirs(candidate: SkillInfoCandidate): {
-  tap: SkillInfoCandidate["tap"];
+function candidateDirs(candidate: NonTapNameCandidate): {
+  tap: NameCandidate["tap"];
   dirs: string[];
 } {
   if (candidate.kind === "skill") return { tap: candidate.tap, dirs: [candidate.location.path] };

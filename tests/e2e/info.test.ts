@@ -61,6 +61,33 @@ describe("crew info", () => {
     expect(capture.stdout()).toContain("financial-analysis");
     expect(capture.stdout()).toContain("Finance workflows");
   });
+
+  test("bare missing skill reports no skill or namespace match", () => {
+    const home = makeCrewHome();
+    const capture = captureStreams();
+    const code = runCli(["info", "missing-skill"], { home, streams: capture.streams });
+
+    expect(code).toBe(4);
+    expect(capture.stderr()).toContain("isn't a skill or namespace");
+  });
+
+  test("bare ambiguous skill reports candidates", () => {
+    const home = makeCrewHome();
+    const one = makeTempDir();
+    const two = makeTempDir();
+    makeSkill(one, "shared", skillFrontmatter({ name: "shared" }));
+    makeSkill(two, "shared", skillFrontmatter({ name: "shared" }));
+    runCli(["tap", "add", one, "one"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", two, "two"], { home, streams: captureStreams().streams });
+
+    const capture = captureStreams();
+    const code = runCli(["info", "shared"], { home, streams: capture.streams });
+
+    expect(code).toBe(4);
+    expect(capture.stderr()).toContain("ambiguous");
+    expect(capture.stderr()).toContain("crew install one/shared");
+    expect(capture.stderr()).toContain("crew install two/shared");
+  });
 });
 
 function makeDeclaredNameTap(): string {

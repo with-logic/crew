@@ -810,7 +810,11 @@ On every `crew update` run, for each group of state entries sharing
 `tracks_tap: true`, crew:
 
 1. Walks one level deep under the tap's resolved root (§9 step 5) and
-   builds the current child set.
+   builds the current child set. If the current child set contains the
+   same declared `name` at more than one tap-relative source path,
+   re-expansion records `conflicting_dependencies` for that name,
+   leaves existing state entries pointed at their previous source path,
+   and the update run exits 1.
 2. For each child that is **not** already in state (a skill the
    maintainer added upstream since the user's last update): runs the
    install algorithm (§7.3) for every agent in the current agent
@@ -1566,7 +1570,7 @@ Implementations and test suites refer to criteria by ID.
 | C-SPEC-07 | §9 | `name` containing `--` (consecutive hyphens) fails validation. |
 | C-SPEC-08 | §9 | `name` longer than 64 characters fails validation. |
 | C-SPEC-09 | §9 | `description` longer than 1024 characters fails validation. |
-| C-SPEC-10 | §9 | (obsolete) Prior versions required `name` to match the parent directory name; current versions allow the source directory name to differ. |
+| C-SPEC-10 | §9 | The skill's source directory name need not match `name`. A skill with `name: foo` in a directory `foo-source/` is valid. |
 | C-SPEC-11 | §9 | `compatibility`, if present and longer than 500 characters, fails validation. |
 | C-SPEC-12 | §9 | Validation errors name the offending field in the human-readable message. |
 | C-SPEC-13 | §9 | No file is written to any agent when validation fails. |

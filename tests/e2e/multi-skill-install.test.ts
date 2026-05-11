@@ -136,7 +136,7 @@ describe("tap re-expansion on update (§10.1.1)", () => {
     expect(existsSync(join(ccRoot, "gamma", "SKILL.md"))).toBe(true);
   });
 
-  test("C-UPD-15 newly-added sibling records source path when directory differs", () => {
+  test("newly-added sibling records source path when directory differs", () => {
     const home = makeCrewHome();
     const repo = makeMultiSkillRepo(["alpha"]);
     runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
@@ -160,7 +160,7 @@ describe("tap re-expansion on update (§10.1.1)", () => {
     expect(second.stdout()).not.toContain("failed");
   });
 
-  test("C-UPD-15 renamed sibling directory updates source path by declared name", () => {
+  test("renamed sibling directory updates source path by declared name", () => {
     const home = makeCrewHome();
     const repo = makeMultiSkillRepo(["alpha"]);
     runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
@@ -177,7 +177,24 @@ describe("tap re-expansion on update (§10.1.1)", () => {
     expect(alpha.source.path).toBe("alpha-renamed");
   });
 
-  test("C-UPD-15 single-skill installs do NOT auto-pull new siblings on update", () => {
+  test("duplicate declared sibling name does not re-point existing source path", () => {
+    const home = makeCrewHome();
+    const repo = makeMultiSkillRepo(["alpha"]);
+    runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
+
+    makeSkill(repo, "alpha-copy", skillFrontmatter({ name: "alpha" }));
+    commitAll(repo, "add duplicate alpha");
+
+    const capture = captureStreams();
+    const code = runCli(["update"], { home, streams: capture.streams });
+    expect(code).toBe(1);
+    expect(capture.stdout()).toContain("conflicting");
+
+    const alpha = readState(home).installations.find((e) => e.name === "alpha")!;
+    expect(alpha.source.path).toBe("alpha");
+  });
+
+  test("single-skill installs do NOT auto-pull new siblings on update", () => {
     // Counterpart to the whole-tap case: a user who installed just
     // ONE skill from a tap hasn't opted into the tap's future skills.
     // Adding a new sibling upstream should NOT appear on their

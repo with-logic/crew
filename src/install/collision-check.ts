@@ -11,8 +11,9 @@
  * = no prompt, tap wins silently (or bare-name resolution takes over
  * when the name doesn't match a tap at all).
  *
- * Taps that fail to materialize are silently skipped while checking
- * other taps (same policy as search / bare-name install).
+ * Taps that are not already on disk, or fail to materialize, are
+ * silently skipped while checking other taps (same policy as search /
+ * bare-name install). `crew tap add` normally clones taps up front.
  */
 
 import { tapPath } from "../core/paths.ts";
