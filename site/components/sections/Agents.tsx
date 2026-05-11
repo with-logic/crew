@@ -31,7 +31,7 @@ export function Agents() {
         </div>
 
         <p className={styles.footnote}>
-          Don't see yours? Its adapter probably takes an afternoon to write —{" "}
+          Don't see yours? Its adapter probably takes a minute to write —{" "}
           <a href="https://github.com/with-logic/crew/blob/main/PRD.md#71-adapter-operations">
             §7.1
           </a>{" "}

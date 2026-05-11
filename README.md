@@ -8,6 +8,8 @@
 Easily discover and share skills across your team. One command to install. The
 same skills on every laptop, in every coding agent. Updated automatically.
 
+Homecrew is an open-source project by [Logic, Inc](https://logic.inc).
+
 ```
 crew tap add @acme/skills
 crew install acme/team-baseline
@@ -47,6 +49,10 @@ registry.
 - **no hosted registry** · git is the backend
 - **no account** · nothing to sign up for
 - **no telemetry** · Homecrew never phones home
+
+Homecrew is an open-source project by [Logic, Inc](https://logic.inc). Logic is
+a platform for building and operating fleets of production agents reliably at
+scale.
 
 ## Install
 
