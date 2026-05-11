@@ -168,6 +168,7 @@ for examples.
 | `crew tap remove <name>` | Delete a local tap clone and drop it from config. |
 | `crew tap list` | Print each tap's name, URL, and last-fetched timestamp. |
 | `crew taps` | Alias for `crew tap list`. |
+| `crew untap <name>` | Alias for `crew tap remove <name>`. |
 
 **Agents & automation**
 
