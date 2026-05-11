@@ -19,7 +19,7 @@ test("renderKnownTapRegistry writes generated modules", () => {
 
   expect(files.map((file) => file.path)).toEqual(["alpha.ts", "index.ts"]);
   expect(files[0]?.contents).toContain("export const ALPHA_KNOWN_TAP");
-  expect(files[1]?.contents).toContain("GENERATED_KNOWN_TAPS = [ALPHA_KNOWN_TAP]");
+  expect(files[1]?.contents).toContain("GENERATED_KNOWN_TAPS = [\n  ALPHA_KNOWN_TAP,\n]");
 });
 
 test("renderKnownTapRegistry splits large tap modules", () => {
@@ -49,4 +49,6 @@ test("renderKnownTapRegistry splits large tap modules", () => {
   ]);
   expect(files[2]?.contents).toContain("...LARGE_KNOWN_TAP_SKILLS_1");
   expect(files[2]?.contents).toContain("...LARGE_KNOWN_TAP_SKILLS_2");
+  expect(files[2]?.contents).toContain('"name": "large"');
+  expect(files[2]?.contents).not.toContain("...{");
 });

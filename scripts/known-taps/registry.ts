@@ -47,8 +47,10 @@ function staleFile(
   expected: readonly RenderedKnownTapRegistryFile[],
 ): StaleFile | null {
   const expectedByPath = new Map(expected.map((file) => [file.path, file.contents]));
+  // listDir returns [] when outPath is absent; the expected-file loop below
+  // then reports the first missing generated file.
   for (const name of listDir(outPath)) {
-    if (name.endsWith(".ts") && !expectedByPath.has(name)) {
+    if (!expectedByPath.has(name)) {
       return { path: name, actual: readText(join(outPath, name)), expected: null };
     }
   }
@@ -79,16 +81,16 @@ function staleMessage(stale: StaleFile): string {
   if (stale.expected === null) {
     return `known-tap registry has stale file ${stale.path}; run \`bun run known-taps build\``;
   }
-  return mismatchedFileMessage(stale);
+  return mismatchedFileMessage(stale.path, stale.actual, stale.expected);
 }
 
-function mismatchedFileMessage(stale: StaleFile): string {
-  const actualLines = stale.actual!.split("\n");
-  const expectedLines = stale.expected!.split("\n");
+function mismatchedFileMessage(path: string, actual: string, expected: string): string {
+  const actualLines = actual.split("\n");
+  const expectedLines = expected.split("\n");
   const max = Math.max(actualLines.length, expectedLines.length);
   for (let i = 0; i < max; i++) {
     if (actualLines[i] !== expectedLines[i]) {
-      return `known-tap registry is stale in ${stale.path} at line ${i + 1}; run \`bun run known-taps build\``;
+      return `known-tap registry is stale in ${path} at line ${i + 1}; run \`bun run known-taps build\``;
     }
   }
   return "known-tap registry is stale; run `bun run known-taps build`";

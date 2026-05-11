@@ -76,21 +76,20 @@ function renderSplitTapModule(tap: KnownTap, chunkCount: number): RenderedKnownT
     (_, index) =>
       `import { ${exportName}_SKILLS_${index + 1} } from "./${tap.name}-skills-${index + 1}.ts";`,
   ).join("\n");
-  const meta = JSON.stringify(
-    {
-      name: tap.name,
-      url: tap.url,
-      subpath: tap.subpath,
-      description: tap.description,
-      trust: tap.trust,
-    },
-    null,
-    2,
-  );
   const skills = Array.from(
     { length: chunkCount },
     (_, index) => `...${exportName}_SKILLS_${index + 1}`,
   ).join(", ");
+  const fields = [
+    `"name": ${JSON.stringify(tap.name)}`,
+    `"url": ${JSON.stringify(tap.url)}`,
+    `"subpath": ${JSON.stringify(tap.subpath)}`,
+    `"description": ${JSON.stringify(tap.description)}`,
+    `"trust": ${JSON.stringify(tap.trust)}`,
+    `"skills": [${skills}]`,
+  ]
+    .map((field) => `  ${field},`)
+    .join("\n");
   return {
     path: `${tap.name}.ts`,
     contents: `/**
@@ -104,8 +103,7 @@ import type { KnownTap } from "../types.ts";
 ${imports}
 
 export const ${exportName} = {
-  ...${meta},
-  "skills": [${skills}],
+${fields}
 } as const satisfies KnownTap;
 `,
   };
@@ -115,7 +113,7 @@ function renderIndexModule(taps: readonly KnownTap[]): RenderedKnownTapRegistryF
   const imports = taps
     .map((tap) => `import { ${exportNameFor(tap.name)} } from "./${tap.name}.ts";`)
     .join("\n");
-  const values = taps.map((tap) => exportNameFor(tap.name)).join(", ");
+  const values = renderExportList(taps.map((tap) => exportNameFor(tap.name)));
   const importBlock = imports.length === 0 ? "" : `${imports}\n`;
   return {
     path: "index.ts",
@@ -128,13 +126,18 @@ function renderIndexModule(taps: readonly KnownTap[]): RenderedKnownTapRegistryF
 
 import type { KnownTap } from "../types.ts";
 ${importBlock}
-export const GENERATED_KNOWN_TAPS = [${values}] as const satisfies readonly KnownTap[];
+export const GENERATED_KNOWN_TAPS = ${values} as const satisfies readonly KnownTap[];
 `,
   };
 }
 
 function exportNameFor(tapName: string): string {
   return `${tapName.replaceAll("-", "_").toUpperCase()}_KNOWN_TAP`;
+}
+
+function renderExportList(values: readonly string[]): string {
+  if (values.length === 0) return "[]";
+  return `[\n  ${values.join(",\n  ")},\n]`;
 }
 
 function chunk<T>(items: readonly T[], size: number): readonly (readonly T[])[] {
