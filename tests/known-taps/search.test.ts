@@ -4,6 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { tapConfigFromKnownTap } from "../../src/known-taps/convert.ts";
+import { knownTapSource } from "../../src/known-taps/format.ts";
 import {
   findKnownTapByName,
   findKnownTapSkill,
@@ -122,7 +123,30 @@ describe("searchKnownTaps", () => {
 
   test("default registry includes seeded official taps", () => {
     expect(findKnownTapByName("supabase")?.trust).toBe("official");
-    expect(searchKnownTaps("postgres").some((hit) => hit.tap.name === "supabase")).toBe(true);
+    expect(searchKnownTaps("supabase").some((hit) => hit.tap.name === "supabase")).toBe(true);
+  });
+});
+
+describe("known tap source formatting", () => {
+  test("knownTapSource renders the simplest valid source reference", () => {
+    expect(
+      knownTapSource({
+        url: "https://github.com/anthropics/skills.git",
+        subpath: "skills",
+      }),
+    ).toBe("https://github.com/anthropics/skills");
+    expect(
+      knownTapSource({
+        url: "https://github.com/anthropics/knowledge-work-plugins.git",
+        subpath: "finance",
+      }),
+    ).toBe("https://github.com/anthropics/knowledge-work-plugins//finance");
+    expect(
+      knownTapSource({
+        url: "git@github.com:anthropics/skills.git",
+        subpath: "skills",
+      }),
+    ).toBe("git@github.com:anthropics/skills.git");
   });
 });
 

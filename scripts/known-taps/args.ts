@@ -5,11 +5,12 @@
 import { join } from "node:path";
 import type { KnownTapTrust } from "../../src/known-taps/types.ts";
 
-export const COMMON_FLAGS = ["manifest", "out", "work-dir"] as const;
+export const COMMON_FLAGS = ["manifest", "out", "site-catalog-out", "work-dir"] as const;
 
 export interface Paths {
   readonly manifestPath: string;
   readonly outPath: string;
+  readonly siteCatalogPath: string;
   readonly workDir: string;
 }
 
@@ -46,6 +47,9 @@ export function pathsFrom(root: string, defaultWorkDir: string, parsed: ParsedAr
   return {
     manifestPath: flagValue(parsed, "manifest") ?? join(root, "known-taps", "manifest.json"),
     outPath: flagValue(parsed, "out") ?? join(root, "src", "known-taps", "generated"),
+    siteCatalogPath:
+      flagValue(parsed, "site-catalog-out") ??
+      join(root, "site", "lib", "generated", "skillCatalog.ts"),
     workDir: flagValue(parsed, "work-dir") ?? defaultWorkDir,
   };
 }
@@ -90,6 +94,8 @@ export function usage(): string {
     "  check",
     "  update --all | update <name> [<name>...]",
     "  add <name> <url> [--description text] [--subpath path] [--trust curated|official] [--tracking-ref ref]",
+    "",
+    "common flags: [--manifest path] [--out path] [--site-catalog-out path] [--work-dir path]",
   ].join("\n");
 }
 

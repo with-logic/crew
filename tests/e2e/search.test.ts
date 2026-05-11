@@ -261,7 +261,7 @@ describe("crew search output", () => {
     expect(out).toContain("supabase");
     expect(out).toContain("database/schema-review");
     expect(out).toContain(
-      "tap with: crew tap add https://github.com/example/supabase-skills.git//skills supabase",
+      "tap with: crew tap add https://github.com/example/supabase-skills supabase",
     );
     expect(out).toContain("crew install supabase/database/schema-review");
 
@@ -311,7 +311,7 @@ describe("crew search output", () => {
     const c = captureStreams();
     runCli(["search", "openai"], { home, streams: c.streams });
     expect(c.stdout()).toContain(
-      "tap with: crew tap add https://github.com/example/openai-skills.git openai",
+      "tap with: crew tap add https://github.com/example/openai-skills openai",
     );
   });
 

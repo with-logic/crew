@@ -3,20 +3,8 @@
  */
 
 import { join } from "node:path";
-import { buildKnownTapRegistry } from "../../src/known-taps/build/index.ts";
-import {
-  type RenderedKnownTapRegistryFile,
-  renderKnownTapRegistry,
-} from "../../src/known-taps/build/render.ts";
-import type { KnownTapManifest } from "../../src/known-taps/build/types.ts";
+import type { RenderedKnownTapRegistryFile } from "../../src/known-taps/build/render.ts";
 import { listDir, readText, rmrf, writeText } from "../../src/util/fs.ts";
-
-export function renderRegistry(
-  manifest: KnownTapManifest,
-  workDir: string,
-): readonly RenderedKnownTapRegistryFile[] {
-  return renderKnownTapRegistry(buildKnownTapRegistry(manifest, { workDir }));
-}
 
 export function writeRegistryFiles(
   outPath: string,

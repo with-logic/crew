@@ -10,18 +10,19 @@ const COLUMNS: readonly {
   {
     title: "Product",
     links: [
-      { href: "#how", label: "How it works" },
-      { href: "#commands", label: "Commands" },
-      { href: "#safety", label: "Safety" },
-      { href: "#install", label: "Install" },
+      { href: "/#how", label: "How it works" },
+      { href: "/#commands", label: "Commands" },
+      { href: "/#safety", label: "Safety" },
+      { href: "/skills", label: "Skill catalog" },
+      { href: "/#install", label: "Install" },
     ],
   },
   {
     title: "Resources",
     links: [
       { href: "https://agentskills.io/specification", label: "agent skills spec" },
-      { href: "#skill-md", label: "SKILL.md anatomy" },
-      { href: "#faq", label: "FAQ" },
+      { href: "/#skill-md", label: "SKILL.md anatomy" },
+      { href: "/#faq", label: "FAQ" },
     ],
   },
   {

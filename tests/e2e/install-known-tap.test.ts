@@ -49,7 +49,7 @@ describe("known-tap fallback for install misses", () => {
     expect(code).toBe(4);
     expect(c.stderr()).toContain("Known taps may have what you want");
     expect(c.stderr()).toContain(
-      "tap with: crew tap add https://github.com/example/supabase-skills.git//skills supabase",
+      "tap with: crew tap add https://github.com/example/supabase-skills supabase",
     );
     expect(c.stderr()).toContain("install with: crew install supabase/database/schema-review");
     expect(readConfig(home).taps).toEqual([]);
@@ -75,7 +75,7 @@ describe("known-tap fallback for install misses", () => {
         name: "schema-review",
         namespace: "database",
         description: "Review SQL migrations and RLS policies.",
-        tap_add: "crew tap add https://github.com/example/supabase-skills.git//skills supabase",
+        tap_add: "crew tap add https://github.com/example/supabase-skills supabase",
         install: "crew install supabase/database/schema-review",
       },
     ]);
@@ -117,7 +117,7 @@ describe("known-tap fallback for install misses", () => {
         name: null,
         namespace: null,
         description: "Supabase workflows.",
-        tap_add: "crew tap add https://github.com/example/supabase-skills.git//skills supabase",
+        tap_add: "crew tap add https://github.com/example/supabase-skills supabase",
         install: "crew install supabase",
       },
     ]);

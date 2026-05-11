@@ -284,6 +284,7 @@ fi
 if [ -f known-taps/manifest.json ]; then
   echo "==> Regenerating known-tap registry"
   bun run known-taps build
+  bun run known-taps check
 fi
 
 # Write/update CHANGELOG.md. If it doesn't exist, create a header
@@ -332,6 +333,7 @@ git add package.json CHANGELOG.md
 [ -f PRD.md ] && git add PRD.md
 [ -f site/public/latest-version.json ] && git add site/public/latest-version.json
 [ -d src/known-taps/generated ] && git add src/known-taps/generated
+[ -f site/lib/generated/skillCatalog.ts ] && git add site/lib/generated/skillCatalog.ts
 git commit -q -m "Release ${next_tag}"
 
 echo "==> Pushing branch"

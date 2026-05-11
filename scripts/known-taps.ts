@@ -5,8 +5,10 @@
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { addKnownTapSource } from "../src/known-taps/build/add.ts";
+import { buildKnownTapRegistry } from "../src/known-taps/build/index.ts";
 import { parseKnownTapManifest } from "../src/known-taps/build/manifest.ts";
 import { updateKnownTapPins } from "../src/known-taps/build/pins.ts";
+import { renderKnownTapRegistry } from "../src/known-taps/build/render.ts";
 import type { KnownTapManifest } from "../src/known-taps/build/types.ts";
 import { rmrf } from "../src/util/fs.ts";
 import { readJson } from "../src/util/json.ts";
@@ -23,32 +25,46 @@ import {
   usage,
 } from "./known-taps/args.ts";
 import { writeKnownTapManifest } from "./known-taps/manifest.ts";
-import { checkRegistryFiles, renderRegistry, writeRegistryFiles } from "./known-taps/registry.ts";
+import { checkRegistryFiles, writeRegistryFiles } from "./known-taps/registry.ts";
+import { checkSiteCatalog, writeSiteCatalog } from "./known-taps/site-catalog.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_WORK_DIR = join(ROOT, ".crew-known-taps-work");
 const argv = Bun.argv.slice(2);
 
 try {
-  withCleanup(argv, () => run(argv));
+  const invocation = invocationFrom(argv);
+  withCleanup(invocation, () => run(invocation));
 } catch (err) {
   process.stderr.write(`${(err as Error).message}\n`);
   process.exit(1);
 }
 
-function run(argv: readonly string[]): void {
-  const command = argv[0];
-  if (command === undefined || command === "help" || command === "--help") {
-    throw new Error(usage());
-  }
+interface Invocation {
+  readonly command: string | undefined;
+  readonly parsed: ParsedArgs;
+  readonly paths: Paths;
+}
+
+function invocationFrom(argv: readonly string[]): Invocation {
   const parsed = parseArgs(argv.slice(1));
   const paths = pathsFrom(ROOT, DEFAULT_WORK_DIR, parsed);
   assertSafeWorkDir(paths.workDir);
+  return { command: argv[0], parsed, paths };
+}
+
+function run(invocation: Invocation): void {
+  const { command, parsed, paths } = invocation;
+  if (command === undefined || command === "help" || command === "--help") {
+    throw new Error(usage());
+  }
   if (command === "build") {
+    ensureFlags(parsed, COMMON_FLAGS);
     build(paths);
     return;
   }
   if (command === "check") {
+    ensureFlags(parsed, COMMON_FLAGS);
     check(paths);
     return;
   }
@@ -65,12 +81,14 @@ function run(argv: readonly string[]): void {
 
 function build(paths: Paths): void {
   const manifest = readManifest(paths.manifestPath);
-  writeRegistry(paths.outPath, manifest, paths.workDir);
+  writeGenerated(paths, manifest);
 }
 
 function check(paths: Paths): void {
   const manifest = readManifest(paths.manifestPath);
-  checkRegistryFiles(paths.outPath, renderRegistry(manifest, paths.workDir));
+  const registry = buildKnownTapRegistry(manifest, { workDir: paths.workDir });
+  checkRegistryFiles(paths.outPath, renderKnownTapRegistry(registry));
+  checkSiteCatalog(paths.siteCatalogPath, registry, paths.workDir);
 }
 
 function update(parsed: ParsedArgs, paths: Paths): void {
@@ -78,9 +96,8 @@ function update(parsed: ParsedArgs, paths: Paths): void {
   const manifest = readManifest(paths.manifestPath);
   const selection = updateSelection(parsed);
   const updated = updateKnownTapPins(manifest, selection);
-  const rendered = renderRegistry(updated.manifest, paths.workDir);
   writeKnownTapManifest(paths.manifestPath, updated.manifest);
-  writeRegistryFiles(paths.outPath, rendered);
+  writeGenerated(paths, updated.manifest);
   printUpdates(updated.updates);
 }
 
@@ -98,9 +115,8 @@ function add(parsed: ParsedArgs, paths: Paths): void {
     trust: trustFlag(parsed),
     trackingRef: flagValue(parsed, "tracking-ref") ?? "main",
   });
-  const rendered = renderRegistry(result.manifest, paths.workDir);
   writeKnownTapManifest(paths.manifestPath, result.manifest);
-  writeRegistryFiles(paths.outPath, rendered);
+  writeGenerated(paths, result.manifest);
   process.stdout.write(`added ${result.source.name} at ${result.source.commit.slice(0, 8)}\n`);
 }
 
@@ -108,8 +124,10 @@ function readManifest(path: string): KnownTapManifest {
   return parseKnownTapManifest(readJson<unknown>(path));
 }
 
-function writeRegistry(outPath: string, manifest: KnownTapManifest, workDir: string): void {
-  writeRegistryFiles(outPath, renderRegistry(manifest, workDir));
+function writeGenerated(paths: Paths, manifest: KnownTapManifest): void {
+  const registry = buildKnownTapRegistry(manifest, { workDir: paths.workDir });
+  writeRegistryFiles(paths.outPath, renderKnownTapRegistry(registry));
+  writeSiteCatalog(paths.siteCatalogPath, registry, paths.workDir);
 }
 
 function printUpdates(updates: readonly { name: string; from: string; to: string }[]): void {
@@ -124,26 +142,18 @@ function printUpdates(updates: readonly { name: string; from: string; to: string
   }
 }
 
-function withCleanup(argv: readonly string[], fn: () => void): void {
-  const cleanupDir = cleanupPathFrom(argv);
+function withCleanup(invocation: Invocation, fn: () => void): void {
   try {
     fn();
   } finally {
-    rmrf(cleanupDir);
+    rmrf(invocation.paths.workDir);
   }
-}
-
-function cleanupPathFrom(argv: readonly string[]): string {
-  const parsed = parseArgs(argv.slice(1));
-  const workDir = pathsFrom(ROOT, DEFAULT_WORK_DIR, parsed).workDir;
-  assertSafeWorkDir(workDir);
-  return workDir;
 }
 
 function assertSafeWorkDir(workDir: string): void {
   const resolved = resolve(workDir);
   const forbidden = new Set([resolve(ROOT), resolve("/"), resolve(process.env["HOME"] ?? ROOT)]);
-  if (forbidden.has(resolved) || !basename(resolved).includes("known-taps-work")) {
+  if (forbidden.has(resolved) || !basename(resolved).startsWith(".crew-known-taps-work")) {
     throw new Error("--work-dir must point at a disposable known-taps work directory");
   }
 }
