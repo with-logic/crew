@@ -40,6 +40,7 @@ import { type UpdateRow, updateOneEntry } from "../../install/update-one.ts";
 import { garbageCollectStore } from "../../maintenance/gc.ts";
 import { readState, upsertEntry, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
+import { resolveStateSubjects } from "../../state/subjects.ts";
 import { nowIso } from "../../util/time.ts";
 import { refreshTaps, type TapRefreshRow } from "../tap/refresh.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
@@ -50,7 +51,7 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   const config = readConfig(ctx.home);
   const home = ctx.home ?? crewHome();
 
-  const names = ctx.positional;
+  const rawNames = ctx.positional;
 
   const rows: UpdateRow[] = [];
   const tapReexpandRows: TapReexpandRow[] = [];
@@ -62,7 +63,9 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
 
     // Dep-closure expansion — may add more entries, but they all live in
     // state already (we never install new skills during update).
-    const { entries: initialSelected, transitiveSources } = chooseEntries(current, names);
+    const subjects = resolveStateSubjects(current, rawNames);
+    const { entries: initialSelected, transitiveSources } = chooseEntries(current, subjects);
+    const names = subjects.map((subject) => subject.name);
 
     // §10.1 step 1 (scoped): fetch only the taps that back the entries
     // this run will actually touch. Per-tap failures become warnings,
@@ -88,7 +91,10 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
     // tap-re-expansion state. In practice the set is stable — tap
     // re-expansion can add skills, but those come in as explicit
     // top-level entries and aren't part of the dep closure.
-    const { entries: targetEntries } = chooseEntries(current, names);
+    const { entries: targetEntries } = chooseEntries(
+      current,
+      resolveStateSubjects(current, rawNames),
+    );
     for (const entry of targetEntries) {
       if (sourceGone.has(entry.name)) {
         rows.push(
