@@ -6,7 +6,7 @@
  * of every known tap.
  */
 
-import { GENERATED_KNOWN_TAPS } from "./generated.ts";
+import { GENERATED_KNOWN_TAPS } from "./generated/index.ts";
 import type { KnownTap } from "./types.ts";
 
 const BUNDLED_KNOWN_TAPS: readonly KnownTap[] = GENERATED_KNOWN_TAPS;
