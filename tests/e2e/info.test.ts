@@ -14,7 +14,7 @@ import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts
 
 describe("crew info", () => {
   test("bare tap skill uses declared SKILL.md name, not source directory", () => {
-    const home = makeCrewHome();
+    const home = makeInfoHome();
     const repo = makeDeclaredNameTap();
     runCli(["tap", "add", repo, "firebase"], { home, streams: captureStreams().streams });
 
@@ -27,7 +27,7 @@ describe("crew info", () => {
   });
 
   test("qualified tap skill uses declared SKILL.md name, not source directory", () => {
-    const home = makeCrewHome();
+    const home = makeInfoHome();
     const repo = makeDeclaredNameTap();
     runCli(["tap", "add", repo, "firebase"], { home, streams: captureStreams().streams });
 
@@ -43,7 +43,7 @@ describe("crew info", () => {
   });
 
   test("bare namespace lists its member skills", () => {
-    const home = makeCrewHome();
+    const home = makeInfoHome();
     const repo = makeTempDir();
     const namespace = join(repo, "skills", "knowledge-work");
     mkdirSync(namespace, { recursive: true });
@@ -63,16 +63,21 @@ describe("crew info", () => {
   });
 
   test("bare missing skill reports no skill or namespace match", () => {
-    const home = makeCrewHome();
+    const home = makeInfoHome();
+    const repo = makeTempDir();
+    makeSkill(repo, "other", skillFrontmatter({ name: "other" }));
+    runCli(["tap", "add", repo, "local"], { home, streams: captureStreams().streams });
+
     const capture = captureStreams();
     const code = runCli(["info", "missing-skill"], { home, streams: capture.streams });
 
     expect(code).toBe(4);
     expect(capture.stderr()).toContain("isn't a skill or namespace");
+    expect(capture.stderr()).toContain("local");
   });
 
   test("bare ambiguous skill reports candidates", () => {
-    const home = makeCrewHome();
+    const home = makeInfoHome();
     const one = makeTempDir();
     const two = makeTempDir();
     makeSkill(one, "shared", skillFrontmatter({ name: "shared" }));
@@ -88,7 +93,27 @@ describe("crew info", () => {
     expect(capture.stderr()).toContain("crew install one/shared");
     expect(capture.stderr()).toContain("crew install two/shared");
   });
+
+  test("bare root-skill tap uses declared SKILL.md name", () => {
+    const home = makeInfoHome();
+    const repo = makeTempDir();
+    makeSkill(repo, ".", skillFrontmatter({ name: "declared-root", description: "Root skill" }));
+    runCli(["tap", "add", repo, "vendor"], { home, streams: captureStreams().streams });
+
+    const capture = captureStreams();
+    const code = runCli(["info", "declared-root"], { home, streams: capture.streams });
+
+    expect(code).toBe(0);
+    expect(capture.stdout()).toContain("declared-root");
+    expect(capture.stdout()).toContain("Root skill");
+  });
 });
+
+function makeInfoHome(): string {
+  const home = makeCrewHome();
+  runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+  return home;
+}
 
 function makeDeclaredNameTap(): string {
   const repo = makeTempDir();

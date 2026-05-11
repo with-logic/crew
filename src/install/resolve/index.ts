@@ -23,8 +23,8 @@ import { stageIntoStore } from "../../sources/store.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
 import { attributeRef } from "../tap-attribution.ts";
 import { topoSort } from "../topo.ts";
+import { enqueueDep } from "./dep.ts";
 import {
-  enqueueDep,
   enqueueTapRef,
   expandSkillsAsItems,
   type PendingItem,
@@ -97,8 +97,12 @@ export function resolveInstallSet(
         continue;
       const existingSha = existing.resolvedSha ?? "<null>";
       const incomingSha = item.resolvedSha ?? "<null>";
-      const existingSource = sourceLabel(existing.tap.name, existing.tapRelativePath);
-      const incomingSource = sourceLabel(item.tap.name, item.tapRelativePath);
+      const existingSource = sourceLabel(
+        existing.tap.name,
+        existing.tapRelativePath,
+        existing.resolvedSha,
+      );
+      const incomingSource = sourceLabel(item.tap.name, item.tapRelativePath, item.resolvedSha);
       if (existing.resolvedSha !== item.resolvedSha) {
         throw new CrewError(
           "conflicting_dependencies",
@@ -187,6 +191,9 @@ function sameInstallSetSource(existing: ResolvedSkill, incoming: PendingItem): b
   );
 }
 
-function sourceLabel(tapName: string, tapRelativePath: string): string {
-  return tapRelativePath.length > 0 ? `${tapName}/${tapRelativePath}` : `${tapName} (root)`;
+function sourceLabel(tapName: string, tapRelativePath: string, resolvedSha: string | null): string {
+  if (tapRelativePath.length > 0) return `${tapName}/${tapRelativePath}`;
+  return resolvedSha === null
+    ? `${tapName} (root, local)`
+    : `${tapName} (root @ ${resolvedSha.slice(0, 8)})`;
 }

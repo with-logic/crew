@@ -21,14 +21,15 @@ function pathTap(path: string, name = "t"): TapConfig {
 }
 
 describe("indexTap", () => {
-  test("single-skill root: returns empty index (whole-tap shape)", () => {
+  test("single-skill root: indexes declared skill name", () => {
     const tmp = makeTempDir("ti-root-");
     writeFileSync(
       join(tmp, "SKILL.md"),
-      `---\n${skillFrontmatter({ name: tmp.split("/").pop() ?? "x" })}\n---\n`,
+      `---\n${skillFrontmatter({ name: "declared-root" })}\n---\n`,
     );
     const idx = indexTap(pathTap(tmp), "/unused");
-    expect(idx.skills.size).toBe(0);
+    expect([...idx.skills.keys()]).toEqual(["declared-root"]);
+    expect(idx.skills.get("declared-root")![0]!.tapRelativePath).toBe("");
     expect(idx.namespaces.size).toBe(0);
   });
 

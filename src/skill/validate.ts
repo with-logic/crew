@@ -17,6 +17,7 @@ const MAX_COMPATIBILITY_LENGTH = 500;
 
 /**
  * Validate raw frontmatter against the Agent Skills spec.
+ * Delegates name-only checks to `validateFrontmatterName`.
  *
  * @param data - YAML-decoded frontmatter object.
  */

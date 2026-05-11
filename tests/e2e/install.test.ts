@@ -565,10 +565,32 @@ describe("install dependencies", () => {
       streams: captureStreams().streams,
     });
     expect(code).toBe(0);
-    expect(readState(home).installations.map((entry) => entry.name)).toEqual([
-      "3-statement-model",
-      "root",
-    ]);
+    const depEntry = readState(home).installations.find(
+      (entry) => entry.name === "3-statement-model",
+    )!;
+    expect(depEntry.source.path).toBe("");
+    writeFileSync(join(container, "numeric-source", "README.md"), "updated");
+    const capture = captureStreams();
+    const updateCode = runCli(["update", "3-statement-model"], { home, streams: capture.streams });
+    expect(updateCode).toBe(0);
+    expect(capture.stdout()).toContain("updated");
+  });
+
+  test("duplicate declared sibling dependency names fail deterministically", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir();
+    makeSkill(container, "one", skillFrontmatter({ name: "dep" }));
+    makeSkill(container, "two", skillFrontmatter({ name: "dep" }));
+    makeSkill(container, "root", skillFrontmatter({ name: "root", dependencies: ["dep"] }));
+
+    const capture = captureStreams();
+    const code = runCli(["install", join(container, "root")], {
+      home,
+      streams: capture.streams,
+    });
+
+    expect(code).toBe(4);
+    expect(capture.stderr()).toContain("appears multiple times");
   });
 
   test("C-DEP-08 dependency cycle terminates", () => {

@@ -60,9 +60,8 @@ export function tapRoot(tap: TapConfig, home: string): string {
 }
 
 /**
- * Build a shallow index of a tap. Returns empty maps for a tap that
- * turns out to have no valid skills (including the single-root-skill
- * case, which the resolver handles as a whole-tap install).
+ * Build a shallow index of a tap. Returns empty maps only for a tap
+ * that turns out to have no valid skills.
  */
 export function indexTap(tap: TapConfig, home: string): TapIndex {
   const root = tapRoot(tap, home);
@@ -82,8 +81,9 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
 
   // Case 1: root is itself a skill.
   if (hasSkillMd(root)) {
-    // Tap resolution handles this as a whole-tap install; per-name
-    // lookup is unused for a root-skill tap.
+    const skillName = skillNameForIndex(root);
+    if (skillName !== null)
+      addSkill({ name: skillName, namespace: null, path: root, tapRelativePath: "" });
     return { skills, namespaces };
   }
 

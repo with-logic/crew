@@ -131,6 +131,19 @@ describe("tap source install", () => {
     expect(firebase.source.path).toBe("firebase-data-connect-basics");
   });
 
+  test("bare install finds root-skill tap by declared SKILL.md name", () => {
+    const home = makeCrewHome();
+    const repo = makeTempDir("crew-root-tap-");
+    makeSkill(repo, ".", skillFrontmatter({ name: "declared-root" }));
+    runCli(["tap", "add", repo, "vendor"], { home, streams: captureStreams().streams });
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+
+    const code = runCli(["install", "declared-root"], { home, streams: captureStreams().streams });
+
+    expect(code).toBe(0);
+    expect(existsSync(join(ccRoot, "declared-root", "SKILL.md"))).toBe(true);
+  });
+
   test("qualified tap ref", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();

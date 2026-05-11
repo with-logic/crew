@@ -1228,7 +1228,7 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
 | `ambiguous_reference` | 4 | A reference has more than one valid resolution across taps, skills, and namespaces, and the user is non-interactive or the prompt was aborted. |
 | `ambiguous_dependency` | 4 | A dependency's bare name is ambiguous across taps. |
-| `conflicting_dependencies` | 4 | Two skills in one install set have the same name but different source paths or resolved SHAs. |
+| `conflicting_dependencies` | 4 | Two skills in one install set have the same name but different source paths or resolved SHAs; also emitted by `crew update` when tap re-expansion finds multiple current children declaring the same `name`. |
 | `name_conflict` | 4 | Trying to install a skill whose name is already held by a different source, without `--force`. |
 | `untracked_directory` | 6 | Destination exists without a crew marker. |
 | `customized` | 6 | Destination has a marker but content hash differs. |

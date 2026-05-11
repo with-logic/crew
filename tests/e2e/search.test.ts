@@ -218,6 +218,21 @@ describe("crew search output", () => {
     ]);
   });
 
+  test("search indexes root-skill taps by declared SKILL.md name", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repo = makeTempDir("crew-root-skill-");
+    makeSkill(repo, ".", skillFrontmatter({ name: "declared-root", description: "Root skill" }));
+    runCli(["tap", "add", repo, "vendor"], { home, streams: captureStreams().streams });
+
+    const capture = captureStreams();
+    const code = runCli(["search", "declared-root"], { home, streams: capture.streams });
+
+    expect(code).toBe(0);
+    expect(capture.stdout()).toContain("declared-root");
+    expect(capture.stdout()).toContain("Root skill");
+  });
+
   test("empty result set prints a no-match line (still exit 0)", () => {
     const home = makeCrewHome();
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
