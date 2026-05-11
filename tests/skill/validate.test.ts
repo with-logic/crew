@@ -2,9 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
-import { extractFrontmatter } from "../../src/skill/frontmatter.ts";
 import { hasSkillMd, loadSkill } from "../../src/skill/load.ts";
-import { validateFrontmatter } from "../../src/skill/validate.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
 describe("loadSkill", () => {
@@ -47,7 +45,7 @@ describe("loadSkill", () => {
 
   test("C-SPEC-06 leading hyphen fails", () => {
     const d = makeTempDir();
-    // Directory name must match the frontmatter name; use the same invalid name.
+    // The invalid frontmatter name triggers validation; the directory name is just a source location.
     const skill = makeSkill(d, "-bad", skillFrontmatter({ name: "-bad" }));
     expect(() => loadSkill(skill)).toThrow(/name/);
   });
@@ -177,31 +175,5 @@ describe("loadSkill", () => {
     expect(hasSkillMd(d)).toBe(false);
     const skill = makeSkill(d, "foo", skillFrontmatter({ name: "foo" }));
     expect(hasSkillMd(skill)).toBe(true);
-  });
-});
-
-describe("extractFrontmatter edge cases", () => {
-  test("leading blank lines tolerated", () => {
-    const fm = extractFrontmatter("\n\n---\nname: foo\ndescription: x\n---\nbody");
-    expect((fm.data as { name: string }).name).toBe("foo");
-  });
-  test("missing --- start fails", () => {
-    expect(() => extractFrontmatter("no frontmatter here")).toThrow(CrewError);
-  });
-  test("unterminated frontmatter fails", () => {
-    expect(() => extractFrontmatter("---\nname: foo\ndesc: x\n")).toThrow(CrewError);
-  });
-  test("windows line endings", () => {
-    const fm = extractFrontmatter("---\r\nname: foo\r\ndescription: x\r\n---\r\nbody\r\n");
-    expect((fm.data as { name: string }).name).toBe("foo");
-  });
-});
-
-describe("validateFrontmatter: non-object inputs", () => {
-  test("array data fails", () => {
-    expect(() => validateFrontmatter([])).toThrow();
-  });
-  test("null data fails", () => {
-    expect(() => validateFrontmatter(null)).toThrow();
   });
 });

@@ -30,4 +30,11 @@ describe("countSkills", () => {
 
     expect(countSkills(pathTap(root), "/unused")).toBe(2);
   });
+
+  test("root-skill tap with invalid name counts as zero", () => {
+    const root = makeTempDir("collision-count-");
+    makeSkill(root, ".", skillFrontmatter({ name: "Bad" }));
+
+    expect(countSkills(pathTap(root), "/unused")).toBe(0);
+  });
 });

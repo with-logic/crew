@@ -40,6 +40,22 @@ function configWith(tap: TapConfig): Config {
 }
 
 describe("findSiblingDep", () => {
+  test("finds a sibling by declared name and returns its tap-relative path", () => {
+    const root = makeTempDir("dep-resolution-");
+    makeSkill(root, "parent-source", skillFrontmatter({ name: "parent" }));
+    makeSkill(root, "dep-source", skillFrontmatter({ name: "dep" }));
+
+    const hit = findSiblingDep(
+      { tap: pathTap(root), tapRelativePath: "parent-source" },
+      "dep",
+      "/unused",
+      configWith(pathTap(root)),
+    );
+
+    expect(hit?.loaded.frontmatter.name).toBe("dep");
+    expect(hit?.tapRelativePath).toBe("dep-source");
+  });
+
   test("returns null when no sibling matches the bare name", () => {
     const root = makeTempDir("dep-resolution-");
     makeSkill(root, "parent-source", skillFrontmatter({ name: "parent" }));

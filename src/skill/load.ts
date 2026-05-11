@@ -32,7 +32,15 @@ export function loadSkill(path: string): LoadedSkill {
 
 /** Load only the declared skill name from `SKILL.md`, for tap indexing. */
 export function loadSkillName(path: string): string {
-  const raw = readText(join(path, "SKILL.md"));
+  const skillMdPath = join(path, "SKILL.md");
+  if (!exists(skillMdPath)) {
+    throw new CrewError(
+      "invalid_skill",
+      `no SKILL.md in \`${path}\` — every skill directory needs one`,
+      { path },
+    );
+  }
+  const raw = readText(skillMdPath);
   const { data } = extractFrontmatter(raw);
   return validateFrontmatterName(data);
 }
