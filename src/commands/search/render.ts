@@ -91,11 +91,20 @@ function formatConfiguredRows(hits: readonly SearchHit[], style: Styler, width: 
   const descStart = 2 + 1 + 1 + nameWidth + 2;
   const descBudget = Math.max(20, width - descStart);
   const rows = hits.map((h) => {
-    const mark = h.installed ? style.green("✓") : " ";
-    const desc = style.dim(truncate(h.description, descBudget));
+    const mark = searchHitMark(h, style);
+    const rawDesc = h.same_name_installed
+      ? `${h.description} (same name installed from another source)`
+      : h.description;
+    const desc = style.dim(truncate(rawDesc, descBudget));
     return [`  ${mark} ${displayName(h)}`, desc];
   });
   return columns(rows, 2);
+}
+
+function searchHitMark(hit: SearchHit, style: Styler): string {
+  if (hit.installed) return style.green("✓");
+  if (hit.same_name_installed) return style.yellow("!");
+  return " ";
 }
 
 function formatKnownRows(hits: readonly KnownSearchHit[], style: Styler, width: number): string[] {
