@@ -60,8 +60,9 @@ export function dispatch(command: string, ctx: CommandContext): CommandOutput {
   if (!handler) {
     throw new CrewError(
       "usage_error",
-      `\`${command}\` is not a crew command.\n\nRun \`crew help\` to see what Homecrew can do.`,
+      `\`${command}\` is not a crew command.`,
       { command },
+      "Run `crew help` to see what Homecrew can do.",
     );
   }
   return handler(aliasCtx);

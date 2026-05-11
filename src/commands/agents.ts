@@ -22,8 +22,9 @@ export function agentsCommand(ctx: CommandContext): CommandOutput {
   // Unknown subcommand — a typo, most likely. Error with a hint.
   throw new CrewError(
     "usage_error",
-    `\`${sub}\` is not a \`crew agents\` command.\n\nRun \`crew help agents\` to see the agent commands.`,
+    `\`${sub}\` is not a \`crew agents\` command.`,
     { sub },
+    "Run `crew help agents` to see the agent commands.",
   );
 }
 

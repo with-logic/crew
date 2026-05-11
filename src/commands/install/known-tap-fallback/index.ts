@@ -43,10 +43,15 @@ export function withKnownTapInstallSuggestions(
   if (suggestions.length === 0) {
     return err;
   }
-  return new CrewError("invalid_ref", renderKnownInstallError(err, suggestions), {
-    ...err.details,
-    known_tap_suggestions: suggestions.map(suggestionJson),
-  });
+  return new CrewError(
+    "invalid_ref",
+    renderKnownInstallError(err, suggestions),
+    {
+      ...err.details,
+      known_tap_suggestions: suggestions.map(suggestionJson),
+    },
+    null,
+  );
 }
 
 function parseMaybeTap(raw: string, cwd: string): TapSource | null {

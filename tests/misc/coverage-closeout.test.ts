@@ -21,6 +21,7 @@ import type { TapConfig } from "../../src/core/types.ts";
 import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";
 import { ensureRepo, resolveRef } from "../../src/git/repo.ts";
 import { parseRef } from "../../src/refs/parse.ts";
+import { makeStyler } from "../../src/util/term.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
   commitAll,
@@ -96,7 +97,7 @@ describe("cli/output — default streams wrap process.stdout/stderr", () => {
       return true;
     };
     try {
-      writeError(new CrewError("usage_error", "boom"), false, defaultStreams);
+      writeError(new CrewError("usage_error", "boom"), false, defaultStreams, makeStyler(false));
     } finally {
       (process.stderr as unknown as { write: typeof origWrite }).write = origWrite;
     }

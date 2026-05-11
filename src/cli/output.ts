@@ -14,7 +14,7 @@
 
 import type { CommandOutput } from "../commands/types.ts";
 import type { CrewError, CrewErrorName } from "../core/errors.ts";
-import { makeStyler, type Styler } from "../util/term.ts";
+import type { Styler } from "../util/term.ts";
 
 /** Writable stream shape used by `writeOutput` — lets tests pass buffers. */
 export interface OutputStreams {
@@ -58,7 +58,7 @@ export function writeError(
   err: CrewError,
   json: boolean,
   streams: OutputStreams,
-  style: Styler = makeStyler(false),
+  style: Styler,
 ): void {
   if (json) {
     streams.stdout(
@@ -78,7 +78,7 @@ export function writeError(
   }
   streams.stderr(`${style.red(style.bold("Error"))}\n`);
   writeMessageBlock(err.message, streams);
-  const hint = REMEDIES[err.code];
+  const hint = err.remedy === undefined ? REMEDIES[err.code] : err.remedy;
   if (hint) {
     streams.stderr(`\n${style.bold("Next step")}\n`);
     writeMessageBlock(hint, streams);

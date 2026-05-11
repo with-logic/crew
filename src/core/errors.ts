@@ -69,11 +69,18 @@ export class CrewError extends Error {
   override readonly name: "CrewError" = "CrewError";
   readonly code: CrewErrorName;
   readonly details: Record<string, unknown>;
+  readonly remedy: string | null | undefined;
 
-  constructor(code: CrewErrorName, message: string, details: Record<string, unknown> = {}) {
+  constructor(
+    code: CrewErrorName,
+    message: string,
+    details: Record<string, unknown> = {},
+    remedy?: string | null,
+  ) {
     super(message);
     this.code = code;
     this.details = details;
+    this.remedy = remedy;
   }
 
   /** Exit code this error should terminate the process with. */

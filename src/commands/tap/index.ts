@@ -47,8 +47,9 @@ export function tapCommand(ctx: CommandContext): CommandOutput {
   if (!sub) return showCommandHelp("tap");
   throw new CrewError(
     "usage_error",
-    `\`${sub}\` is not a \`crew tap\` command.\n\nRun \`crew help tap\` to see the tap commands.`,
+    `\`${sub}\` is not a \`crew tap\` command.`,
     { sub },
+    "Run `crew help tap` to see the tap commands.",
   );
 }
 
@@ -77,8 +78,9 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
     if (!tap) {
       throw new CrewError(
         "usage_error",
-        `\`${name}\` was not found in your list of taps.\n\nThis may have been a typo. View your configured taps with \`crew tap list\`.`,
+        `\`${name}\` was not found in your list of taps.`,
         { name },
+        "This may have been a typo. View your configured taps with `crew tap list`.",
       );
     }
     if (name === DEFAULT_TAP_NAME && !ctx.flags.force)
@@ -121,8 +123,9 @@ function tapsMatching(all: readonly TapConfig[], names: readonly string[]): TapC
     if (!tap) {
       throw new CrewError(
         "usage_error",
-        `\`${n}\` was not found in your list of taps.\n\nThis may have been a typo. View your configured taps with \`crew tap list\`.`,
+        `\`${n}\` was not found in your list of taps.`,
         { name: n },
+        "This may have been a typo. View your configured taps with `crew tap list`.",
       );
     }
     out.push(tap);
