@@ -18,15 +18,15 @@ export const GROUPS: readonly CommandGroup[] = [
       {
         name: "uninstall",
         signature: <>crew uninstall &lt;name&gt;…</>,
-        description: "Remove installed skills from every agent they were installed into.",
+        description: "Remove installed skills from every agent. Bare and tap-qualified names work.",
       },
       {
         name: "update",
         signature: <>crew update [&lt;name&gt;…]</>,
         description: (
           <>
-            Update all installed skills, or only those named. Pinned SHAs are skipped unless{" "}
-            <span className={styles.flag}>--force</span>.
+            Update all installed skills, or only those named. Names can be bare or tap-qualified.
+            Pinned SHAs are skipped unless <span className={styles.flag}>--force</span>.
           </>
         ),
       },
@@ -43,7 +43,7 @@ export const GROUPS: readonly CommandGroup[] = [
       {
         name: "info",
         signature: <>crew info &lt;ref-or-name&gt;</>,
-        description: "Show details for an installed skill or one available in a tap.",
+        description: "Show installed details or preview a tap skill. Tap-qualified names work.",
       },
     ],
   },

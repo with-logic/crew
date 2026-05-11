@@ -28,7 +28,7 @@ import { tapPath } from "../../core/paths.ts";
 import type { Config, StateFile } from "../../core/types.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
-import { resolveStateSubjects } from "../../state/subjects.ts";
+import { resolveStateSubject } from "../../state/subjects.ts";
 import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
@@ -50,7 +50,8 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
 
   withStateLock(() => {
     let state = readState(ctx.home);
-    for (const subject of resolveStateSubjects(state, ctx.positional)) {
+    for (const raw of ctx.positional) {
+      const subject = resolveStateSubject(state, raw);
       const { updatedState, rec } = removeOne(state, subject, ctx, false, agentFilter);
       state = updatedState;
       records.push(rec);

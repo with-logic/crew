@@ -50,6 +50,11 @@ describe("resolveStateSubject", () => {
     expect(subject.entries.map((entry) => entry.source.tap)).toEqual(["anthropic"]);
   });
 
+  test("tap-qualified selectors do not ignore ref tails", () => {
+    const subject = resolveStateSubject(state, "anthropic/pdf@v1");
+    expect(subject.entries).toHaveLength(0);
+  });
+
   test("namespace-qualified selectors match the installed namespace path", () => {
     const subject = resolveStateSubject(state, "anthropic/finance/forecast");
     expect(subject.name).toBe("forecast");
@@ -66,6 +71,7 @@ describe("resolveStateSubject", () => {
 
   test("invalid or non-state references return an empty raw selector", () => {
     expect(resolveStateSubject(state, "not a ref").entries).toHaveLength(0);
+    expect(resolveStateSubject(state, "foo bar").entries).toHaveLength(0);
     expect(resolveStateSubject(state, "./pdf").entries).toHaveLength(0);
     expect(resolveStateSubject(state, "anthropic/missing").raw).toBe("anthropic/missing");
   });

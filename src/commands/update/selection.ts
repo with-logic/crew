@@ -22,6 +22,11 @@ export interface ChosenEntries {
   readonly transitiveSources: ReadonlyMap<string, readonly string[]>;
 }
 
+interface DependencyClosure {
+  readonly selectedNames: ReadonlySet<string>;
+  readonly transitiveSources: ReadonlyMap<string, readonly string[]>;
+}
+
 /**
  * Compute the set of tap configs whose clones this run needs fresh.
  *
@@ -43,6 +48,9 @@ export function tapsToRefreshFor(
   for (const e of expandedSelection) {
     wantedTapNames.add(e.source.tap);
   }
+  // `names` are resolved skill names, not raw inputs. Qualified refs
+  // refresh through `expandedSelection`; this preserves bare tap-name
+  // updates.
   for (const n of names) {
     if (config.taps.some((t) => t.name === n)) wantedTapNames.add(n);
   }
@@ -79,26 +87,42 @@ export function chooseEntries(state: StateFile, subjects: readonly StateSubject[
 
   const names = subjects.map((subject) => subject.name);
   const topLevel = new Set(names);
-  const selectedNames = selectedWithDependencies(state, names);
-  const entries = orderedEntries(state, subjects, selectedNames, topLevel);
-  return { entries, transitiveSources: transitiveSourcesFor(state, names, topLevel) };
+  const closure = dependencyClosureFor(state, names, topLevel);
+  const entries = orderedEntries(state, subjects, closure.selectedNames, topLevel);
+  return { entries, transitiveSources: closure.transitiveSources };
 }
 
-function selectedWithDependencies(state: StateFile, names: readonly string[]): ReadonlySet<string> {
+function dependencyClosureFor(
+  state: StateFile,
+  names: readonly string[],
+  topLevel: ReadonlySet<string>,
+): DependencyClosure {
   const selectedNames = new Set<string>();
-  const queue = names.map((name) => ({ name }));
+  const ancestors = new Map<string, Set<string>>();
+  const visited = new Set<string>();
+  const queue = names.map((name) => ({ name, rootedAt: name }));
   while (queue.length > 0) {
-    const { name } = queue.shift()!;
-    const firstVisit = !selectedNames.has(name);
+    const { name, rootedAt } = queue.shift()!;
+    const firstVisit = !visited.has(name);
+    visited.add(name);
     selectedNames.add(name);
+    if (!topLevel.has(name)) {
+      if (!ancestors.has(name)) ancestors.set(name, new Set());
+      ancestors.get(name)!.add(rootedAt);
+    }
     if (!firstVisit) continue;
     for (const candidate of state.installations) {
-      if (candidate.required_by.includes(name)) queue.push({ name: candidate.name });
+      if (candidate.required_by.includes(name)) {
+        queue.push({ name: candidate.name, rootedAt });
+      }
     }
   }
-  return selectedNames;
+  const transitiveSources = new Map<string, readonly string[]>();
+  for (const [name, set] of ancestors) transitiveSources.set(name, [...set].sort());
+  return { selectedNames, transitiveSources };
 }
 
+/** Preserve the user's requested entries first, then append dependency entries in state order. */
 function orderedEntries(
   state: StateFile,
   subjects: readonly StateSubject[],
@@ -121,34 +145,6 @@ function orderedEntries(
     add(entry);
   }
   return entries;
-}
-
-function transitiveSourcesFor(
-  state: StateFile,
-  names: readonly string[],
-  topLevel: ReadonlySet<string>,
-): ReadonlyMap<string, readonly string[]> {
-  const ancestors = new Map<string, Set<string>>();
-  const visited = new Set<string>();
-  const queue = names.map((name) => ({ name, rootedAt: name }));
-  while (queue.length > 0) {
-    const { name, rootedAt } = queue.shift()!;
-    const firstVisit = !visited.has(name);
-    visited.add(name);
-    if (!topLevel.has(name)) {
-      if (!ancestors.has(name)) ancestors.set(name, new Set());
-      ancestors.get(name)!.add(rootedAt);
-    }
-    if (!firstVisit) continue;
-    for (const candidate of state.installations) {
-      if (candidate.required_by.includes(name)) {
-        queue.push({ name: candidate.name, rootedAt });
-      }
-    }
-  }
-  const out = new Map<string, readonly string[]>();
-  for (const [name, set] of ancestors) out.set(name, [...set].sort());
-  return out;
 }
 
 function entryKey(entry: StateEntry): string {

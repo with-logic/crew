@@ -780,6 +780,22 @@ Given one or more skill references on the command line, `crew install` proceeds 
 
 Exit code: 0 if every skill succeeded in at least one agent; 1 if any skill failed in every agent; 2 if nothing was attempted (empty install set after expansion when the user explicitly asked for something). Other exit codes per §15.
 
+### 9.1 `crew info`
+
+`crew info` accepts any install reference and, for installed skills, the same
+installed-skill selectors defined in §5.1. It reads `state.json` without taking
+the state lock. If the argument matches one or more installed state entries,
+`crew info` renders the installed view first: source, resolved version, installed
+agents, and local description when available. A tap-qualified selector such as
+`<tap>/<skill>` or `<tap>/<namespace>/<skill>` narrows the installed entries by
+`state.source.tap`, optional namespace path, and `state.name`.
+
+If the argument does not match installed state, `crew info` resolves it as an
+install reference and previews the valid skills available at that source. An
+`@ref` tail is not part of the installed-skill selector grammar; arguments such
+as `<tap>/<skill>@<ref>` therefore follow the reference-preview path rather than
+matching installed state.
+
 ## 10. Update and autoupdate
 
 ### 10.1 `crew update`
@@ -1738,6 +1754,12 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background agent from its launchd-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
+
+#### C-INFO: Info (§9.1)
+
+| ID | Reference | Assertion |
+|---|---|---|
+| C-INFO-01 | §9.1 | `crew info <tap>/<skill>` resolves the argument against installed state first; if matching state entries exist, it renders the installed view rather than walking the tap source. |
 
 #### C-UNINST: Uninstall (§7.4)
 

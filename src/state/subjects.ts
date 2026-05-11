@@ -4,7 +4,8 @@
  * Commands such as `info`, `update`, and `uninstall` operate on entries already
  * present in `state.json`. They accept either the stored skill name (`pdf`) or a
  * more specific tap-qualified selector (`anthropic/pdf`) that identifies the
- * same installed entry.
+ * same installed entry. `name` is the resolved skill name when matched, and the
+ * raw input when unmatched so error messages can echo exactly what the user typed.
  */
 
 import type { StateEntry, StateFile, TapSource } from "../core/types.ts";
@@ -41,6 +42,7 @@ function parseStateTapRef(raw: string): TapSource | null {
   try {
     const source = parseRef(raw);
     if (source.type !== "tap") return null;
+    if (source.ref !== null) return null;
     return source;
   } catch {
     return null;
@@ -56,6 +58,7 @@ function matchesTapSource(entry: StateEntry, source: TapSource): boolean {
 
 function namespaceForEntry(entry: StateEntry): string | null {
   const parts = entry.source.path.split("/");
+  // §16 tap index paths use `skills/<namespace>/<name>` only for namespaced skills.
   if (parts.length === 3 && parts[0] === "skills") return parts[1]!;
   return null;
 }
