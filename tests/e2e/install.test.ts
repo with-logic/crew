@@ -648,6 +648,28 @@ describe("install dependencies", () => {
     // An unresolvable dependency bubbles up as invalid_ref/ambiguous from acquire; exit 4.
     expect([4, 5]).toContain(code);
   });
+
+  test("--recursive does not propagate to path dependencies", () => {
+    const home = makeCrewHome();
+    const rootContainer = makeTempDir();
+    const depContainer = makeTempDir();
+    const nested = join(depContainer, "teams", "support");
+    mkdirSync(nested, { recursive: true });
+    makeSkill(nested, "deep-dep", skillFrontmatter({ name: "deep-dep" }));
+    makeSkill(
+      rootContainer,
+      "root",
+      skillFrontmatter({ name: "root", dependencies: [depContainer] }),
+    );
+
+    const code = runCli(["install", "--recursive", join(rootContainer, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(code).toBe(4);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "deep-dep"))).toBe(false);
+    expect(existsSync(join(redirect.agents["claude-code"]!, "root"))).toBe(false);
+  });
 });
 
 describe("uninstall", () => {
