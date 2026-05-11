@@ -177,7 +177,7 @@ function formatOutcome(
         `${style.symbol("ok")} Updated tap ${style.bold(name)}`,
         style.dim(`  recursive discovery enabled for ${targetStr}`),
       ],
-      json: { ...payload, updated: true },
+      json: { ...payload, updated: true, discovery: "recursive" },
     };
   }
   return {

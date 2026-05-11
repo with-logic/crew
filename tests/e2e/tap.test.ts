@@ -574,9 +574,14 @@ describe("crew tap", () => {
 
     const capture = captureStreams();
     expect(
-      runCli(["tap", "add", "--recursive", dir, "local"], { home, streams: capture.streams }),
+      runCli(["tap", "add", "--recursive", "--json", dir, "local"], {
+        home,
+        streams: capture.streams,
+      }),
     ).toBe(0);
-    expect(capture.stdout()).toContain("Updated tap");
+    const output = JSON.parse(capture.stdout()) as { updated: boolean; discovery: string };
+    expect(output.updated).toBe(true);
+    expect(output.discovery).toBe("recursive");
     expect(readConfig(home).taps.find((t) => t.name === "local")!.discovery).toBe("recursive");
   });
 
