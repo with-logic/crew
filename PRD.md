@@ -1295,6 +1295,10 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 
 The `--force` flag overrides `customized`, `untracked_directory`, `inconsistent_marker`, and `not_installed_here`. It does **not** override `invalid_skill`, `name_conflict`, `conflicting_dependencies`, or any other error.
 
+JSON error payloads remain the stable machine contract:
+`{ "error": { "name": string, "message": string, "details": object } }`.
+Human-mode remedy hints are not part of that payload.
+
 **Human-mode error quality.** In human mode, an error message should
 name the offending thing (path, skill, ref, URL) and — whenever a
 reasonable next step exists — point the user at what to try. The stable
@@ -1411,8 +1415,10 @@ When Homecrew renders a `crew tap add` command for a known-tap suggestion, it
 SHOULD use the shortest equivalent source reference that still resolves through
 the normal tap rules: omit a GitHub HTTPS `.git` suffix, and omit `//skills`
 when the tap root can be represented by the repo root because Homecrew indexes a
-top-level `skills/` directory by default. Non-`skills` subpaths MUST still render
-with `//<subpath>`.
+top-level `skills/` directory by default. The registry build MUST reject this
+shortcut if the repo root also has a `SKILL.md`, because that would make the
+repo-root reference resolve differently from `//skills`. Non-`skills` subpaths
+MUST still render with `//<subpath>`.
 
 Example registry sliver:
 

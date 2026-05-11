@@ -3,6 +3,7 @@
  */
 
 import type { TapConfig } from "../core/types.ts";
+import { knownTapSource } from "./format.ts";
 import { sameText } from "./text.ts";
 import type { KnownTap } from "./types.ts";
 
@@ -19,10 +20,8 @@ export function knownTapIsConfigured(tap: KnownTap, configuredTaps: readonly Tap
 }
 
 function sameGitSource(configured: TapConfig, tap: KnownTap): boolean {
-  return (
-    configured.kind === "git" &&
-    sameText(configured.url, tap.url) &&
-    // Case-sensitive: subpaths are filesystem paths inside the repo.
-    configured.subpath === tap.subpath
-  );
+  if (configured.kind !== "git") return false;
+  // Compare the source references users see in suggestions. That folds GitHub
+  // `.git` suffixes and the validated top-level `skills/` shortcut together.
+  return sameText(knownTapSource(configured), knownTapSource(tap));
 }

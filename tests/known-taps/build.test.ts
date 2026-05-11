@@ -150,6 +150,22 @@ describe("known tap registry builder", () => {
       ),
     ).toThrow("has an invalid skill");
   });
+
+  test("rejects shortened skills subpath display when repo root is also a skill", () => {
+    const root = makeTempDir("crew-known-taps-shadowed-");
+    const repo = join(root, "repo");
+    mkdirSync(repo, { recursive: true });
+    writeFileSync(join(repo, "SKILL.md"), `---\n${skillFrontmatter({ name: "root" })}\n---\n`);
+    makeSkill(join(repo, "skills"), "nested", skillFrontmatter({ name: "nested" }));
+    const commit = makeGitRepo(repo).sha;
+
+    expect(() =>
+      buildKnownTapRegistry(
+        { version: 1, taps: [sourceFor("shadowed", repo, "skills", commit)] },
+        { workDir: join(root, "work") },
+      ),
+    ).toThrow("repo root also has a SKILL.md");
+  });
 });
 
 function validSource(): Record<string, unknown> {

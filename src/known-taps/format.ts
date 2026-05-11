@@ -10,7 +10,8 @@ export interface KnownTapSourceParts {
 export function knownTapSource(tap: KnownTapSourceParts): string {
   const url = displayUrl(tap.url);
   // `crew tap add <repo>` discovers a top-level `skills/` directory, so
-  // known-tap prompts can use the shorter command for that common layout.
+  // known-tap prompts can use the shorter command for that common layout. The
+  // registry build rejects this shortcut when a root SKILL.md would shadow it.
   if (tap.subpath === "" || tap.subpath === "skills") {
     return url;
   }

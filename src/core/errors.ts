@@ -69,6 +69,7 @@ export class CrewError extends Error {
   override readonly name: "CrewError" = "CrewError";
   readonly code: CrewErrorName;
   readonly details: Record<string, unknown>;
+  /** `undefined` uses the default hint, `string` overrides it, `null` suppresses it. */
   readonly remedy: string | null | undefined;
 
   constructor(

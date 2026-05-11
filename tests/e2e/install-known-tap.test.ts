@@ -144,10 +144,13 @@ describe("known-tap fallback for install misses", () => {
     expect(named.stderr()).not.toContain("Homecrew found possible matches in known taps");
 
     const bySource = homeWithKnownTaps();
-    writeConfig(
-      { ...readConfig(bySource), taps: [{ ...configuredKnownSource(), name: "renamed" }] },
-      bySource,
-    );
+    const renamedSource = {
+      ...configuredKnownSource(),
+      name: "renamed",
+      url: "https://github.com/example/supabase-skills",
+      subpath: "",
+    };
+    writeConfig({ ...readConfig(bySource), taps: [renamedSource] }, bySource);
     const sourced = captureStreams();
     runCli(["install", "schema-review"], { home: bySource, streams: sourced.streams });
     expect(sourced.stderr()).not.toContain("Homecrew found possible matches in known taps");
@@ -181,7 +184,6 @@ function homeWithKnownTaps(): string {
   const home = makeCrewHome();
   setKnownTapsForTest(KNOWN_TAPS);
   const setupStreams = captureStreams();
-  // Keep configured taps empty so suggestions can only come from the known registry fixture.
   runCli(["tap", "remove", "core", "--force"], { home, streams: setupStreams.streams });
   return home;
 }

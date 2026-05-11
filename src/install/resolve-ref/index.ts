@@ -122,9 +122,9 @@ function resolveTwoSegment(source: TapSource, config: Config, home: string): Non
   }
   throw new CrewError(
     "invalid_ref",
-    `\`${first}/${second}\` does not match any configured tap or namespace.`,
+    `\`${first}/${second}\` does not match any configured tap or namespace.\nNo tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
     { first, second },
-    `No tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
+    `Run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
   );
 }
 

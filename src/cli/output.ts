@@ -76,7 +76,7 @@ export function writeError(
     );
     return;
   }
-  streams.stderr(`${style.red(style.bold("Error"))}\n`);
+  streams.stderr(`${style.red(style.bold("Error"))} ${style.dim(`(${err.code})`)}\n`);
   writeMessageBlock(err.message, streams);
   const hint = err.remedy === undefined ? REMEDIES[err.code] : err.remedy;
   if (hint) {
