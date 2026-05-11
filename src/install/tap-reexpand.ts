@@ -17,12 +17,12 @@
  * their `resolvedSha` is null.
  */
 
-import { join } from "node:path";
 import type { CrewError } from "../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
-import { isDirectory, listDir } from "../util/fs.ts";
+import { isDirectory } from "../util/fs.ts";
+import { indexTap } from "./tap-index.ts";
 
 /** One re-expansion outcome row. */
 export interface TapReexpandRow {
@@ -49,6 +49,12 @@ export interface TapReexpandResult {
   readonly added: readonly StateEntry[];
   readonly sourceGone: ReadonlySet<string>;
   readonly rows: readonly TapReexpandRow[];
+}
+
+interface CurrentTapChild {
+  readonly name: string;
+  readonly path: string;
+  readonly tapRelativePath: string;
 }
 
 export function reexpandTaps(
@@ -118,39 +124,12 @@ export function reexpandTaps(
       continue;
     }
 
-    // Walk tap root: either it IS a single skill (root SKILL.md) or
-    // it contains skill subdirectories.
-    const childNames = new Set<string>();
-    const childByName = new Map<string, string>(); // name → dir
-    if (isDirectory(acquired.rootDir)) {
-      if (hasSkillMd(acquired.rootDir)) {
-        // Tap root is itself a skill: the tap holds exactly one.
-        // Its `tapRelativePath` is "".
-        try {
-          const skill = loadSkill(acquired.rootDir);
-          childNames.add(skill.frontmatter.name);
-          childByName.set(skill.frontmatter.name, acquired.rootDir);
-        } catch {
-          // Skip; treated as if the skill disappeared.
-        }
-      } else {
-        for (const entryName of listDir(acquired.rootDir)) {
-          const dir = join(acquired.rootDir, entryName);
-          if (!(isDirectory(dir) && hasSkillMd(dir))) continue;
-          try {
-            const skill = loadSkill(dir);
-            childNames.add(skill.frontmatter.name);
-            childByName.set(skill.frontmatter.name, dir);
-          } catch {
-            // Skip invalid SKILL.md; same as search/install behavior.
-          }
-        }
-      }
-    }
+    const children = currentTapChildren(tap, home, acquired.rootDir);
+    const childKeys = new Set(children.map(childKey));
 
     // SOURCE_GONE: members no longer present upstream.
     for (const m of members) {
-      if (!childNames.has(m.name)) {
+      if (!childKeys.has(entryKey(m))) {
         sourceGone.add(m.name);
         rows.push({ name: m.name, scope: m.scope, tap: tap.name, kind: "source_gone" });
       }
@@ -159,14 +138,12 @@ export function reexpandTaps(
     // ADDITIONS: children upstream not in state.
     const memberNames = new Set(members.map((m) => m.name));
     const aggregateTargets = [...new Set(members.flatMap((m) => m.agents))];
-    for (const childName of childNames) {
-      if (memberNames.has(childName)) continue;
-      const skillDir = childByName.get(childName)!;
-      const tapRelativePath = childName;
+    for (const child of children) {
+      if (memberNames.has(child.name)) continue;
       const entry = installOne({
-        skillDir,
-        skillName: childName,
-        tapRelativePath,
+        skillDir: child.path,
+        skillName: child.name,
+        tapRelativePath: child.tapRelativePath,
         scope: first.scope,
         tap,
         agents: aggregateTargets,
@@ -175,10 +152,41 @@ export function reexpandTaps(
       });
       if (entry) {
         added.push(entry);
-        rows.push({ name: childName, scope: first.scope, tap: tap.name, kind: "added" });
+        rows.push({ name: child.name, scope: first.scope, tap: tap.name, kind: "added" });
       }
     }
   }
 
   return { added, sourceGone, rows };
+}
+
+function currentTapChildren(tap: TapConfig, home: string, rootDir: string): CurrentTapChild[] {
+  const children: CurrentTapChild[] = [];
+  if (!isDirectory(rootDir)) return children;
+  if (hasSkillMd(rootDir)) {
+    pushLoaded(children, rootDir, "");
+    return children;
+  }
+  const index = indexTap(tap, home);
+  for (const locs of index.skills.values()) {
+    for (const loc of locs) pushLoaded(children, loc.path, loc.tapRelativePath);
+  }
+  return children;
+}
+
+function pushLoaded(children: CurrentTapChild[], path: string, tapRelativePath: string): void {
+  try {
+    const skill = loadSkill(path);
+    children.push({ name: skill.frontmatter.name, path, tapRelativePath });
+  } catch {
+    // Skip invalid SKILL.md; same as search/install behavior.
+  }
+}
+
+function childKey(child: CurrentTapChild): string {
+  return `${child.tapRelativePath}\0${child.name}`;
+}
+
+function entryKey(entry: StateEntry): string {
+  return `${entry.source.path}\0${entry.name}`;
 }

@@ -78,7 +78,7 @@ describe("loadSkill", () => {
     expect(() => loadSkill(skill)).toThrow(/description/);
   });
 
-  test("C-SPEC-10 obsolete: declared name may differ from parent dir", () => {
+  test("declared name may differ from source directory name", () => {
     const d = makeTempDir();
     const skill = makeSkill(d, "wrongname", skillFrontmatter({ name: "foo" }));
     expect(loadSkill(skill).frontmatter.name).toBe("foo");

@@ -153,7 +153,7 @@ export function validateFrontmatterName(data: YamlValue): string {
   if (!NAME_PATTERN.test(name)) {
     throw new CrewError(
       "invalid_skill",
-      `\`name: ${name}\` has invalid characters — use lowercase letters, digits, and hyphens only, starting with a letter or digit`,
+      `\`name: ${name}\` has invalid characters — use lowercase letters, digits, and hyphens only, starting with an alphanumeric, not a hyphen`,
     );
   }
   if (name.endsWith("-")) {

@@ -136,6 +136,30 @@ describe("tap re-expansion on update (§10.1.1)", () => {
     expect(existsSync(join(ccRoot, "gamma", "SKILL.md"))).toBe(true);
   });
 
+  test("C-UPD-15 newly-added sibling records source path when directory differs", () => {
+    const home = makeCrewHome();
+    const repo = makeMultiSkillRepo(["alpha"]);
+    runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
+
+    makeSkill(repo, "numeric-source", skillFrontmatter({ name: "3-statement-model" }));
+    commitAll(repo, "add numeric source");
+
+    const first = captureStreams();
+    const firstCode = runCli(["update"], { home, streams: first.streams });
+    expect(firstCode).toBe(0);
+    expect(first.stdout()).toContain("3-statement-model");
+
+    const added = readState(home).installations.find((e) => e.name === "3-statement-model")!;
+    expect(added.source.path).toBe("numeric-source");
+    expect(existsSync(join(ccRoot, "3-statement-model", "SKILL.md"))).toBe(true);
+
+    const second = captureStreams();
+    const secondCode = runCli(["update"], { home, streams: second.streams });
+    expect(secondCode).toBe(0);
+    expect(second.stdout()).not.toContain("removed upstream");
+    expect(second.stdout()).not.toContain("failed");
+  });
+
   test("C-UPD-15 single-skill installs do NOT auto-pull new siblings on update", () => {
     // Counterpart to the whole-tap case: a user who installed just
     // ONE skill from a tap hasn't opted into the tap's future skills.

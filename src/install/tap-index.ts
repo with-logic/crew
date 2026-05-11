@@ -9,6 +9,10 @@
  *     skills/<name>, or skills/<namespace>/<name>).
  *   - `namespaces`: every namespace name and its skill children.
  *
+ * The index is intentionally optimistic: it validates only the
+ * declared `name`; full SKILL.md validation still happens at install
+ * or search-render time.
+ *
  * Namespace rules (§9 step 5 case 2): a namespace is a directory
  * directly under `skills/` that contains no `SKILL.md` of its own
  * but contains child directories with a `SKILL.md`.
@@ -78,11 +82,8 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
 
   // Case 1: root is itself a skill.
   if (hasSkillMd(root)) {
-    // We don't know the skill's declared name without loading it; use
-    // the tap root's leaf as a stand-in. Tap resolution never looks
-    // this up by name (the caller always knows it's a whole-tap shape).
-    // Returning an empty index here is fine — the resolver treats
-    // "tap root IS a skill" as a whole-tap install regardless of name.
+    // Tap resolution handles this as a whole-tap install; per-name
+    // lookup is unused for a root-skill tap.
     return { skills, namespaces };
   }
 
