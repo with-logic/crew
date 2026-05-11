@@ -64,6 +64,15 @@ describe("expandSkills", () => {
     expect(names).toEqual(["one", "two"]);
   });
 
+  test("expanded skill names come from SKILL.md, not directory names", () => {
+    const root = makeTempDir("expand-declared-name-");
+    makeSkill(root, "source-folder", skillFrontmatter({ name: "declared-name" }));
+
+    const skills = expandSkills(root).valid;
+    expect(skills[0]!.frontmatter.name).toBe("declared-name");
+    expect(skills[0]!.path).toBe(join(root, "source-folder"));
+  });
+
   test("skipping non-directory children in the walk", () => {
     // Exercises the `!isDirectory(candidate)` branch of the collector.
     const root = makeTempDir("expand-skip-");

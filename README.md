@@ -220,8 +220,9 @@ acme-skills/
     └── contributing.md    # ignored by crew search
 ```
 
-Any top-level directory with a valid `SKILL.md` is a skill. Everything else is
-ignored. Prefer to keep skills under a `skills/` directory? That works too — if
+Any top-level directory with a valid `SKILL.md` is a skill; the install name
+comes from the `name` field inside `SKILL.md`. Everything else is ignored.
+Prefer to keep skills under a `skills/` directory? That works too — if
 `skills/` exists at the root, Homecrew indexes its children instead of the root.
 
 ### Namespaces

@@ -49,6 +49,17 @@ describe("crew tap", () => {
     expect(readConfig(home).taps.some((t) => t.name === "custom-name")).toBe(true);
   });
 
+  test("tap add accepts explicit names that start with a digit", () => {
+    const home = makeCrewHome();
+    const repo = buildTapRepo();
+    const code = runCli(["tap", "add", `file://${repo}`, "3d-skills"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(code).toBe(0);
+    expect(readConfig(home).taps.some((t) => t.name === "3d-skills")).toBe(true);
+  });
+
   test("C-TAP-03 remove deletes", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();

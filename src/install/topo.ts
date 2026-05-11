@@ -8,6 +8,7 @@
  */
 
 import type { ResolvedSkill } from "../core/types.ts";
+import { NAME_PATTERN } from "../refs/parse.ts";
 
 /** Topological sort: dependency before dependent. */
 export function topoSort(byName: Map<string, ResolvedSkill>): ResolvedSkill[] {
@@ -56,6 +57,6 @@ export function extractDepName(ref: string): string | null {
   // Bare tap name or `tap/name` (both may have an `@ref` tail).
   const bareOrQualified = trimmed.split("@")[0]!;
   const tail = bareOrQualified.split("/").pop() ?? "";
-  if (/^[a-z][a-z0-9-]*$/.test(tail)) return tail;
+  if (NAME_PATTERN.test(tail)) return tail;
   return null;
 }

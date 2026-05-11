@@ -6,7 +6,6 @@
  * `invalid_skill` with a message naming the failing field.
  */
 
-import { basename } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { SkillFrontmatter } from "../core/types.ts";
 import { NAME_PATTERN } from "../refs/parse.ts";
@@ -18,63 +17,13 @@ const MAX_COMPATIBILITY_LENGTH = 500;
 
 /**
  * Validate raw frontmatter against the Agent Skills spec.
+ * Delegates name-only checks to `validateFrontmatterName`.
  *
  * @param data - YAML-decoded frontmatter object.
- * @param skillDir - absolute path to the skill's directory; used to check
- *                   that the frontmatter `name` matches the parent
- *                   directory name per §9 step 4.
  */
-export function validateFrontmatter(data: YamlValue, skillDir: string): SkillFrontmatter {
-  if (data === null || typeof data !== "object" || Array.isArray(data)) {
-    throw new CrewError(
-      "invalid_skill",
-      "SKILL.md frontmatter must be a YAML mapping (`key: value` pairs), not a scalar or list",
-    );
-  }
+export function validateFrontmatter(data: YamlValue): SkillFrontmatter {
+  const name = validateFrontmatterName(data);
   const map = data as Record<string, YamlValue>;
-
-  // name
-  const name = map["name"];
-  if (typeof name !== "string" || name.length === 0) {
-    throw new CrewError(
-      "invalid_skill",
-      "SKILL.md frontmatter is missing `name` — add a non-empty string, e.g. `name: my-skill`",
-    );
-  }
-  if (name.length > MAX_NAME_LENGTH) {
-    throw new CrewError(
-      "invalid_skill",
-      `\`name\` is ${name.length} characters; max is ${MAX_NAME_LENGTH}`,
-    );
-  }
-  if (!NAME_PATTERN.test(name)) {
-    throw new CrewError(
-      "invalid_skill",
-      `\`name: ${name}\` has invalid characters — use lowercase letters, digits, and hyphens only, starting with a letter`,
-    );
-  }
-  if (name.endsWith("-")) {
-    throw new CrewError(
-      "invalid_skill",
-      `\`name: ${name}\` ends with a hyphen — drop the trailing \`-\``,
-    );
-  }
-  if (name.includes("--")) {
-    throw new CrewError(
-      "invalid_skill",
-      `\`name: ${name}\` contains \`--\` — collapse consecutive hyphens to single ones`,
-    );
-  }
-
-  // Parent directory must equal name (§9 step 4).
-  const dirName = basename(skillDir);
-  if (dirName !== name) {
-    throw new CrewError(
-      "invalid_skill",
-      `\`name: ${name}\` doesn't match the parent directory name \`${dirName}\` — rename one so they match`,
-      { name, dirName },
-    );
-  }
 
   // description
   const description = map["description"];
@@ -176,4 +125,49 @@ export function validateFrontmatter(data: YamlValue, skillDir: string): SkillFro
     ...(crewMeta === undefined ? {} : { metadata: crewMeta }),
   };
   return result;
+}
+
+/** Validate and return only the declared skill name from SKILL.md frontmatter. */
+export function validateFrontmatterName(data: YamlValue): string {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    throw new CrewError(
+      "invalid_skill",
+      "SKILL.md frontmatter must be a YAML mapping (`key: value` pairs), not a scalar or list",
+    );
+  }
+  const map = data as Record<string, YamlValue>;
+
+  // name
+  const name = map["name"];
+  if (typeof name !== "string" || name.length === 0) {
+    throw new CrewError(
+      "invalid_skill",
+      "SKILL.md frontmatter is missing `name` — add a non-empty string, e.g. `name: my-skill`",
+    );
+  }
+  if (name.length > MAX_NAME_LENGTH) {
+    throw new CrewError(
+      "invalid_skill",
+      `\`name\` is ${name.length} characters; max is ${MAX_NAME_LENGTH}`,
+    );
+  }
+  if (!NAME_PATTERN.test(name)) {
+    throw new CrewError(
+      "invalid_skill",
+      `\`name: ${name}\` has invalid characters — use lowercase letters, digits, and hyphens only, starting with an alphanumeric, not a hyphen`,
+    );
+  }
+  if (name.endsWith("-")) {
+    throw new CrewError(
+      "invalid_skill",
+      `\`name: ${name}\` ends with a hyphen — drop the trailing \`-\``,
+    );
+  }
+  if (name.includes("--")) {
+    throw new CrewError(
+      "invalid_skill",
+      `\`name: ${name}\` contains \`--\` — collapse consecutive hyphens to single ones`,
+    );
+  }
+  return name;
 }

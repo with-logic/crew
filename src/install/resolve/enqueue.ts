@@ -8,19 +8,14 @@
  * Exports:
  *   - `PendingItem` — an in-flight entry the orchestrator holds.
  *   - `enqueueTapRef` — turn a `TapSource` into zero+ PendingItems.
- *   - `enqueueDep` — resolve a dependency reference (bare-name
- *     sibling, qualified, git URL, or path).
  *   - `expandSkillsAsItems` — map one directory to PendingItems.
  *   - `sourceRequestedRef` / `sourcePinned` — structural helpers.
  */
 
 import type { Config, LoadedSkill, Source, TapConfig } from "../../core/types.ts";
-import { parseRef } from "../../refs/parse.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
 import { expandSkills, type SkippedSkill } from "../../sources/expand.ts";
-import { findSiblingDep } from "../dep-resolution.ts";
 import { type KindHint, resolveTapRef } from "../resolve-ref/index.ts";
-import { attributeRef } from "../tap-attribution.ts";
 
 export interface PendingItem {
   readonly loaded: LoadedSkill;
@@ -163,67 +158,6 @@ export function expandSkillsAsItems(
     });
   }
   return { items, skipped };
-}
-
-/** Resolve and enqueue items for a dependency reference. */
-export function enqueueDep(
-  depRef: string,
-  parent: PendingItem,
-  config: Config,
-  cwd: string,
-  home: string,
-): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
-  const source = parseRef(depRef, cwd);
-
-  // Bare-name dep with a tap-aware parent: prefer a sibling in the parent's tap.
-  if (source.type === "tap" && source.tap === null) {
-    const sibling = findSiblingDep(
-      { tap: parent.tap, tapRelativePath: parent.tapRelativePath },
-      source.name,
-      home,
-    );
-    if (sibling) {
-      // Adopt the parent's resolution metadata (same tap clone, same SHA).
-      return {
-        items: [
-          {
-            loaded: sibling.loaded,
-            tap: sibling.tap,
-            tapRelativePath: sibling.tapRelativePath,
-            resolvedSha: parent.resolvedSha,
-            requestedRef: null,
-            pinned: parent.pinned,
-            explicit: false,
-            tracksTap: false,
-          },
-        ],
-        config,
-        skipped: [],
-      };
-    }
-    // Fall through to bare-name search across all configured taps.
-  }
-
-  // Qualified tap ref or fallback bare name search.
-  if (source.type === "tap") {
-    return enqueueTapRef(source, config, home, false, null);
-  }
-
-  // Git or path dep ref. Not a whole-tap install — dep edges don't
-  // subscribe the user to every sibling of the dep's source.
-  const attrib = attributeRef(source, config);
-  const acquired = acquireTap(attrib.tap, home);
-  const expansion = expandSkillsAsItems(
-    acquired.rootDir,
-    attrib.tap,
-    "",
-    acquired.resolvedSha,
-    sourceRequestedRef(source),
-    sourcePinned(source, acquired.resolvedSha),
-    false,
-    false,
-  );
-  return { items: expansion.items, config: attrib.config, skipped: expansion.skipped };
 }
 
 export function sourceRequestedRef(source: Source): string | null {

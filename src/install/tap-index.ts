@@ -1,12 +1,17 @@
 /**
  * Shallow index of a single tap's layout — just what we need for
- * reference resolution (§8.3). Does not load skills or parse
- * frontmatter; just walks the directory tree.
+ * reference resolution (§8.3). It reads only each skill's declared
+ * `name` from SKILL.md; full validation happens later in the install
+ * flow.
  *
  * Given a tap, produces:
- *   - `skills`: every skill name findable under the tap (root,
+ *   - `skills`: every declared skill name findable under the tap (root,
  *     skills/<name>, or skills/<namespace>/<name>).
  *   - `namespaces`: every namespace name and its skill children.
+ *
+ * The index is intentionally optimistic: it validates only the
+ * declared `name`; full SKILL.md validation still happens at install
+ * or search-render time.
  *
  * Namespace rules (§9 step 5 case 2): a namespace is a directory
  * directly under `skills/` that contains no `SKILL.md` of its own
@@ -17,13 +22,13 @@ import { join } from "node:path";
 import { tapPath } from "../core/paths.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo.ts";
-import { hasSkillMd } from "../skill/load.ts";
+import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 
 /** Location of one skill inside a tap. */
 export interface SkillLocation {
-  /** Skill name (leaf directory). */
+  /** Declared skill name from SKILL.md. */
   readonly name: string;
   /** Namespace the skill lives under, or null if at skills/ root or tap root. */
   readonly namespace: string | null;
@@ -55,9 +60,8 @@ export function tapRoot(tap: TapConfig, home: string): string {
 }
 
 /**
- * Build a shallow index of a tap. Returns empty maps for a tap that
- * turns out to have no valid skills (including the single-root-skill
- * case, which the resolver handles as a whole-tap install).
+ * Build a shallow index of a tap. Returns empty maps only for a tap
+ * that turns out to have no valid skills.
  */
 export function indexTap(tap: TapConfig, home: string): TapIndex {
   const root = tapRoot(tap, home);
@@ -77,11 +81,9 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
 
   // Case 1: root is itself a skill.
   if (hasSkillMd(root)) {
-    // We don't know the skill's declared name without loading it; use
-    // the tap root's leaf as a stand-in. Tap resolution never looks
-    // this up by name (the caller always knows it's a whole-tap shape).
-    // Returning an empty index here is fine — the resolver treats
-    // "tap root IS a skill" as a whole-tap install regardless of name.
+    const skillName = skillNameForIndex(root);
+    if (skillName !== null)
+      addSkill({ name: skillName, namespace: null, path: root, tapRelativePath: "" });
     return { skills, namespaces };
   }
 
@@ -92,8 +94,10 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
       const child = join(skillsDir, name);
       if (!isDirectory(child)) continue;
       if (hasSkillMd(child)) {
+        const skillName = skillNameForIndex(child);
+        if (skillName === null) continue;
         addSkill({
-          name,
+          name: skillName,
           namespace: null,
           path: child,
           tapRelativePath: `skills/${name}`,
@@ -105,8 +109,10 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
         const grandchild = join(child, childName);
         if (!isDirectory(grandchild)) continue;
         if (!hasSkillMd(grandchild)) continue;
+        const skillName = skillNameForIndex(grandchild);
+        if (skillName === null) continue;
         addSkill({
-          name: childName,
+          name: skillName,
           namespace: name,
           path: grandchild,
           tapRelativePath: `skills/${name}/${childName}`,
@@ -121,7 +127,17 @@ export function indexTap(tap: TapConfig, home: string): TapIndex {
     const child = join(root, name);
     if (!isDirectory(child)) continue;
     if (!hasSkillMd(child)) continue;
-    addSkill({ name, namespace: null, path: child, tapRelativePath: name });
+    const skillName = skillNameForIndex(child);
+    if (skillName === null) continue;
+    addSkill({ name: skillName, namespace: null, path: child, tapRelativePath: name });
   }
   return { skills, namespaces };
+}
+
+function skillNameForIndex(path: string): string | null {
+  try {
+    return loadSkillName(path);
+  } catch {
+    return null;
+  }
 }

@@ -11,7 +11,7 @@ import { tapPath } from "../../core/paths.ts";
 import type { Source, TapConfig } from "../../core/types.ts";
 import { ensureClone } from "../../git/repo.ts";
 import { deriveAutoTapName } from "../../install/tap-naming.ts";
-import { parseRef } from "../../refs/parse.ts";
+import { NAME_PATTERN, parseRef } from "../../refs/parse.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { exists, isDirectory, rmrf } from "../../util/fs.ts";
 import type { Styler } from "../../util/term.ts";
@@ -38,10 +38,10 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   const target = parseTapAddTarget(rawArg, ctx.cwd);
   const explicitName = args[1];
   const name = explicitName ?? deriveName(target);
-  if (!/^[a-z][a-z0-9-]*$/.test(name)) {
+  if (!NAME_PATTERN.test(name)) {
     throw new CrewError(
       "usage_error",
-      `tap name \`${name}\` has invalid characters — use lowercase letters, digits, and hyphens only (starting with a letter)`,
+      `tap name \`${name}\` has invalid characters — use lowercase letters, digits, and hyphens only (starting with an alphanumeric, not a hyphen)`,
       { name },
     );
   }

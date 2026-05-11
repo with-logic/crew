@@ -94,6 +94,56 @@ describe("tap source install", () => {
     expect(existsSync(join(ccRoot, "alpha"))).toBe(true);
   });
 
+  test("install uses SKILL.md name when the source directory differs", () => {
+    const home = makeCrewHome();
+    const repo = makeTempDir("crew-declared-name-tap-");
+    makeGitRepo(repo);
+    makeSkill(
+      repo,
+      "firebase-data-connect-basics",
+      skillFrontmatter({ name: "firebase-data-connect" }),
+    );
+    makeSkill(repo, "numeric-source", skillFrontmatter({ name: "3-statement-model" }));
+    commitAll(repo, "init");
+
+    runCli(["tap", "add", `file://${repo}`, "mytap"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+
+    const firebaseCode = runCli(["install", "firebase-data-connect"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    const numericCode = runCli(["install", "3-statement-model"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(firebaseCode).toBe(0);
+    expect(numericCode).toBe(0);
+    expect(existsSync(join(ccRoot, "firebase-data-connect", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(ccRoot, "firebase-data-connect-basics"))).toBe(false);
+    expect(existsSync(join(ccRoot, "3-statement-model", "SKILL.md"))).toBe(true);
+
+    const state = readState(home);
+    const firebase = state.installations.find((i) => i.name === "firebase-data-connect")!;
+    expect(firebase.source.path).toBe("firebase-data-connect-basics");
+  });
+
+  test("bare install finds root-skill tap by declared SKILL.md name", () => {
+    const home = makeCrewHome();
+    const repo = makeTempDir("crew-root-tap-");
+    makeSkill(repo, ".", skillFrontmatter({ name: "declared-root" }));
+    runCli(["tap", "add", repo, "vendor"], { home, streams: captureStreams().streams });
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+
+    const code = runCli(["install", "declared-root"], { home, streams: captureStreams().streams });
+
+    expect(code).toBe(0);
+    expect(existsSync(join(ccRoot, "declared-root", "SKILL.md"))).toBe(true);
+  });
+
   test("qualified tap ref", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
@@ -164,7 +214,7 @@ describe("tap source install", () => {
     const home = makeCrewHome();
     const tap1 = makeTempDir("crew-tap1-");
     makeGitRepo(tap1);
-    makeSkill(tap1, "dep", skillFrontmatter({ name: "dep", description: "in tap1" }));
+    makeSkill(tap1, "dep-source", skillFrontmatter({ name: "dep", description: "in tap1" }));
     makeSkill(tap1, "root", skillFrontmatter({ name: "root", dependencies: ["dep"] }));
     commitAll(tap1, "init");
 
@@ -189,6 +239,7 @@ describe("tap source install", () => {
     const state = readState(home);
     const dep = state.installations.find((i) => i.name === "dep")!;
     expect(dep.source.tap).toBe("tap1");
+    expect(dep.source.path).toBe("dep-source");
   });
 
   test("nonexistent tap name fails", () => {

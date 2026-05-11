@@ -276,9 +276,9 @@ describe("install directory expansion", () => {
   test("C-INST-20 invalid skill in a multi-skill source is soft-skipped", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-soft-");
-    // A valid skill alongside an invalid one (name doesn't match dir).
+    // A valid skill alongside an invalid one whose declared name uses uppercase.
     makeSkill(container, "good-skill", skillFrontmatter({ name: "good-skill" }));
-    makeSkill(container, "bad-dir", skillFrontmatter({ name: "mismatched-name" }));
+    makeSkill(container, "bad-dir", skillFrontmatter({ name: "Bad" }));
     const capture = captureStreams();
     const code = runCli(["install", container], { home, streams: capture.streams });
     // Exit 1: partial success, not 4.
@@ -287,31 +287,30 @@ describe("install directory expansion", () => {
     expect(existsSync(join(redirect.agents["claude-code"]!, "good-skill"))).toBe(true);
     // The invalid one was reported in stdout, not as a hard error.
     expect(capture.stdout()).toContain("Failed");
-    expect(capture.stdout()).toContain("bad-dir");
+    expect(capture.stdout()).toContain("name: Bad");
   });
 
   test("C-INST-21 multi-skill dir where every skill is invalid: exit 4, all listed in Failed", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-all-invalid-");
-    // Two siblings, both have mismatched name/dir.
-    makeSkill(container, "bad-one", skillFrontmatter({ name: "wrong-one" }));
-    makeSkill(container, "bad-two", skillFrontmatter({ name: "wrong-two" }));
+    makeSkill(container, "bad-one", skillFrontmatter({ name: "BadOne" }));
+    makeSkill(container, "bad-two", skillFrontmatter({ name: "BadTwo" }));
     const capture = captureStreams();
     const code = runCli(["install", container], { home, streams: capture.streams });
     // Zero succeeded AND ≥1 validation failure → exit 4.
     expect(code).toBe(4);
     const out = capture.stdout();
     expect(out).toContain("Failed");
-    // Both skills reported.
-    expect(out).toContain("bad-one");
-    expect(out).toContain("bad-two");
+    // Both validation failures were reported.
+    expect(out).toContain("name: BadOne");
+    expect(out).toContain("name: BadTwo");
   });
 
   test("C-INST-20 --json surfaces skipped skills", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-soft-json-");
     makeSkill(container, "good-skill", skillFrontmatter({ name: "good-skill" }));
-    makeSkill(container, "bad-dir", skillFrontmatter({ name: "mismatched-name" }));
+    makeSkill(container, "bad-dir", skillFrontmatter({ name: "Bad" }));
     const capture = captureStreams();
     runCli(["install", "--json", container], { home, streams: capture.streams });
     const parsed = JSON.parse(capture.stdout()) as {
@@ -324,7 +323,7 @@ describe("install directory expansion", () => {
   test("C-INST-21 single-skill source still hard-fails on invalid SKILL.md", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-hard-");
-    const skill = makeSkill(container, "bad-dir", skillFrontmatter({ name: "mismatched-name" }));
+    const skill = makeSkill(container, "bad-dir", skillFrontmatter({ name: "Bad" }));
     const capture = captureStreams();
     const code = runCli(["install", skill], { home, streams: capture.streams });
     // Exit 4: the user asked for that one skill and it's invalid.
@@ -550,6 +549,48 @@ describe("install dependencies", () => {
     expect(code).toBe(0);
     expect(existsSync(join(redirect.agents["claude-code"]!, "dep", "SKILL.md"))).toBe(true);
     expect(existsSync(join(redirect.agents["claude-code"]!, "root", "SKILL.md"))).toBe(true);
+  });
+
+  test("C-DEP-01 digit-leading dependency installs before dependent", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir();
+    makeSkill(container, "numeric-source", skillFrontmatter({ name: "3-statement-model" }));
+    makeSkill(
+      container,
+      "root",
+      skillFrontmatter({ name: "root", dependencies: ["3-statement-model"] }),
+    );
+    const code = runCli(["install", join(container, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(code).toBe(0);
+    const depEntry = readState(home).installations.find(
+      (entry) => entry.name === "3-statement-model",
+    )!;
+    expect(depEntry.source.path).toBe("");
+    writeFileSync(join(container, "numeric-source", "README.md"), "updated");
+    const capture = captureStreams();
+    const updateCode = runCli(["update", "3-statement-model"], { home, streams: capture.streams });
+    expect(updateCode).toBe(0);
+    expect(capture.stdout()).toContain("updated");
+  });
+
+  test("duplicate declared sibling dependency names fail deterministically", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir();
+    makeSkill(container, "one", skillFrontmatter({ name: "dep" }));
+    makeSkill(container, "two", skillFrontmatter({ name: "dep" }));
+    makeSkill(container, "root", skillFrontmatter({ name: "root", dependencies: ["dep"] }));
+
+    const capture = captureStreams();
+    const code = runCli(["install", join(container, "root")], {
+      home,
+      streams: capture.streams,
+    });
+
+    expect(code).toBe(4);
+    expect(capture.stderr()).toContain("appears multiple times");
   });
 
   test("C-DEP-08 dependency cycle terminates", () => {

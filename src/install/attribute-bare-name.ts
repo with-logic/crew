@@ -9,13 +9,9 @@
  *   - none of the above (invalid).
  *
  * This module enumerates every interpretation and lets the caller
- * prompt or error on ambiguity. The legacy entry point
- * `findTapForBareName` is preserved for unchanged call sites —
- * it returns the single tap that holds the bare skill name and
- * throws `invalid_ref` when zero or `ambiguous_reference` when many.
+ * prompt or error on ambiguity.
  */
 
-import { CrewError } from "../core/errors.ts";
 import type { Config, TapConfig } from "../core/types.ts";
 import type { SkillLocation, TapIndex } from "./tap-index.ts";
 import { indexTap } from "./tap-index.ts";
@@ -65,38 +61,4 @@ export function enumerateCandidates(
     }
   }
   return out;
-}
-
-/**
- * Legacy: find exactly the single tap holding a bare skill name.
- * Used by call sites that haven't migrated to the richer candidate
- * enumeration. Throws `invalid_ref` on zero, `ambiguous_reference`
- * on many.
- */
-export function findTapForBareName(name: string, config: Config, home: string): TapConfig {
-  const candidates = enumerateCandidates(name, config, home).filter((c) => c.kind === "skill");
-  if (candidates.length === 0) {
-    const tapNames = config.taps.map((t) => t.name).join(", ");
-    throw new CrewError(
-      "invalid_ref",
-      `skill \`${name}\` isn't in any configured tap (searched: ${tapNames || "<none>"}) — try \`crew search ${name}\`, or add a tap with \`crew tap add <url>\``,
-      { skill: name },
-    );
-  }
-  // Dedupe by tap — the "skill in multiple namespaces within one tap"
-  // case is handled by the richer resolver, not this legacy path.
-  const taps = new Map<string, TapConfig>();
-  for (const c of candidates) {
-    if (c.kind !== "skill") continue;
-    taps.set(c.tap.name, c.tap);
-  }
-  if (taps.size > 1) {
-    const qualifieds = [...taps.values()].map((t) => `${t.name}/${name}`).join(", ");
-    throw new CrewError(
-      "ambiguous_reference",
-      `skill \`${name}\` matches multiple taps (${qualifieds}) — qualify with one of those names to pick`,
-      { candidates: qualifieds },
-    );
-  }
-  return [...taps.values()][0]!;
 }

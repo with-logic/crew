@@ -417,6 +417,12 @@ describe("C-TAP-20 auto-tap creation on `crew install <git-url>`", () => {
     expect(state.installations[0]!.source.tap).toBe(auto!.name);
   });
 
+  test("auto-tap derivation preserves leading digits", () => {
+    const { deriveAutoTapName } =
+      require("../../src/install/tap-naming.ts") as typeof import("../../src/install/tap-naming.ts");
+    expect(deriveAutoTapName("gh:foo/3d-skills", "")).toBe("3d-skills");
+  });
+
   test("auto-tap suffix keeps incrementing past -2 when multiple names are taken", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo("crew-triple-", ["x"]);

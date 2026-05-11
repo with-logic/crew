@@ -50,7 +50,7 @@ export const tapHelp: CommandHelp = {
     {
       heading: "What a tap looks like",
       body: [
-        "A tap is just a git repo (or a local folder) where each subfolder is a skill — a `SKILL.md` file inside tells Homecrew what it is. No manifest, no registry, no setup. If you can put it on GitHub, you can share it.",
+        "A tap is just a git repo (or a local folder) where each subfolder with a `SKILL.md` is a skill. The `name` field inside `SKILL.md` is the install name. No manifest, no registry, no setup. If you can put it on GitHub, you can share it.",
         "Usually, skills live at the root of the repo:",
         {
           literal: true,
@@ -90,7 +90,7 @@ export const tapHelp: CommandHelp = {
       body: [
         "Want to publish skills for your team? It's a regular git repo.",
         "1. `git init my-skills && cd my-skills` (or pick a `skills/` folder in a repo you already have).",
-        "2. For each skill, make a folder whose name matches the skill's name, and put a `SKILL.md` inside it. See `crew help install` for what goes in a SKILL.md (it's the Agent Skills spec — https://agentskills.io/specification).",
+        "2. For each skill, make a folder and put a `SKILL.md` inside it. The folder name is just a filesystem location; the `name` field in `SKILL.md` is what users install. See `crew help install` for what goes in a SKILL.md (it's the Agent Skills spec — https://agentskills.io/specification).",
         "3. Commit and push anywhere you can push a git repo — GitHub, GitLab, Bitbucket, a self-hosted remote, a local `file://` URL for testing.",
         "4. Share it! Your team runs `crew tap <your-url>` and installs with `crew install <skill-name>`. Or `crew install <your-url>` to install everything at once.",
         "Tags and branches work like you'd expect — `crew install my-skill@v1.0.0` pins to a release; the tap itself follows the default branch.",
