@@ -98,6 +98,20 @@ describe("install: conflicting_dependencies", () => {
     });
     expect(code).toBe(4);
   });
+
+  test("same declared name from two tap paths conflicts even at the same SHA", () => {
+    const home = makeCrewHome();
+    const repo = makeTempDir();
+    makeGitRepo(repo);
+    makeSkill(repo, "one", skillFrontmatter({ name: "shared" }));
+    makeSkill(repo, "two", skillFrontmatter({ name: "shared" }));
+    commitAll(repo, "duplicates");
+
+    const capture = captureStreams();
+    const code = runCli(["install", `file://${repo}`], { home, streams: capture.streams });
+    expect(code).toBe(4);
+    expect(capture.stderr()).toContain("different sources");
+  });
 });
 
 describe("update: source_unreachable is a soft warning", () => {

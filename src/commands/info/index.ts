@@ -14,7 +14,8 @@ import { agentByName } from "../../agents/registry.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateEntry } from "../../core/types.ts";
-import { findTapForBareName } from "../../install/attribute-bare-name.ts";
+import type { NameCandidate } from "../../install/attribute-bare-name.ts";
+import { resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { attributeRef } from "../../install/tap-attribution.ts";
 import { NAME_PATTERN, parseRef } from "../../refs/parse.ts";
 import { hasSkillMd, loadSkill } from "../../skill/load.ts";
@@ -24,6 +25,8 @@ import { readState } from "../../state/load.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import type { InstalledInfo, SkillInfo } from "./render.ts";
 import { renderInstalled, renderSkills } from "./render.ts";
+
+type SkillInfoCandidate = Extract<NameCandidate, { kind: "skill" | "namespace" }>;
 
 export function infoCommand(ctx: CommandContext): CommandOutput {
   if (ctx.positional.length !== 1) {
@@ -57,25 +60,19 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   // Fall through to resolving the ref and walking its source.
   const config = readConfig(ctx.home);
   const source = parseRef(arg, ctx.cwd);
-  const { tap, dir } = (() => {
+  const { tap, dirs } = (() => {
     if (source.type === "tap" && source.tap === null) {
       const namedTap = config.taps.find((t) => t.name === source.name);
       if (namedTap) {
         const acq = acquireTap(namedTap, ctx.home);
-        return { tap: namedTap, dir: acq.rootDir };
+        return { tap: namedTap, dirs: [acq.rootDir] };
       }
-      const owning = findTapForBareName(source.name, config, ctx.home);
-      const acq = acquireTap(owning, ctx.home);
-      return { tap: owning, dir: join(acq.rootDir, source.name) };
+      // The tap-name case returned above; remaining bare refs resolve
+      // to a skill or namespace candidate.
+      return candidateDirs(resolveTapRef(source, config, ctx.home) as SkillInfoCandidate);
     }
     if (source.type === "tap") {
-      const t = config.taps.find((c) => c.name === source.tap);
-      if (!t)
-        throw new CrewError("invalid_ref", `no tap named \`${source.tap}\` is configured`, {
-          tap: source.tap,
-        });
-      const acq = acquireTap(t, ctx.home);
-      return { tap: t, dir: join(acq.rootDir, source.name) };
+      return candidateDirs(resolveTapRef(source, config, ctx.home) as SkillInfoCandidate);
     }
     const matched = config.taps.find((t) => {
       if (source.type === "git")
@@ -84,19 +81,27 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
     });
     if (matched) {
       const acq = acquireTap(matched, ctx.home);
-      return { tap: matched, dir: acq.rootDir };
+      return { tap: matched, dirs: [acq.rootDir] };
     }
     const attrib = attributeRef(source, config);
     const acq = acquireTap(attrib.tap, ctx.home);
-    return { tap: attrib.tap, dir: acq.rootDir };
+    return { tap: attrib.tap, dirs: [acq.rootDir] };
   })();
 
-  const skillInfos = buildSkillInfos(dir);
+  const skillInfos = buildSkillInfos(dirs);
   return {
     exitCode: 0,
     human: renderSkills(skillInfos, tap, ctx.style, ctx.width),
     json: { skills: skillInfos },
   };
+}
+
+function candidateDirs(candidate: SkillInfoCandidate): {
+  tap: SkillInfoCandidate["tap"];
+  dirs: string[];
+} {
+  if (candidate.kind === "skill") return { tap: candidate.tap, dirs: [candidate.location.path] };
+  return { tap: candidate.tap, dirs: candidate.members.map((m) => m.path) };
 }
 
 /**
@@ -140,8 +145,8 @@ function loadDescriptionFromAny(
  * read-only "show me what's valid here" command, so skipped skills
  * are deliberately dropped. `crew install` surfaces those (§9 step 9).
  */
-function buildSkillInfos(dir: string): SkillInfo[] {
-  const { valid } = expandSkills(dir);
+function buildSkillInfos(dirs: readonly string[]): SkillInfo[] {
+  const valid = dirs.flatMap((d) => expandSkills(d).valid);
   return valid.map((s) => ({
     name: s.frontmatter.name,
     description: s.frontmatter.description,

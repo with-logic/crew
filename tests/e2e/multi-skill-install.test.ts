@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
@@ -158,6 +158,23 @@ describe("tap re-expansion on update (§10.1.1)", () => {
     expect(secondCode).toBe(0);
     expect(second.stdout()).not.toContain("removed upstream");
     expect(second.stdout()).not.toContain("failed");
+  });
+
+  test("C-UPD-15 renamed sibling directory updates source path by declared name", () => {
+    const home = makeCrewHome();
+    const repo = makeMultiSkillRepo(["alpha"]);
+    runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
+
+    renameSync(join(repo, "alpha"), join(repo, "alpha-renamed"));
+    commitAll(repo, "rename alpha directory");
+
+    const capture = captureStreams();
+    const code = runCli(["update"], { home, streams: capture.streams });
+    expect(code).toBe(0);
+    expect(capture.stdout()).not.toContain("removed upstream");
+
+    const alpha = readState(home).installations.find((e) => e.name === "alpha")!;
+    expect(alpha.source.path).toBe("alpha-renamed");
   });
 
   test("C-UPD-15 single-skill installs do NOT auto-pull new siblings on update", () => {

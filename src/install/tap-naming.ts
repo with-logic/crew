@@ -7,7 +7,7 @@
  *   reduce collisions when every monorepo's tap dir is `skills`.
  *
  * Result is lowercased + non-`[a-z0-9-]` chars replaced with `-`,
- * with leading non-letters and trailing hyphens trimmed. If the
+ * with leading non-alphanumerics and trailing hyphens trimmed. If the
  * sanitized name is empty, returns the raw value so the caller's
  * downstream validator can quote it in a useful error.
  */
@@ -33,6 +33,6 @@ function sanitize(raw: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/-+/g, "-");
-  const trimmed = lowered.replace(/^[^a-z]+/, "").replace(/-+$/, "");
+  const trimmed = lowered.replace(/^[^a-z0-9]+/, "").replace(/-+$/, "");
   return trimmed.length > 0 ? trimmed : raw;
 }

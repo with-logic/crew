@@ -276,7 +276,7 @@ describe("install directory expansion", () => {
   test("C-INST-20 invalid skill in a multi-skill source is soft-skipped", () => {
     const home = makeCrewHome();
     const container = makeTempDir("crew-soft-");
-    // A valid skill alongside an invalid one.
+    // A valid skill alongside an invalid one whose declared name uses uppercase.
     makeSkill(container, "good-skill", skillFrontmatter({ name: "good-skill" }));
     makeSkill(container, "bad-dir", skillFrontmatter({ name: "Bad" }));
     const capture = captureStreams();
@@ -549,6 +549,26 @@ describe("install dependencies", () => {
     expect(code).toBe(0);
     expect(existsSync(join(redirect.agents["claude-code"]!, "dep", "SKILL.md"))).toBe(true);
     expect(existsSync(join(redirect.agents["claude-code"]!, "root", "SKILL.md"))).toBe(true);
+  });
+
+  test("C-DEP-01 digit-leading dependency installs before dependent", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir();
+    makeSkill(container, "numeric-source", skillFrontmatter({ name: "3-statement-model" }));
+    makeSkill(
+      container,
+      "root",
+      skillFrontmatter({ name: "root", dependencies: ["3-statement-model"] }),
+    );
+    const code = runCli(["install", join(container, "root")], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(code).toBe(0);
+    expect(readState(home).installations.map((entry) => entry.name)).toEqual([
+      "3-statement-model",
+      "root",
+    ]);
   });
 
   test("C-DEP-08 dependency cycle terminates", () => {

@@ -713,7 +713,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Multi-skill expansions are how the user gets every skill in a tap installed at once. Each child becomes an independent state entry attributed to the same tap (`source.tap`); upstream additions to that tap are picked up automatically by `crew update` (§10.1.1).
 6. **Resolve dependencies.** For each skill in the install set, read `metadata.crew.dependencies` and add each to the install set. Continue recursively until no new dependencies appear. Cycles are allowed and terminate naturally (a skill already in the set is not re-added).
    - **Bare-name resolution precedence:** (1) a sibling directory at the same source and ref (for sources where "sibling" is meaningful — git sources with a parent directory and path sources in a parent directory); (2) the tap the parent skill was installed from, if any; (3) search across all configured taps. An unqualified name matching multiple taps aborts with `ambiguous_dependency` naming the candidates.
-   - **Conflict detection:** if two skills in the install set have the same `name` but resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
+   - **Conflict detection:** if two skills in the install set have the same `name` but come from different tap-relative source paths, or resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
 7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
 8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. If the store entry already exists and its content hash matches, reuse it.
 9. **Install into each agent.** For each skill × each agent in the agent set × the scope, run the install algorithm from §7.3. Record per-agent results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, agent) pair does not stop others.
@@ -1224,7 +1224,7 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
 | `ambiguous_reference` | 4 | A reference has more than one valid resolution across taps, skills, and namespaces, and the user is non-interactive or the prompt was aborted. |
 | `ambiguous_dependency` | 4 | A dependency's bare name is ambiguous across taps. |
-| `conflicting_dependencies` | 4 | Two skills with the same name resolve to different SHAs. |
+| `conflicting_dependencies` | 4 | Two skills in one install set have the same name but different source paths or resolved SHAs. |
 | `name_conflict` | 4 | Trying to install a skill whose name is already held by a different source, without `--force`. |
 | `untracked_directory` | 6 | Destination exists without a crew marker. |
 | `customized` | 6 | Destination has a marker but content hash differs. |
@@ -1625,7 +1625,7 @@ Implementations and test suites refer to criteria by ID.
 | C-DEP-04 | §9 step 6 | A bare-name dependency unambiguously present in only one configured tap resolves to that tap. |
 | C-DEP-05 | §9 step 6 | A bare-name dependency present in multiple taps, with no closer match, produces `ambiguous_dependency`. |
 | C-DEP-06 | §9 step 6 | A fully qualified dependency (`tap/name`, `gh:...`, URL) bypasses bare-name precedence. |
-| C-DEP-07 | §9 step 6 | Two skills in a transitive install set with the same `name` but different resolved SHAs produce `conflicting_dependencies`. |
+| C-DEP-07 | §9 step 6 | Two skills in a transitive install set with the same `name` but different source paths or resolved SHAs produce `conflicting_dependencies`. |
 | C-DEP-08 | §9 step 6 | A dependency cycle terminates normally (each skill appears in the install set at most once). |
 | C-DEP-09 | §9 step 6 | A dependency that cannot be resolved causes the root install to fail; other root skills in the same command are not blocked. |
 

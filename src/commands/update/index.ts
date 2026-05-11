@@ -76,6 +76,9 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
       installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
     );
     tapReexpandRows.push(...reexpanded.rows);
+    for (const entry of reexpanded.updated) {
+      current = upsertEntry(current, entry);
+    }
     for (const entry of reexpanded.added) {
       current = upsertEntry(current, entry);
     }

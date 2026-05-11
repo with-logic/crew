@@ -93,13 +93,24 @@ export function resolveInstallSet(
     const name = item.loaded.frontmatter.name;
     if (byName.has(name)) {
       const existing = byName.get(name)!;
-      if (existing.resolvedSha !== item.resolvedSha)
+      if (sameInstallSetSource(existing, item) && existing.resolvedSha === item.resolvedSha)
+        continue;
+      const existingSha = existing.resolvedSha ?? "<null>";
+      const incomingSha = item.resolvedSha ?? "<null>";
+      const existingSource = sourceLabel(existing.tap.name, existing.tapRelativePath);
+      const incomingSource = sourceLabel(item.tap.name, item.tapRelativePath);
+      if (existing.resolvedSha !== item.resolvedSha) {
         throw new CrewError(
           "conflicting_dependencies",
-          `\`${name}\` appears twice in this install set with different SHAs (${(existing.resolvedSha ?? "<null>").slice(0, 8)} vs ${(item.resolvedSha ?? "<null>").slice(0, 8)}) — pin one to a specific version, or install them separately`,
+          `\`${name}\` appears twice in this install set with different SHAs (${existingSha.slice(0, 8)} vs ${incomingSha.slice(0, 8)}) — pin one to a specific version, or install them separately`,
           { name, existing: existing.resolvedSha, incoming: item.resolvedSha },
         );
-      continue;
+      }
+      throw new CrewError(
+        "conflicting_dependencies",
+        `\`${name}\` appears twice in this install set from different sources (${existingSource} vs ${incomingSource}) — rename one skill or install them separately`,
+        { name, existing: existingSource, incoming: incomingSource },
+      );
     }
 
     const staged = stageIntoStore(item.loaded.path, name, item.resolvedSha, home);
@@ -166,4 +177,14 @@ function enqueueRoot(
     true,
   );
   return { items: expansion.items, config: attrib.config, skipped: expansion.skipped };
+}
+
+function sameInstallSetSource(existing: ResolvedSkill, incoming: PendingItem): boolean {
+  return (
+    existing.tap.name === incoming.tap.name && existing.tapRelativePath === incoming.tapRelativePath
+  );
+}
+
+function sourceLabel(tapName: string, tapRelativePath: string): string {
+  return tapRelativePath.length > 0 ? `${tapName}/${tapRelativePath}` : tapName;
 }

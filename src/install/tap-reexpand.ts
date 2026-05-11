@@ -47,6 +47,7 @@ export type InstallNewChild = (args: {
 
 export interface TapReexpandResult {
   readonly added: readonly StateEntry[];
+  readonly updated: readonly StateEntry[];
   readonly sourceGone: ReadonlySet<string>;
   readonly rows: readonly TapReexpandRow[];
 }
@@ -65,6 +66,7 @@ export function reexpandTaps(
   installOne: InstallNewChild,
 ): TapReexpandResult {
   const added: StateEntry[] = [];
+  const updated: StateEntry[] = [];
   const sourceGone = new Set<string>();
   const rows: TapReexpandRow[] = [];
 
@@ -125,13 +127,18 @@ export function reexpandTaps(
     }
 
     const children = currentTapChildren(tap, home, acquired.rootDir);
-    const childKeys = new Set(children.map(childKey));
+    const childByName = new Map(children.map((child) => [child.name, child]));
 
     // SOURCE_GONE: members no longer present upstream.
     for (const m of members) {
-      if (!childKeys.has(entryKey(m))) {
+      const child = childByName.get(m.name);
+      if (!child) {
         sourceGone.add(m.name);
         rows.push({ name: m.name, scope: m.scope, tap: tap.name, kind: "source_gone" });
+        continue;
+      }
+      if (child.tapRelativePath !== m.source.path) {
+        updated.push({ ...m, source: { ...m.source, path: child.tapRelativePath } });
       }
     }
 
@@ -157,7 +164,7 @@ export function reexpandTaps(
     }
   }
 
-  return { added, sourceGone, rows };
+  return { added, updated, sourceGone, rows };
 }
 
 function currentTapChildren(tap: TapConfig, home: string, rootDir: string): CurrentTapChild[] {
@@ -181,12 +188,4 @@ function pushLoaded(children: CurrentTapChild[], path: string, tapRelativePath: 
   } catch {
     // Skip invalid SKILL.md; same as search/install behavior.
   }
-}
-
-function childKey(child: CurrentTapChild): string {
-  return `${child.tapRelativePath}\0${child.name}`;
-}
-
-function entryKey(entry: StateEntry): string {
-  return `${entry.source.path}\0${entry.name}`;
 }
