@@ -26,7 +26,7 @@ export function cacheCommand(ctx: CommandContext): CommandOutput {
     if (!sub) return showCommandHelp("cache");
     throw new CrewError(
       "usage_error",
-      `\`crew cache\` has no subcommand named \`${sub}\` — run \`crew help cache\` to see what's available`,
+      `\`${sub}\` is not a \`crew cache\` command.\n\nRun \`crew help cache\` to see the cache commands.`,
       { sub },
     );
   }

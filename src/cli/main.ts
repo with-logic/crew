@@ -66,7 +66,7 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
   } catch (err) {
     // `parseArgs` only raises `CrewError`.
     const ce = err as CrewError;
-    writeError(ce, false, streams);
+    writeError(ce, false, streams, style);
     return ce.exitCode;
   }
 
@@ -88,7 +88,7 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
     exitCode = output.exitCode;
   } catch (err) {
     if (err instanceof CrewError) {
-      writeError(err, parsed.flags.json, streams);
+      writeError(err, parsed.flags.json, streams, style);
       exitCode = err.exitCode;
     } else {
       // Unexpected runtime error — wrap it in a usage error so the user
@@ -101,6 +101,7 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
         ),
         parsed.flags.json,
         streams,
+        style,
       );
       exitCode = 4;
     }

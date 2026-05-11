@@ -111,7 +111,7 @@ describe("resolveTapRef", () => {
     const root = makeTempDir("rr-2-nope-");
     const cfg = configWith(pathTap(root, "core"));
     expect(() => resolveTapRef(tapRef("nope", null, "nada"), cfg, "/unused")).toThrow(
-      /doesn't resolve/,
+      /does not match/,
     );
   });
 
@@ -148,7 +148,7 @@ describe("resolveTapRef", () => {
     const root = makeTempDir("rr-b-nope-");
     const cfg = configWith(pathTap(root, "core"));
     expect(() => resolveTapRef(tapRef(null, null, "ghost"), cfg, "/unused")).toThrow(
-      /isn't a tap, skill, or namespace/,
+      /was not found in any configured tap/,
     );
   });
 

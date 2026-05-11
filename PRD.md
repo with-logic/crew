@@ -1305,10 +1305,10 @@ is part of the product. Implementations SHOULD follow these guidelines:
 - **Name the thing.** "`python-testing` isn't in any configured tap"
   beats "skill not found."
 - **Point at a remedy.** Errors with an obvious next step should carry
-  a one-line hint — the command to run, the flag that overrides, the
-  file to edit. A remedy separate from the primary message (e.g. a
-  trailing `→ <hint>` line) is easy for users to skim past when they
-  don't need it.
+  a short hint — the command to run, the flag that overrides, the file
+  to edit. In human output, render the primary message and the next
+  step as separate, skimmable blocks instead of cramming everything
+  into one line.
 - **Speak as a peer.** "run `crew list` to see what's installed" lands
   better than "the requested skill is not present in the state file."
 - **Respect `--force` semantics.** If the error is one `--force`

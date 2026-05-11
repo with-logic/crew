@@ -180,4 +180,16 @@ describe("known tap lookup", () => {
       path: "",
     });
   });
+
+  test("knownTapSource formats concise commands for common tap layouts", () => {
+    expect(knownTapSource({ url: "https://github.com/a/root.git", subpath: "" })).toBe(
+      "https://github.com/a/root",
+    );
+    expect(knownTapSource({ url: "https://github.com/a/root.git", subpath: "skills" })).toBe(
+      "https://github.com/a/root",
+    );
+    expect(knownTapSource({ url: "https://github.com/a/root.git", subpath: "vendor/skills" })).toBe(
+      "https://github.com/a/root//vendor/skills",
+    );
+  });
 });

@@ -116,12 +116,14 @@ function renderKnownInstallError(
   err: CrewError,
   suggestions: readonly KnownInstallSuggestion[],
 ): string {
-  const lines = [err.message, "", "Known taps may have what you want:"];
+  const lines = [err.message, "", "Homecrew found possible matches in known taps:"];
   for (const suggestion of suggestions) {
     lines.push("");
     lines.push(`  ${suggestion.installRef} (${suggestion.tap.trust})`);
-    lines.push(`    tap with: ${tapAddCommand(suggestion.tap)}`);
-    lines.push(`    install with: crew install ${suggestion.installRef}`);
+    lines.push(`    Add the tap:`);
+    lines.push(`      ${tapAddCommand(suggestion.tap)}`);
+    lines.push(`    Then install:`);
+    lines.push(`      crew install ${suggestion.installRef}`);
   }
   return lines.join("\n");
 }

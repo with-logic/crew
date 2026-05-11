@@ -47,11 +47,13 @@ describe("known-tap fallback for install misses", () => {
     const c = captureStreams();
     const code = runCli(["install", "schema-review"], { home, streams: c.streams });
     expect(code).toBe(4);
-    expect(c.stderr()).toContain("Known taps may have what you want");
+    expect(c.stderr()).toContain("Homecrew found possible matches in known taps");
+    expect(c.stderr()).toContain("Add the tap:");
     expect(c.stderr()).toContain(
-      "tap with: crew tap add https://github.com/example/supabase-skills supabase",
+      "crew tap add https://github.com/example/supabase-skills supabase",
     );
-    expect(c.stderr()).toContain("install with: crew install supabase/database/schema-review");
+    expect(c.stderr()).toContain("Then install:");
+    expect(c.stderr()).toContain("crew install supabase/database/schema-review");
     expect(readConfig(home).taps).toEqual([]);
   });
 
@@ -128,7 +130,7 @@ describe("known-tap fallback for install misses", () => {
     const c = captureStreams();
     const code = runCli(["install", "auth-audit@v1"], { home, streams: c.streams });
     expect(code).toBe(4);
-    expect(c.stderr()).toContain("install with: crew install supabase/auth-audit@v1");
+    expect(c.stderr()).toContain("crew install supabase/auth-audit@v1");
   });
 
   test("C-TAP-24 configured known taps are not suggested by name or source", () => {
@@ -139,7 +141,7 @@ describe("known-tap fallback for install misses", () => {
     );
     const named = captureStreams();
     runCli(["install", "schema-review"], { home: byName, streams: named.streams });
-    expect(named.stderr()).not.toContain("Known taps may have what you want");
+    expect(named.stderr()).not.toContain("Homecrew found possible matches in known taps");
 
     const bySource = homeWithKnownTaps();
     writeConfig(
@@ -148,7 +150,7 @@ describe("known-tap fallback for install misses", () => {
     );
     const sourced = captureStreams();
     runCli(["install", "schema-review"], { home: bySource, streams: sourced.streams });
-    expect(sourced.stderr()).not.toContain("Known taps may have what you want");
+    expect(sourced.stderr()).not.toContain("Homecrew found possible matches in known taps");
   });
 
   test("malformed install refs keep the original invalid_ref error", () => {
@@ -159,7 +161,7 @@ describe("known-tap fallback for install misses", () => {
       streams: c.streams,
     });
     expect(code).toBe(4);
-    expect(c.stderr()).not.toContain("Known taps may have what you want");
+    expect(c.stderr()).not.toContain("Homecrew found possible matches in known taps");
   });
 
   test("C-TAP-24 multi-ref install misses include matching known-tap suggestions", () => {
@@ -170,8 +172,8 @@ describe("known-tap fallback for install misses", () => {
       streams: c.streams,
     });
     expect(code).toBe(4);
-    expect(c.stderr()).toContain("Known taps may have what you want");
-    expect(c.stderr()).toContain("install with: crew install supabase/database/schema-review");
+    expect(c.stderr()).toContain("Homecrew found possible matches in known taps");
+    expect(c.stderr()).toContain("crew install supabase/database/schema-review");
   });
 });
 

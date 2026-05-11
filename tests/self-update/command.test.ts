@@ -156,7 +156,7 @@ describe("crew self-update (full upgrade)", () => {
     const cap = captureStreams();
     const code = runCli(["self-update", "--check"], { home, streams: cap.streams });
     expect(code).toBe(5);
-    expect(cap.stderr()).toContain("error:");
+    expect(cap.stderr()).toContain("Error");
   });
 });
 
@@ -194,7 +194,7 @@ describe("post-command update notice", () => {
       stderrIsTty: true,
     });
     expect(code).toBe(4);
-    expect(cap.stderr()).toContain("error:");
+    expect(cap.stderr()).toContain("Error");
     expect(cap.stderr()).toContain("A new version of Homecrew is available");
   });
 

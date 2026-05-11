@@ -137,7 +137,7 @@ describe("tap update + fetch policy", () => {
     const c = captureStreams();
     const code = runCli(["tap", "update", "no-such-tap"], { home, streams: c.streams });
     expect(code).toBe(4);
-    expect(c.stderr()).toContain("no tap named");
+    expect(c.stderr()).toContain("was not found in your list of taps");
   });
 
   test("`crew tap update` exits 1 when any tap fails", () => {

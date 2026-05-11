@@ -35,24 +35,24 @@ describe("known-tap install fallback with disambiguation flags", () => {
     const c = runWithKnownTaps(["install", "--tap", "schema-review"]);
     expect(c.code).toBe(4);
     expect(c.stderr).toContain("`schema-review` is not a tap");
-    expect(c.stderr).not.toContain("Known taps may have what you want");
+    expect(c.stderr).not.toContain("Homecrew found possible matches in known taps");
   });
 
   test("C-TAP-24 --skill does not suggest whole known taps", () => {
     const c = runWithKnownTaps(["install", "--skill", "supabase"]);
     expect(c.code).toBe(4);
     expect(c.stderr).toContain("`supabase` is not a skill");
-    expect(c.stderr).not.toContain("Known taps may have what you want");
+    expect(c.stderr).not.toContain("Homecrew found possible matches in known taps");
   });
 
   test("C-TAP-24 --bundle suppresses known skill and tap suggestions", () => {
     const skill = runWithKnownTaps(["install", "--bundle", "schema-review"]);
     expect(skill.code).toBe(4);
-    expect(skill.stderr).not.toContain("Known taps may have what you want");
+    expect(skill.stderr).not.toContain("Homecrew found possible matches in known taps");
 
     const tap = runWithKnownTaps(["install", "--bundle", "supabase"]);
     expect(tap.code).toBe(4);
-    expect(tap.stderr).not.toContain("Known taps may have what you want");
+    expect(tap.stderr).not.toContain("Homecrew found possible matches in known taps");
   });
 });
 
