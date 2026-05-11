@@ -19,6 +19,7 @@ import { tapHelp } from "./tap.ts";
 import { tapsHelp } from "./taps.ts";
 import type { CommandHelp } from "./types.ts";
 import { uninstallHelp } from "./uninstall.ts";
+import { untapHelp } from "./untap.ts";
 import { updateHelp } from "./update.ts";
 import { versionHelp } from "./version.ts";
 
@@ -35,7 +36,7 @@ export const GROUPS: readonly CommandGroup[] = [
     title: "Managing skills",
     commands: ["install", "uninstall", "update", "list", "skills", "info"],
   },
-  { title: "Discovery", commands: ["search", "tap", "taps"] },
+  { title: "Discovery", commands: ["search", "tap", "taps", "untap"] },
   { title: "Agents & automation", commands: ["agents", "autoupdate"] },
   { title: "Housekeeping", commands: ["doctor", "cache", "self-update"] },
   { title: "Meta", commands: ["help", "version"] },
@@ -51,6 +52,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
   search: searchHelp,
   tap: tapHelp,
   taps: tapsHelp,
+  untap: untapHelp,
   agents: agentsHelp,
   autoupdate: autoupdateHelp,
   doctor: doctorHelp,
@@ -71,6 +73,7 @@ export const ONELINERS: Record<string, string> = {
   search: "Look for a skill by name or description.",
   tap: "Manage the collections you install from.",
   taps: "Alias for `tap list`.",
+  untap: "Alias for `tap remove`.",
   agents: "See or adjust which agent coders Homecrew touches.",
   autoupdate: "Keep skills up to date in the background.",
   doctor: "Check Homecrew's health; fix what's fixable.",
