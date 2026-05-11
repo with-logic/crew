@@ -454,9 +454,9 @@ describe("commands/tap — deriveTapName fallback branches", () => {
   test("tap add on an unreachable ssh URL still derives a name and fails cleanly", () => {
     const home = makeCrewHome();
     // Exercises `deriveTapName`'s "no URL scheme" branch (ssh-style
-    // `git@host:owner/repo.git`). The clone itself fails because the
-    // host isn't reachable — we're not testing connectivity, just that
-    // the derive path runs to completion.
+    // `git@host:owner/repo.git`). Stub the clone so this never depends
+    // on DNS or SSH timeout behavior.
+    setGitRunner(() => ({ stdout: "", stderr: "network down", exitCode: 1 }));
     const c = captureStreams();
     const code = runCli(["tap", "add", "git@example.invalid:owner/repo.git"], {
       home,
@@ -509,6 +509,7 @@ describe("commands/update — branch coverage", () => {
     // Force an update even though nothing moved — the path source
     // triggers update's re-install path.
     writeFileSync(join(skill, "CHANGED.md"), "x");
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const code = runCli(["update"], { home, streams: captureStreams().streams });
     expect([0, 1]).toContain(code);
   });
@@ -532,6 +533,7 @@ describe("commands/update — branch coverage", () => {
     void entry;
     // Change the source so update re-stages.
     writeFileSync(join(skill, "NEW.md"), "x");
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
     expect([0, 1]).toContain(code);
@@ -747,6 +749,7 @@ describe("update — pinned-to-SHA entries are skipped", () => {
       home,
       streams: captureStreams().streams,
     });
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
     expect(code).toBe(0);
@@ -773,6 +776,7 @@ describe("update — skill renamed upstream is treated as source_gone", () => {
       makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
       commitAll(repo, "v1");
       runCli(["install", `file://${repo}//demo`], { home, streams: captureStreams().streams });
+      runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
       require("node:fs").writeFileSync(
         join(repo, "demo", "SKILL.md"),
         `---\nname: different-name\ndescription: renamed\n---\n`,
