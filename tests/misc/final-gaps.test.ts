@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
-import { uninstallSkillFromAgents } from "../../src/agents/install.ts";
+import { uninstallSkillFromAgents } from "../../src/agents/uninstall.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";

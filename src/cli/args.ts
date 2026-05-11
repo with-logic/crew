@@ -34,7 +34,8 @@ const STRING_GLOBALS = ["scope", "from-git"] as const;
 /** Subcommand-specific boolean flags. */
 const BOOLEAN_SUB: Record<string, readonly string[]> = {
   doctor: ["verify", "repair"],
-  install: ["tap", "bundle", "skill"],
+  install: ["tap", "bundle", "skill", "recursive"],
+  tap: ["recursive"],
   uninstall: ["prune"],
   "self-update": ["check"],
 };

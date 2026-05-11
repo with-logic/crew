@@ -29,6 +29,11 @@ export const installHelp: CommandHelp = {
       description:
         "Overwrite a skill you've edited locally, or a folder Homecrew didn't create. Won't push through a real name conflict or a broken skill — those errors deserve your attention.",
     },
+    {
+      flag: "--recursive",
+      description:
+        "For direct git/path sources, fall back to bounded recursive discovery when standard tap layouts find no skills.",
+    },
     { flag: "--json", description: "Machine-readable output." },
   ],
   examples: [
@@ -39,6 +44,10 @@ export const installHelp: CommandHelp = {
     {
       command: "crew install @with-logic/skills",
       description: "Install every skill in a GitHub repo; new ones show up on `crew update`.",
+    },
+    {
+      command: "crew install --recursive @acme/monorepo",
+      description: "Install skills nested inside a trusted non-standard repository.",
     },
     {
       command: "crew install team-skills",

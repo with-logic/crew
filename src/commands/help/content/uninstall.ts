@@ -5,6 +5,7 @@ export const uninstallHelp: CommandHelp = {
   synopsis: "crew uninstall <name> [<name>...]",
   summary: [
     "Remove an installed skill from every agent on your machine.",
+    "You can name the installed skill directly (`pdf`) or use a tap-qualified name like `anthropic/pdf`.",
     "Homecrew only touches skills it installed — anything else in your agents' skills folders is left alone.",
     "If the skill pulled in dependencies, those stick around by default in case you want them. Pass `--prune` to also clean up anything that's now unused, like `apt autoremove`.",
   ],
@@ -32,6 +33,10 @@ export const uninstallHelp: CommandHelp = {
     {
       command: "crew uninstall python-testing",
       description: "Remove the skill from every agent it's in.",
+    },
+    {
+      command: "crew uninstall core/python-testing",
+      description: "Remove the installed skill using its tap-qualified name.",
     },
     {
       command: "crew uninstall --agent codex python-testing",

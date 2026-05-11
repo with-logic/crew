@@ -8,8 +8,16 @@ export interface KnownTapSourceParts {
 }
 
 export function knownTapSource(tap: KnownTapSourceParts): string {
-  if (tap.subpath === "") {
-    return tap.url;
+  const url = displayUrl(tap.url);
+  if (tap.subpath === "" || tap.subpath === "skills") {
+    return url;
   }
-  return `${tap.url}//${tap.subpath}`;
+  return `${url}//${tap.subpath}`;
+}
+
+function displayUrl(url: string): string {
+  if (!url.startsWith("https://github.com/")) {
+    return url;
+  }
+  return url.endsWith(".git") ? url.slice(0, -4) : url;
 }

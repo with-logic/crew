@@ -1,0 +1,81 @@
+.catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.searchLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--mute);
+  font: 12px var(--font-mono);
+}
+
+.search {
+  width: 100%;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--ink);
+  font: 500 15px var(--font-sans);
+  padding: 12px 14px;
+}
+
+.search:focus {
+  border-color: var(--accent);
+  outline: 2px solid color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.toc {
+  position: sticky;
+  top: 84px;
+  align-self: start;
+  display: flex;
+  max-height: calc(100vh - 120px);
+  flex-direction: column;
+  gap: 2px;
+  overflow: auto;
+  font: 12px var(--font-mono);
+}
+
+.toc a {
+  border-left: 2px solid transparent;
+  color: var(--mute);
+  padding: 5px 0 5px 9px;
+}
+
+.toc a:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.empty {
+  padding: 24px 0;
+  color: var(--mute);
+  font: 13px var(--font-mono);
+}
+
+@media (max-width: 1050px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .toc {
+    display: none;
+  }
+}

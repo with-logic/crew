@@ -17,12 +17,11 @@
  * their `resolvedSha` is null.
  */
 
-import { join } from "node:path";
 import type { CrewError } from "../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
-import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
-import { isDirectory, listDir } from "../util/fs.ts";
+import { isDirectory } from "../util/fs.ts";
+import { currentTapChildren, groupChildrenByName } from "./tap-children.ts";
 
 /** One re-expansion outcome row. */
 export interface TapReexpandRow {
@@ -47,6 +46,8 @@ export type InstallNewChild = (args: {
 
 export interface TapReexpandResult {
   readonly added: readonly StateEntry[];
+  readonly updated: readonly StateEntry[];
+  readonly hardFailure: boolean;
   readonly sourceGone: ReadonlySet<string>;
   readonly rows: readonly TapReexpandRow[];
 }
@@ -59,8 +60,10 @@ export function reexpandTaps(
   installOne: InstallNewChild,
 ): TapReexpandResult {
   const added: StateEntry[] = [];
+  const updated: StateEntry[] = [];
   const sourceGone = new Set<string>();
   const rows: TapReexpandRow[] = [];
+  let hardFailure = false;
 
   // Group state entries by (tap-name, scope, project_root). Entries
   // sharing all three are managed together: same tap clone, same
@@ -118,55 +121,50 @@ export function reexpandTaps(
       continue;
     }
 
-    // Walk tap root: either it IS a single skill (root SKILL.md) or
-    // it contains skill subdirectories.
-    const childNames = new Set<string>();
-    const childByName = new Map<string, string>(); // name → dir
-    if (isDirectory(acquired.rootDir)) {
-      if (hasSkillMd(acquired.rootDir)) {
-        // Tap root is itself a skill: the tap holds exactly one.
-        // Its `tapRelativePath` is "".
-        try {
-          const skill = loadSkill(acquired.rootDir);
-          childNames.add(skill.frontmatter.name);
-          childByName.set(skill.frontmatter.name, acquired.rootDir);
-        } catch {
-          // Skip; treated as if the skill disappeared.
-        }
-      } else {
-        for (const entryName of listDir(acquired.rootDir)) {
-          const dir = join(acquired.rootDir, entryName);
-          if (!(isDirectory(dir) && hasSkillMd(dir))) continue;
-          try {
-            const skill = loadSkill(dir);
-            childNames.add(skill.frontmatter.name);
-            childByName.set(skill.frontmatter.name, dir);
-          } catch {
-            // Skip invalid SKILL.md; same as search/install behavior.
-          }
-        }
-      }
+    const children = currentTapChildren(tap, home, acquired.rootDir);
+    const childrenByName = groupChildrenByName(children);
+    const conflictedNames = new Set<string>();
+    for (const [name, locs] of childrenByName) {
+      if (locs.length < 2) continue;
+      conflictedNames.add(name);
+      hardFailure = true;
+      rows.push({
+        name,
+        scope: first.scope,
+        tap: tap.name,
+        kind: "tap_error",
+        error: {
+          code: "conflicting_dependencies",
+          message: `\`${name}\` appears multiple times in tap \`${tap.name}\` at ${locs.map((loc) => loc.tapRelativePath || "(root)").join(", ")}`,
+        },
+      });
     }
 
     // SOURCE_GONE: members no longer present upstream.
     for (const m of members) {
-      if (!childNames.has(m.name)) {
+      if (conflictedNames.has(m.name)) continue;
+      const locs = childrenByName.get(m.name);
+      const child = locs?.[0];
+      if (!child) {
         sourceGone.add(m.name);
         rows.push({ name: m.name, scope: m.scope, tap: tap.name, kind: "source_gone" });
+        continue;
+      }
+      if (child.tapRelativePath !== m.source.path) {
+        updated.push({ ...m, source: { ...m.source, path: child.tapRelativePath } });
       }
     }
 
     // ADDITIONS: children upstream not in state.
     const memberNames = new Set(members.map((m) => m.name));
     const aggregateTargets = [...new Set(members.flatMap((m) => m.agents))];
-    for (const childName of childNames) {
-      if (memberNames.has(childName)) continue;
-      const skillDir = childByName.get(childName)!;
-      const tapRelativePath = childName;
+    for (const child of children) {
+      if (conflictedNames.has(child.name)) continue;
+      if (memberNames.has(child.name)) continue;
       const entry = installOne({
-        skillDir,
-        skillName: childName,
-        tapRelativePath,
+        skillDir: child.path,
+        skillName: child.name,
+        tapRelativePath: child.tapRelativePath,
         scope: first.scope,
         tap,
         agents: aggregateTargets,
@@ -175,10 +173,10 @@ export function reexpandTaps(
       });
       if (entry) {
         added.push(entry);
-        rows.push({ name: childName, scope: first.scope, tap: tap.name, kind: "added" });
+        rows.push({ name: child.name, scope: first.scope, tap: tap.name, kind: "added" });
       }
     }
   }
 
-  return { added, sourceGone, rows };
+  return { added, updated, hardFailure, sourceGone, rows };
 }

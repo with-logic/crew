@@ -13,14 +13,15 @@ import { baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import type { StateEntry } from "../../core/types.ts";
-import { findTapForBareName } from "../../install/attribute-bare-name.ts";
+import type { LoadedSkill, StateEntry, TapConfig } from "../../core/types.ts";
+import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { attributeRef } from "../../install/tap-attribution.ts";
-import { NAME_PATTERN, parseRef } from "../../refs/parse.ts";
+import { parseRef } from "../../refs/parse.ts";
 import { hasSkillMd, loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
 import { expandSkills } from "../../sources/expand.ts";
 import { readState } from "../../state/load.ts";
+import { resolveStateSubject } from "../../state/subjects.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import type { InstalledInfo, SkillInfo } from "./render.ts";
 import { renderInstalled, renderSkills } from "./render.ts";
@@ -34,48 +35,34 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   }
   const arg = ctx.positional[0]!;
 
-  // Bare names try state first — show the user what they have, with
-  // a real description pulled from the installed SKILL.md. A skill
-  // can be installed in multiple places (user + several projects);
-  // gather them all so info reflects the full picture.
   const state = readState(ctx.home);
-  const isBareName = NAME_PATTERN.test(arg);
-  const matches = isBareName ? state.installations.filter((e) => e.name === arg) : [];
-  if (matches.length > 0) {
-    const installed = buildInstalledInfo(matches, ctx.cwd);
+  const subject = resolveStateSubject(state, arg);
+  if (subject.entries.length > 0) {
+    const installed = buildInstalledInfo(subject.entries, ctx.cwd);
     return {
       exitCode: 0,
       human: renderInstalled(installed, ctx.style, ctx.width),
       json: {
         installed: installed.primary,
-        entries: matches,
+        entries: subject.entries,
         description: installed.description,
       },
     };
   }
 
-  // Fall through to resolving the ref and walking its source.
   const config = readConfig(ctx.home);
   const source = parseRef(arg, ctx.cwd);
-  const { tap, dir } = (() => {
+  const { tap, skills } = (() => {
     if (source.type === "tap" && source.tap === null) {
       const namedTap = config.taps.find((t) => t.name === source.name);
       if (namedTap) {
         const acq = acquireTap(namedTap, ctx.home);
-        return { tap: namedTap, dir: acq.rootDir };
+        return { tap: namedTap, skills: buildSkillInfos(acq.rootDir, namedTap) };
       }
-      const owning = findTapForBareName(source.name, config, ctx.home);
-      const acq = acquireTap(owning, ctx.home);
-      return { tap: owning, dir: join(acq.rootDir, source.name) };
+      return candidateSkills(resolveTapRef(source, config, ctx.home, "non-tap"));
     }
     if (source.type === "tap") {
-      const t = config.taps.find((c) => c.name === source.tap);
-      if (!t)
-        throw new CrewError("invalid_ref", `no tap named \`${source.tap}\` is configured`, {
-          tap: source.tap,
-        });
-      const acq = acquireTap(t, ctx.home);
-      return { tap: t, dir: join(acq.rootDir, source.name) };
+      return candidateSkills(resolveTapRef(source, config, ctx.home, "non-tap"));
     }
     const matched = config.taps.find((t) => {
       if (source.type === "git")
@@ -84,27 +71,30 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
     });
     if (matched) {
       const acq = acquireTap(matched, ctx.home);
-      return { tap: matched, dir: acq.rootDir };
+      return { tap: matched, skills: buildSkillInfos(acq.rootDir, matched) };
     }
     const attrib = attributeRef(source, config);
     const acq = acquireTap(attrib.tap, ctx.home);
-    return { tap: attrib.tap, dir: acq.rootDir };
+    return { tap: attrib.tap, skills: buildSkillInfos(acq.rootDir, attrib.tap) };
   })();
 
-  const skillInfos = buildSkillInfos(dir);
   return {
     exitCode: 0,
-    human: renderSkills(skillInfos, tap, ctx.style, ctx.width),
-    json: { skills: skillInfos },
+    human: renderSkills(skills, tap, ctx.style, ctx.width),
+    json: { skills },
   };
 }
 
-/**
- * Gather all state entries that match a skill name and enrich with a
- * description pulled from any installed SKILL.md. The "primary" entry
- * is the user-scope install when present, otherwise the first project
- * install; it drives the top-level metadata block.
- */
+function candidateSkills(candidate: NonTapNameCandidate): {
+  tap: TapConfig;
+  skills: SkillInfo[];
+} {
+  if (candidate.kind === "skill") {
+    return { tap: candidate.tap, skills: buildSkillInfosFromDirs([candidate.location]) };
+  }
+  return { tap: candidate.tap, skills: buildSkillInfosFromDirs(candidate.members) };
+}
+
 function buildInstalledInfo(entries: readonly StateEntry[], fallbackCwd: string): InstalledInfo {
   const primary = entries.find((e) => e.scope === "user") ?? entries[0]!;
   const description = loadDescriptionFromAny(entries, fallbackCwd);
@@ -134,20 +124,22 @@ function loadDescriptionFromAny(
   return null;
 }
 
-/**
- * Walk a source directory and gather SkillInfo per skill we find.
- * `expandSkills` returns `{ valid, skipped }`; `info` is a
- * read-only "show me what's valid here" command, so skipped skills
- * are deliberately dropped. `crew install` surfaces those (§9 step 9).
- */
-function buildSkillInfos(dir: string): SkillInfo[] {
-  const { valid } = expandSkills(dir);
-  return valid.map((s) => ({
+function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
+  const { valid } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
+  return valid.map(skillInfoOf);
+}
+
+function buildSkillInfosFromDirs(dirs: readonly { readonly path: string }[]): SkillInfo[] {
+  return dirs.map((dir) => skillInfoOf(loadSkill(dir.path)));
+}
+
+function skillInfoOf(s: LoadedSkill): SkillInfo {
+  return {
     name: s.frontmatter.name,
     description: s.frontmatter.description,
     license: s.frontmatter.license ?? null,
     compatibility: s.frontmatter.compatibility ?? null,
     homepage: s.frontmatter.metadata?.crew?.homepage ?? null,
     dependencies: s.frontmatter.metadata?.crew?.dependencies ?? [],
-  }));
+  };
 }

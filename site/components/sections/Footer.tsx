@@ -10,18 +10,19 @@ const COLUMNS: readonly {
   {
     title: "Product",
     links: [
-      { href: "#how", label: "How it works" },
-      { href: "#commands", label: "Commands" },
-      { href: "#safety", label: "Safety" },
-      { href: "#install", label: "Install" },
+      { href: "/#how", label: "How it works" },
+      { href: "/#commands", label: "Commands" },
+      { href: "/#safety", label: "Safety" },
+      { href: "/skills", label: "Skill catalog" },
+      { href: "/#install", label: "Install" },
     ],
   },
   {
     title: "Resources",
     links: [
       { href: "https://agentskills.io/specification", label: "agent skills spec" },
-      { href: "#skill-md", label: "SKILL.md anatomy" },
-      { href: "#faq", label: "FAQ" },
+      { href: "/#skill-md", label: "SKILL.md anatomy" },
+      { href: "/#faq", label: "FAQ" },
     ],
   },
   {
@@ -47,7 +48,7 @@ export function Footer() {
             <Brand />
             <p className={styles.lede}>
               A macOS package manager for agent skills. Install once, share through git, keep every
-              agent current.
+              agent current. An open-source project by <a href="https://logic.inc">Logic, Inc</a>.
             </p>
           </div>
           {COLUMNS.map((c) => (
@@ -65,7 +66,9 @@ export function Footer() {
         </div>
         <div className={styles.bot}>
           <span>Homecrew · {CREW_VERSION_TAG} · macOS (arm64, x86_64)</span>
-          <span>© {new Date().getFullYear()} Logic App, Inc.</span>
+          <span>
+            © {new Date().getFullYear()} <a href="https://logic.inc">Logic App, Inc.</a>
+          </span>
           <span>$ crew help</span>
         </div>
       </Container>

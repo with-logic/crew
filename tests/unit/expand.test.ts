@@ -64,6 +64,15 @@ describe("expandSkills", () => {
     expect(names).toEqual(["one", "two"]);
   });
 
+  test("expanded skill names come from SKILL.md, not directory names", () => {
+    const root = makeTempDir("expand-declared-name-");
+    makeSkill(root, "source-folder", skillFrontmatter({ name: "declared-name" }));
+
+    const skills = expandSkills(root).valid;
+    expect(skills[0]!.frontmatter.name).toBe("declared-name");
+    expect(skills[0]!.path).toBe(join(root, "source-folder"));
+  });
+
   test("skipping non-directory children in the walk", () => {
     // Exercises the `!isDirectory(candidate)` branch of the collector.
     const root = makeTempDir("expand-skip-");
@@ -136,5 +145,40 @@ describe("expandSkills", () => {
       .valid.map((s) => s.frontmatter.name)
       .sort();
     expect(names).toEqual(["real"]);
+  });
+
+  test("recursive fallback finds nested skills only when standard layout has no candidates", () => {
+    const root = makeTempDir("expand-recursive-");
+    const nested = join(root, "vendor-team", "workflows");
+    mkdirSync(nested, { recursive: true });
+    makeSkill(nested, "deep-skill", skillFrontmatter({ name: "deep-skill" }));
+
+    expect(() => expandSkills(root)).toThrow(/no valid skills found/);
+
+    const names = expandSkills(root, { recursive: true }).valid.map((s) => s.frontmatter.name);
+    expect(names).toEqual(["deep-skill"]);
+  });
+
+  test("recursive fallback skips hidden and vendor directories", () => {
+    const root = makeTempDir("expand-recursive-skip-");
+    const source = join(root, "source-tree");
+    mkdirSync(join(source, ".hidden"), { recursive: true });
+    mkdirSync(join(source, "node_modules"), { recursive: true });
+    writeFileSync(
+      join(source, ".hidden", "SKILL.md"),
+      `---\n${skillFrontmatter({ name: "hidden-root" })}\n---\n`,
+    );
+    writeFileSync(
+      join(source, "node_modules", "SKILL.md"),
+      `---\n${skillFrontmatter({ name: "package-root" })}\n---\n`,
+    );
+    makeSkill(join(source, ".hidden"), "hidden-skill", skillFrontmatter({ name: "hidden-skill" }));
+    makeSkill(
+      join(source, "node_modules"),
+      "package-skill",
+      skillFrontmatter({ name: "package-skill" }),
+    );
+
+    expect(() => expandSkills(root, { recursive: true })).toThrow(/no valid skills found/);
   });
 });

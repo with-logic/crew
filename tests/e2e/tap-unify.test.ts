@@ -417,6 +417,12 @@ describe("C-TAP-20 auto-tap creation on `crew install <git-url>`", () => {
     expect(state.installations[0]!.source.tap).toBe(auto!.name);
   });
 
+  test("auto-tap derivation preserves leading digits", () => {
+    const { deriveAutoTapName } =
+      require("../../src/install/tap-naming.ts") as typeof import("../../src/install/tap-naming.ts");
+    expect(deriveAutoTapName("gh:foo/3d-skills", "")).toBe("3d-skills");
+  });
+
   test("auto-tap suffix keeps incrementing past -2 when multiple names are taken", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo("crew-triple-", ["x"]);
@@ -550,6 +556,31 @@ describe("C-TAP-22 auto→registered promotion", () => {
     // The state entry's source.tap was rewritten to the new name.
     const state = readState(home);
     expect(state.installations[0]!.source.tap).toBe("teamtap");
+  });
+
+  test("`crew tap add --recursive <same-url>` promotes and upgrades an auto tap", () => {
+    const home = makeCrewHome();
+    const repo = buildTapRepo("crew-promote-recursive-", ["widget"]);
+    runCli(["install", `file://${repo}`], {
+      home,
+      streams: captureStreams().streams,
+      prompt: alwaysYes,
+    });
+    const before = readConfig(home);
+    const auto = before.taps.find((t) => t.kind === "git" && t.url === `file://${repo}`)!;
+    expect(auto.registered).toBe(false);
+    expect(auto.discovery).toBeUndefined();
+
+    const code = runCli(["tap", "add", "--recursive", `file://${repo}`, "teamtap"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(code).toBe(0);
+    const tap = readConfig(home).taps.find((t) => t.kind === "git" && t.url === `file://${repo}`)!;
+    expect(tap.name).toBe("teamtap");
+    expect(tap.registered).toBe(true);
+    expect(tap.discovery).toBe("recursive");
+    expect(readState(home).installations[0]!.source.tap).toBe("teamtap");
   });
 
   test("promotion rewrites markers for project-scope installs too", () => {

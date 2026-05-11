@@ -20,15 +20,20 @@ function pathTap(path: string, name = "t"): TapConfig {
   };
 }
 
+function recursivePathTap(path: string): TapConfig {
+  return { ...pathTap(path), discovery: "recursive" };
+}
+
 describe("indexTap", () => {
-  test("single-skill root: returns empty index (whole-tap shape)", () => {
+  test("single-skill root: indexes declared skill name", () => {
     const tmp = makeTempDir("ti-root-");
     writeFileSync(
       join(tmp, "SKILL.md"),
-      `---\n${skillFrontmatter({ name: tmp.split("/").pop() ?? "x" })}\n---\n`,
+      `---\n${skillFrontmatter({ name: "declared-root" })}\n---\n`,
     );
     const idx = indexTap(pathTap(tmp), "/unused");
-    expect(idx.skills.size).toBe(0);
+    expect([...idx.skills.keys()]).toEqual(["declared-root"]);
+    expect(idx.skills.get("declared-root")![0]!.tapRelativePath).toBe("");
     expect(idx.namespaces.size).toBe(0);
   });
 
@@ -43,6 +48,35 @@ describe("indexTap", () => {
     expect([...idx.skills.keys()].sort()).toEqual(["alpha", "beta"]);
     expect(idx.namespaces.size).toBe(0);
     expect(idx.skills.get("alpha")![0]!.tapRelativePath).toBe("skills/alpha");
+  });
+
+  test("skills/ flat: index uses declared skill names, not directory names", () => {
+    const root = makeTempDir("ti-declared-name-");
+    const skillsDir = join(root, "skills");
+    mkdirSync(skillsDir);
+    makeSkill(
+      skillsDir,
+      "firebase-data-connect-basics",
+      skillFrontmatter({ name: "firebase-data-connect" }),
+    );
+    makeSkill(skillsDir, "numeric", skillFrontmatter({ name: "3-statement-model" }));
+
+    const idx = indexTap(pathTap(root), "/unused");
+    expect([...idx.skills.keys()].sort()).toEqual(["3-statement-model", "firebase-data-connect"]);
+    expect(idx.skills.get("firebase-data-connect")![0]!.tapRelativePath).toBe(
+      "skills/firebase-data-connect-basics",
+    );
+  });
+
+  test("skills/ flat: invalid child frontmatter is skipped", () => {
+    const root = makeTempDir("ti-invalid-name-");
+    const skillsDir = join(root, "skills");
+    mkdirSync(skillsDir);
+    makeSkill(skillsDir, "bad", skillFrontmatter({ name: "Bad" }));
+    makeSkill(skillsDir, "good", skillFrontmatter({ name: "good" }));
+
+    const idx = indexTap(pathTap(root), "/unused");
+    expect([...idx.skills.keys()]).toEqual(["good"]);
   });
 
   test("skills/ with namespace dir: skill + namespace indexed", () => {
@@ -129,5 +163,17 @@ describe("indexTap", () => {
     const idx = indexTap(pathTap(root), "/unused");
     expect(idx.skills.get("copy-review")!.length).toBe(2);
     expect([...idx.namespaces.keys()].sort()).toEqual(["engineering", "marketing"]);
+  });
+
+  test("recursive tap indexes nested skills when standard layouts expose none", () => {
+    const root = makeTempDir("ti-recursive-");
+    const nested = join(root, "products", "firebase");
+    mkdirSync(nested, { recursive: true });
+    makeSkill(nested, "data-connect", skillFrontmatter({ name: "data-connect" }));
+
+    const idx = indexTap(recursivePathTap(root), "/unused");
+    const loc = idx.skills.get("data-connect")![0]!;
+    expect(loc.namespace).toBeNull();
+    expect(loc.tapRelativePath).toBe("products/firebase/data-connect");
   });
 });

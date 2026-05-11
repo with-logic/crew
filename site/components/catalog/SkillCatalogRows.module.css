@@ -1,0 +1,120 @@
+.tap {
+  scroll-margin-top: 88px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 22px;
+}
+
+.tapMain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 36%);
+  gap: 28px;
+  align-items: start;
+}
+
+.tapTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tap h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.tap p {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: var(--ink-2);
+}
+
+.badge {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--accent-ink);
+  font: 11px var(--font-mono);
+  padding: 3px 7px;
+}
+
+.actions {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.actions a {
+  align-self: flex-end;
+  color: var(--mute);
+  font-size: 13px;
+}
+
+.tapButtons {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.skillHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.skills {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.skill {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 9px;
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
+  min-width: 0;
+}
+
+.skill code {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.skill span {
+  display: block;
+  color: var(--mute);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.expand {
+  color: var(--mute);
+  font: 11px var(--font-mono);
+  margin-left: 6px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.noSkills {
+  color: var(--mute);
+  font: 13px var(--font-mono);
+}
+
+@media (max-width: 1050px) {
+  .tapMain,
+  .skills {
+    grid-template-columns: 1fr;
+  }
+}

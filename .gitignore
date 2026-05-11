@@ -13,3 +13,6 @@ bun.lockb
 # Local release-signing private key. The public key is committed in
 # release/signing-public-key.pem and embedded into release assets from there.
 .crew-release-signing-key.pem
+
+# Temporary clones used while building the bundled known-tap registry.
+.crew-known-taps-work/

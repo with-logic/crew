@@ -18,15 +18,15 @@ export const GROUPS: readonly CommandGroup[] = [
       {
         name: "uninstall",
         signature: <>crew uninstall &lt;name&gt;…</>,
-        description: "Remove installed skills from every agent they were installed into.",
+        description: "Remove installed skills from every agent. Bare and tap-qualified names work.",
       },
       {
         name: "update",
         signature: <>crew update [&lt;name&gt;…]</>,
         description: (
           <>
-            Update all installed skills, or only those named. Pinned SHAs are skipped unless{" "}
-            <span className={styles.flag}>--force</span>.
+            Update all installed skills, or only those named. Names can be bare or tap-qualified.
+            Pinned SHAs are skipped unless <span className={styles.flag}>--force</span>.
           </>
         ),
       },
@@ -43,7 +43,7 @@ export const GROUPS: readonly CommandGroup[] = [
       {
         name: "info",
         signature: <>crew info &lt;ref-or-name&gt;</>,
-        description: "Show details for an installed skill or one available in a tap.",
+        description: "Show installed details or preview a tap skill. Tap-qualified names work.",
       },
     ],
   },
@@ -64,10 +64,11 @@ export const GROUPS: readonly CommandGroup[] = [
       },
       {
         name: "tap-add",
-        signature: <>crew tap add &lt;git-url&gt; [name]</>,
+        signature: <>crew tap add [--recursive] &lt;url-or-path&gt; [name]</>,
         description: (
           <>
-            Clone a registry into <code>~/.crew/taps/</code>. Name defaults to the repo name.
+            Add a registry from a git source or local folder. Name defaults to the repo/path name.
+            Recursive discovery is opt-in for trusted non-standard layouts.
           </>
         ),
       },
@@ -79,7 +80,8 @@ export const GROUPS: readonly CommandGroup[] = [
       {
         name: "tap-list",
         signature: <>crew tap list</>,
-        description: "Print each tap's name, URL, and last-fetched timestamp.",
+        description:
+          "Print each tap's name, kind/status, source target, recursive discovery marker when set, and last-fetched timestamp for git taps.",
       },
       {
         name: "taps",
