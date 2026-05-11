@@ -8,8 +8,8 @@
  */
 
 import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
-import { uninstallSkillFromAgents } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
+import { uninstallSkillFromAgents } from "../../agents/uninstall.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
 import type { CommandContext } from "../types.ts";

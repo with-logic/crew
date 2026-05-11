@@ -138,5 +138,3 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
 function mergeAdapters(a: readonly string[], b: readonly string[]): string[] {
   return [...new Set([...a, ...b])].sort();
 }
-
-export { uninstallSkillFromAgents } from "./uninstall.ts";

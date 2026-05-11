@@ -80,7 +80,8 @@ export const GROUPS: readonly CommandGroup[] = [
       {
         name: "tap-list",
         signature: <>crew tap list</>,
-        description: "Print each tap's name, URL, and last-fetched timestamp.",
+        description:
+          "Print each tap's name, kind/status, source target, recursive discovery marker when set, and last-fetched timestamp for git taps.",
       },
       {
         name: "taps",

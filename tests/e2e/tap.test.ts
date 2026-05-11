@@ -549,6 +549,21 @@ describe("crew tap", () => {
     expect(capture.stdout()).toContain("budget-review");
   });
 
+  test("info prefers a bare tap-name match over same-named skills in other taps", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const tapDir = makeTempDir("crew-info-tap-name-");
+    makeSkill(tapDir, "inner", skillFrontmatter({ name: "inner" }));
+    const helperDir = makeTempDir("crew-info-skill-name-");
+    makeSkill(helperDir, "team", skillFrontmatter({ name: "team" }));
+    runCli(["tap", "add", tapDir, "team"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", helperDir, "helpers"], { home, streams: captureStreams().streams });
+
+    const capture = captureStreams();
+    expect(runCli(["info", "team"], { home, streams: capture.streams })).toBe(0);
+    expect(capture.stdout()).toContain("inner");
+  });
+
   test("tap add --recursive upgrades an existing registered tap", () => {
     const home = makeCrewHome();
     const dir = makeTempDir("crew-recursive-upgrade-");
