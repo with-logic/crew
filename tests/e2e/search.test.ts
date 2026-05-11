@@ -490,7 +490,7 @@ describe("crew search output", () => {
     runCli(["search", "shared"], { home, streams: human.streams, width: 120 });
     expect(human.stdout()).not.toContain("✓ shared");
     expect(human.stdout()).toContain("! shared");
-    expect(human.stdout()).toContain("same name installed from another source");
+    expect(human.stdout()).toContain("same name installed elsewhere");
     const conflict = runCli(["install", "newtap/shared"], {
       home,
       streams: captureStreams().streams,

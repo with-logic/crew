@@ -7,6 +7,8 @@ import type { Styler } from "../../util/term.ts";
 import { knownInstallRef, knownSkillRef, knownTapSource } from "./known.ts";
 import type { KnownSearchHit, SearchHit } from "./types.ts";
 
+const SAME_NAME_NOTE = "same name installed elsewhere";
+
 export function formatSearchResults(
   hits: readonly SearchHit[],
   knownHits: readonly KnownSearchHit[],
@@ -92,13 +94,17 @@ function formatConfiguredRows(hits: readonly SearchHit[], style: Styler, width: 
   const descBudget = Math.max(20, width - descStart);
   const rows = hits.map((h) => {
     const mark = searchHitMark(h, style);
-    const rawDesc = h.same_name_installed
-      ? `${h.description} (same name installed from another source)`
-      : h.description;
-    const desc = style.dim(truncate(rawDesc, descBudget));
+    const desc = style.dim(formatSearchDescription(h, descBudget));
     return [`  ${mark} ${displayName(h)}`, desc];
   });
   return columns(rows, 2);
+}
+
+function formatSearchDescription(hit: SearchHit, descBudget: number): string {
+  if (!hit.same_name_installed) return truncate(hit.description, descBudget);
+  const budget = Math.max(SAME_NAME_NOTE.length, descBudget);
+  const suffix = hit.description.length === 0 ? "" : ` — ${hit.description}`;
+  return truncate(`${SAME_NAME_NOTE}${suffix}`, budget);
 }
 
 function searchHitMark(hit: SearchHit, style: Styler): string {

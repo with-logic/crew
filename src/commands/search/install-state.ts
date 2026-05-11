@@ -4,7 +4,7 @@
 
 import type { StateFile, StateSource } from "../../core/types.ts";
 
-export interface SearchInstallStatus {
+interface SearchInstallStatus {
   readonly installed: boolean;
   readonly same_name_installed: boolean;
 }
