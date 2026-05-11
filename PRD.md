@@ -1717,10 +1717,10 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-04 | §16.3 | `crew tap list` reports every configured tap with name, URL, and last-fetched timestamp. |
 | C-TAP-05 | §16.2 | The default tap named `core` is present on first run. |
 | C-TAP-06 | §16.2 | `crew tap remove core` is refused without `--force`. |
-| C-TAP-07 | §16.4 | `crew search <skill>` matches case-insensitively against `name` and `description` across every tap. |
-| C-TAP-08 | §16.4 | `crew search --json` emits a structured array of matches. Each hit includes `installed: boolean`, `same_name_installed: boolean`, and `namespace: string \| null` fields. |
-| C-TAP-08b | §16.4 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
-| C-TAP-08c | §16.4 | A same-name skill from a different tap/path is not marked installed in `crew search`; JSON reports `installed: false` and `same_name_installed: true`. |
+| C-TAP-07 | §16.6 | `crew search <skill>` matches case-insensitively against `name` and `description` across every tap. |
+| C-TAP-08 | §16.6 | `crew search --json` emits a structured array of matches. Each hit includes `installed: boolean`, `same_name_installed: boolean`, and `namespace: string \| null` fields. |
+| C-TAP-08b | §16.6 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
+| C-TAP-08c | §16.6 | A same-name skill from a different tap/path is not marked installed in `crew search`; JSON reports `installed: false` and `same_name_installed: true`. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
 | C-TAP-12 | §16.3 | `crew tap add <url>//<subpath>` configures a tap rooted at `<subpath>` inside the repo. Skills at the top level of `<subpath>` are installable by bare name, just like a root tap. |
