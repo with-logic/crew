@@ -16,8 +16,8 @@
 #   2. Compute next version from package.json + bump kind.
 #   3. Call `claude -p` once with a JSON schema to get
 #      { pr_body, changelog } for commits since the last tag.
-#   4. Update package.json and CHANGELOG.md on a fresh
-#      release/vX.Y.Z branch.
+#   4. Update package.json, CHANGELOG.md, and generated release
+#      artifacts on a fresh release/vX.Y.Z branch.
 #   5. `gh pr create` with the generated PR body.
 #
 # Merging the PR triggers the release-tag workflow, which tags the
@@ -278,6 +278,14 @@ if [ -d site/public ]; then
 JSON
 fi
 
+# Refresh the bundled known-tap registry snapshot from the reviewed,
+# commit-pinned manifest. This deliberately does not advance pins from
+# trackingRef; pin refreshes must happen in ordinary reviewed PRs.
+if [ -f known-taps/manifest.json ]; then
+  echo "==> Regenerating known-tap registry"
+  bun run known-taps build
+fi
+
 # Write/update CHANGELOG.md. If it doesn't exist, create a header
 # first; then prepend the new section below the header.
 if [ ! -f CHANGELOG.md ]; then
@@ -323,6 +331,7 @@ git add package.json CHANGELOG.md
 [ -f src/core/version.ts ] && git add src/core/version.ts
 [ -f PRD.md ] && git add PRD.md
 [ -f site/public/latest-version.json ] && git add site/public/latest-version.json
+[ -f src/known-taps/generated.ts ] && git add src/known-taps/generated.ts
 git commit -q -m "Release ${next_tag}"
 
 echo "==> Pushing branch"
