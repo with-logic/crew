@@ -3,19 +3,20 @@
  */
 
 import type { TapConfig } from "../../core/types.ts";
-import { indexTap } from "../../install/tap-index.ts";
+import { indexTap, type SkillLocation } from "../../install/tap-index.ts";
 import { loadSkill } from "../../skill/load.ts";
+import { type SearchInstallIndex, searchInstallStatus } from "./install-state.ts";
 import type { ConfiguredSearchResult, SearchHit } from "./types.ts";
 
 export function collectConfiguredHits(
   taps: readonly TapConfig[],
   query: string,
-  installedNames: ReadonlySet<string>,
+  installIndex: SearchInstallIndex,
   home: string,
 ): ConfiguredSearchResult {
   const hits: SearchHit[] = [];
   const warnings: string[] = [];
-  for (const tap of taps) collectHitsFromTap(tap, query, installedNames, home, hits, warnings);
+  for (const tap of taps) collectHitsFromTap(tap, query, installIndex, home, hits, warnings);
   hits.sort(compareSearchHits);
   return { hits, warnings };
 }
@@ -23,7 +24,7 @@ export function collectConfiguredHits(
 function collectHitsFromTap(
   tap: TapConfig,
   query: string,
-  installedNames: ReadonlySet<string>,
+  installIndex: SearchInstallIndex,
   home: string,
   hits: SearchHit[],
   warnings: string[],
@@ -38,15 +39,15 @@ function collectHitsFromTap(
     return;
   }
   for (const locs of index.skills.values()) {
-    for (const loc of locs) collectSkillHit(tap, loc, query, installedNames, hits);
+    for (const loc of locs) collectSkillHit(tap, loc, query, installIndex, hits);
   }
 }
 
 function collectSkillHit(
   tap: TapConfig,
-  loc: { readonly namespace: string | null; readonly path: string },
+  loc: SkillLocation,
   query: string,
-  installedNames: ReadonlySet<string>,
+  installIndex: SearchInstallIndex,
   hits: SearchHit[],
 ): void {
   try {
@@ -58,7 +59,7 @@ function collectSkillHit(
       name,
       namespace: loc.namespace,
       description,
-      installed: installedNames.has(name),
+      ...searchInstallStatus(installIndex, name, tap.name, loc.tapRelativePath),
     });
   } catch {
     // Invalid skill directories in a tap are silently ignored —
