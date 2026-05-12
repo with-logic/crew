@@ -10,6 +10,7 @@ export interface SearchHit {
   readonly namespace: string | null;
   readonly description: string;
   readonly installed: boolean;
+  readonly same_name_installed: boolean;
 }
 
 export interface KnownSearchHit {

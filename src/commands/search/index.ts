@@ -10,6 +10,7 @@ import { readConfig } from "../../config/load.ts";
 import { readState } from "../../state/load.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { collectConfiguredHits } from "./configured.ts";
+import { buildSearchInstallIndex } from "./install-state.ts";
 import { collectKnownHits } from "./known.ts";
 import { formatSearchResults } from "./render.ts";
 
@@ -18,9 +19,9 @@ export function searchCommand(ctx: CommandContext): CommandOutput {
   const query = rawQuery.toLowerCase();
   const config = readConfig(ctx.home);
   const state = readState(ctx.home);
-  const installedNames = new Set(state.installations.map((i) => i.name));
+  const installIndex = buildSearchInstallIndex(state);
 
-  const { hits, warnings } = collectConfiguredHits(config.taps, query, installedNames, ctx.home);
+  const { hits, warnings } = collectConfiguredHits(config.taps, query, installIndex, ctx.home);
   const knownHits = collectKnownHits(query, config.taps);
   const human = formatSearchResults(hits, knownHits, rawQuery, ctx.style, ctx.width);
   return {

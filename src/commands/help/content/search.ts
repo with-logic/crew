@@ -7,7 +7,7 @@ export const searchHelp: CommandHelp = {
     "Find a skill. Searches names and descriptions across every tap you've added.",
     "Matches are case-insensitive and partial — search for `python` to find everything Python-related.",
     "With a query, Homecrew can also suggest matching trusted taps you haven't added yet.",
-    "Without a query, lists every skill in every tap you've added. Installed skills are marked `✓`.",
+    "Without a query, lists every skill in every tap you've added. Exact installed matches are marked `✓`; same-name skills installed from another source are marked `!`.",
   ],
   flags: [{ flag: "--json", description: "Machine-readable output." }],
   examples: [
