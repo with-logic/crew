@@ -24,6 +24,7 @@ import { ANTHROPIC_SALES_KNOWN_TAP } from "./anthropic-sales.ts";
 import { APOLLO_KNOWN_TAP } from "./apollo.ts";
 import { AZURE_KNOWN_TAP } from "./azure.ts";
 import { CLOUDFLARE_KNOWN_TAP } from "./cloudflare.ts";
+import { COMPOUND_ENGINEERING_KNOWN_TAP } from "./compound-engineering.ts";
 import { ELEVENLABS_KNOWN_TAP } from "./elevenlabs.ts";
 import { FIGMA_KNOWN_TAP } from "./figma.ts";
 import { GOOGLE_GEMINI_KNOWN_TAP } from "./google-gemini.ts";
@@ -52,6 +53,7 @@ export const GENERATED_KNOWN_TAPS = [
   APOLLO_KNOWN_TAP,
   AZURE_KNOWN_TAP,
   CLOUDFLARE_KNOWN_TAP,
+  COMPOUND_ENGINEERING_KNOWN_TAP,
   ELEVENLABS_KNOWN_TAP,
   FIGMA_KNOWN_TAP,
   GOOGLE_GEMINI_KNOWN_TAP,
