@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.1] — 2026-05-11
+
+### Added
+- **Compound Engineering known tap.** EveryInc's Compound Engineering Plugin (`compound-engineering`) is now in the curated registry, contributing 37 skills for spec writing, implementation, code review, debugging, and product workflows. The tap uses a non-standard subpath (`plugins/compound-engineering/skills`) and is pinned to a reviewed commit. It surfaces in `crew search` suggestions, `crew install` hints, and the skill catalog on the crew website.
+
 ## [0.8.0] — 2026-05-11
 
 ### Added
