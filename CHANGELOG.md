@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.8.0] — 2026-05-11
+
+### Added
+- Bundled known-tap registry with 255 curated skills across 26 first-party taps (Anthropic, Apollo GraphQL, Azure, Cloudflare, ElevenLabs, Figma, Google Gemini, Hugging Face, OpenAI, PostHog, Stripe, Supabase, and more); no network access required on first run.
+- `crew install` now suggests known-tap `crew tap add` commands when a skill name is not found in any configured tap.
+- `crew search` appends known-but-untapped registry results (with tap-add commands) after configured-tap results for non-empty queries.
+- `crew untap <name>` top-level alias for `crew tap remove <name>`.
+- `crew skills` alias for `crew list`; `crew taps` alias for `crew tap list`.
+- `--recursive` flag for `crew tap add` and `crew install` to discover skills in non-standard, deeply nested tap layouts; discovery mode is persisted across search, update, and doctor repair.
+- Qualified skill selectors (`tap/skill`) now accepted by `crew uninstall`, `crew update`, and `crew info`.
+- Signed release checksums: every release ships `SHA256SUMS` + `SHA256SUMS.sig`; both the hosted installer and `crew self-update` verify the RSA/SHA-256 signature before trusting checksums.
+- Browsable skill catalog at `/skills` on the crew website, auto-generated from the curated registry.
+- CONTRIBUTING.md and SECURITY.md added to the repository.
+
+### Changed
+- CLI errors render as readable blocks with an explicit "Next step" instead of single-line messages; common tap, command, install-miss, and empty-search copy reworded for clarity.
+- `crew search` installed markers are now source-aware (tap + path), preventing false positives when taps share skill names.
+- Install refs are canonicalized to lowercase, making bare, qualified, and namespaced refs case-insensitive.
+- `SKILL.md` frontmatter `name` is now the authoritative skill name; source directory name no longer needs to match, and names may begin with a digit.
+- Hosted installer and `crew self-update` verify `SHA256SUMS` before replacing the binary on disk.
+
+### Fixed
+- Removing or replacing a tap no longer causes skills from the old tap to show as installed in `crew search` results.
+
 ## [0.7.0] — 2026-05-06
 
 ### Changed
