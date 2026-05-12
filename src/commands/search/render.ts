@@ -23,14 +23,14 @@ export function formatSearchResults(
   }
   if (knownHits.length > 0) {
     return [
-      style.dim(`No skills match "${query}" in configured taps.`),
+      style.dim(`No skills match "${query}" in your added taps.`),
       "",
       ...formatKnownSection(knownHits, style, width),
     ];
   }
   if (query === "") {
     return [
-      style.dim("No skills in any configured tap."),
+      style.dim("No skills in any tap you've added."),
       "",
       style.dim("Add one with `crew tap add <url>`."),
     ];
@@ -71,7 +71,7 @@ function formatKnownSection(
   width: number,
 ): string[] {
   const lines: string[] = [
-    `${style.bold("Known taps not added yet")} (${knownHits.length} ${knownHits.length === 1 ? "match" : "matches"})`,
+    `${style.bold("Trusted taps you can add")} (${knownHits.length} ${knownHits.length === 1 ? "match" : "matches"})`,
     "",
   ];
   for (const [tap, tapHits] of groupBy(knownHits, (hit) => hit.tap)) {
@@ -79,7 +79,7 @@ function formatKnownSection(
     const firstHit = tapHits[0]!;
     lines.push(`  ${style.bold(tap)} ${style.dim(`(${firstHit.trust})`)}`);
     lines.push(...formatKnownRows(tapHits, style, width));
-    lines.push(`    ${style.dim(`tap with: crew tap add ${knownTapSource(firstHit)} ${tap}`)}`);
+    lines.push(`    ${style.dim(`Add tap: crew tap add ${knownTapSource(firstHit)} ${tap}`)}`);
     lines.push("");
   }
   lines.push(style.dim("Add a tap first, then install a suggested skill by qualified name."));

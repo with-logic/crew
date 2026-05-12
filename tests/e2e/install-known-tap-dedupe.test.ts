@@ -56,7 +56,7 @@ describe("known-tap install suggestion dedupe", () => {
     const code = runCli(["install", "supabase"], { home, streams: c.streams });
 
     expect(code).toBe(4);
-    expect(c.stderr()).toContain("install with: crew install supabase/supabase");
+    expect(c.stderr()).toContain("crew install supabase/supabase");
     expect(c.stderr()).not.toContain("\n  supabase (curated)\n");
   });
 });

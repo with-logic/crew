@@ -32,8 +32,9 @@ export function autoupdateCommand(ctx: CommandContext): CommandOutput {
   if (!sub) return showCommandHelp("autoupdate");
   throw new CrewError(
     "usage_error",
-    `\`crew autoupdate\` has no subcommand named \`${sub}\` — run \`crew help autoupdate\` to see what's available`,
+    `\`${sub}\` is not a \`crew autoupdate\` command.`,
     { sub },
+    "Run `crew help autoupdate` to see the autoupdate commands.",
   );
 }
 

@@ -54,7 +54,7 @@ export function Problem() {
           number="01"
           label="Why Homecrew"
           title="Package-manager workflows for agent skills."
-          description="The best prompts and agent playbooks often live as copied folders, gists, or private notes. Homecrew gives them install commands, source tracking, update behavior, and a git-native way to share them without a hosted registry."
+          description="The best prompts and agent playbooks often live as copied folders, gists, or private notes. Homecrew gives them install commands, source tracking, update behavior, and a git-native way to share them."
         />
         <div className={styles.grid}>
           {CELLS.map((c) => (

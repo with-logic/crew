@@ -258,12 +258,12 @@ describe("crew search output", () => {
     const code = runCli(["search", "schema"], { home, streams: c.streams });
     expect(code).toBe(0);
     const out = c.stdout();
-    expect(out).toContain('No skills match "schema" in configured taps.');
-    expect(out).toContain("Known taps not added yet");
+    expect(out).toContain('No skills match "schema" in your added taps.');
+    expect(out).toContain("Trusted taps you can add");
     expect(out).toContain("supabase");
     expect(out).toContain("database/schema-review");
     expect(out).toContain(
-      "tap with: crew tap add https://github.com/example/supabase-skills supabase",
+      "Add tap: crew tap add https://github.com/example/supabase-skills supabase",
     );
     expect(out).toContain("crew install supabase/database/schema-review");
 
@@ -313,7 +313,7 @@ describe("crew search output", () => {
     const c = captureStreams();
     runCli(["search", "openai"], { home, streams: c.streams });
     expect(c.stdout()).toContain(
-      "tap with: crew tap add https://github.com/example/openai-skills openai",
+      "Add tap: crew tap add https://github.com/example/openai-skills openai",
     );
   });
 
@@ -605,8 +605,8 @@ describe("crew search output", () => {
     const c = captureStreams();
     const code = runCli(["search"], { home, streams: c.streams });
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("No skills in any configured tap");
-    expect(c.stdout()).not.toContain("Known taps not added yet");
+    expect(c.stdout()).toContain("No skills in any tap you've added");
+    expect(c.stdout()).not.toContain("Trusted taps you can add");
   });
 
   test("unreachable tap produces a warning", () => {

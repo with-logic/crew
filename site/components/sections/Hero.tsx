@@ -14,8 +14,8 @@ export function Hero() {
               <span className={styles.accent}>share agent skills</span>.
             </h1>
             <p className={styles.lede}>
-              Install skills for yourself or create a shared tap for your team. Homecrew will keep
-              your skills up to date.
+              Install a skill once and Homecrew copies it into every supported coding agent. Share
+              team skills through git, then keep them current with <code>crew update</code>.
             </p>
             <div className={styles.ctaRow}>
               <Button href="#install">Install Homecrew</Button>

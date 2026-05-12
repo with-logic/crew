@@ -43,10 +43,15 @@ export function withKnownTapInstallSuggestions(
   if (suggestions.length === 0) {
     return err;
   }
-  return new CrewError("invalid_ref", renderKnownInstallError(err, suggestions), {
-    ...err.details,
-    known_tap_suggestions: suggestions.map(suggestionJson),
-  });
+  return new CrewError(
+    "invalid_ref",
+    renderKnownInstallError(err, suggestions),
+    {
+      ...err.details,
+      known_tap_suggestions: suggestions.map(suggestionJson),
+    },
+    null,
+  );
 }
 
 function parseMaybeTap(raw: string, cwd: string): TapSource | null {
@@ -116,12 +121,14 @@ function renderKnownInstallError(
   err: CrewError,
   suggestions: readonly KnownInstallSuggestion[],
 ): string {
-  const lines = [err.message, "", "Known taps may have what you want:"];
+  const lines = [err.message, "", "Homecrew found possible matches in known taps:"];
   for (const suggestion of suggestions) {
     lines.push("");
     lines.push(`  ${suggestion.installRef} (${suggestion.tap.trust})`);
-    lines.push(`    tap with: ${tapAddCommand(suggestion.tap)}`);
-    lines.push(`    install with: crew install ${suggestion.installRef}`);
+    lines.push(`    Add the tap:`);
+    lines.push(`      ${tapAddCommand(suggestion.tap)}`);
+    lines.push(`    Then install:`);
+    lines.push(`      crew install ${suggestion.installRef}`);
   }
   return lines.join("\n");
 }

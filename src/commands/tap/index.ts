@@ -47,8 +47,9 @@ export function tapCommand(ctx: CommandContext): CommandOutput {
   if (!sub) return showCommandHelp("tap");
   throw new CrewError(
     "usage_error",
-    `\`crew tap\` has no subcommand named \`${sub}\` — run \`crew help tap\` to see what's available`,
+    `\`${sub}\` is not a \`crew tap\` command.`,
     { sub },
+    "Run `crew help tap` to see the tap commands.",
   );
 }
 
@@ -77,8 +78,9 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
     if (!tap) {
       throw new CrewError(
         "usage_error",
-        `no tap named \`${name}\` is configured — run \`crew tap list\` to see what's there`,
+        `\`${name}\` was not found in your list of taps.`,
         { name },
+        "This may have been a typo. View your configured taps with `crew tap list`.",
       );
     }
     if (name === DEFAULT_TAP_NAME && !ctx.flags.force)
@@ -121,8 +123,9 @@ function tapsMatching(all: readonly TapConfig[], names: readonly string[]): TapC
     if (!tap) {
       throw new CrewError(
         "usage_error",
-        `no tap named \`${n}\` is configured — run \`crew tap list\` to see what's there`,
+        `\`${n}\` was not found in your list of taps.`,
         { name: n },
+        "This may have been a typo. View your configured taps with `crew tap list`.",
       );
     }
     out.push(tap);

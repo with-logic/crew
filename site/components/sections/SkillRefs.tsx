@@ -44,7 +44,8 @@ const CARDS: readonly {
       <>
         A skill inside a configured tap. Bare names search every tap — including the default{" "}
         <code>core</code> tap, which ships with a curated set of battle-tested skills. Qualify with{" "}
-        <code>tap/name</code> to be explicit. Pin with <code>@v1.0</code>.
+        <code>tap/name</code> to be explicit. If a name is only in a trusted tap you haven't added,
+        Homecrew shows the tap to add first.
       </>
     ),
     examples: [

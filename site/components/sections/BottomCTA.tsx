@@ -9,7 +9,7 @@ export function BottomCTA() {
     <Section tight ruleTop className={styles.section}>
       <Container>
         <div className={styles.wrap}>
-          <Eyebrow centered>A package manager for agent skills</Eyebrow>
+          <Eyebrow centered>An open-source package manager for agent skills</Eyebrow>
           <h2 className={styles.title}>$ crew install &lt;skill&gt;</h2>
           <div className={styles.ctaRow}>
             <Button href="#install">Install Homecrew</Button>

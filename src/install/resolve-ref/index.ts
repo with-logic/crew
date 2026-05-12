@@ -69,8 +69,9 @@ function resolveThreeSegment(source: TapSource, config: Config, home: string): N
   if (!tap) {
     throw new CrewError(
       "invalid_ref",
-      `no tap named \`${source.tap}\` is configured — run \`crew tap list\` to see configured taps`,
+      `\`${source.tap}\` was not found in your list of taps.`,
       { tap: source.tap },
+      "View your configured taps with `crew tap list`.",
     );
   }
   const index = indexTap(tap, home);
@@ -121,8 +122,9 @@ function resolveTwoSegment(source: TapSource, config: Config, home: string): Non
   }
   throw new CrewError(
     "invalid_ref",
-    `\`${first}/${second}\` doesn't resolve — no tap or namespace named \`${first}\` holds a skill \`${second}\``,
+    `\`${first}/${second}\` does not match any configured tap or namespace.\nNo tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
     { first, second },
+    `Run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
   );
 }
 
@@ -165,8 +167,9 @@ function resolveBare(
     const tapNames = config.taps.map((t) => t.name).join(", ");
     throw new CrewError(
       "invalid_ref",
-      `\`${name}\` isn't a tap, skill, or namespace in any configured tap (searched: ${tapNames || "<none>"})`,
+      `\`${name}\` was not found in any configured tap.`,
       { name },
+      `Searched: ${tapNames || "<none>"}.`,
     );
   }
   if (all.length === 1) return all[0]!;

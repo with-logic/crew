@@ -5,6 +5,7 @@
 import { join, relative } from "node:path";
 import type { LoadedSkill } from "../../core/types.ts";
 import { checkoutSha, cloneRepo } from "../../git/repo.ts";
+import { hasSkillMd } from "../../skill/load.ts";
 import { expandSkills } from "../../sources/expand.ts";
 import { toPosix } from "../../util/fs.ts";
 import type { KnownTap, KnownTapSkill } from "../types.ts";
@@ -13,6 +14,7 @@ import type { KnownTapSource } from "./types.ts";
 export function indexKnownTapSource(source: KnownTapSource, clonePath: string): KnownTap {
   cloneRepo(source.url, clonePath, true);
   checkoutSha(clonePath, source.commit);
+  assertDisplaySafeSource(source, clonePath);
   const root = source.subpath.length > 0 ? join(clonePath, source.subpath) : clonePath;
   const expanded = expandSkills(root);
   if (expanded.skipped.length > 0) {
@@ -29,6 +31,14 @@ export function indexKnownTapSource(source: KnownTapSource, clonePath: string): 
     trust: source.trust,
     skills,
   };
+}
+
+function assertDisplaySafeSource(source: KnownTapSource, clonePath: string): void {
+  if (source.subpath !== "skills") return;
+  if (!hasSkillMd(clonePath)) return;
+  throw new Error(
+    `known tap \`${source.name}\` uses subpath \`skills\` but repo root also has a SKILL.md; use an explicit sourceRef before shortening display commands`,
+  );
 }
 
 function knownTapSkill(root: string, skill: LoadedSkill): KnownTapSkill {

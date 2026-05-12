@@ -3,10 +3,11 @@
   <h1>Homecrew</h1>
 </div>
 
-**Helps teams share [agent skills](https://agentskills.io/specification).**
+**A package manager for [agent skills](https://agentskills.io/specification).**
 
-Easily discover and share skills across your team. One command to install. The
-same skills on every laptop, in every coding agent. Updated automatically.
+Install a skill once and `crew` copies it into every supported coding agent.
+Share team skills through git, keep them reviewed in PRs, and roll updates out
+without hand-copying folders between tools.
 
 Homecrew is an open-source project by [Logic, Inc](https://logic.inc).
 
@@ -28,7 +29,8 @@ GitHub Copilot, Goose, and [every other supported agent](#agents).
 
 Right now, the best prompts and agent playbooks either sit on one person's
 machine or get copy-pasted through gists and Slack messages that nobody keeps
-current. Homecrew gives them a home, a way to be shared, and kept up to date.
+current. Homecrew gives them install commands, source tracking, and a reliable
+update path.
 Anyone can publish. Anyone can install.
 
 - **Publish a skill.** Any git repo with a `SKILL.md` at the root is
@@ -37,8 +39,8 @@ Anyone can publish. Anyone can install.
 - **Your skills repo is your registry.** Point Homecrew at a shared repo — a
   _tap_ — and everyone on the team pulls the same skills, reviewed in PRs,
   versioned in git. Onboarding is one command.
-- **Discover what actually works.** Browse the default `core` tap and
-  community taps for battle-tested skills. Fork, tweak, publish your own.
+- **Discover what actually works.** Browse the default `core` tap and trusted
+  known taps for useful starting points. Nothing installs until you ask.
 
 ## What is Homecrew?
 
@@ -73,7 +75,7 @@ installer also uses macOS-standard `curl`, `shasum`, and `openssl`.
 
 ## How it works
 
-Four everyday motions. No manifest to learn, no plugins to configure —
+Five everyday motions. No manifest to learn, no plugins to configure —
 commands that do what they say, across every agent you use.
 
 1. **Find great skills.** `crew search` across the default `core` collection
@@ -161,7 +163,7 @@ When a command asks for an installed skill name, you can use the bare name
 
 | Command | What it does |
 |---|---|
-| `crew install <ref>…` | Install one or more skills into every detected agent; on name misses, may suggest skills from trusted known taps you haven't added yet. |
+| `crew install <ref>…` | Install one or more skills into every detected agent; on misses, may suggest skills from trusted taps you haven't added yet. |
 | `crew uninstall <name>…` | Remove installed skills from every agent they were installed into. |
 | `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. |
 | `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. |
@@ -172,7 +174,7 @@ When a command asks for an installed skill name, you can use the bare name
 
 | Command | What it does |
 |---|---|
-| `crew search [<query>]` | Case-insensitive substring match across every configured tap. With no query, lists every installable skill; installed ones are marked `✓`. With a query, also suggests matching known taps to add. |
+| `crew search [<query>]` | Case-insensitive substring match across every configured tap. With no query, lists every installable skill; exact installed matches are marked `✓`. With a query, also suggests matching known taps to add. |
 | `crew tap add <url-or-path> [name]` | Add a registry from a git source or local path. Name defaults to the repo/path name. Add `--recursive` for trusted repos with non-standard nested layouts. |
 | `crew tap remove <name>` | Delete a local tap clone and drop it from config. |
 | `crew tap list` | Print each tap's name, kind/status, source target, recursive discovery marker when set, and last-fetched timestamp for git taps. |
@@ -349,8 +351,8 @@ OpenCode · pi · Roo Code
 Don't see yours? If it reads the spec path (`~/.agents/skills/`), the
 `agent-skills` adapter already covers it — Homecrew detects it whenever
 `~/.agents/` exists and writes there alongside any tool-specific adapters.
-If it reads a tool-specific path, writing the adapter usually takes an
-afternoon — see [§7.1](./PRD.md#71-adapter-operations) in the PRD.
+If it reads a tool-specific path, writing the adapter usually takes a minute —
+see [§7.1](./PRD.md#71-adapter-operations) in the PRD.
 
 ## FAQ
 

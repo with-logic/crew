@@ -429,14 +429,13 @@ describe("error output non-json mode", () => {
     expect(c.stderr()).toContain("crew list");
   });
 
-  test("error renderer appends a remedy hint line for known codes", () => {
+  test("error renderer appends a remedy block for known codes", () => {
     const home = makeCrewHome();
     const c = captureStreams();
     // `crew install` with no args → `usage_error`, which has a remedy hint.
     runCli(["install"], { home, streams: c.streams });
-    expect(c.stderr()).toContain("error:");
-    // The `→` prefix is how remedy hints are rendered.
-    expect(c.stderr()).toContain("→");
+    expect(c.stderr()).toContain("Error");
+    expect(c.stderr()).toContain("Next step");
     expect(c.stderr()).toContain("crew help");
   });
 
