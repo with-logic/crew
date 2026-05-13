@@ -1,4 +1,5 @@
 import { SAAP_FULL_PROMPT } from "../../lib/prd";
+import { CREW_VERSION_TAG } from "../../lib/version";
 import { Acc, CodeBlock } from "../primitives/CodeBlock";
 import { Container } from "../primitives/Container";
 import { CopyButton } from "../primitives/CopyButton";
@@ -7,6 +8,7 @@ import { BuildItYourself } from "./BuildItYourself";
 import styles from "./Install.module.css";
 
 const INSTALL_COMMAND = "curl -fsSL https://crew.logic.inc/install.sh | sh";
+const CREW_VERSION = CREW_VERSION_TAG.replace(/^v/, "");
 
 export function Install() {
   return (
@@ -30,7 +32,7 @@ export function Install() {
             {"$ curl -fsSL "}
             <Acc>https://crew.logic.inc/install.sh</Acc>
             {" | sh\n$ crew version\ncrew "}
-            <Acc>0.3.1</Acc>
+            <Acc>{CREW_VERSION}</Acc>
             {" (darwin-arm64)"}
           </CodeBlock>
           <div className={styles.copy}>
