@@ -8,7 +8,7 @@
 
 import { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
-import type { UpdateRow } from "../../install/update-one.ts";
+import type { UpdateRow } from "../../install/update/types.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 
 /** Expanded update set + per-entry "who pulled you in" map. */

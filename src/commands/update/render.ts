@@ -1,17 +1,11 @@
 /**
  * Human-friendly output for `crew update`.
  *
- * Layout:
- *   - Tap-level warnings (offline taps, fetch errors) at the top.
- *   - A header with how many skills were checked.
- *   - One aligned row per skill: symbol, bold name, colored status word,
- *     version tail (short SHA or "→ new SHA").
- *   - Tap additions ("gained X new skill from tap Y") if any.
- *   - Dim totals line at the bottom.
+ * Renders tap warnings, aligned per-skill rows, tap additions, and totals.
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand.ts";
-import type { UpdateRow } from "../../install/update-one.ts";
+import type { UpdateRow } from "../../install/update/types.ts";
 import { columns, plural, shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
@@ -39,7 +33,6 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   }
   if (lines.length > 0) lines.push("");
 
-  // Header summarising what was checked.
   const checkedCount = input.rows.length;
   const addedRows = input.tapReexpandRows.filter((r) => r.kind === "added");
   if (checkedCount === 0 && addedRows.length === 0) {
@@ -69,7 +62,6 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
     for (const line of columns(rowCells, 2)) lines.push(line);
   }
 
-  // Tap additions: "gained X new skills from tap Y".
   const addedByTap = groupByTap(addedRows);
   if (addedByTap.size > 0) {
     if (lines.length > 0 && lines[lines.length - 1] !== "") lines.push("");

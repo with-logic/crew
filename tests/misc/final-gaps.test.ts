@@ -106,12 +106,23 @@ describe("update: tentative stage for path source unchanged", () => {
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     runCli(["install", skill], { home, streams: captureStreams().streams });
+    const beforeHash = readState(home).installations.find((e) => e.name === "demo")!.content_hash;
     // Modify the source.
     writeFileSync(join(skill, "NEW.md"), "new");
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
     expect(code).toBe(0);
     expect(c.stdout()).toContain("updated");
+    const afterHash = readState(home).installations.find((e) => e.name === "demo")!.content_hash;
+    expect(afterHash).not.toBe(beforeHash);
+
+    const second = captureStreams();
+    const secondCode = runCli(["update", "--json"], { home, streams: second.streams });
+    const rows = JSON.parse(second.stdout()) as {
+      rows: { name: string; outcome: { kind: string } }[];
+    };
+    expect(secondCode).toBe(0);
+    expect(rows.rows.find((r) => r.name === "demo")!.outcome.kind).toBe("up_to_date");
   });
 });
 
