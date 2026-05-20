@@ -31,15 +31,10 @@ export interface UpdateRow {
   readonly transitively_required_by?: readonly string[];
 }
 
-export type UpdatedOutcome = Extract<Outcome, { kind: "updated" }>;
+type UpdatedOutcome = Extract<Outcome, { kind: "updated" }>;
 
-export type NonUpdatedOutcome = Exclude<Outcome, UpdatedOutcome>;
+type NonUpdatedOutcome = Exclude<Outcome, UpdatedOutcome>;
 
 export type InternalOutcome =
   | NonUpdatedOutcome
-  | {
-      readonly kind: "updated";
-      readonly new_sha: string | null;
-      readonly content_hash: string;
-      readonly per_target: PerAgentUpdate[];
-    };
+  | (UpdatedOutcome & { readonly content_hash: string });

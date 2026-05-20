@@ -12,6 +12,7 @@ import { uninstallSkillFromAgents } from "../../src/agents/uninstall.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";
+import { hashDirectory } from "../../src/hash/content.ts";
 import { readState, upsertEntry, writeState } from "../../src/state/load.ts";
 import { parseYaml, stringifyYaml } from "../../src/yaml/parse.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -114,7 +115,9 @@ describe("update: tentative stage for path source unchanged", () => {
     expect(code).toBe(0);
     expect(c.stdout()).toContain("updated");
     const afterHash = readState(home).installations.find((e) => e.name === "demo")!.content_hash;
+    const installedHash = hashDirectory(join(ccRoot, "demo"));
     expect(afterHash).not.toBe(beforeHash);
+    expect(afterHash).toBe(installedHash);
 
     const second = captureStreams();
     const secondCode = runCli(["update", "--json"], { home, streams: second.streams });

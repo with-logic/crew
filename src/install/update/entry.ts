@@ -120,6 +120,7 @@ function updateOne(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
+  // Tap re-expansion has already marked missing children `source_gone`.
   const skillDir = join(acquired.rootDir, entry.source.path);
 
   if (newSha === entry.resolved_sha) {
