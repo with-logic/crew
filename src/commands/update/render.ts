@@ -33,6 +33,7 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   }
   if (lines.length > 0) lines.push("");
 
+  // Header summarising what was checked.
   const checkedCount = input.rows.length;
   const addedRows = input.tapReexpandRows.filter((r) => r.kind === "added");
   if (checkedCount === 0 && addedRows.length === 0) {
@@ -62,6 +63,7 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
     for (const line of columns(rowCells, 2)) lines.push(line);
   }
 
+  // Tap additions: "gained X new skills from tap Y".
   const addedByTap = groupByTap(addedRows);
   if (addedByTap.size > 0) {
     if (lines.length > 0 && lines[lines.length - 1] !== "") lines.push("");

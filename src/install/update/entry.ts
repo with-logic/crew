@@ -75,6 +75,7 @@ export function updateOneEntry(
   }
 }
 
+/** Build an UpdateRow for a state entry, threading through project_root. */
 function rowFor(entry: StateEntry, outcome: InternalOutcome): UpdateRow {
   const publicOutcome =
     outcome.kind === "updated"
