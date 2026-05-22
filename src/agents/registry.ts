@@ -11,6 +11,7 @@
 import type { AgentAdapter } from "./adapter.ts";
 import { agentSkillsAdapter } from "./agent-skills.ts";
 import { ampAdapter } from "./amp.ts";
+import { antigravityCliAdapter } from "./antigravity-cli.ts";
 import { autohandAdapter } from "./autohand.ts";
 import { claudeCodeAdapter } from "./claude-code.ts";
 import { codexAdapter } from "./codex.ts";
@@ -32,6 +33,7 @@ import { rooCodeAdapter } from "./roo-code.ts";
 export const ALL_AGENTS: readonly AgentAdapter[] = [
   agentSkillsAdapter,
   ampAdapter,
+  antigravityCliAdapter,
   autohandAdapter,
   claudeCodeAdapter,
   codexAdapter,

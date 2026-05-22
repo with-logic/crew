@@ -344,7 +344,8 @@ Works with every Mac agent that speaks the spec. Any agent coder that reads
 the [Agent Skills spec](https://agentskills.io/specification) is a valid
 target. Homecrew auto-detects the ones you already have and quietly skips the rest.
 
-Amp · Autohand · Claude Code · Codex · Command Code · Cursor · Factory ·
+Amp · Antigravity CLI · Autohand · Claude Code · Codex · Command Code ·
+Cursor · Factory ·
 Gemini CLI · GitHub Copilot · Goose · Junie · Kiro · Mistral Vibe · Nanobot ·
 OpenCode · pi · Roo Code
 
