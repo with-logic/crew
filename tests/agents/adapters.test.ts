@@ -53,6 +53,12 @@ const EXPECTATIONS: readonly AdapterExpectation[] = [
     detectFixtures: [".config/amp"],
   },
   {
+    name: "antigravity-cli",
+    userSuffix: ".gemini/antigravity-cli/skills",
+    projectSuffix: ".agents/skills",
+    detectFixtures: [".gemini/antigravity-cli"],
+  },
+  {
     name: "autohand",
     userSuffix: ".autohand/skills",
     projectSuffix: ".autohand/skills",

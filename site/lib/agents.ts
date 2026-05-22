@@ -11,6 +11,7 @@ export interface Agent {
 
 export const AGENTS: readonly Agent[] = [
   { name: "amp", display: "Amp" },
+  { name: "antigravity-cli", display: "Antigravity CLI" },
   { name: "autohand", display: "Autohand" },
   { name: "claude-code", display: "Claude Code" },
   { name: "codex", display: "Codex" },

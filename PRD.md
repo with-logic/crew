@@ -410,6 +410,7 @@ Every adapter listed at [agentskills.io/clients](https://agentskills.io/clients)
 |---|---|---|---|
 | `agent-skills` | `~/.agents/skills/` | `<project>/.agents/skills/` | `~/.agents/` exists |
 | `amp` | `~/.config/amp/skills/` | `<project>/.agents/skills/` | `amp` on PATH or `~/.config/amp/` exists |
+| `antigravity-cli` | `~/.gemini/antigravity-cli/skills/` | `<project>/.agents/skills/` | `antigravity` on PATH or `~/.gemini/antigravity-cli/` exists |
 | `autohand` | `~/.autohand/skills/` | `<project>/.autohand/skills/` | `autohand` on PATH or `~/.autohand/` exists |
 | `claude-code` | `~/.claude/skills/` | `<project>/.claude/skills/` | `claude` on PATH or `~/.claude/` exists |
 | `codex` | `~/.agents/skills/` | `<project>/.agents/skills/` | `codex` on PATH or `~/.codex/` exists |
@@ -443,7 +444,7 @@ Adding a new adapter later requires updating this table, adding a file under `sr
 
 **Install path shape.** Each agent has a base directory for skills (user scope and project scope). A skill named `python-testing` is installed by writing its files under `<base>/python-testing/`. The install directory name equals the skill's declared `name`, which is lowercase alphanumerics and hyphens and may begin with a letter or digit.
 
-**Path sharing.** Most adapters resolve to the same filesystem path: `~/.agents/skills/` (user) and `<project>/.agents/skills/` (project) is the emerging cross-tool convention, read by Codex, Cursor, Command Code, Gemini CLI, GitHub Copilot, Goose, OpenCode, pi, and `agent-skills`. Homecrew writes bytes there once and reports the install to the user under each detected adapter's name, even though only one physical copy exists. The rule: **when a tool reads `~/.agents/skills/`, Homecrew's adapter points there** — one install serves every such tool at once. Adapters whose tools don't support the cross-tool path (Amp user-scope, Autohand, Claude Code, Factory, Junie, Kiro, Mistral Vibe, Nanobot, Roo Code) keep their tool-specific paths.
+**Path sharing.** Most adapters resolve to the same filesystem path: `~/.agents/skills/` (user) and `<project>/.agents/skills/` (project) is the emerging cross-tool convention, read by Codex, Cursor, Command Code, Gemini CLI, GitHub Copilot, Goose, OpenCode, pi, and `agent-skills`. Homecrew writes bytes there once and reports the install to the user under each detected adapter's name, even though only one physical copy exists. The rule: **when a tool reads `~/.agents/skills/`, Homecrew's adapter points there** — one install serves every such tool at once. Adapters whose tools don't support the cross-tool path (Amp user-scope, Antigravity CLI user-scope, Autohand, Claude Code, Factory, Junie, Kiro, Mistral Vibe, Nanobot, Roo Code) keep their tool-specific paths.
 
 The install algorithm (§7.3) dedupes writes by resolved path; the marker (§7.5) records which adapters own the install.
 

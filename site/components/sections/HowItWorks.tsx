@@ -72,6 +72,7 @@ const DIAGRAM_ROWS: readonly {
   { name: "codex", path: "~/.agents/skills/", status: "detected" },
   { name: "cursor", path: "~/.agents/skills/", status: "detected" },
   { name: "gemini-cli", path: "~/.agents/skills/", status: "detected" },
+  { name: "antigravity-cli", path: "~/.gemini/antigravity-cli/skills/", status: "detected" },
 ];
 
 export function HowItWorks() {
@@ -99,7 +100,7 @@ export function HowItWorks() {
           </div>
 
           <aside className={styles.diagram}>
-            <div className={styles.dTitle}>Agent adapters · showing 4 of 17</div>
+            <div className={styles.dTitle}>Agent adapters · showing 5 of 18</div>
             {DIAGRAM_ROWS.map((r) => (
               <div key={r.name} className={styles.dRow}>
                 <span className={styles.dName}>{r.name}</span>
