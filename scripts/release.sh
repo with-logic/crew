@@ -71,6 +71,18 @@ for cmd in claude gh jq bun; do
   fi
 done
 
+# `claude --bare` (used below for deterministic output) explicitly
+# bypasses OAuth and the keychain — it only accepts ANTHROPIC_API_KEY
+# or an apiKeyHelper via --settings. Catch this here so the failure
+# isn't opaque at the summary step.
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "error: ANTHROPIC_API_KEY is not set" >&2
+  echo "  This script invokes 'claude --bare' to summarize changes," >&2
+  echo "  which ignores OAuth/keychain auth and requires the env var." >&2
+  echo "  export ANTHROPIC_API_KEY=sk-ant-... and re-run." >&2
+  exit 1
+fi
+
 # ---------- 2. Compute next version ---------------------------------------
 
 current_version="$(bun -e 'console.log(require("./package.json").version)')"
@@ -160,7 +172,8 @@ Return a JSON object matching the provided schema. Do not wrap it in markdown fe
 
 # --bare disables hooks, CLAUDE.md auto-discovery, and other ambient
 # context so the prompt is deterministic. `--json-schema` forces the
-# response to match our schema.
+# response to match our schema. We deliberately do NOT redirect stderr
+# here — if claude writes a diagnostic, the user should see it.
 response="$(
   printf '%s\n' "$prompt" | claude -p \
     --bare \
@@ -168,12 +181,21 @@ response="$(
     --output-format json \
     --json-schema "$schema" \
     --model sonnet \
-    --max-budget-usd 1.00 \
-    2>/dev/null
+    --max-budget-usd 1.00
 )"
 
 if [ -z "$response" ]; then
   echo "error: claude returned no output" >&2
+  exit 1
+fi
+
+# Claude reports logical failures (auth, budget, refusal) as a
+# top-level `{ "is_error": true, "result": "..." }` envelope and still
+# exits 0. Surface the `result` text instead of letting the downstream
+# jq fail with a cryptic parse error.
+if [ "$(echo "$response" | jq -r 'if type == "object" then (.is_error // false) else false end')" = "true" ]; then
+  echo "error: claude reported an error:" >&2
+  echo "  $(echo "$response" | jq -r '.result // "(no result field)"')" >&2
   exit 1
 fi
 
