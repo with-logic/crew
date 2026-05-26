@@ -12,6 +12,7 @@ import { uninstallSkillFromAgents } from "../../src/agents/uninstall.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";
+import { hashDirectory } from "../../src/hash/content.ts";
 import { readState, upsertEntry, writeState } from "../../src/state/load.ts";
 import { parseYaml, stringifyYaml } from "../../src/yaml/parse.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -106,12 +107,25 @@ describe("update: tentative stage for path source unchanged", () => {
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     runCli(["install", skill], { home, streams: captureStreams().streams });
+    const beforeHash = readState(home).installations.find((e) => e.name === "demo")!.content_hash;
     // Modify the source.
     writeFileSync(join(skill, "NEW.md"), "new");
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
     expect(code).toBe(0);
     expect(c.stdout()).toContain("updated");
+    const afterHash = readState(home).installations.find((e) => e.name === "demo")!.content_hash;
+    const installedHash = hashDirectory(join(ccRoot, "demo"));
+    expect(afterHash).not.toBe(beforeHash);
+    expect(afterHash).toBe(installedHash);
+
+    const second = captureStreams();
+    const secondCode = runCli(["update", "--json"], { home, streams: second.streams });
+    const rows = JSON.parse(second.stdout()) as {
+      rows: { name: string; outcome: { kind: string } }[];
+    };
+    expect(secondCode).toBe(0);
+    expect(rows.rows.find((r) => r.name === "demo")!.outcome.kind).toBe("up_to_date");
   });
 });
 

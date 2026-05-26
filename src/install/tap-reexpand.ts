@@ -11,7 +11,7 @@
  *      install.
  *
  * Existing-and-still-present children are handled by the regular
- * per-skill update loop in `update-one.ts`.
+ * per-skill update loop in `update/entry.ts`.
  *
  * Path-kind taps follow the same algorithm; they just don't fetch and
  * their `resolvedSha` is null.

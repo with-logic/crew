@@ -1,17 +1,11 @@
 /**
  * Human-friendly output for `crew update`.
  *
- * Layout:
- *   - Tap-level warnings (offline taps, fetch errors) at the top.
- *   - A header with how many skills were checked.
- *   - One aligned row per skill: symbol, bold name, colored status word,
- *     version tail (short SHA or "→ new SHA").
- *   - Tap additions ("gained X new skill from tap Y") if any.
- *   - Dim totals line at the bottom.
+ * Renders tap warnings, aligned per-skill rows, tap additions, and totals.
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand.ts";
-import type { UpdateRow } from "../../install/update-one.ts";
+import type { UpdateRow } from "../../install/update/types.ts";
 import { columns, plural, shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";

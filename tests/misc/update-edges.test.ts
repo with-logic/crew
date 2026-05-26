@@ -1,6 +1,6 @@
 /**
  * Update flow edge cases that fill the remaining uncovered branches
- * in `src/install/update-one.ts` and `src/commands/update.ts`.
+ * in `src/install/update/entry.ts` and `src/commands/update.ts`.
  *
  * Covers:
  *   - tap-not-in-config: a state entry whose `source.tap` is absent
@@ -83,7 +83,7 @@ describe("update edge cases", () => {
     });
     // Manually strip the tap row from config.yaml. State still
     // references it by name — exactly the "user manually deleted"
-    // state that update-one.ts's tap-lookup check catches.
+    // state that update/entry.ts's tap-lookup check catches.
     const cfg = readConfig(home);
     const state = readState(home);
     const orphanedTapName = state.installations[0]!.source.tap;
@@ -106,7 +106,7 @@ describe("update edge cases", () => {
       streams: captureStreams().streams,
     });
     // The tap-reexpand path handles additions / whole-tap source_gone.
-    // To trigger the update-one.ts `no_skills_found` throw specifically,
+    // To trigger the update/entry.ts `no_skills_found` throw specifically,
     // the tap has to still exist but the subpath SKILL.md disappears.
     // Replace the SKILL.md with a non-skill file and commit.
     rmSync(join(repo, "demo", "SKILL.md"));

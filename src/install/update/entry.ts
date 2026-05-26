@@ -12,43 +12,18 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { type AgentAdapter, baseFor, cwdForEntry } from "../agents/adapter.ts";
-import { installSkillIntoAgents } from "../agents/install.ts";
-import { agentByName } from "../agents/registry.ts";
-import { CrewError } from "../core/errors.ts";
-import type { Config, StateEntry, StateFile } from "../core/types.ts";
-import { loadSkill } from "../skill/load.ts";
-import { acquireTap } from "../sources/acquire/index.ts";
-import { stageIntoStore } from "../sources/store.ts";
-import { upsertEntry } from "../state/load.ts";
-import { nowIso } from "../util/time.ts";
+import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
+import { installSkillIntoAgents } from "../../agents/install.ts";
+import { agentByName } from "../../agents/registry.ts";
+import { CrewError } from "../../core/errors.ts";
+import type { Config, StateEntry, StateFile } from "../../core/types.ts";
+import { loadSkill } from "../../skill/load.ts";
+import { acquireTap } from "../../sources/acquire/index.ts";
+import { stageIntoStore } from "../../sources/store.ts";
+import { upsertEntry } from "../../state/load.ts";
+import { nowIso } from "../../util/time.ts";
+import type { InternalOutcome, PerAgentUpdate, UpdateRow } from "./types.ts";
 
-export interface PerAgentUpdate {
-  readonly agent: string;
-  readonly kind: "installed" | "up_to_date" | "skipped" | "failed";
-  readonly error?: { code: string; message: string };
-  readonly reason?: string;
-}
-
-export type Outcome =
-  | { kind: "up_to_date" }
-  | { kind: "updated"; new_sha: string | null; per_target: PerAgentUpdate[] }
-  | { kind: "skipped"; reason: string }
-  | { kind: "source_gone" }
-  | { kind: "missing_project_root"; root: string }
-  | { kind: "failed"; error: { code: string; message: string } };
-
-export interface UpdateRow {
-  readonly name: string;
-  readonly scope: string;
-  /** For project-scope entries, the directory the skill is installed under. */
-  readonly project_root?: string;
-  readonly outcome: Outcome;
-  /** Top-level names whose dep closure pulled this entry in (when `crew update <name>...`). */
-  readonly transitively_required_by?: readonly string[];
-}
-
-/** Per-entry update: returns a row, the new state, and whether to bump hardFailure. */
 export function updateOneEntry(
   entry: StateEntry,
   state: StateFile,
@@ -64,7 +39,12 @@ export function updateOneEntry(
       const successfulTargets = outcome.per_target
         .filter((t) => t.kind !== "failed")
         .map((t) => t.agent);
-      const newEntry = rebuildStateEntry(entry, outcome.new_sha, successfulTargets);
+      const newEntry = rebuildStateEntry(
+        entry,
+        outcome.new_sha,
+        outcome.content_hash,
+        successfulTargets,
+      );
       next = upsertEntry(state, newEntry);
     }
     return {
@@ -96,12 +76,16 @@ export function updateOneEntry(
 }
 
 /** Build an UpdateRow for a state entry, threading through project_root. */
-function rowFor(entry: StateEntry, outcome: Outcome): UpdateRow {
+function rowFor(entry: StateEntry, outcome: InternalOutcome): UpdateRow {
+  const publicOutcome =
+    outcome.kind === "updated"
+      ? { kind: "updated" as const, new_sha: outcome.new_sha, per_target: outcome.per_target }
+      : outcome;
   return {
     name: entry.name,
     scope: entry.scope,
     ...(entry.project_root === undefined ? {} : { project_root: entry.project_root }),
-    outcome,
+    outcome: publicOutcome,
   };
 }
 
@@ -111,7 +95,7 @@ function updateOne(
   home: string,
   force: boolean,
   fallbackCwd: string,
-): Outcome {
+): InternalOutcome {
   const entryCwd = cwdForEntry(entry, fallbackCwd);
   if (entry.scope === "project" && entry.project_root && !existsSync(entry.project_root)) {
     return { kind: "missing_project_root", root: entry.project_root };
@@ -121,7 +105,6 @@ function updateOne(
     return { kind: "skipped", reason: "pinned to exact SHA" };
   }
 
-  // Look up the tap that owns this entry.
   const tap = config.taps.find((t) => t.name === entry.source.tap);
   if (!tap) {
     // Tap was removed from config (manually); doctor --repair can fix.
@@ -138,10 +121,7 @@ function updateOne(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
-  // Resolve the skill's directory inside the tap. Tap re-expansion
-  // runs before the per-entry loop and already marks missing skills
-  // as `source_gone`, so by the time we're here the dir is guaranteed
-  // to exist.
+  // Tap re-expansion has already marked missing children `source_gone`.
   const skillDir = join(acquired.rootDir, entry.source.path);
 
   if (newSha === entry.resolved_sha) {
@@ -194,17 +174,24 @@ function updateOne(
       }
     }
   }
-  return { kind: "updated", new_sha: newSha, per_target: perTarget };
+  return {
+    kind: "updated",
+    new_sha: newSha,
+    content_hash: staged.contentHash,
+    per_target: perTarget,
+  };
 }
 
 function rebuildStateEntry(
   entry: StateEntry,
   newSha: string | null,
+  contentHash: string,
   successfulTargets: string[],
 ): StateEntry {
   return {
     ...entry,
     resolved_sha: newSha,
+    content_hash: contentHash,
     agents: successfulTargets.length > 0 ? successfulTargets : entry.agents,
     installed_at: nowIso(),
   };
