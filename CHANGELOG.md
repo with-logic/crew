@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.0] — 2026-05-26
+
+### Added
+- Antigravity CLI is now a supported agent. `crew` detects it automatically and resolves user-level skills to `~/.gemini/antigravity-cli/skills/`; project-level installs continue to use `<project>/.agents/skills/`.
+
+### Fixed
+- `crew update` no longer reports local path-sourced skills as updated on every run. The new content hash is persisted after each real change, so the next run compares against current bytes instead of stale state.
+- The install snippet on the crew website now dynamically renders the latest release version instead of a hardcoded string.
+
 ## [0.8.1] — 2026-05-11
 
 ### Added
