@@ -199,19 +199,12 @@ if [ "$(echo "$response" | jq -r 'if type == "object" then (.is_error // false) 
   exit 1
 fi
 
-# With `--json-schema`, Claude's structured response comes back as a
-# tool call named `StructuredOutput` whose `input` is the schema-
-# conforming object. The top-level `result` field is empty text.
-# Walk the event stream and pick out the last tool_use input.
-inner="$(
-  echo "$response" | jq -c '
-    map(select(.type == "assistant")
-      | .message.content[]
-      | select(.name == "StructuredOutput")
-      | .input
-    ) | last
-  '
-)"
+# With `--json-schema` and `--output-format json`, claude returns a
+# single result envelope and parks the schema-conforming object at
+# top-level `.structured_output`. (Earlier versions of this script
+# walked a stream-json event log — that shape never matched under
+# --output-format json and produced a cryptic jq error.)
+inner="$(echo "$response" | jq -c '.structured_output')"
 if [ -z "$inner" ] || [ "$inner" = "null" ]; then
   echo "error: claude response missing structured output" >&2
   echo "--- raw response ---" >&2
