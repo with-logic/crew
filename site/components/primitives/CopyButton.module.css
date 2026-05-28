@@ -7,7 +7,7 @@
   padding: 0;
   background: color-mix(in oklab, var(--term-ink) 8%, transparent);
   border: 1px solid color-mix(in oklab, var(--term-ink) 15%, transparent);
-  border-radius: 6px;
+  border-radius: 2px;
   color: var(--term-mute);
   cursor: pointer;
   transition:

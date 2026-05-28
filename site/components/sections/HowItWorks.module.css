@@ -42,7 +42,7 @@
 .diagram {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 28px;
   position: sticky;
   top: 80px;

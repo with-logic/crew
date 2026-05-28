@@ -1,7 +1,7 @@
 .tap {
   scroll-margin-top: 88px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 2px;
   background: var(--surface);
   padding: 22px;
 }
@@ -34,7 +34,7 @@
 
 .badge {
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 999px;
   color: var(--accent-ink);
   font: 11px var(--font-mono);
   padding: 3px 7px;

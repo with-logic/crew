@@ -104,6 +104,6 @@
   font-family: var(--font-mono);
   background: var(--paper);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: 4px;
   font-size: 0.9em;
 }

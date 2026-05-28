@@ -2,7 +2,7 @@
   box-sizing: border-box;
   width: 100%;
   min-height: 34px;
-  border-radius: 5px;
+  border-radius: 2px;
   cursor: pointer;
   font: 600 12px var(--font-mono);
   padding: 0 10px;
@@ -36,7 +36,7 @@
   max-width: 28px;
   min-width: 28px;
   min-height: 28px;
-  border-radius: 50%;
+  border-radius: 2px;
   font-size: 17px;
   line-height: 1;
   overflow: hidden;
@@ -52,7 +52,7 @@
 .action:has(.iconButton:focus-visible) .iconButton,
 .actionCopied .iconButton {
   max-width: 160px;
-  border-radius: 999px;
+  border-radius: 2px;
   padding: 0 12px 0 0;
 }
 
@@ -131,7 +131,7 @@
   max-width: max-content;
   padding: 9px 10px;
   border: 1px solid var(--line-2);
-  border-radius: 6px;
+  border-radius: 2px;
   background: var(--surface);
   box-shadow: 0 10px 24px color-mix(in oklab, var(--ink) 14%, transparent);
   color: var(--mute);

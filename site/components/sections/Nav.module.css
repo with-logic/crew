@@ -23,7 +23,7 @@
   color: var(--mute);
   padding: 3px 7px;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: 6px;
 }
 
 .links {
@@ -77,7 +77,7 @@
   font-size: 12px;
   padding: 6px 12px;
   border: 1px solid var(--line-2);
-  border-radius: 4px;
+  border-radius: 6px;
   text-decoration: none;
   background: var(--surface);
   color: var(--ink);

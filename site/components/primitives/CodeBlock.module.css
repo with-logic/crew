@@ -4,7 +4,7 @@
   line-height: 1.65;
   background: var(--term-bg);
   color: var(--term-ink);
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 20px 22px;
   overflow-x: auto;
   white-space: pre;

@@ -15,7 +15,7 @@
 .search {
   width: 100%;
   border: 1px solid var(--line-2);
-  border-radius: 5px;
+  border-radius: 2px;
   background: var(--surface);
   color: var(--ink);
   font: 500 15px var(--font-sans);

@@ -14,7 +14,7 @@
   font-size: 0.88em;
   background: var(--paper);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .list details summary {
