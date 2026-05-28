@@ -2,6 +2,7 @@ import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { Archivo, Azeret_Mono, Instrument_Sans } from "next/font/google";
 import type { ReactNode } from "react";
+import { GridFidget } from "../components/primitives/GridFidget";
 import "./globals.css";
 
 const archivo = Archivo({
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${archivo.variable} ${instrumentSans.variable} ${azeretMono.variable}`}
     >
       <body>
+        <GridFidget />
         {children}
         <Analytics />
       </body>

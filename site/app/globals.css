@@ -11,7 +11,11 @@ body {
 }
 
 body {
-  background: var(--bg);
+  background:
+    linear-gradient(color-mix(in oklab, var(--saffron) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--saffron) 6%, transparent) 1px, transparent 1px),
+    var(--bg);
+  background-size: 18px 18px;
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 16px;
