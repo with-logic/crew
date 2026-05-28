@@ -10,7 +10,7 @@
 .inner {
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
   height: var(--nav-h);
   padding: 0 var(--wrap-pad);
   max-width: var(--wrap-max);
@@ -28,7 +28,7 @@
 
 .links {
   display: flex;
-  gap: 24px;
+  gap: 20px;
   font-size: 14px;
   color: var(--ink-2);
   margin-left: 12px;
@@ -50,7 +50,7 @@
 
 .osPill {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   padding: 5px 10px 5px 8px;
   border: 1px solid var(--line-2);
   border-radius: 999px;
@@ -59,7 +59,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #fff;
+  background: var(--surface);
+  white-space: nowrap;
 }
 
 .osPill:hover {
@@ -73,16 +74,17 @@
 
 .cta {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
   padding: 6px 12px;
   border: 1px solid var(--line-2);
   border-radius: 4px;
   text-decoration: none;
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 }
 
 .cta:hover {
@@ -96,6 +98,16 @@
 @media (max-width: 860px) {
   .links,
   .osPill {
+    display: none;
+  }
+
+  .inner {
+    gap: 14px;
+  }
+}
+
+@media (max-width: 520px) {
+  .cta {
     display: none;
   }
 }

@@ -18,11 +18,11 @@
 }
 
 .title {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 40px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 42px;
   line-height: 1.05;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.012em;
   margin: 0 0 16px;
   max-width: 620px;
   text-wrap: balance;

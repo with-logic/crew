@@ -31,11 +31,11 @@
 }
 
 .title {
-  font-family: var(--font-sans);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 700;
   font-size: 64px;
   line-height: 1.02;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.016em;
   margin: 0;
   max-width: 980px;
   text-wrap: balance;
@@ -73,7 +73,7 @@
 
 .codePaper {
   font-family: var(--font-mono);
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   padding: 1px 6px;
   border-radius: 3px;

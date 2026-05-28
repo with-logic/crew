@@ -16,7 +16,7 @@
 
 .secondaryButton {
   border: 1px solid var(--line-2);
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
 }
 
@@ -25,7 +25,7 @@
 }
 
 .iconButton.secondaryButton:hover {
-  background: #fff;
+  background: var(--surface);
 }
 
 .iconButton {
@@ -100,7 +100,7 @@
 .copiedButton.secondaryButton:hover,
 .failedButton.secondaryButton,
 .failedButton.secondaryButton:hover {
-  background: #fff;
+  background: var(--surface);
 }
 
 .disabledButton,
@@ -132,7 +132,7 @@
   padding: 9px 10px;
   border: 1px solid var(--line-2);
   border-radius: 6px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 10px 24px color-mix(in oklab, var(--ink) 14%, transparent);
   color: var(--mute);
   font: 11px var(--font-mono);

@@ -2,7 +2,7 @@
   scroll-margin-top: 88px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   padding: 22px;
 }
 

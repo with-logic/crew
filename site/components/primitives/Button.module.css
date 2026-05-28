@@ -13,7 +13,7 @@
 }
 
 .btn:hover {
-  background: #000;
+  background: color-mix(in oklab, var(--ink) 92%, var(--aubergine));
 }
 
 .ghost {

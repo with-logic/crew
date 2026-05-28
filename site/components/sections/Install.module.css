@@ -32,11 +32,11 @@
 }
 
 .title {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 40px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 42px;
   line-height: 1.05;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.012em;
   margin: 0;
   color: var(--ink);
 }
@@ -81,7 +81,7 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--ink-2);
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line-2);
   border-radius: 999px;
   padding: 7px 14px 7px 12px;
