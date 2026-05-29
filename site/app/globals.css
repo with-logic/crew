@@ -11,17 +11,20 @@ body {
 }
 
 body {
-  background:
-    linear-gradient(color-mix(in oklab, var(--saffron) 7%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in oklab, var(--saffron) 6%, transparent) 1px, transparent 1px),
-    var(--bg);
-  background-size: 18px 18px;
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "ss01", "cv11";
+}
+
+body > nav,
+body > main,
+body > footer {
+  position: relative;
+  z-index: 2;
 }
 
 a {

@@ -2,30 +2,15 @@
 
 /*
  * Background grid fidget for the site presentation surface (§16.6).
- * The canvas is visual-only: it never intercepts input, and click bursts
+ * The canvas is visual-only: it never intercepts input, and click waves
  * only trigger from background-like whitespace rather than foreground UI.
  */
 
 import { useEffect, useRef } from "react";
+import type { GridOffset, Palette, Wave } from "./grid-fidget/waves";
+import { addWave, drawWaves } from "./grid-fidget/waves";
 
 const CELL_SIZE = 18;
-const MAX_PARTICLES = 120;
-
-type Particle = {
-  readonly born: number;
-  readonly size: number;
-  readonly spin: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-};
-
-type Palette = {
-  readonly aubergine: string;
-  readonly saffron: string;
-};
 
 export function GridFidget() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -39,7 +24,7 @@ export function GridFidget() {
 
     const palette = readPalette();
     const pointer = { x: -1, y: -1, active: false };
-    const particles: Particle[] = [];
+    const waves: Wave[] = [];
     let animationFrame = 0;
     let width = 0;
     let height = 0;
@@ -64,9 +49,11 @@ export function GridFidget() {
     const draw = (now: number) => {
       animationFrame = 0;
       ctx.clearRect(0, 0, width, height);
-      if (pointer.active) drawHoverCell(ctx, pointer.x, pointer.y, palette);
-      drawParticles(ctx, particles, palette, now);
-      if (pointer.active || particles.length > 0) schedule();
+      const offset = gridOffset();
+      drawGrid(ctx, width, height, palette, offset);
+      if (pointer.active) drawHoverCell(ctx, pointer.x, pointer.y, palette, offset);
+      drawWaves(ctx, waves, palette, now, offset);
+      if (pointer.active || waves.length > 0) schedule();
     };
 
     const onPointerMove = (event: PointerEvent) => {
@@ -82,8 +69,8 @@ export function GridFidget() {
     };
 
     const onPointerDown = (event: PointerEvent) => {
-      if (!isBackgroundClick(event.target)) return;
-      burstFromCell(particles, event.clientX, event.clientY, performance.now());
+      if (!shouldStartWave(event)) return;
+      addWave(waves, event.clientX, event.clientY, width, height, performance.now());
       schedule();
     };
 
@@ -92,6 +79,7 @@ export function GridFidget() {
     window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("pointerleave", onPointerLeave, { passive: true });
     window.addEventListener("pointerdown", onPointerDown, { passive: true });
+    window.addEventListener("scroll", schedule, { passive: true });
 
     return () => {
       cancelAnimationFrame(animationFrame);
@@ -99,6 +87,7 @@ export function GridFidget() {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerleave", onPointerLeave);
       window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("scroll", schedule);
     };
   }, []);
 
@@ -109,7 +98,7 @@ export function GridFidget() {
         inset: 0,
         position: "fixed",
         pointerEvents: "none",
-        zIndex: 2,
+        zIndex: 1,
       }}
     />
   );
@@ -123,69 +112,63 @@ function readPalette(): Palette {
   };
 }
 
-function drawHoverCell(ctx: CanvasRenderingContext2D, x: number, y: number, palette: Palette) {
-  const cellX = Math.floor(x / CELL_SIZE) * CELL_SIZE;
-  const cellY = Math.floor(y / CELL_SIZE) * CELL_SIZE;
+function drawHoverCell(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  palette: Palette,
+  offset: GridOffset,
+) {
+  const cellX = snapToGrid(x, offset.x);
+  const cellY = snapToGrid(y, offset.y);
   ctx.fillStyle = colorWithAlpha(palette.aubergine, 0.09);
   ctx.fillRect(cellX + 1, cellY + 1, CELL_SIZE - 1, CELL_SIZE - 1);
   ctx.strokeStyle = colorWithAlpha(palette.saffron, 0.38);
   ctx.strokeRect(cellX + 0.5, cellY + 0.5, CELL_SIZE, CELL_SIZE);
 }
 
-function drawParticles(
+function drawGrid(
   ctx: CanvasRenderingContext2D,
-  particles: Particle[],
+  width: number,
+  height: number,
   palette: Palette,
-  now: number,
+  offset: GridOffset,
 ) {
-  for (let index = particles.length - 1; index >= 0; index -= 1) {
-    const particle = particles[index]!;
-    const age = now - particle.born;
-    if (age > particle.life) {
-      particles.splice(index, 1);
-      continue;
-    }
-    const progress = age / particle.life;
-    particle.x += particle.vx;
-    particle.y += particle.vy;
-    particle.vy += 0.045;
-    ctx.save();
-    ctx.translate(particle.x, particle.y);
-    ctx.rotate(progress * particle.spin);
-    ctx.fillStyle = colorWithAlpha(palette.aubergine, (1 - progress) * 0.26);
-    ctx.fillRect(-particle.size / 2, -particle.size / 2, particle.size, particle.size);
-    ctx.restore();
+  ctx.strokeStyle = colorWithAlpha(palette.saffron, 0.065);
+  ctx.lineWidth = 1;
+  for (let x = offset.x + 0.5; x <= width; x += CELL_SIZE) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = colorWithAlpha(palette.saffron, 0.075);
+  for (let y = offset.y + 0.5; y <= height; y += CELL_SIZE) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
   }
 }
 
-function burstFromCell(particles: Particle[], x: number, y: number, now: number) {
-  const baseX = Math.floor(x / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2;
-  const baseY = Math.floor(y / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2;
-  for (let index = 0; index < 18; index += 1) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 0.7 + Math.random() * 1.6;
-    particles.push({
-      born: now,
-      life: 620 + Math.random() * 380,
-      size: 4 + Math.random() * 7,
-      spin: Math.random() * 4 - 2,
-      x: baseX,
-      y: baseY,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - 0.6,
-    });
-  }
-  if (particles.length > MAX_PARTICLES) particles.splice(0, particles.length - MAX_PARTICLES);
+function gridOffset(): GridOffset {
+  return {
+    x: -(window.scrollX % CELL_SIZE),
+    y: -(window.scrollY % CELL_SIZE),
+  };
 }
 
-function isBackgroundClick(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
-  const foreground = target.closest(
-    "a,button,input,textarea,select,summary,details,pre,code,h1,h2,h3,h4,p,li,span,strong,em,small,svg,img,[role='button']",
-  );
-  if (foreground) return false;
-  if (target.matches("body,main,section")) return true;
-  return target instanceof HTMLElement && target.textContent?.trim() === "";
+function snapToGrid(value: number, offset: number): number {
+  return Math.floor((value - offset) / CELL_SIZE) * CELL_SIZE + offset;
+}
+
+function shouldStartWave(event: PointerEvent): boolean {
+  if (!(event.target instanceof Element)) return false;
+  const target = document.elementFromPoint(event.clientX, event.clientY);
+  if (!target || target.closest("a,button,input,textarea,select,summary,[role='button']")) {
+    return false;
+  }
+  return !target.closest("pre,code,svg,img,canvas,video");
 }
 
 function colorWithAlpha(hex: string, alpha: number): string {

@@ -68,6 +68,20 @@
   line-height: 1.5;
 }
 
+.lede code {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+  line-height: 1.15;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  padding: 0.16em 0.42em 0.18em;
+  white-space: nowrap;
+  transform: translateY(-0.04em);
+}
+
 .ctaRow {
   display: flex;
   gap: 12px;
