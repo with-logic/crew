@@ -5,8 +5,8 @@
   gap: 8px;
   padding: 5px 10px;
   border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #fff;
+  border-radius: 999px;
+  background: var(--surface);
   color: var(--ink);
   font-size: 13px;
 }

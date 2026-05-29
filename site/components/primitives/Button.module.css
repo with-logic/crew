@@ -2,7 +2,7 @@
   font-family: var(--font-mono);
   font-size: 13px;
   padding: 10px 16px;
-  border-radius: 5px;
+  border-radius: 2px;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -13,7 +13,7 @@
 }
 
 .btn:hover {
-  background: #000;
+  background: color-mix(in oklab, var(--ink) 92%, var(--aubergine));
 }
 
 .ghost {

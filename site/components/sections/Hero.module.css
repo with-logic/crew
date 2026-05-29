@@ -10,12 +10,16 @@
   align-items: start;
 }
 
+.grid > * {
+  min-width: 0;
+}
+
 .title {
-  font-family: var(--font-sans);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 700;
   font-size: 76px;
   line-height: 1;
-  letter-spacing: -0.038em;
+  letter-spacing: -0.018em;
   margin: 0 0 28px;
   text-wrap: balance;
 }
@@ -44,7 +48,7 @@
   border: 1px solid var(--line-2);
   border-radius: 10px;
   padding: 0.14em 0.24em 0.18em 0.18em;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   color: var(--ink);
   display: inline-block;
   /* translateY: nudge UP by 0.1em so the pill's vertical center lines
@@ -62,6 +66,20 @@
   max-width: 540px;
   margin: 0 0 40px;
   line-height: 1.5;
+}
+
+.lede code {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+  line-height: 1.15;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  padding: 0.16em 0.42em 0.18em;
+  white-space: nowrap;
+  transform: translateY(-0.04em);
 }
 
 .ctaRow {

@@ -4,7 +4,7 @@
   padding: 36px 28px 32px;
   background: var(--paper);
   border: 1px dashed var(--line-2);
-  border-radius: 10px;
+  border-radius: 2px;
   text-align: center;
 }
 
@@ -77,7 +77,7 @@
   font-family: var(--font-mono);
   font-size: 13px;
   padding: 10px 18px;
-  border-radius: 6px;
+  border-radius: 2px;
   border: 1px solid var(--line-2);
   background: var(--bg);
   color: var(--ink);

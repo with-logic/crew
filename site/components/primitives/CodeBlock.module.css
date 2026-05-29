@@ -4,16 +4,16 @@
   line-height: 1.65;
   background: var(--term-bg);
   color: var(--term-ink);
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 20px 22px;
   overflow-x: auto;
   white-space: pre;
-  border: 1px solid #000;
+  border: 1px solid var(--line-2);
   margin: 0;
 }
 
 .light {
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   border: 1px solid var(--line);
 }
@@ -36,7 +36,7 @@
   color: var(--term-ok);
 }
 .light .ok {
-  color: oklch(0.5 0.12 150);
+  color: var(--ok);
 }
 
 .warn {
@@ -54,5 +54,5 @@
   color: var(--term-key);
 }
 .light .key {
-  color: oklch(0.5 0.12 250);
+  color: var(--key);
 }

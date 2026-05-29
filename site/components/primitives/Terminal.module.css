@@ -1,11 +1,11 @@
 .card {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 2px;
   overflow: hidden;
   box-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.02),
-    0 12px 40px -24px rgba(23, 22, 26, 0.25);
+    0 1px 0 color-mix(in oklab, var(--shadow) 4%, transparent),
+    0 12px 40px -24px color-mix(in oklab, var(--shadow) 28%, transparent);
 }
 
 .head {
@@ -30,7 +30,7 @@
   height: 10px;
   border-radius: 50%;
   display: inline-block;
-  background: #d8d2c4;
+  background: var(--chrome-dot);
 }
 
 .title {
@@ -46,4 +46,5 @@
   font-family: var(--font-mono);
   font-size: 14px;
   line-height: 1.7;
+  overflow-x: auto;
 }

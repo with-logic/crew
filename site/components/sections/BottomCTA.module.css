@@ -9,9 +9,10 @@
 }
 
 .title {
+  font-family: var(--font-display);
   font-size: 48px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-weight: 700;
+  letter-spacing: -0.014em;
   margin: 0 0 24px;
   line-height: 1.05;
 }

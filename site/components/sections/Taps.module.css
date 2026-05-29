@@ -15,7 +15,7 @@
   max-width: 820px;
   padding: 36px 28px 32px;
   border: 1px dashed var(--line-2);
-  border-radius: 10px;
+  border-radius: 2px;
   background: var(--paper);
   text-align: center;
 }

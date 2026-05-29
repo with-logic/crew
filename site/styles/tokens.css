@@ -5,34 +5,44 @@
  */
 
 :root {
-  /* Ink & paper */
-  --bg: #faf8f5;
-  --ink: #17161a;
-  --ink-2: #3a3740;
-  --mute: #6e6a74;
-  --line: #e7e2d9;
-  --line-2: #d5cfc3;
-  --paper: #f2ede3;
+  /* Three-color system */
+  --white: #ffffff;
+  --off-black: #11100f;
+  --aubergine: #a30d2c;
+  --saffron: #b86f00;
+
+  --bg: var(--white);
+  --surface: var(--white);
+  --ink: var(--off-black);
+  --ink-2: color-mix(in oklab, var(--off-black) 88%, var(--saffron));
+  --mute: color-mix(in oklab, var(--off-black) 62%, var(--saffron));
+  --line: color-mix(in oklab, var(--saffron) 15%, var(--white));
+  --line-2: color-mix(in oklab, var(--saffron) 30%, var(--white));
+  --paper: color-mix(in oklab, var(--saffron) 6%, var(--white));
+  --shadow: var(--off-black);
+  --chrome-dot: color-mix(in oklab, var(--saffron) 36%, var(--white));
 
   /* Accent + semantic */
-  --accent: oklch(0.68 0.15 58);
-  --accent-ink: oklch(0.38 0.09 55);
-  --ok: oklch(0.6 0.12 150);
-  --warn: oklch(0.62 0.16 25);
+  --accent: var(--aubergine);
+  --accent-ink: var(--aubergine);
+  --key: var(--aubergine);
+  --ok: var(--aubergine);
+  --warn: var(--aubergine);
 
   /* Terminal palette */
-  --term-bg: #17161a;
-  --term-ink: #ece6d8;
-  --term-mute: #8a8478;
-  --term-ok: oklch(0.78 0.15 150);
-  --term-warn: oklch(0.78 0.17 60);
-  --term-accent: oklch(0.82 0.13 60);
-  --term-key: oklch(0.82 0.12 250);
-  --term-prompt: #d0c7b0;
+  --term-bg: var(--off-black);
+  --term-ink: var(--white);
+  --term-mute: color-mix(in oklab, var(--white) 58%, var(--saffron));
+  --term-ok: color-mix(in oklab, var(--aubergine) 44%, var(--white));
+  --term-warn: color-mix(in oklab, var(--aubergine) 44%, var(--white));
+  --term-accent: color-mix(in oklab, var(--aubergine) 44%, var(--white));
+  --term-key: color-mix(in oklab, var(--aubergine) 30%, var(--white));
+  --term-prompt: color-mix(in oklab, var(--white) 72%, var(--saffron));
 
   /* Typography */
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Archivo", system-ui, sans-serif;
+  --font-sans: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "Azeret Mono", ui-monospace, monospace;
 
   /* Layout */
   --wrap-max: 1160px;

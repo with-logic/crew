@@ -20,6 +20,14 @@ body {
   font-feature-settings: "ss01", "cv11";
 }
 
+body > nav,
+body > main,
+body > footer {
+  /* Keep page content above the visual-only GridFidget canvas. */
+  position: relative;
+  z-index: 2;
+}
+
 a {
   color: var(--ink);
   text-decoration: underline;
