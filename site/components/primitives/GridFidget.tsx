@@ -1,27 +1,28 @@
 "use client";
 
 /*
- * Background grid fidget for the site presentation surface (§16.6).
+ * Background grid fidget for the site-only presentation surface.
+ * This visual layer does not implement a CLI PRD section.
  * The canvas is visual-only: it never intercepts input, and click waves
  * only trigger from background-like whitespace rather than foreground UI.
  */
 
 import { useEffect, useRef } from "react";
+import { CELL_SIZE, colorWithAlpha, snapToGrid } from "./grid-fidget/util";
 import type { GridOffset, Palette, Wave } from "./grid-fidget/waves";
 import { addWave, drawWaves } from "./grid-fidget/waves";
-
-const CELL_SIZE = 18;
 
 export function GridFidget() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const allowMotion = !matchMedia("(prefers-reduced-motion: reduce)").matches;
     const palette = readPalette();
     const pointer = { x: -1, y: -1, active: false };
     const waves: Wave[] = [];
@@ -51,12 +52,14 @@ export function GridFidget() {
       ctx.clearRect(0, 0, width, height);
       const offset = gridOffset();
       drawGrid(ctx, width, height, palette, offset);
+      if (!allowMotion) return;
       if (pointer.active) drawHoverCell(ctx, pointer.x, pointer.y, palette, offset);
       drawWaves(ctx, waves, palette, now, offset);
       if (pointer.active || waves.length > 0) schedule();
     };
 
     const onPointerMove = (event: PointerEvent) => {
+      if (!allowMotion) return;
       pointer.x = event.clientX;
       pointer.y = event.clientY;
       pointer.active = true;
@@ -69,6 +72,7 @@ export function GridFidget() {
     };
 
     const onPointerDown = (event: PointerEvent) => {
+      if (!allowMotion) return;
       if (!shouldStartWave(event)) return;
       addWave(waves, event.clientX, event.clientY, width, height, performance.now());
       schedule();
@@ -92,15 +96,17 @@ export function GridFidget() {
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
+    <div
+      aria-hidden="true"
       style={{
         inset: 0,
         position: "fixed",
         pointerEvents: "none",
         zIndex: 1,
       }}
-    />
+    >
+      <canvas ref={canvasRef} />
+    </div>
   );
 }
 
@@ -136,19 +142,19 @@ function drawGrid(
 ) {
   ctx.strokeStyle = colorWithAlpha(palette.saffron, 0.065);
   ctx.lineWidth = 1;
+  ctx.beginPath();
   for (let x = offset.x + 0.5; x <= width; x += CELL_SIZE) {
-    ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, height);
-    ctx.stroke();
   }
+  ctx.stroke();
   ctx.strokeStyle = colorWithAlpha(palette.saffron, 0.075);
+  ctx.beginPath();
   for (let y = offset.y + 0.5; y <= height; y += CELL_SIZE) {
-    ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(width, y);
-    ctx.stroke();
   }
+  ctx.stroke();
 }
 
 function gridOffset(): GridOffset {
@@ -158,21 +164,14 @@ function gridOffset(): GridOffset {
   };
 }
 
-function snapToGrid(value: number, offset: number): number {
-  return Math.floor((value - offset) / CELL_SIZE) * CELL_SIZE + offset;
-}
-
 function shouldStartWave(event: PointerEvent): boolean {
   if (!(event.target instanceof Element)) return false;
   const target = document.elementFromPoint(event.clientX, event.clientY);
-  if (!target || target.closest("a,button,input,textarea,select,summary,[role='button']")) {
+  if (
+    !target ||
+    target.closest("a,button,input,textarea,select,summary,[role='button'],[data-no-fidget]")
+  ) {
     return false;
   }
   return !target.closest("pre,code,svg,img,canvas,video");
-}
-
-function colorWithAlpha(hex: string, alpha: number): string {
-  return `${hex}${Math.round(alpha * 255)
-    .toString(16)
-    .padStart(2, "0")}`;
 }

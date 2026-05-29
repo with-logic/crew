@@ -23,6 +23,7 @@ body {
 body > nav,
 body > main,
 body > footer {
+  /* Keep page content above the visual-only GridFidget canvas. */
   position: relative;
   z-index: 2;
 }

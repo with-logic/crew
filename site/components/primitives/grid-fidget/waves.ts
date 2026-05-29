@@ -1,14 +1,16 @@
 /*
- * Wave drawing helpers for the site background fidget (§16.6).
- * These keep the canvas component small while preserving the grid physics.
+ * Wave drawing helpers for the site-only background fidget.
+ * This visual layer does not implement a CLI PRD section.
  */
 
-const CELL_SIZE = 18;
+import { CELL_SIZE, colorWithAlpha, snapToGrid } from "./util";
+
 const WAVE_BAND = CELL_SIZE * 2.7;
 const WAVE_SPEED = 0.72;
 const WAVE_SEGMENTS = 96;
 const MAX_WAVES = 64;
 const RING_OFFSETS = [-20, -10, 0, 10, 20];
+const RING_FADE_SPAN = Math.max(...RING_OFFSETS.map(Math.abs)) + 8;
 
 export type Wave = {
   readonly born: number;
@@ -73,7 +75,7 @@ function drawWaveRing(
   now: number,
 ) {
   for (const offset of RING_OFFSETS) {
-    const strength = 1 - Math.abs(offset) / 28;
+    const strength = 1 - Math.abs(offset) / RING_FADE_SPAN;
     ctx.beginPath();
     drawRingPath(ctx, wave, radius + offset, now);
     ctx.strokeStyle = colorWithAlpha(palette.aubergine, fade * strength * 0.18);
@@ -133,14 +135,4 @@ function drawWaveCell(
   ctx.fillRect(cellX + 1, cellY + 1 - lift, CELL_SIZE - 2, CELL_SIZE - 2);
   ctx.strokeStyle = colorWithAlpha(palette.saffron, alpha * 1.8);
   ctx.strokeRect(cellX + 0.5, cellY + 0.5 - lift, CELL_SIZE - 1, CELL_SIZE - 1);
-}
-
-function colorWithAlpha(hex: string, alpha: number): string {
-  return `${hex}${Math.round(alpha * 255)
-    .toString(16)
-    .padStart(2, "0")}`;
-}
-
-function snapToGrid(value: number, offset: number): number {
-  return Math.floor((value - offset) / CELL_SIZE) * CELL_SIZE + offset;
 }
