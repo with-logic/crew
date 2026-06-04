@@ -9,3 +9,10 @@ declare module "*.module.css" {
   const classes: Record<string, string>;
   export default classes;
 }
+
+declare module "*.png" {
+  import type { StaticImageData } from "next/image";
+
+  const src: StaticImageData;
+  export default src;
+}
