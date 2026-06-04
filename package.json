@@ -29,7 +29,7 @@
     "check": "bun run check-release-signing-key && bun run known-taps check && bun run typecheck && bun run lint && bun test"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.15",
+    "@biomejs/biome": "2.4.16",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
     "@types/proper-lockfile": "^4.1.4",
