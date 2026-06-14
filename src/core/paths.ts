@@ -1,7 +1,7 @@
 /**
  * Homecrew's canonical filesystem layout.
  *
- * §6 lays out the directory tree crew owns under `~/.crew/`. Every path in
+ * §6 and §10.2 lay out the directories crew owns or writes. Every path in
  * that tree is produced here so we never hardcode a layout decision in two
  * places. The paths are computed relative to a configurable `home` so tests
  * can redirect crew's state dir via the `CREW_HOME` environment variable.
@@ -32,6 +32,19 @@ export function launchAgentsDir(): string {
   return join(homedir(), "Library", "LaunchAgents");
 }
 
+/**
+ * Resolve the user's systemd unit directory. Normally
+ * `~/.config/systemd/user`, but tests can redirect via
+ * `CREW_SYSTEMD_USER_DIR`.
+ */
+export function systemdUserDir(): string {
+  const override = process.env["CREW_SYSTEMD_USER_DIR"];
+  if (override && override.length > 0) {
+    return override;
+  }
+  return join(homedir(), ".config", "systemd", "user");
+}
+
 /** Every well-known path crew produces. */
 export interface CrewPaths {
   readonly home: string;
@@ -46,6 +59,9 @@ export interface CrewPaths {
   readonly autoupdateLog: string;
   readonly launchAgentsDir: string;
   readonly autoupdatePlist: string;
+  readonly systemdUserDir: string;
+  readonly autoupdateSystemdService: string;
+  readonly autoupdateSystemdTimer: string;
   readonly versionCheckFile: string;
 }
 
@@ -64,6 +80,9 @@ export function paths(home: string = crewHome()): CrewPaths {
     autoupdateLog: join(home, "logs", "autoupdate.log"),
     launchAgentsDir: launchAgentsDir(),
     autoupdatePlist: join(launchAgentsDir(), "sh.crew.autoupdate.plist"),
+    systemdUserDir: systemdUserDir(),
+    autoupdateSystemdService: join(systemdUserDir(), "sh.crew.autoupdate.service"),
+    autoupdateSystemdTimer: join(systemdUserDir(), "sh.crew.autoupdate.timer"),
     versionCheckFile: join(home, "version-check.json"),
   };
 }

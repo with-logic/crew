@@ -6,11 +6,13 @@
  * so the command handler can render the right human output.
  */
 
+import { dirname } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { CREW_VERSION } from "../core/version.ts";
+import { rmrf } from "../util/fs.ts";
 import { writeVersionCheck } from "./check.ts";
 import { checksumAssetUrl, downloadChecksums, verifyAssetChecksum } from "./checksum.ts";
-import { assetNameForArch, downloadAssetToTemp, installBinary } from "./download.ts";
+import { downloadAssetToTemp, installBinary, releaseAssetName } from "./download.ts";
 import { fetchRelease, releasesByTagUrl, releasesLatestUrl } from "./github.ts";
 import {
   checksumSignatureAssetUrl,
@@ -42,7 +44,7 @@ export interface SelfUpdateOptions {
 }
 
 export function runSelfUpdate(options: SelfUpdateOptions): SelfUpdateResult {
-  assertMacOS();
+  assertSupportedPlatform();
   const url = options.tag ? releasesByTagUrl(options.tag) : releasesLatestUrl();
   const release = fetchRelease(url, RELEASE_FETCH_TIMEOUT_SECONDS);
 
@@ -54,7 +56,7 @@ export function runSelfUpdate(options: SelfUpdateOptions): SelfUpdateResult {
     return { currentVersion, latestTag: release.tag, replaced: false };
   }
 
-  const assetName = assetNameForArch();
+  const assetName = releaseAssetName();
   const downloadUrl = release.assets[assetName];
   if (!downloadUrl) {
     throw new CrewError(
@@ -72,7 +74,12 @@ export function runSelfUpdate(options: SelfUpdateOptions): SelfUpdateResult {
     verifyChecksumsSignature(checksumsText, signature);
   }
   const tempPath = downloadAssetToTemp(downloadUrl, DOWNLOAD_TIMEOUT_SECONDS);
-  verifyAssetChecksum(tempPath, assetName, checksumsText);
+  try {
+    verifyAssetChecksum(tempPath, assetName, checksumsText);
+  } catch (err) {
+    rmrf(dirname(tempPath));
+    throw err;
+  }
   installBinary(tempPath, resolveDest(options.execPath));
   writeVersionCheck(release.tag, options.home);
   return { currentVersion, latestTag: release.tag, replaced: true };
@@ -100,7 +107,7 @@ export function runSelfUpdateCheck(
   home: string,
   tag?: string,
 ): { readonly currentVersion: string; readonly latestTag: string } {
-  assertMacOS();
+  assertSupportedPlatform();
   const url = tag ? releasesByTagUrl(tag) : releasesLatestUrl();
   const release = fetchRelease(url, RELEASE_FETCH_TIMEOUT_SECONDS);
   writeVersionCheck(release.tag, home);
@@ -112,11 +119,11 @@ function sameTag(a: string, b: string): boolean {
   return norm(a) === norm(b);
 }
 
-function assertMacOS(): void {
-  if (process.platform !== "darwin") {
+function assertSupportedPlatform(): void {
+  if (process.platform !== "darwin" && process.platform !== "linux") {
     throw new CrewError(
       "self_update_unavailable",
-      "Homecrew ships macOS binaries only. use your package manager or build from source on other platforms.",
+      "Homecrew ships binaries for macOS and Linux only. use your package manager or build from source on other platforms.",
       { platform: process.platform },
     );
   }

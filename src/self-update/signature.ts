@@ -6,9 +6,10 @@
  */
 
 import { createVerify } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
+import { dirname } from "node:path";
 import { CrewError } from "../core/errors.ts";
-import { downloadAssetToTemp } from "./download.ts";
+import { CHECKSUM_SIGNATURE_MAX_BYTES, downloadAssetToTemp } from "./download.ts";
 import { RELEASE_SIGNING_PUBLIC_KEY } from "./signing-key.ts";
 
 export const CHECKSUMS_SIGNATURE_ASSET_NAME = "SHA256SUMS.sig";
@@ -41,7 +42,12 @@ export function checksumSignatureAssetUrl(
 }
 
 export function downloadChecksumSignature(url: string, timeoutSeconds: number): Buffer {
-  return readFileSync(downloadAssetToTemp(url, timeoutSeconds));
+  const path = downloadAssetToTemp(url, timeoutSeconds, CHECKSUM_SIGNATURE_MAX_BYTES);
+  try {
+    return readFileSync(path);
+  } finally {
+    rmSync(dirname(path), { recursive: true, force: true });
+  }
 }
 
 export function verifyChecksumsSignature(checksumsText: string, signature: Buffer): void {

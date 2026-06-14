@@ -47,8 +47,9 @@ export function Footer() {
           <div>
             <Brand />
             <p className={styles.lede}>
-              A macOS package manager for agent skills. Install once, share through git, keep every
-              agent current. An open-source project by <a href="https://logic.inc">Logic, Inc</a>.
+              A package manager for agent skills on macOS and Linux. Install once, share through
+              git, keep every agent current. An open-source project by{" "}
+              <a href="https://logic.inc">Logic, Inc</a>.
             </p>
           </div>
           {COLUMNS.map((c) => (
@@ -65,7 +66,7 @@ export function Footer() {
           ))}
         </div>
         <div className={styles.bot}>
-          <span>Homecrew · {CREW_VERSION_TAG} · macOS (arm64, x86_64)</span>
+          <span>Homecrew · {CREW_VERSION_TAG} · macOS + Linux</span>
           <span>
             © {new Date().getFullYear()} <a href="https://logic.inc">Logic App, Inc.</a>
           </span>

@@ -99,12 +99,14 @@ describe("defaultDownloader (download.ts)", () => {
       const cmd = (args as unknown as { cmd: string[] }).cmd;
       const outIdx = cmd.indexOf("-o");
       const outPath = cmd[outIdx + 1]!;
-      require("node:fs").writeFileSync(outPath, "downloaded-bytes");
+      const sizeIdx = cmd.indexOf("--max-filesize");
+      expect(cmd[sizeIdx + 1]).toBe("9");
+      require("node:fs").writeFileSync(outPath, "bytes");
       return result(0);
     });
-    const p = downloadAssetToTemp("https://example.com/asset", 5);
+    const p = downloadAssetToTemp("https://example.com/asset", 5, 9);
     expect(existsSync(p)).toBe(true);
-    expect(readFileSync(p, "utf8")).toBe("downloaded-bytes");
+    expect(readFileSync(p, "utf8")).toBe("bytes");
     void home;
   });
 

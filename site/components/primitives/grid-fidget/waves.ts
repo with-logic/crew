@@ -29,7 +29,8 @@ export type GridOffset = {
   readonly y: number;
 };
 
-export function drawWaves(
+/** Draw active waves and remove expired waves from the passed array. */
+export function drawAndPruneWaves(
   ctx: CanvasRenderingContext2D,
   waves: Wave[],
   palette: Palette,
@@ -104,15 +105,74 @@ function drawWaveCells(
   palette: Palette,
   offset: GridOffset,
 ) {
-  const fromX = snapToGrid(Math.max(0, wave.x - radius - WAVE_BAND), offset.x);
-  const toX = snapToGrid(wave.x + radius + WAVE_BAND + CELL_SIZE, offset.x);
   const fromY = snapToGrid(Math.max(0, wave.y - radius - WAVE_BAND), offset.y);
   const toY = snapToGrid(wave.y + radius + WAVE_BAND + CELL_SIZE, offset.y);
+  const outerRadius = radius + WAVE_BAND;
+  const innerRadius = Math.max(0, radius - WAVE_BAND);
+  const outerSquared = outerRadius * outerRadius;
+  const innerSquared = innerRadius * innerRadius;
 
   for (let cellY = fromY; cellY <= toY; cellY += CELL_SIZE) {
-    for (let cellX = fromX; cellX <= toX; cellX += CELL_SIZE) {
-      drawWaveCell(ctx, wave, radius, fade, palette, cellX, cellY);
+    const centerY = cellY + CELL_SIZE / 2;
+    const dy = centerY - wave.y;
+    const dySquared = dy * dy;
+    if (dySquared > outerSquared) continue;
+    const outerDx = Math.sqrt(outerSquared - dySquared);
+    if (innerRadius > 0 && dySquared < innerSquared) {
+      const innerDx = Math.sqrt(innerSquared - dySquared);
+      drawWaveCellRange(
+        ctx,
+        wave,
+        radius,
+        fade,
+        palette,
+        offset,
+        cellY,
+        wave.x - outerDx,
+        wave.x - innerDx,
+      );
+      drawWaveCellRange(
+        ctx,
+        wave,
+        radius,
+        fade,
+        palette,
+        offset,
+        cellY,
+        wave.x + innerDx,
+        wave.x + outerDx,
+      );
+      continue;
     }
+    drawWaveCellRange(
+      ctx,
+      wave,
+      radius,
+      fade,
+      palette,
+      offset,
+      cellY,
+      wave.x - outerDx,
+      wave.x + outerDx,
+    );
+  }
+}
+
+function drawWaveCellRange(
+  ctx: CanvasRenderingContext2D,
+  wave: Wave,
+  radius: number,
+  fade: number,
+  palette: Palette,
+  offset: GridOffset,
+  cellY: number,
+  fromX: number,
+  toX: number,
+) {
+  const fromCellX = snapToGrid(Math.max(0, fromX - CELL_SIZE / 2), offset.x);
+  const toCellX = snapToGrid(toX + CELL_SIZE / 2, offset.x);
+  for (let cellX = fromCellX; cellX <= toCellX; cellX += CELL_SIZE) {
+    drawWaveCell(ctx, wave, radius, fade, palette, cellX, cellY);
   }
 }
 

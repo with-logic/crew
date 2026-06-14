@@ -42,7 +42,6 @@ import { garbageCollectStore } from "../../maintenance/gc.ts";
 import { readState, upsertEntry, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { resolveStateSubjects } from "../../state/subjects.ts";
-import { nowIso } from "../../util/time.ts";
 import { refreshTaps, type TapRefreshRow } from "../tap/refresh.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { renderUpdate } from "./render.ts";
@@ -132,15 +131,10 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
 
   const exitCode = hardFailure ? 1 : 0;
   const human = renderUpdate({ rows, tapReexpandRows, tapRows }, ctx.style);
-  const stderr =
-    process.env["CREW_AUTOUPDATE_LOG"] === "1"
-      ? [`crew-autoupdate ${nowIso()} exit=${exitCode}`]
-      : [];
 
   return {
     exitCode,
     human,
-    stderr,
     json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows },
   };
 }

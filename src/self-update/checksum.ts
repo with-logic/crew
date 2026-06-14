@@ -1,15 +1,16 @@
 /**
  * Release checksum verification for binary self-update (§10.3).
  *
- * `crew self-update` verifies the downloaded macOS binary against the
+ * `crew self-update` verifies the downloaded platform binary against the
  * release's SHA256SUMS asset before making it executable or replacing
  * the running binary.
  */
 
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
+import { dirname } from "node:path";
 import { CrewError } from "../core/errors.ts";
-import { downloadAssetToTemp } from "./download.ts";
+import { CHECKSUMS_MAX_BYTES, downloadAssetToTemp } from "./download.ts";
 
 export const CHECKSUMS_ASSET_NAME = "SHA256SUMS";
 
@@ -26,7 +27,12 @@ export function checksumAssetUrl(assets: Readonly<Record<string, string>>, tag: 
 }
 
 export function downloadChecksums(url: string, timeoutSeconds: number): string {
-  return readFileSync(downloadAssetToTemp(url, timeoutSeconds), "utf8");
+  const path = downloadAssetToTemp(url, timeoutSeconds, CHECKSUMS_MAX_BYTES);
+  try {
+    return readFileSync(path, "utf8");
+  } finally {
+    rmSync(dirname(path), { recursive: true, force: true });
+  }
 }
 
 export function verifyAssetChecksum(path: string, assetName: string, checksumsText: string): void {

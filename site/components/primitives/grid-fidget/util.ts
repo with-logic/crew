@@ -10,7 +10,9 @@ export function snapToGrid(value: number, offset: number): number {
 }
 
 export function colorWithAlpha(color: string, alpha: number): string {
-  const parsed = parseColor(color.trim());
+  const key = color;
+  const cached = COLOR_CACHE.get(key);
+  const parsed = cached === undefined ? parseAndCacheColor(key) : cached;
   if (!parsed) return color;
   const nextAlpha = clamp(alpha) * parsed.alpha;
   return `rgba(${parsed.r}, ${parsed.g}, ${parsed.b}, ${nextAlpha})`;
@@ -22,6 +24,14 @@ type Rgba = {
   readonly g: number;
   readonly r: number;
 };
+
+const COLOR_CACHE = new Map<string, Rgba | null>();
+
+function parseAndCacheColor(color: string): Rgba | null {
+  const parsed = parseColor(color);
+  COLOR_CACHE.set(color, parsed);
+  return parsed;
+}
 
 function parseColor(color: string): Rgba | null {
   if (color.startsWith("#")) return parseHex(color);

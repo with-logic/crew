@@ -6,12 +6,12 @@
  * when available, falling back to `launchctl load` on older macOS.
  */
 
-import { readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { crewHome, paths } from "../core/paths.ts";
 import { ensureDir, exists, rmrf, writeText } from "../util/fs.ts";
 import { BUNDLE_IDENTIFIER, writeAttributionBundle } from "./bundle.ts";
+import type { EnableInput } from "./types.ts";
 
 /**
  * Plist body per §10.2, plus an `AssociatedBundleIdentifiers` key so
@@ -57,12 +57,6 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export interface EnableInput {
-  readonly crewBinaryPath: string;
-  readonly intervalSeconds: number;
-  readonly home?: string;
-}
-
 /** Write the attribution bundle + plist and (attempt to) load the agent. */
 export function enableAutoupdate(input: EnableInput): void {
   const home = input.home ?? crewHome();
@@ -79,7 +73,7 @@ export function enableAutoupdate(input: EnableInput): void {
   if (!runLaunchctl(["bootstrap", `gui/${process.getuid?.() ?? 0}`, p.autoupdatePlist])) {
     if (!runLaunchctl(["load", p.autoupdatePlist])) {
       throw new CrewError(
-        "launchd_failure",
+        "autoupdate_failure",
         "launchctl refused to load the autoupdate agent — check `log show --predicate 'subsystem == \"com.apple.xpc.launchd\"' --last 5m` for details",
       );
     }
@@ -132,30 +126,6 @@ export function setLaunchctlRunner(next: LaunchctlRunner): LaunchctlRunner {
 
 export function resetLaunchctlRunner(): void {
   launchctlRunner = defaultRunner;
-}
-
-/** Read the last line of the autoupdate log (if any). */
-export function readAutoupdateLogTail(home: string = crewHome()): {
-  last_run: string | null;
-  last_exit_status: number | null;
-  last_line: string | null;
-} {
-  const p = paths(home).autoupdateLog;
-  if (!exists(p)) {
-    return { last_run: null, last_exit_status: null, last_line: null };
-  }
-  const contents = readFileSync(p, "utf8");
-  const lines = contents.split("\n").filter((l) => l.length > 0);
-  if (lines.length === 0) {
-    return { last_run: null, last_exit_status: null, last_line: null };
-  }
-  const lastLine = lines[lines.length - 1]!;
-  const parsed = lastLine.match(/^crew-autoupdate (\S+) exit=(\d+)$/);
-  return {
-    last_run: parsed ? parsed[1]! : null,
-    last_exit_status: parsed ? Number.parseInt(parsed[2]!, 10) : null,
-    last_line: lastLine,
-  };
 }
 
 function runLaunchctl(args: string[]): boolean {

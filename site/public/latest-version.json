@@ -10,6 +10,14 @@
       "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.9.0/crew-macos-x64"
     },
     {
+      "name": "crew-linux-arm64",
+      "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.9.0/crew-linux-arm64"
+    },
+    {
+      "name": "crew-linux-x64",
+      "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.9.0/crew-linux-x64"
+    },
+    {
       "name": "SHA256SUMS",
       "browser_download_url": "https://github.com/with-logic/crew/releases/download/v0.9.0/SHA256SUMS"
     },

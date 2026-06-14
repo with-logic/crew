@@ -127,12 +127,12 @@ export const GROUPS: readonly CommandGroup[] = [
             crew autoupdate enable <span className={styles.flag}>[--interval]</span>
           </>
         ),
-        description: "Install a launchd user agent that runs `crew update --quiet` every 4 hours.",
+        description: "Install a platform scheduler that runs `crew update --quiet` every 4 hours.",
       },
       {
         name: "autoupdate-disable",
         signature: <>crew autoupdate disable</>,
-        description: "Unload and remove the background update agent.",
+        description: "Unload and remove the background updater.",
       },
       {
         name: "autoupdate-status",

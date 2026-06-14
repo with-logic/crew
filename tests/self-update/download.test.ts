@@ -10,11 +10,11 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
-  assetNameForArch,
   downloadAssetToTemp,
   installBinary,
+  releaseAssetName,
   resetAssetDownloader,
   resetXattrClearer,
   setAssetDownloader,
@@ -27,17 +27,24 @@ afterEach(() => {
   resetXattrClearer();
 });
 
-describe("assetNameForArch", () => {
+describe("releaseAssetName", () => {
   test("arm64 → crew-macos-arm64", () => {
-    expect(assetNameForArch("arm64")).toBe("crew-macos-arm64");
+    expect(releaseAssetName("arm64", "darwin")).toBe("crew-macos-arm64");
   });
 
   test("x64 → crew-macos-x64", () => {
-    expect(assetNameForArch("x64")).toBe("crew-macos-x64");
+    expect(releaseAssetName("x64", "darwin")).toBe("crew-macos-x64");
+  });
+
+  test("linux assets include platform in the name", () => {
+    expect(releaseAssetName("arm64", "linux")).toBe("crew-linux-arm64");
+    expect(releaseAssetName("x64", "linux")).toBe("crew-linux-x64");
   });
 
   test("throws self_update_unavailable for unknown arches", () => {
-    expect(() => assetNameForArch("riscv64")).toThrow(/no release asset for this CPU \(riscv64\)/);
+    expect(() => releaseAssetName("riscv64" as NodeJS.Architecture, "linux")).toThrow(
+      /no release asset for this platform \(linux\/riscv64\)/,
+    );
   });
 });
 
@@ -52,10 +59,25 @@ describe("downloadAssetToTemp", () => {
   });
 
   test("wraps downloader failures as self_update_unavailable", () => {
-    setAssetDownloader(() => {
+    let tempPath = "";
+    setAssetDownloader((_url, destPath) => {
+      tempPath = destPath;
       throw new Error("network down");
     });
     expect(() => downloadAssetToTemp("https://example.com/crew", 5)).toThrow(/network down/);
+    expect(existsSync(dirname(tempPath))).toBe(false);
+  });
+
+  test("rejects downloads larger than the requested byte cap", () => {
+    let tempPath = "";
+    setAssetDownloader((_url, destPath) => {
+      tempPath = destPath;
+      writeFileSync(destPath, "too-large");
+    });
+    expect(() => downloadAssetToTemp("https://example.com/crew", 5, 3)).toThrow(
+      /exceeded the 3 byte limit/,
+    );
+    expect(existsSync(dirname(tempPath))).toBe(false);
   });
 });
 

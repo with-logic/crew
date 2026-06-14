@@ -9,7 +9,7 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { paths } from "../../src/core/paths.ts";
 import { CREW_VERSION } from "../../src/core/version.ts";
 import { readVersionCheck } from "../../src/self-update/check.ts";
@@ -35,11 +35,9 @@ import {
   releaseAssets,
 } from "./helpers.ts";
 
-// Force `process.platform === "darwin"` for the duration of this file.
-// `runSelfUpdate`'s platform guard rejects non-macOS hosts (§10.3), so
-// every happy-path test here would fail on a Linux CI runner without
-// this override. The dedicated "platform guard" test below still
-// flips it back to "linux" for that one case.
+// Force `process.platform === "darwin"` for deterministic asset names.
+// The dedicated "platform guard" test below flips to an unsupported
+// platform for that one case.
 const originalPlatform = process.platform;
 beforeAll(() => {
   Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
@@ -49,6 +47,7 @@ afterAll(() => {
 });
 
 afterEach(() => {
+  Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
   resetReleaseFetcher();
   resetAssetDownloader();
   resetXattrClearer();
@@ -77,6 +76,25 @@ describe("runSelfUpdate", () => {
     const record = readVersionCheck(home);
     expect(record?.latest_tag).toBe("v99.99.99");
     expect(existsSync(paths(home).versionCheckFile)).toBe(true);
+  });
+
+  test("downloads the Linux release asset on Linux hosts", () => {
+    Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+    const home = makeCrewHome();
+    const dest = join(home, "crew-bin");
+    writeFileSync(dest, "OLD");
+
+    setReleaseFetcher(() => ({
+      tag: "v99.99.99",
+      assets: releaseAssets(),
+    }));
+    setAssetDownloader(downloaderForBinary("LINUX"));
+    setReleaseSignatureVerifier(() => true);
+    setXattrClearer(() => {});
+
+    const result = runSelfUpdate({ home, force: false, execPath: dest });
+    expect(result.replaced).toBe(true);
+    expect(readFileSync(dest, "utf8")).toBe("LINUX");
   });
 
   test("no-op when already on latest, but still refreshes version-check", () => {
@@ -189,7 +207,9 @@ describe("runSelfUpdate", () => {
     writeFileSync(dest, "OLD");
 
     setReleaseFetcher(() => ({ tag: "v99.99.99", assets: releaseAssets() }));
+    let assetPath = "";
     setAssetDownloader((url, destPath) => {
+      if (url.endsWith("/asset")) assetPath = destPath;
       const body =
         url === CHECKSUMS_URL || url === CHECKSUMS_SIGNATURE_URL
           ? checksumTextFor("EXPECTED")
@@ -202,6 +222,7 @@ describe("runSelfUpdate", () => {
       /checksum mismatch/,
     );
     expect(readFileSync(dest, "utf8")).toBe("OLD");
+    expect(existsSync(dirname(assetPath))).toBe(false);
   });
 
   test("accepts an explicit tag", () => {
@@ -246,11 +267,11 @@ describe("runSelfUpdateCheck", () => {
 });
 
 describe("platform guard", () => {
-  test("non-darwin raises self_update_unavailable before touching the network", () => {
+  test("unsupported platforms raise self_update_unavailable before touching the network", () => {
     // Inside this file, `beforeAll` has stamped platform = "darwin".
-    // Flip to linux for this test alone and restore to darwin after,
+    // Flip to freebsd for this test alone and restore to darwin after,
     // keeping the file-level invariant intact for any later tests.
-    Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+    Object.defineProperty(process, "platform", { value: "freebsd", configurable: true });
     let fetcherCalled = false;
     setReleaseFetcher(() => {
       fetcherCalled = true;
@@ -258,7 +279,7 @@ describe("platform guard", () => {
     });
     try {
       expect(() => runSelfUpdateCheck(makeCrewHome())).toThrow(
-        /Homecrew ships macOS binaries only/,
+        /Homecrew ships binaries for macOS and Linux only/,
       );
       expect(fetcherCalled).toBe(false);
     } finally {

@@ -31,7 +31,7 @@ import { CrewError } from "../core/errors.ts";
 export interface ReleaseInfo {
   /** The version tag, e.g. "v0.4.0". */
   readonly tag: string;
-  /** Assets keyed by name (e.g. "crew-macos-arm64" → download URL). */
+  /** Assets keyed by name (e.g. "crew-linux-x64" → download URL). */
   readonly assets: Readonly<Record<string, string>>;
 }
 

@@ -27,7 +27,7 @@ const azeretMono = Azeret_Mono({
 });
 
 const SITE_DESCRIPTION =
-  "Install personal skills, team taps, and git-hosted skill collections into every agent on your Mac. An open-source project by Logic, Inc.";
+  "Install personal skills, team taps, and git-hosted skill collections into every agent on macOS or Linux. An open-source project by Logic, Inc.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://crew.logic.inc"),

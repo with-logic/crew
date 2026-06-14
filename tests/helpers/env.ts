@@ -31,7 +31,9 @@ export function captureStreams(): { streams: OutputStreams; stdout(): string; st
 
 /** Make a fresh crew home directory. */
 export function makeCrewHome(): string {
-  return mkdtempSync(join(tmpdir(), "crew-home-"));
+  const home = mkdtempSync(join(tmpdir(), "crew-home-"));
+  activeCrewHome = home;
+  return home;
 }
 
 type AdapterMut = {
@@ -48,6 +50,7 @@ type AdapterMut = {
  * on first call.
  */
 const ADAPTER_ORIGINALS = new Map<string, AdapterMut>();
+let activeCrewHome = tmpdir();
 
 /**
  * Force every adapter NOT in the `keep` set to be undetected and point
@@ -78,8 +81,7 @@ export function neutralizeAdaptersExcept(keep: readonly string[]): void {
       });
     }
     if (keepSet.has(a.name)) continue;
-    (a as AdapterMut).userPath = () =>
-      join(process.env["CREW_HOME"] ?? tmpdir(), "inert-adapters", a.name);
+    (a as AdapterMut).userPath = () => join(activeCrewHome, "inert-adapters", a.name);
     (a as AdapterMut).projectPath = (cwd: string) => join(cwd, ".inert-adapters", a.name);
     (a as AdapterMut).detect = () => false;
   }

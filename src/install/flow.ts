@@ -98,7 +98,6 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     const summary = performInstall(toInstall, agents, options.scope, cwd, currentState, {
       force: options.force,
       dryRun: true,
-      home,
       requiredBy,
       allResolved: resolvedAll,
     });
@@ -116,7 +115,6 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     const result = performInstall(toInstall, agents, options.scope, cwd, freshState, {
       force: options.force,
       dryRun: false,
-      home,
       requiredBy,
       allResolved: resolvedAll,
     });
