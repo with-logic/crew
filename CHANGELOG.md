@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0] — 2026-06-15
+
+### Added
+- Linux is now a supported platform. Homecrew ships Linux x64 and ARM64 release assets, installs through the hosted installer, performs signed self-updates, and runs background autoupdates through systemd user timers.
+
+### Changed
+- The website now presents Homecrew as a macOS and Linux tool and uses the refreshed visual system from the public site update.
+
 ## [0.9.0] — 2026-05-26
 
 ### Added
@@ -134,4 +142,3 @@
 All notable changes to crew are documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and crew adheres to [Semantic Versioning](https://semver.org/).
-

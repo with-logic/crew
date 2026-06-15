@@ -191,20 +191,21 @@ fi
 
 # Claude reports logical failures (auth, budget, refusal) as a
 # top-level `{ "is_error": true, "result": "..." }` envelope and still
-# exits 0. Surface the `result` text instead of letting the downstream
-# jq fail with a cryptic parse error.
-if [ "$(echo "$response" | jq -r 'if type == "object" then (.is_error // false) else false end')" = "true" ]; then
+# exits 0. Some Claude CLI versions wrap the result envelope in an
+# event array, so normalize to the final envelope before inspecting it.
+envelope="$(echo "$response" | jq -c 'if type == "array" then .[-1] else . end')"
+if [ "$(echo "$envelope" | jq -r 'if type == "object" then (.is_error // false) else false end')" = "true" ]; then
   echo "error: claude reported an error:" >&2
-  echo "  $(echo "$response" | jq -r '.result // "(no result field)"')" >&2
+  echo "  $(echo "$envelope" | jq -r '.result // "(no result field)"')" >&2
   exit 1
 fi
 
 # With `--json-schema` and `--output-format json`, claude returns a
-# single result envelope and parks the schema-conforming object at
-# top-level `.structured_output`. (Earlier versions of this script
-# walked a stream-json event log — that shape never matched under
-# --output-format json and produced a cryptic jq error.)
-inner="$(echo "$response" | jq -c '.structured_output')"
+# result envelope and parks the schema-conforming object at top-level
+# `.structured_output`. (Earlier versions of this script walked a
+# stream-json event log — that shape never matched under --output-format
+# json and produced a cryptic jq error.)
+inner="$(echo "$envelope" | jq -c '.structured_output')"
 if [ -z "$inner" ] || [ "$inner" = "null" ]; then
   echo "error: claude response missing structured output" >&2
   echo "--- raw response ---" >&2
