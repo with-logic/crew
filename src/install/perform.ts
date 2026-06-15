@@ -22,7 +22,6 @@
 import { type AgentAdapter, baseFor } from "../agents/adapter.ts";
 import { type InstallOutcome, installSkillIntoAgents } from "../agents/install.ts";
 import type { CrewError } from "../core/errors.ts";
-import { crewHome } from "../core/paths.ts";
 import type { ResolvedSkill, Scope, StateEntry, StateFile } from "../core/types.ts";
 import type { RequiredByMap } from "../install/resolve/index.ts";
 import { upsertEntry } from "../state/load.ts";
@@ -59,7 +58,6 @@ export function performInstall(
   options: {
     readonly force: boolean;
     readonly dryRun: boolean;
-    readonly home?: string;
     readonly requiredBy: RequiredByMap;
     /**
      * The full resolve set (including skills that were already
@@ -71,8 +69,6 @@ export function performInstall(
     readonly allResolved?: readonly ResolvedSkill[];
   },
 ): InstallSummary {
-  const home = options.home ?? crewHome();
-  void home;
   const records: InstallRecord[] = [];
   let state = startingState;
 

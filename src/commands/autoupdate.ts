@@ -12,7 +12,7 @@ import {
   enableAutoupdate,
   isAutoupdateLoaded,
   readAutoupdateLogTail,
-} from "../autoupdate/launchd.ts";
+} from "../autoupdate/scheduler.ts";
 import { DEFAULT_AUTOUPDATE_INTERVAL_SECONDS } from "../config/defaults.ts";
 import { readConfig, writeConfig } from "../config/load.ts";
 import { CrewError } from "../core/errors.ts";
@@ -96,6 +96,8 @@ function status(ctx: CommandContext): CommandOutput {
     json: {
       enabled: config.autoupdate.enabled,
       interval_seconds: config.autoupdate.interval_seconds,
+      scheduler_loaded: loaded,
+      // Deprecated compatibility alias for pre-Linux status consumers.
       agent_loaded: loaded,
       last_run: tail.last_run,
       last_exit_status: tail.last_exit_status,
@@ -120,7 +122,7 @@ function renderStatus(
   }
   const headline = loaded
     ? `${style.symbol("ok")} ${style.bold("Autoupdate is on")}`
-    : `${style.symbol("warn")} ${style.bold("Autoupdate is on, but the background agent isn't loaded")}`;
+    : `${style.symbol("warn")} ${style.bold("Autoupdate is on, but the background updater isn't loaded")}`;
   lines.push(headline);
   lines.push("");
   const rows: [string, string][] = [];
@@ -173,6 +175,9 @@ export function parseDuration(raw: string): number {
     );
   }
   const n = Number.parseInt(m[1]!, 10);
+  if (n === 0) {
+    throw new CrewError("usage_error", "duration must be positive", { raw });
+  }
   const unit = m[2] as "s" | "m" | "h" | "d";
   const scale = { s: 1, m: 60, h: 3600, d: 86400 }[unit];
   return n * scale;

@@ -8,19 +8,23 @@
  */
 
 import { useEffect, useRef } from "react";
+import { configureCanvas } from "./grid-fidget/canvas";
 import { CELL_SIZE, colorWithAlpha, snapToGrid } from "./grid-fidget/util";
 import type { GridOffset, Palette, Wave } from "./grid-fidget/waves";
-import { addWave, drawWaves } from "./grid-fidget/waves";
+import { addWave, drawAndPruneWaves } from "./grid-fidget/waves";
 
 export function GridFidget() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const gridRef = useRef<HTMLCanvasElement>(null);
+  const effectsRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const gridCanvas = gridRef.current;
+    const effectsCanvas = effectsRef.current;
+    if (!(gridCanvas && effectsCanvas)) return;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const gridCtx = gridCanvas.getContext("2d");
+    const effectsCtx = effectsCanvas.getContext("2d");
+    if (!(gridCtx && effectsCtx)) return;
 
     const allowMotion = !matchMedia("(prefers-reduced-motion: reduce)").matches;
     const palette = readPalette();
@@ -35,11 +39,9 @@ export function GridFidget() {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       width = window.innerWidth;
       height = window.innerHeight;
-      canvas.width = Math.ceil(width * dpr);
-      canvas.height = Math.ceil(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      configureCanvas(gridCanvas, gridCtx, width, height, dpr);
+      configureCanvas(effectsCanvas, effectsCtx, width, height, dpr);
+      drawStaticGrid();
       schedule();
     };
 
@@ -49,13 +51,22 @@ export function GridFidget() {
 
     const draw = (now: number) => {
       animationFrame = 0;
-      ctx.clearRect(0, 0, width, height);
+      effectsCtx.clearRect(0, 0, width, height);
       const offset = gridOffset();
-      drawGrid(ctx, width, height, palette, offset);
       if (!allowMotion) return;
-      if (pointer.active) drawHoverCell(ctx, pointer.x, pointer.y, palette, offset);
-      drawWaves(ctx, waves, palette, now, offset);
-      if (pointer.active || waves.length > 0) schedule();
+      if (pointer.active) drawHoverCell(effectsCtx, pointer.x, pointer.y, palette, offset);
+      drawAndPruneWaves(effectsCtx, waves, palette, now, offset);
+      if (waves.length > 0) schedule();
+    };
+
+    const drawStaticGrid = () => {
+      gridCtx.clearRect(0, 0, width, height);
+      drawGrid(gridCtx, width, height, palette, gridOffset());
+    };
+
+    const onScroll = () => {
+      drawStaticGrid();
+      schedule();
     };
 
     const onPointerMove = (event: PointerEvent) => {
@@ -83,7 +94,7 @@ export function GridFidget() {
     window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("pointerleave", onPointerLeave, { passive: true });
     window.addEventListener("pointerdown", onPointerDown, { passive: true });
-    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
       cancelAnimationFrame(animationFrame);
@@ -91,7 +102,7 @@ export function GridFidget() {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerleave", onPointerLeave);
       window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("scroll", onScroll);
     };
   }, []);
 
@@ -105,7 +116,8 @@ export function GridFidget() {
         zIndex: 1,
       }}
     >
-      <canvas ref={canvasRef} />
+      <canvas ref={gridRef} />
+      <canvas ref={effectsRef} />
     </div>
   );
 }
@@ -127,6 +139,7 @@ function drawHoverCell(
 ) {
   const cellX = snapToGrid(x, offset.x);
   const cellY = snapToGrid(y, offset.y);
+  // Alpha values are hand-tuned for the quiet background texture.
   ctx.fillStyle = colorWithAlpha(palette.aubergine, 0.09);
   ctx.fillRect(cellX + 1, cellY + 1, CELL_SIZE - 1, CELL_SIZE - 1);
   ctx.strokeStyle = colorWithAlpha(palette.saffron, 0.38);
@@ -165,7 +178,6 @@ function gridOffset(): GridOffset {
 }
 
 function shouldStartWave(event: PointerEvent): boolean {
-  if (!(event.target instanceof Element)) return false;
   const target = document.elementFromPoint(event.clientX, event.clientY);
   if (
     !target ||

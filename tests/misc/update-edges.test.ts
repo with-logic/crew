@@ -20,6 +20,7 @@ import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
+import { COMMAND_HANDLERS, type CommandHandler } from "../../src/cli/dispatch.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { readConfig, writeConfig } from "../../src/config/load.ts";
 import { readState } from "../../src/state/load.ts";
@@ -128,5 +129,21 @@ describe("update edge cases", () => {
     expect(code).toBe(0);
     expect(c.stdout()).toBe("");
     expect(c.stderr()).toMatch(/^crew-autoupdate \S+ exit=0\n$/);
+  });
+
+  test("autoupdate log mode records unexpected update crashes", () => {
+    const savedEnv = process.env["CREW_AUTOUPDATE_LOG"];
+    const savedHandler = COMMAND_HANDLERS["update"] as CommandHandler;
+    process.env["CREW_AUTOUPDATE_LOG"] = "1";
+    COMMAND_HANDLERS["update"] = () => {
+      throw new Error("boom");
+    };
+    const c = captureStreams();
+    const code = runCli(["update", "--quiet"], { home: makeCrewHome(), streams: c.streams });
+    COMMAND_HANDLERS["update"] = savedHandler;
+    if (savedEnv === undefined) delete process.env["CREW_AUTOUPDATE_LOG"];
+    else process.env["CREW_AUTOUPDATE_LOG"] = savedEnv;
+    expect(code).toBe(4);
+    expect(c.stderr()).toMatch(/crew-autoupdate \S+ exit=4\n$/);
   });
 });

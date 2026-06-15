@@ -3,9 +3,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import {
   isAutoupdateLoaded,
   plistXml,
-  readAutoupdateLogTail,
   resetLaunchctlRunner,
 } from "../../src/autoupdate/launchd.ts";
+import { readAutoupdateLogTail } from "../../src/autoupdate/log.ts";
 import { parseDuration } from "../../src/commands/autoupdate.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import { paths } from "../../src/core/paths.ts";
@@ -44,6 +44,7 @@ describe("parseDuration", () => {
   });
   test("rejects garbage", () => {
     expect(() => parseDuration("")).toThrow(CrewError);
+    expect(() => parseDuration("0s")).toThrow(CrewError);
     expect(() => parseDuration("5x")).toThrow(CrewError);
     expect(() => parseDuration("abc")).toThrow(CrewError);
   });

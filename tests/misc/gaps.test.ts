@@ -18,6 +18,7 @@ import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
 import { ALL_AGENTS, agentByName } from "../../src/agents/registry.ts";
 import { uninstallSkillFromAgents } from "../../src/agents/uninstall.ts";
 import { resetLaunchctlRunner, setLaunchctlRunner } from "../../src/autoupdate/launchd.ts";
+import { resetAutoupdatePlatform, setAutoupdatePlatform } from "../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { parseDuration } from "../../src/commands/autoupdate.ts";
 import { CrewError } from "../../src/core/errors.ts";
@@ -379,24 +380,28 @@ describe("doctor warnings — orphan store", () => {
       require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
     const cfg = readConfig(home);
     writeConfig({ ...cfg, autoupdate: { enabled: true, interval_seconds: 60 } }, home);
+    setAutoupdatePlatform("darwin");
     setLaunchctlRunner(() => false); // not loaded
     try {
       const c = captureStreams();
       runCli(["doctor"], { home, streams: c.streams });
-      expect(c.stdout()).toContain("background agent isn't loaded");
+      expect(c.stdout()).toContain("background updater isn't loaded");
     } finally {
+      resetAutoupdatePlatform();
       resetLaunchctlRunner();
     }
   });
 
   test("doctor flags autoupdate unexpectedly loaded", () => {
     const home = makeCrewHome();
+    setAutoupdatePlatform("darwin");
     setLaunchctlRunner(() => true); // loaded
     try {
       const c = captureStreams();
       runCli(["doctor"], { home, streams: c.streams });
       expect(c.stdout()).toContain("still loaded");
     } finally {
+      resetAutoupdatePlatform();
       resetLaunchctlRunner();
     }
   });

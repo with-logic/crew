@@ -281,6 +281,14 @@ if [ -d site/public ]; then
       "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/crew-macos-x64"
     },
     {
+      "name": "crew-linux-arm64",
+      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/crew-linux-arm64"
+    },
+    {
+      "name": "crew-linux-x64",
+      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/crew-linux-x64"
+    },
+    {
       "name": "SHA256SUMS",
       "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/SHA256SUMS"
     },

@@ -18,8 +18,8 @@ const CODE_LABELS: Record<string, string> = {
   orphan_store_entry: "a cached skill is no longer referenced",
   agent_missing: "an agent in your state isn't detected anymore",
   missing_project_root: "a project folder is missing",
-  autoupdate_not_loaded: "autoupdate is enabled but the background agent isn't loaded",
-  autoupdate_unexpectedly_loaded: "autoupdate is off but the background agent is still loaded",
+  autoupdate_not_loaded: "autoupdate is enabled but the background updater isn't loaded",
+  autoupdate_unexpectedly_loaded: "autoupdate is off but the background updater is still loaded",
   config_invalid: "~/.crew/config.yaml couldn't be parsed",
 };
 

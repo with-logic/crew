@@ -11,6 +11,7 @@ import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
 import { maybeEmitUpdateNotice } from "../self-update/notice.ts";
 import { colorEnabled, makeStyler, type Styler, terminalWidth } from "../util/term.ts";
+import { nowIso } from "../util/time.ts";
 import { parseArgs } from "./args.ts";
 import { dispatch } from "./dispatch.ts";
 import { defaultStreams, type OutputStreams, writeError, writeSuccess } from "./output.ts";
@@ -45,11 +46,23 @@ export interface RunCliOptions {
   readonly stderrIsTty?: boolean;
 }
 
-/** Run the CLI with the given argv. Returns an exit code. */
+/**
+ * Run the CLI with the given argv. Returns an exit code.
+ */
 export function runCli(argv: readonly string[], options: RunCliOptions = {}): number {
   const streams = options.streams ?? defaultStreams;
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
+  return runCliWithHome(argv, options, streams, cwd, home);
+}
+
+function runCliWithHome(
+  argv: readonly string[],
+  options: RunCliOptions,
+  streams: OutputStreams,
+  cwd: string,
+  home: string,
+): number {
   // When the caller supplied a streams override (tests, pipes), force
   // plain-text output regardless of whether the real stdout is a TTY —
   // color codes in captured buffers are almost never what you want.
@@ -105,6 +118,11 @@ export function runCli(argv: readonly string[], options: RunCliOptions = {}): nu
       );
       exitCode = 4;
     }
+  }
+  // §10.2: scheduled updates append one status line before exit. Keeping
+  // this at the CLI boundary covers both normal `update` exits and crashes.
+  if (parsed.command === "update" && process.env["CREW_AUTOUPDATE_LOG"] === "1") {
+    streams.stderr(`crew-autoupdate ${nowIso()} exit=${exitCode}\n`);
   }
 
   // §10.4 update-available notice. Runs on every command path (success

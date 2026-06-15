@@ -77,11 +77,12 @@ still describe the thing accurately.
 ### Runtime and shape
 
 - **Language**: TypeScript, strict mode (`tsconfig.json`).
-- **Runtime**: [Bun](https://bun.sh) only. We ship a single bundled
-  macOS executable produced by `bun build --compile`.
+- **Runtime**: [Bun](https://bun.sh) only. We ship bundled native
+  macOS and Linux executables produced by `bun build --compile`.
 - **Minimal host dependencies**: the `dist/crew` binary carries the Bun
-  runtime. The only host-level requirements are `git` and `launchctl`
-  (both mandated by PRD §17.1).
+  runtime. The host-level requirements are `git`, plus `launchctl` on
+  macOS or `systemctl --user` on Linux for autoupdate (mandated by
+  PRD §17.1).
 - **Libraries**: use well-established libraries for solved problems,
   hand-roll anything that's trivial or spec-prescribed. Current
   dependencies:
@@ -126,7 +127,7 @@ src/
 ├── git/                  # git exec seam + high-level repo ops
 ├── hash/                 # content hashing (§12.1)
 ├── maintenance/          # store garbage collection
-├── autoupdate/           # launchd plist + launchctl runner seam
+├── autoupdate/           # platform scheduler backends (launchd/systemd) + shared types/log
 ├── util/                 # fs, copy, json, time helpers
 ├── yaml/                 # minimal YAML parser + writer
 └── core/version.ts       # CREW_VERSION constant
@@ -209,11 +210,11 @@ are staged into a sibling directory whose name cannot collide with a
 real skill (leading dot), then `renameSync` onto `dest` after removing
 the old `dest`. A crash mid-install never leaves a half-copied install.
 
-**5. Testable subprocess boundary.** `src/git/exec.ts` and
-`src/autoupdate/launchd.ts` each expose a `setXRunner` seam. Real
-runner is the default; tests install a stub via `setGitRunner` /
-`setLaunchctlRunner` and call `resetXRunner` in `afterEach`. Prefer
-this pattern over global mocking.
+**5. Testable subprocess boundary.** `src/git/exec.ts`,
+`src/autoupdate/launchd.ts`, and `src/autoupdate/systemd.ts` each expose a
+`setXRunner` seam. Real runner is the default; tests install a stub via
+`setGitRunner` / `setLaunchctlRunner` / `setSystemctlRunner` and call
+`resetXRunner` in `afterEach`. Prefer this pattern over global mocking.
 
 **6. Errors are `CrewError(code, message, details)`.** `src/core/errors.ts`.
 Every error the user can see has a stable machine name (PRD §13) and a
@@ -251,13 +252,15 @@ is crew-owned; a source-authored marker would poison the install.
 - real `git` subprocesses against local `file://` repos;
 - the real YAML parser against real SKILL.md bytes.
 
-Mocks are confined to exactly two boundaries:
+Mocks are confined to exactly three boundaries:
 
 - `src/git/exec.ts` — for corner cases like "what if `git` returns
   exit code 42 with throwOnError=false"; real `git` is used for 95%
   of tests.
 - `src/autoupdate/launchd.ts` — because macOS CI environments don't
   have a user session launchd to talk to.
+- `src/autoupdate/systemd.ts` — because Linux CI environments don't
+  have a systemd `--user` session to talk to.
 
 **Adapter redirection.** Tests redirect `claudeCodeAdapter.userPath` /
 `.detect` / `.projectPath` at the top of the file via direct property

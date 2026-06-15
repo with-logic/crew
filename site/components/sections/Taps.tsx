@@ -74,12 +74,12 @@ export function Taps() {
               {"\n\n"}
               <Prompt /> crew autoupdate enable
               {"\n"}
-              <Ok>✓</Ok> agent loaded · keeps skills current every 4h
+              <Ok>✓</Ok> updater loaded · keeps skills current every 4h
             </CodeBlock>
             <p className={styles.note}>
               A meta-skill is an ordinary skill whose body describes the team's conventions and
               whose <code>dependencies</code> list pulls in the rest. The same pattern works for a
-              solo baseline: one command to recreate your preferred agent setup on a new Mac.
+              solo baseline: one command to recreate your preferred agent setup on a new machine.
             </p>
           </div>
         </div>

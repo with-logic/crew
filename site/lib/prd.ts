@@ -18,7 +18,7 @@ Rules:
 - The PRD is the contract. Build to spec.
 - Ask me which language and runtime to use before writing any code. Popular choices: TypeScript (Bun, Deno, Node), Go, Rust, Python, Swift. Pick with me; don't decide unilaterally.
 - After I choose, scaffold the project, implement the CLI, and write tests that map to the §18 conformance criteria.
-- Ship a single macOS-installable binary (or the language's closest equivalent).
+- Ship single native binaries for macOS and Linux (or the language's closest equivalent).
 - Match the PRD literally on commands, flags, file layouts, error codes, and marker schemas. Every command in §5.2 must exist with the documented behavior.
 
 ---

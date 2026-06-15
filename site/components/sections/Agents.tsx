@@ -11,7 +11,7 @@ export function Agents() {
         <SectionHead
           number="12"
           label="Agents"
-          title="Works with every Mac agent that speaks the spec."
+          title="Works with every supported local agent that speaks the spec."
           description={
             <>
               Any agent coder that reads the{" "}

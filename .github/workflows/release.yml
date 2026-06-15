@@ -103,9 +103,8 @@ jobs:
   build-and-release:
     needs: resolve
     if: needs.resolve.outputs.should_release == 'true'
-    # Bun cross-compiles cleanly, so a Linux runner builds both macOS
-    # binaries and saves on GitHub minutes (Ubuntu is 10x cheaper than
-    # macOS).
+    # Bun cross-compiles cleanly, so a Linux runner builds every
+    # supported binary and saves on GitHub minutes.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -163,9 +162,21 @@ jobs:
             --target=bun-darwin-x64 \
             src/index.ts --outfile dist/crew-macos-x64
 
+      - name: Build Linux arm64
+        run: |
+          bun build --compile --minify --sourcemap \
+            --target=bun-linux-arm64 \
+            src/index.ts --outfile dist/crew-linux-arm64
+
+      - name: Build Linux x64
+        run: |
+          bun build --compile --minify --sourcemap \
+            --target=bun-linux-x64 \
+            src/index.ts --outfile dist/crew-linux-x64
+
       - name: Generate checksums
         working-directory: dist
-        run: sha256sum crew-macos-arm64 crew-macos-x64 > SHA256SUMS
+        run: sha256sum crew-macos-arm64 crew-macos-x64 crew-linux-arm64 crew-linux-x64 > SHA256SUMS
 
       - name: Sign checksums
         working-directory: dist
@@ -197,6 +208,8 @@ jobs:
           files: |
             dist/crew-macos-arm64
             dist/crew-macos-x64
+            dist/crew-linux-arm64
+            dist/crew-linux-x64
             dist/SHA256SUMS
             dist/SHA256SUMS.sig
 

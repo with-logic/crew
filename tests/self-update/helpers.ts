@@ -4,14 +4,14 @@
 
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
-import { type AssetDownloader, assetNameForArch } from "../../src/self-update/download.ts";
+import { type AssetDownloader, releaseAssetName } from "../../src/self-update/download.ts";
 
 export const ASSET_URL = "https://example.com/asset";
 export const CHECKSUMS_URL = "https://example.com/SHA256SUMS";
 export const CHECKSUMS_SIGNATURE_URL = "https://example.com/SHA256SUMS.sig";
 
 export function currentAssetName(): string {
-  return assetNameForArch();
+  return releaseAssetName();
 }
 
 export function sha256Hex(bytes: string): string {
