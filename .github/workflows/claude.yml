@@ -1,13 +1,14 @@
 # Claude Code PR review + mention responder.
 #
-# On PR open, posts a review grounded in CLAUDE.md's working agreement
-# and standards. On @claude mentions in PR comments/reviews/inline
-# review comments, lets Claude respond to the user's request directly.
+# On PR open or first conflict-resolving head update, posts a review
+# grounded in CLAUDE.md's working agreement and standards. On @claude
+# mentions in PR comments/reviews/inline review comments, lets Claude
+# respond to the user's request directly.
 name: Claude Code
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize, reopened, ready_for_review]
   issue_comment:
     types: [created]
   pull_request_review_comment:
@@ -18,9 +19,15 @@ on:
 jobs:
   claude-review-pr:
     name: "Claude: Review new PR"
-    if: github.event_name == 'pull_request' && github.event.action == 'opened'
+    if: |
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.draft &&
+      contains(fromJSON('["opened", "synchronize", "reopened", "ready_for_review"]'), github.event.action)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: claude-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     permissions:
       actions: read
       contents: read
@@ -28,17 +35,36 @@ jobs:
       issues: write
       id-token: write
     steps:
+      - name: Decide whether to review
+        id: existing-review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if gh pr diff "$PR_NUMBER" --repo "$GH_REPO" --name-only | grep -qx '.github/workflows/claude.yml'; then
+            echo "should_review=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json comments \
+            --jq '"should_review=\(any(.comments[]; .author.login == "claude" and (.body | contains("Claude finished"))) | not)"' \
+            >> "$GITHUB_OUTPUT"
+
       - name: Checkout repository
+        if: steps.existing-review.outputs.should_review == 'true'
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Bun
+        if: steps.existing-review.outputs.should_review == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
       - name: Read PR review prompt
+        if: steps.existing-review.outputs.should_review == 'true'
         id: read-prompt
         run: |
           {
@@ -49,6 +75,7 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Run Claude Code - Review PR
+        if: steps.existing-review.outputs.should_review == 'true'
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
