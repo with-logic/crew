@@ -66,11 +66,20 @@ jobs:
     if: |
       (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request &&
-        contains(github.event.comment.body, '@claude')) ||
+        contains(github.event.comment.body, '@claude') &&
+        (github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'COLLABORATOR')) ||
       (github.event_name == 'pull_request_review_comment' &&
-        contains(github.event.comment.body, '@claude')) ||
+        contains(github.event.comment.body, '@claude') &&
+        (github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'COLLABORATOR')) ||
       (github.event_name == 'pull_request_review' &&
-        contains(github.event.review.body, '@claude'))
+        contains(github.event.review.body, '@claude') &&
+        (github.event.review.author_association == 'OWNER' ||
+          github.event.review.author_association == 'MEMBER' ||
+          github.event.review.author_association == 'COLLABORATOR'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -80,23 +89,12 @@ jobs:
       issues: write
       id-token: write
     steps:
-      - name: Resolve PR head
-        id: pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
-        run: |
-          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          gh pr view "$PR_NUMBER" --repo "$GH_REPO" \
-            --json headRepository,headRefName \
-            --jq '"repo=\(.headRepository.nameWithOwner)\nref=\(.headRefName)"' >> "$GITHUB_OUTPUT"
-
-      - name: Checkout PR head
+      # `issue_comment` and review events run in the base repository context.
+      # Keep the privileged job on trusted repository bytes; Claude can inspect
+      # the PR through GitHub APIs instead of executing code from the PR head.
+      - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          repository: ${{ steps.pr.outputs.repo }}
-          ref: ${{ steps.pr.outputs.ref }}
           fetch-depth: 0
 
       - name: Setup Bun
