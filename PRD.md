@@ -2,7 +2,7 @@
 
 **A package manager for Agent Skills.**
 
-Version: 0.10.0
+Version: 0.10.1
 Status: Specification, ready for implementation
 Platform: macOS (Apple Silicon and Intel), Linux (x86_64 and ARM64)
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.10.1] — 2026-07-03
+
+### Changed
+- Hardened GitHub Actions workflows with least-privilege default tokens, and Claude's mention handling no longer checks out PR-head code from privileged comment/review events, closing outstanding CodeQL alerts around workflow permissions and untrusted checkout.
+- Dependabot-authored PRs can now go through the same automated Claude review as other PRs.
+- Routine dependency maintenance: `js-yaml` (4→5), `@biomejs/biome` (2.4.15→2.5.1), `actions/checkout` (6→7), and `@types/node` in the site package.
+
+### Fixed
+- Preserved empty YAML document handling after the `js-yaml` upgrade, so empty config/frontmatter parses continue to normalize to `null`.
+
 ## [0.10.0] — 2026-06-15
 
 ### Added
