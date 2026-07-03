@@ -20,7 +20,7 @@ export type YamlMap = { [key: string]: YamlValue };
 /** Parse a YAML document. Throws on malformed input. */
 export function parseYaml(source: string): YamlValue {
   // `load` already rejects multi-document input (use `loadAll` for that) and
-  // in js-yaml v4 it uses the DEFAULT_SCHEMA which is safe (no !!js/function,
+  // uses the DEFAULT_SCHEMA, which is safe (no !!js/function,
   // no !!js/regexp, no !!js/undefined).
   let value: unknown;
   try {
@@ -33,12 +33,6 @@ export function parseYaml(source: string): YamlValue {
       return null;
     }
     throw err;
-  }
-  // js-yaml returns `undefined` for an empty document; we normalize to `null`
-  // so callers never have to branch between the two (YAML itself treats them
-  // the same — `~`, `null`, and an empty document all mean "no value").
-  if (value === undefined) {
-    return null;
   }
   return value as YamlValue;
 }
