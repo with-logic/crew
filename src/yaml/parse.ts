@@ -11,7 +11,7 @@
  *   - one import site to update if we ever want to swap the library.
  */
 
-import { dump, load } from "js-yaml";
+import { dump, load, YAMLException } from "js-yaml";
 
 /** The value kinds we accept. */
 export type YamlValue = string | number | boolean | null | YamlValue[] | YamlMap;
@@ -22,7 +22,18 @@ export function parseYaml(source: string): YamlValue {
   // `load` already rejects multi-document input (use `loadAll` for that) and
   // in js-yaml v4 it uses the DEFAULT_SCHEMA which is safe (no !!js/function,
   // no !!js/regexp, no !!js/undefined).
-  const value = load(source);
+  let value: unknown;
+  try {
+    value = load(source);
+  } catch (err) {
+    if (
+      err instanceof YAMLException &&
+      err.reason === "expected a document, but the input is empty"
+    ) {
+      return null;
+    }
+    throw err;
+  }
   // js-yaml returns `undefined` for an empty document; we normalize to `null`
   // so callers never have to branch between the two (YAML itself treats them
   // the same — `~`, `null`, and an empty document all mean "no value").
