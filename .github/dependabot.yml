@@ -8,10 +8,10 @@
 #   2. bun in `site/` — the Next.js landing site (also uses bun.lock).
 #   3. github-actions — the workflows under `.github/workflows/`.
 #
-# Note: Dependabot security updates are not yet supported for the bun
-# ecosystem (version-updates only). Security advisories for npm packages
-# in the bun registry will not generate automatic security PRs until
-# that support ships.
+# Note: Dependabot does not yet generate security-update PRs for the bun
+# ecosystem (version-updates only). Repo-level security alerts still
+# surface advisories on the dashboard; only the automatic security-update
+# PRs won't fire until bun security-update support ships.
 
 version: 2
 updates:
