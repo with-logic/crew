@@ -2,17 +2,20 @@
 #
 # Weekly cadence keeps PRs manageable on a small repo. Three ecosystems:
 #
-#   1. npm at the repo root — the crew CLI's deps (typescript, biome,
-#      bun types, etc.). Bun reads npm packages via the same registry.
-#   2. npm in `site/` — the Next.js landing site.
+#   1. bun at the repo root — the crew CLI's deps (typescript, biome,
+#      bun types, etc.). Native bun ecosystem support (GA Feb 2025)
+#      keeps bun.lock in sync alongside package.json automatically.
+#   2. bun in `site/` — the Next.js landing site (also uses bun.lock).
 #   3. github-actions — the workflows under `.github/workflows/`.
 #
-# Security advisories on any of these come in via Dependabot security
-# updates (enabled separately on the repo) regardless of this schedule.
+# Note: Dependabot security updates are not yet supported for the bun
+# ecosystem (version-updates only). Security advisories for npm packages
+# in the bun registry will not generate automatic security PRs until
+# that support ships.
 
 version: 2
 updates:
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -20,7 +23,7 @@ updates:
     commit-message:
       prefix: "deps"
 
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/site"
     schedule:
       interval: "weekly"
