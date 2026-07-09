@@ -1,0 +1,50 @@
+name: Dependabot — regenerate bun.lock
+
+# Dependabot only manages package.json; it has no knowledge of bun.lock.
+# This workflow runs on every dependabot PR, regenerates any stale lockfiles,
+# and commits them back so that `bun install --frozen-lockfile` passes in CI.
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update-lockfile:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Check out the PR head branch (not the merge ref) so we can push back.
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Regenerate root bun.lock
+        run: bun install
+
+      - name: Regenerate site/bun.lock
+        run: bun install
+        working-directory: site
+
+      - name: Commit lockfiles if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bun.lock site/bun.lock
+          if git diff --cached --quiet; then
+            echo "Lockfiles already up to date."
+          else
+            git commit -m "chore: regenerate bun.lock for dependabot bump [skip ci]"
+            git push
+          fi
