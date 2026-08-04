@@ -50,7 +50,7 @@ jobs:
 
       - name: Run Claude Code - Review PR
         id: claude-review
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@v1.0.183
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           allowed_bots: dependabot[bot]
@@ -102,7 +102,7 @@ jobs:
         with:
           bun-version: latest
 
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@v1.0.183
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           path_to_bun_executable: ~/.bun/bin/bun
