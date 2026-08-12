@@ -45,6 +45,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Lockfiles already up to date."
           else
-            git commit -m "chore: regenerate bun.lock for dependabot bump [skip ci]"
+            git commit -m "chore: regenerate bun.lock for dependabot bump"
             git push
           fi
