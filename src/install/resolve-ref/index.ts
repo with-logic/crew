@@ -120,7 +120,7 @@ function resolveTwoSegment(source: TapSource, config: Config, home: string): Non
       `\`${first}/${second}\` is a namespaced skill in multiple taps`,
     );
   }
-  throw twoSegmentMissError(first, second);
+  throw twoSegmentMissError(first, second, source.ref);
 }
 
 function resolveBare(

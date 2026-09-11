@@ -127,7 +127,10 @@ function renderKnownInstallError(
   const lines = [err.message, "", "Homecrew found possible matches in known taps:"];
   for (const suggestion of suggestions) {
     lines.push("");
-    lines.push(`  ${suggestion.installRef} (${suggestion.tap.trust})`);
+    // The heading names the tap; any `@ref` belongs in the command below.
+    lines.push(
+      `  ${suggestion.skill === null ? suggestion.tap.name : suggestion.installRef} (${suggestion.tap.trust})`,
+    );
     if (suggestion.repo) lines.push(`    This is the tap for the GitHub repo ${suggestion.repo}.`);
     lines.push(`    Add the tap:`);
     lines.push(`      ${tapAddCommand(suggestion.tap)}`);

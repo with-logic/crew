@@ -56,7 +56,14 @@ function twoSegmentMatches(
     }
   }
   if (out.length === 0 && matchesGitHubRepo(tap, sourceTap, name)) {
-    out.push({ tap, skill: null, installRef: tap.name, repo: `${sourceTap}/${name}` });
+    // §8.4 allows `tap-name @ tap-ref` for a whole-tap install, so the
+    // user's `@ref` survives into the suggested command.
+    out.push({
+      tap,
+      skill: null,
+      installRef: `${tap.name}${ref === null ? "" : `@${ref}`}`,
+      repo: `${sourceTap}/${name}`,
+    });
   }
   return out;
 }

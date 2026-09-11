@@ -17,13 +17,22 @@ export function flagFor(k: "tap" | "namespace" | "skill"): string {
  * `invalid_ref` for a two-segment reference that names neither a tap
  * nor a namespace (§8.5 "Two-segment misses"). The shape is also how
  * people write a GitHub repo, so the remedy points at `@first/second`.
+ *
+ * `ref` carries the user's `@tail` through to the suggestion: dropping
+ * it would advise a command that installs a different revision than the
+ * one they asked for.
  */
-export function twoSegmentMissError(first: string, second: string): CrewError {
+export function twoSegmentMissError(
+  first: string,
+  second: string,
+  ref: string | null = null,
+): CrewError {
+  const tail = ref === null ? "" : `@${ref}`;
   return new CrewError(
     "invalid_ref",
-    `\`${first}/${second}\` does not match any configured tap or namespace.\nNo tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
-    { first, second },
-    `If you meant the GitHub repository ${first}/${second}, use \`@${first}/${second}\` instead. Otherwise run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
+    `\`${first}/${second}${tail}\` does not match any configured tap or namespace.\nNo tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
+    { first, second, ...(ref === null ? {} : { ref }) },
+    `If you meant the GitHub repository ${first}/${second}, use \`@${first}/${second}${tail}\` instead. Otherwise run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
   );
 }
 

@@ -27,16 +27,27 @@ export function looksLikePath(ref: string): boolean {
 }
 
 /**
+ * A bare authority: dot-separated DNS labels with an optional numeric
+ * port. Deliberately strict — the scheme-less form prepends `https://`,
+ * so anything `new URL` could reinterpret (userinfo, query, fragment,
+ * a non-numeric port) must never reach it. `github.com@evil.example/o/r`
+ * would otherwise parse as host `evil.example` with `github.com` as
+ * userinfo, letting a GitHub-looking reference clone from elsewhere.
+ */
+const SCHEMELESS_AUTHORITY =
+  /^(?=.*\.)[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:\d+)?$/i;
+
+/**
  * True if `ref` is a scheme-less git host reference (§8.5 rule 4): the
- * first `/`-segment contains a `.` (tap names can't) and there are at
- * least `host/owner/repo` segments before any `//subpath` tail.
+ * first `/`-segment is a bare `host[:port]` containing a `.` (tap names
+ * can't) and there are at least `host/owner/repo` segments before any
+ * `//subpath` tail.
  */
 export function looksLikeSchemelessHost(ref: string): boolean {
   const head = ref.split("//", 1)[0]!;
   const segments = head.split("/");
   if (segments.length < 3) return false;
-  const host = segments[0]!;
-  return host.includes(".") && !host.startsWith(".") && !host.endsWith(".");
+  return SCHEMELESS_AUTHORITY.test(segments[0]!);
 }
 
 /** Parse a path source and resolve `~` + relatives to an absolute path. */
