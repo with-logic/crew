@@ -130,16 +130,23 @@ function updateOne(
   // Tap re-expansion has already marked missing children `source_gone`.
   const skillDir = join(acquired.rootDir, entry.source.path);
 
+  // Path-kind tap (no SHA): hash the source once and reuse it both for
+  // the up-to-date comparison and for the store's short id, rather than
+  // walking the same unbounded tree twice. `hashDirectory` ignores a
+  // root `.crew.json`, matching the store.
+  const sourceHash = newSha === null ? hashDirectory(skillDir) : undefined;
+
   if (newSha === entry.resolved_sha) {
     if (newSha !== null) return { kind: "up_to_date" };
-    // Path-kind tap: no SHA to compare, so hash the source directly.
-    // `hashDirectory` ignores a root `.crew.json`, matching the store.
-    if (hashDirectory(skillDir) === entry.content_hash) return { kind: "up_to_date" };
+    if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
   }
 
+  // Validation runs before the dry-run return on purpose: a broken
+  // upstream version must surface as `failed` in a preview too, not be
+  // reported as a clean `would_update`.
   const loaded = loadSkill(skillDir);
   if (dryRun) return { kind: "would_update", new_sha: newSha };
-  const staged = stageIntoStore(loaded.path, entry.name, newSha, home);
+  const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash);
   const perTarget = reinstallIntoAgents({ entry, entryCwd, tap, staged, newSha, force });
   return {
     kind: "updated",

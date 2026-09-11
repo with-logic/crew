@@ -13,7 +13,7 @@ export const updateHelp: CommandHelp = {
     {
       flag: "--dry-run",
       description:
-        "Preview what would change — pending updates and new tap skills — without writing anything. Taps are still refreshed so the preview is current.",
+        "Preview what would change — pending updates and new tap skills. Collections are still refreshed so the preview is current, but nothing you have installed is touched.",
     },
     {
       flag: "--force",
