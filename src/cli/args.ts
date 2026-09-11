@@ -35,7 +35,7 @@ const STRING_GLOBALS = ["scope", "from-git"] as const;
 const BOOLEAN_SUB: Record<string, readonly string[]> = {
   doctor: ["verify", "repair"],
   install: ["tap", "bundle", "skill", "recursive"],
-  tap: ["recursive"],
+  tap: ["recursive", "uninstall"],
   uninstall: ["prune"],
   "self-update": ["check"],
 };

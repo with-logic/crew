@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { installSkillIntoAgents } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
-import { CrewError } from "../../core/errors.ts";
+import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
@@ -106,14 +106,10 @@ function updateOne(
   }
 
   const tap = config.taps.find((t) => t.name === entry.source.tap);
-  if (!tap) {
-    // Tap was removed from config (manually); doctor --repair can fix.
-    throw new CrewError(
-      "source_unreachable",
-      `tap \`${entry.source.tap}\` is no longer in config — run \`crew doctor --repair\` to rebuild it from markers`,
-      { tap: entry.source.tap },
-    );
-  }
+  // §10.1: the tap is gone from config (`crew tap remove --force`, or a
+  // hand-edit). Nothing is unreachable — there's simply no source to
+  // check — so this is soft and the local install is preserved.
+  if (!tap) return { kind: "tap_missing", tap: entry.source.tap };
   const acquired = acquireTap(tap, home);
   const newSha = acquired.resolvedSha;
 

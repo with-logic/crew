@@ -4,8 +4,12 @@
  *
  * Covers:
  *   - tap-not-in-config: a state entry whose `source.tap` is absent
- *     from `config.yaml` (user manually deleted the tap row). Update
- *     raises `source_unreachable` with a pointer to doctor --repair.
+ *     from `config.yaml` (user manually deleted the tap row, or ran
+ *     `crew tap remove --force`). Update reports the soft
+ *     `tap_missing` outcome and preserves the install (§10.1).
+ *   - tap-unreachable: the tap row is present but its clone and URL
+ *     are both gone, so acquiring it raises `source_unreachable` and
+ *     the skill gets a hard FAILED row.
  *   - skill-gone-from-tap: the tap is still present but the specific
  *     skill directory is missing from the tap on disk. Update returns
  *     `source_gone` and preserves the local install.
@@ -75,7 +79,7 @@ function singleSkillRepo(prefix: string, name: string): string {
 }
 
 describe("update edge cases", () => {
-  test("tap removed from config manually → source_unreachable → FAILED row", () => {
+  test("C-UPD-12b tap removed from config manually → tap_missing → soft row", () => {
     const home = makeCrewHome();
     const repo = singleSkillRepo("crew-upd-edge-", "demo");
     runCli(["install", `file://${repo}//demo`], {
@@ -83,8 +87,8 @@ describe("update edge cases", () => {
       streams: captureStreams().streams,
     });
     // Manually strip the tap row from config.yaml. State still
-    // references it by name — exactly the "user manually deleted"
-    // state that update/entry.ts's tap-lookup check catches.
+    // references it by name — the same shape `crew tap remove --force`
+    // leaves behind, which §10.1 treats as a soft `tap_missing`.
     const cfg = readConfig(home);
     const state = readState(home);
     const orphanedTapName = state.installations[0]!.source.tap;
@@ -93,6 +97,30 @@ describe("update edge cases", () => {
     commitAll(repo, "noop");
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(c.stdout()).toContain("tap removed");
+    // The install is preserved, not failed out.
+    expect(readState(home).installations).toHaveLength(1);
+  });
+
+  test("tap configured but unreachable → source_unreachable → FAILED row", () => {
+    const home = makeCrewHome();
+    const repo = singleSkillRepo("crew-upd-unreach-", "demo");
+    runCli(["install", `file://${repo}//demo`], {
+      home,
+      streams: captureStreams().streams,
+    });
+    // The tap row stays in config, but both its clone and the repo it
+    // points at are gone — a genuinely unreachable source, distinct
+    // from the deconfigured-tap case above.
+    const state = readState(home);
+    const tapName = state.installations[0]!.source.tap;
+    rmSync(join(home, "taps", tapName), { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
+
+    const c = captureStreams();
+    const code = runCli(["update"], { home, streams: c.streams });
+
     expect(code).toBe(1);
     expect(c.stdout()).toContain("failed");
     expect(c.stdout()).toContain("source unreachable");
