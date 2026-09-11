@@ -15,6 +15,10 @@ export const updateHelp: CommandHelp = {
       description: "Update even pinned skills and overwrite any local edits you've made.",
     },
     { flag: "--json", description: "Machine-readable output, one record per skill." },
+    {
+      flag: "--verbose",
+      description: "Show each fetch, git command, and install step on stderr as it happens.",
+    },
   ],
   examples: [
     { command: "crew update", description: "The usual: pull in every available improvement." },

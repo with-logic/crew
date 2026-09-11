@@ -9,6 +9,7 @@ import { dirname } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { crewHome, paths } from "../core/paths.ts";
 import { atomicReplace, ensureDir, exists, rmrf, writeText } from "../util/fs.ts";
+import { progress } from "../util/progress.ts";
 import type { EnableInput } from "./types.ts";
 
 export interface SystemctlResult {
@@ -175,5 +176,6 @@ function boundedStderr(stderr: string): string {
 }
 
 function runSystemctl(args: string[]): SystemctlResult {
+  progress(`$ systemctl --user ${args.join(" ")}`);
   return systemctlRunner(args);
 }
