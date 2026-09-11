@@ -152,7 +152,7 @@ Accepted on any command where they apply:
 
 ### 5.3 Install-time flags
 
-- `--from-git <url>[@<ref>]` — explicit git source, equivalent to passing the URL as the ref but disambiguates when the argument might look like a tap name.
+- `--from-git <url>[@<ref>][//<subpath>]` — explicit git source. The value is always parsed as a git source (§8.2), never as a tap reference or path. Any git URL or shorthand form from §8.2 is accepted, and a bare `<owner>/<repo>` value — which as a positional would be read as a tap reference — is treated as GitHub, exactly as if the user had written `@<owner>/<repo>`. The resulting source is installed alongside any positional references on the same command. A value that cannot be parsed as a git source is `invalid_ref`. The flag is only accepted by `crew install`; on any other command it is an unknown flag (`usage_error`).
 - `--recursive` — for direct git/path installs only, fall back to bounded recursive discovery when standard layouts find no skill candidates. Tap-name installs use the tap's configured discovery mode; combining `--recursive` with a tap-name ref is a `usage_error`. Dependencies declared by a skill installed with `--recursive` do not inherit the flag; each dependency resolves with its own standard discovery unless its source is already a recursive tap.
 
 ### 5.3.1 Uninstall-time flags
@@ -1717,6 +1717,7 @@ Implementations and test suites refer to criteria by ID.
 |---|---|---|
 | C-INST-01 | §9 | `crew install ./local-skill` installs from a local path into every detected agent. |
 | C-INST-02 | §9 | `crew install gh:owner/repo` installs from a GitHub URL with no prior `crew tap add`. |
+| C-INST-02b | §5.3 | `crew install --from-git <value>` installs from `<value>` parsed as a git source. A bare `owner/repo` value resolves to `https://github.com/owner/repo.git`. A value that does not parse as a git source is `invalid_ref`, exit 4. Combining `--from-git` with positional references installs both. `--from-git` on any command other than `install` is `usage_error`. |
 | C-INST-03 | §9, §7.3 | After install, `SKILL.md` and every other file in the source appear under `{base}/<name>/`, preserving relative paths. |
 | C-INST-04 | §7.5 | A `.crew.json` marker is written into the installed skill directory with the fields listed in §7.5. |
 | C-INST-05 | §9 | `crew install gh:owner/repo//sub/path` installs only the skill at that subpath. |

@@ -16,6 +16,7 @@ import { parseRef } from "../../refs/parse.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promptBareNameAmbiguity } from "./ambiguity-prompt.ts";
 import { promptForCollision } from "./collision-prompt.ts";
+import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { renderInstall } from "./render/index.ts";
 
@@ -38,7 +39,8 @@ function readKindHint(ctx: CommandContext): KindHint {
 }
 
 export function installCommand(ctx: CommandContext): CommandOutput {
-  if (ctx.positional.length === 0) {
+  const fromGit = ctx.flags.extras["from-git"];
+  if (ctx.positional.length === 0 && typeof fromGit !== "string") {
     throw new CrewError(
       "usage_error",
       "`crew install` needs at least one skill reference — e.g. `crew install python-testing`, `crew install @acme/skills`, or `crew install ./my-skill`",
@@ -48,6 +50,8 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   rejectRecursiveTapRefs(ctx);
   const config = readConfig(ctx.home);
   const refs = resolveCollisions(ctx, config);
+  // §5.3: `--from-git` is never bare, so it skips collision resolution.
+  if (typeof fromGit === "string") refs.push(normalizeFromGit(fromGit, ctx.cwd));
   const installOptions = {
     refs,
     scope: ctx.flags.scope,
