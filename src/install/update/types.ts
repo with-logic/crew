@@ -16,7 +16,11 @@ export interface PerAgentUpdate {
 export type Outcome =
   | { kind: "up_to_date" }
   | { kind: "updated"; new_sha: string | null; per_target: PerAgentUpdate[] }
-  /** `--dry-run` preview of an `updated` outcome (§10.1.1); nothing was written. */
+  /**
+   * `--dry-run` preview of an `updated` outcome (§10.1.1). The tap
+   * clone was refreshed to learn this, but no installed skill, marker,
+   * store entry, or `state.json` was written.
+   */
   | { kind: "would_update"; new_sha: string | null }
   | { kind: "skipped"; reason: string }
   | { kind: "source_gone" }

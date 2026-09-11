@@ -904,12 +904,18 @@ On every `crew update` run, for each group of state entries sharing
    entries pointed at their previous source path, and the update run
    exits 1.
 2. For each child that is **not** already in state (a skill the
-   maintainer added upstream since the user's last update): runs the
-   install algorithm (§7.3) for every agent in the current agent
-   set, at the scope of the originating install, with `explicit: true`,
-   `tracks_tap: true`, and `source.tap` pointing at this tap. This is
-   how `crew install @with-logic/skills` + autoupdate picks up new
-   skills as the team adds them, with no follow-up `crew install`.
+   maintainer added upstream since the user's last update): validates
+   it against §9 step 4 and then runs the install algorithm (§7.3) for
+   every agent in the current agent set, at the scope of the
+   originating install, with `explicit: true`, `tracks_tap: true`, and
+   `source.tap` pointing at this tap. This is how `crew install
+   @with-logic/skills` + autoupdate picks up new skills as the team
+   adds them, with no follow-up `crew install`.
+   Child discovery reads only the declared `name`, so validation here
+   is mandatory: a child whose frontmatter is invalid (missing
+   `description`, over-long fields, …) MUST be reported as a per-child
+   failure carrying `invalid_skill` and MUST NOT be installed, in both
+   real and `--dry-run` runs. The run exits 1.
 3. For each skill in state attributed to this tap whose directory is
    **no longer present** under the resolved root: reports `source_gone`
    and leaves the local install untouched (per the upstream-deletion
@@ -950,6 +956,14 @@ is read-only:
 - Nothing is staged into the store, no agent directory is written, no
   marker is touched, `state.json` is not written, and the store is not
   garbage-collected.
+- The state lock (§14) is NOT acquired. Acquiring it creates
+  `state.json` when absent, which would itself be a write; §14 reserves
+  the lock for commands that modify state.
+
+Refreshed tap clones are the only thing a dry run writes. User-facing
+descriptions of the flag MUST NOT claim it writes nothing at all;
+they state that collections still refresh while nothing installed
+changes.
 
 Human output tags the header with `(dry run)` and renders the pending
 rows as "would update" / "would add". `--json` output includes
@@ -1889,6 +1903,9 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
 | C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`, its clone deleted. Registered taps are NOT garbage-collected by uninstall. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps, then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, and state are byte-identical before and after; `--json` carries `dry_run: true`. |
+| C-UPD-18a | §10.1.1, §14 | `crew update --dry-run` against a home with no `state.json` leaves it absent: the state lock is never acquired, so neither the state file nor its lock is created. |
+| C-UPD-18b | §10.1.1 | `--force --dry-run` previews a pinned skill whose upstream moved as `would_update` (rather than `skipped`) and still writes nothing. |
+| C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
 | C-UPD-23 | §10.1 / §16.6 | `crew update <selector>...` restricts fetching to taps that back the selected entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
 | C-UPD-24 | §10.1 | `crew update <selector>...` includes each selected entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the selected entries, marked as transitively required in `--json` output. |

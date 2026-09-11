@@ -4,8 +4,10 @@
  * For every git-kind tap with at least one state entry attributed to it
  * (filtered by `restrictNames`), walk the tap one level deep and:
  *
- *   1. ADDITIONS — children present upstream but not in state: install
- *      via the caller-provided `installNewChild` callback.
+ *   1. ADDITIONS — children present upstream but not in state: validate
+ *      in full (§9 step 4) and install via the caller-provided
+ *      `installNewChild` callback. A child that fails validation is
+ *      reported as a `tap_error` and never installed.
  *   2. SOURCE_GONE — entries in state attributed to this tap whose
  *      directory is no longer present upstream: report; preserve local
  *      install.
@@ -24,6 +26,7 @@ import type { CrewError } from "../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
 import { isDirectory } from "../util/fs.ts";
+import { collectAdditions } from "./tap-additions.ts";
 import { currentTapChildren, groupChildrenByName } from "./tap-children.ts";
 
 /** One re-expansion outcome row. */
@@ -160,30 +163,21 @@ export function reexpandTaps(
     }
 
     // ADDITIONS: children upstream not in state.
-    const memberNames = new Set(members.map((m) => m.name));
-    const aggregateTargets = [...new Set(members.flatMap((m) => m.agents))];
-    for (const child of children) {
-      if (conflictedNames.has(child.name)) continue;
-      if (memberNames.has(child.name)) continue;
-      if (dryRun) {
-        rows.push({ name: child.name, scope: first.scope, tap: tap.name, kind: "would_add" });
-        continue;
-      }
-      const entry = installOne({
-        skillDir: child.path,
-        skillName: child.name,
-        tapRelativePath: child.tapRelativePath,
-        scope: first.scope,
-        tap,
-        agents: aggregateTargets,
-        resolvedSha: acquired.resolvedSha,
-        projectRoot,
-      });
-      if (entry) {
-        added.push(entry);
-        rows.push({ name: child.name, scope: first.scope, tap: tap.name, kind: "added" });
-      }
-    }
+    const additions = collectAdditions({
+      children,
+      conflictedNames,
+      memberNames: new Set(members.map((m) => m.name)),
+      scope: first.scope,
+      tap,
+      agents: [...new Set(members.flatMap((m) => m.agents))],
+      resolvedSha: acquired.resolvedSha,
+      projectRoot,
+      dryRun,
+      installOne,
+    });
+    added.push(...additions.added);
+    rows.push(...additions.rows);
+    if (additions.hardFailure) hardFailure = true;
   }
 
   return { added, updated, hardFailure, sourceGone, rows };

@@ -26,9 +26,13 @@
  * that back the named entries (after dep-closure expansion) — other
  * taps are left untouched.
  *
- * `--dry-run` (§10.1.1): taps are still fetched, but per-skill moves
- * report `would_update`, tap additions report `would_add`, and neither
- * state.json nor the store nor any agent directory is written.
+ * `--dry-run` (§10.1.1): tap clones are still fetched and checked out —
+ * that is how crew learns what moved — but nothing else is written:
+ * per-skill moves report `would_update`, tap additions report
+ * `would_add`, and no installed skill, marker, store entry, or
+ * `state.json` changes. A dry run also never takes the state lock,
+ * because acquiring it would itself create `state.json` (§14 reserves
+ * the lock for commands that write).
  *
  * Error isolation: a failure on one skill is recorded against that
  * skill only; processing continues. Exit code follows §10.1:
@@ -38,6 +42,7 @@
 
 import { readConfig } from "../../config/load.ts";
 import { crewHome } from "../../core/paths.ts";
+import type { Config, StateFile } from "../../core/types.ts";
 import { installNewTapChild } from "../../install/install-new-tap-child.ts";
 import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand.ts";
 import { updateOneEntry } from "../../install/update/entry.ts";
@@ -54,99 +59,122 @@ import { chooseEntries, tapsToRefreshFor, withTransitive } from "./selection.ts"
 export function updateCommand(ctx: CommandContext): CommandOutput {
   const config = readConfig(ctx.home);
   const home = ctx.home ?? crewHome();
-
-  const rawNames = ctx.positional;
   const dryRun = ctx.flags.dryRun;
 
+  // A dry run reads, fetches tap clones, and reports; it never locks,
+  // writes state, or GCs the store.
+  const plan = dryRun
+    ? planUpdate(ctx, config, home, true)
+    : withStateLock(() => {
+        const p = planUpdate(ctx, config, home, false);
+        writeState(p.state, home);
+        return p;
+      }, home);
+
+  if (!dryRun) garbageCollectStore(plan.state, home);
+
+  const { rows, tapReexpandRows, tapRows } = plan;
+  return {
+    exitCode: plan.hardFailure ? 1 : 0,
+    human: renderUpdate({ rows, tapReexpandRows, tapRows, dryRun }, ctx.style),
+    json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows, dry_run: dryRun },
+  };
+}
+
+/** What an update run would do: the resulting state plus every output row. */
+interface UpdatePlan {
+  readonly state: StateFile;
+  readonly rows: readonly UpdateRow[];
+  readonly tapReexpandRows: readonly TapReexpandRow[];
+  readonly tapRows: readonly TapRefreshRow[];
+  readonly hardFailure: boolean;
+}
+
+/**
+ * Refresh taps, re-expand them, and walk every selected entry,
+ * returning the state that would result. `dryRun` is threaded into the
+ * per-skill and per-child steps, so this one function drives both the
+ * preview and the real run — they can never disagree about what
+ * happens.
+ */
+function planUpdate(
+  ctx: CommandContext,
+  config: Config,
+  home: string,
+  dryRun: boolean,
+): UpdatePlan {
+  const rawNames = ctx.positional;
   const rows: UpdateRow[] = [];
   const tapReexpandRows: TapReexpandRow[] = [];
-  let tapRows: readonly TapRefreshRow[] = [];
   let hardFailure = false;
+  let current = readState(home);
 
-  const newState = withStateLock(() => {
-    let current = readState(home);
+  // Dep-closure expansion — may add more entries, but they all live in
+  // state already (we never install new skills during update).
+  const subjects = resolveStateSubjects(current, rawNames);
+  const { entries: initialSelected, transitiveSources } = chooseEntries(current, subjects);
+  const names = subjects.map((subject) => subject.name);
 
-    // Dep-closure expansion — may add more entries, but they all live in
-    // state already (we never install new skills during update).
-    const subjects = resolveStateSubjects(current, rawNames);
-    const { entries: initialSelected, transitiveSources } = chooseEntries(current, subjects);
-    const names = subjects.map((subject) => subject.name);
+  // §10.1 step 1 (scoped): fetch only the taps that back the entries
+  // this run will actually touch. Per-tap failures become warnings,
+  // not hard errors.
+  const tapRows = refreshTaps(tapsToRefreshFor(config, names, initialSelected), home);
 
-    // §10.1 step 1 (scoped): fetch only the taps that back the entries
-    // this run will actually touch. Per-tap failures become warnings,
-    // not hard errors.
-    const tapsToRefresh = tapsToRefreshFor(config, names, initialSelected);
-    tapRows = refreshTaps(tapsToRefresh, home);
+  // §10.1 step 2b: re-expand taps before walking per-skill updates.
+  const reexpanded = reexpandTaps(
+    current,
+    config,
+    home,
+    names,
+    (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
+    dryRun,
+  );
+  tapReexpandRows.push(...reexpanded.rows);
+  if (reexpanded.hardFailure) hardFailure = true;
+  for (const entry of reexpanded.updated) {
+    current = upsertEntry(current, entry);
+  }
+  for (const entry of reexpanded.added) {
+    current = upsertEntry(current, entry);
+  }
+  const sourceGone = reexpanded.sourceGone;
 
-    // §10.1 step 2b: re-expand taps before walking per-skill updates.
-    const reexpanded = reexpandTaps(
+  // Re-read the (possibly expanded) target set against the post-
+  // tap-re-expansion state. In practice the set is stable — tap
+  // re-expansion can add skills, but those come in as explicit
+  // top-level entries and aren't part of the dep closure.
+  const { entries: targetEntries } = chooseEntries(
+    current,
+    resolveStateSubjects(current, rawNames),
+  );
+  for (const entry of targetEntries) {
+    if (sourceGone.has(entry.name)) {
+      rows.push(
+        withTransitive(
+          {
+            name: entry.name,
+            scope: entry.scope,
+            ...(entry.project_root === undefined ? {} : { project_root: entry.project_root }),
+            outcome: { kind: "source_gone" },
+          },
+          transitiveSources,
+        ),
+      );
+      continue;
+    }
+    const { row, updatedState, bumpHardFailure } = updateOneEntry(
+      entry,
       current,
       config,
       home,
-      names,
-      (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
+      ctx.flags.force,
+      ctx.cwd,
       dryRun,
     );
-    tapReexpandRows.push(...reexpanded.rows);
-    if (reexpanded.hardFailure) hardFailure = true;
-    for (const entry of reexpanded.updated) {
-      current = upsertEntry(current, entry);
-    }
-    for (const entry of reexpanded.added) {
-      current = upsertEntry(current, entry);
-    }
-    const sourceGone = reexpanded.sourceGone;
+    current = updatedState;
+    rows.push(withTransitive(row, transitiveSources));
+    if (bumpHardFailure) hardFailure = true;
+  }
 
-    // Re-read the (possibly expanded) target set against the post-
-    // tap-re-expansion state. In practice the set is stable — tap
-    // re-expansion can add skills, but those come in as explicit
-    // top-level entries and aren't part of the dep closure.
-    const { entries: targetEntries } = chooseEntries(
-      current,
-      resolveStateSubjects(current, rawNames),
-    );
-    for (const entry of targetEntries) {
-      if (sourceGone.has(entry.name)) {
-        rows.push(
-          withTransitive(
-            {
-              name: entry.name,
-              scope: entry.scope,
-              ...(entry.project_root === undefined ? {} : { project_root: entry.project_root }),
-              outcome: { kind: "source_gone" },
-            },
-            transitiveSources,
-          ),
-        );
-        continue;
-      }
-      const { row, updatedState, bumpHardFailure } = updateOneEntry(
-        entry,
-        current,
-        config,
-        home,
-        ctx.flags.force,
-        ctx.cwd,
-        dryRun,
-      );
-      current = updatedState;
-      rows.push(withTransitive(row, transitiveSources));
-      if (bumpHardFailure) hardFailure = true;
-    }
-    if (!dryRun) writeState(current, home);
-    return current;
-  }, home);
-
-  // Post-state garbage collection. Skipped on dry run: nothing was
-  // staged, and the user asked us not to change anything.
-  if (!dryRun) garbageCollectStore(newState, home);
-
-  const exitCode = hardFailure ? 1 : 0;
-  const human = renderUpdate({ rows, tapReexpandRows, tapRows, dryRun }, ctx.style);
-
-  return {
-    exitCode,
-    human,
-    json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows, dry_run: dryRun },
-  };
+  return { state: current, rows, tapReexpandRows, tapRows, hardFailure };
 }

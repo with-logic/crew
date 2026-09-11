@@ -6,7 +6,7 @@
  * (header, tap sections, totals).
  */
 
-import type { UpdateRow } from "../../install/update/types.ts";
+import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import type { Styler } from "../../util/term.ts";
 
 export interface RowParts {
@@ -52,6 +52,11 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
       required,
     };
   }
+  // `failed` is the only remaining variant. `satisfies` makes a newly
+  // added `Outcome` kind a compile error here instead of silently
+  // rendering as a failure, and costs no unreachable runtime line
+  // (CLAUDE.md's coverage rule).
+  o satisfies Extract<Outcome, { kind: "failed" }>;
   return {
     status: style.red("failed"),
     detail: style.red(o.error.code.replace(/_/g, " ")),
@@ -65,6 +70,10 @@ export function symbolFor(row: UpdateRow, style: Styler): string {
   if (o.kind === "up_to_date") return style.symbol("muted");
   if (o.kind === "skipped" || o.kind === "missing_project_root") return style.symbol("muted");
   if (o.kind === "source_gone") return style.symbol("warn");
+  // Only `failed` remains. `satisfies` makes a newly-added `Outcome`
+  // kind a compile error here instead of silently taking the fail
+  // symbol, and costs no unreachable runtime line.
+  o satisfies Extract<Outcome, { kind: "failed" }>;
   return style.symbol("fail");
 }
 
