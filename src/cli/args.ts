@@ -42,6 +42,9 @@ const BOOLEAN_SUB: Record<string, readonly string[]> = {
 /** Subcommand-specific string flags. */
 const STRING_SUB: Record<string, readonly string[]> = {
   autoupdate: ["interval"],
+  // `--tap <name>` scopes a search to one configured tap (§16.6). Distinct
+  // from install's presence-only `--tap`; the tables are per-command.
+  search: ["tap"],
   // `--version <tag>` pins a specific release (e.g. `v0.4.0`).
   "self-update": ["version"],
 };

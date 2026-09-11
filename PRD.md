@@ -101,7 +101,8 @@ crew uninstall <selector> [<selector>...] Remove installed skills from every age
 crew update [<selector>...]       Update all installed skills, or only those selected.
 crew list                         List installed skills.
 crew skills                       Alias for `crew list`.
-crew search <query>               Search across configured taps.
+crew search [--tap <name>] [<query>]
+                                   Search across configured taps (or one tap).
 crew info <ref-or-selector>       Show details for an installed or searchable skill.
 
 crew tap add [--recursive] <url-or-path> [<name>]
@@ -1608,6 +1609,15 @@ Add a tap first, then install a suggested skill by qualified name.
 
 `crew search` (no query) lists every skill in every configured tap — the exhaustive catalog. It does not list the known-tap registry. Output and JSON shape are identical to the query form; the installed marker appears the same way and `known_hits` is empty.
 
+**`--tap <name>`.** `crew search --tap <name> [<query>]` scopes the search
+(or the no-query catalog) to the single configured tap `<name>`. Only that
+tap is walked; every other configured tap is skipped, and known-tap registry
+suggestions are omitted because the user asked about one tap they already
+have. `<name>` must match a configured tap (registered or auto); anything
+else is a `usage_error` that names the value and points at `crew tap list`.
+The JSON payload gains a top-level `tap` field: the tap name when `--tap`
+was given, `null` otherwise.
+
 **Network policy.** Read-only commands (`crew search`, `crew info`, `crew list`, `crew install <bare-name>` and `<tap>/<skill>` forms, tap re-expansion during `crew update` for unrelated taps) MUST NOT contact the network. They read from local tap clones as-of the last `crew update` / `crew tap update`. A tap that has never been cloned is materialized on demand on first use; if that initial clone fails (offline, bad URL), the command warns on stderr and skips that tap — it does not fail the whole run.
 
 The only commands that actively fetch from upstream are:
@@ -1886,6 +1896,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-21 | §16.5 | `crew install <local-path>` creates an auto tap with `kind: path`, `registered: false`, `path: <abs-path>`. `crew tap update` skips path-kind taps; `crew search` walks them when reachable. |
 | C-TAP-22 | §16.5 | Running `crew tap add <url>` against a URL that already backs an auto tap promotes it (`registered` flips to `true`) without re-cloning, and applies any user-supplied `<name>` argument. |
 | C-TAP-22b | §16.3 / §16.6 | `crew tap add --recursive <url-or-path> <name>` persists recursive discovery for that tap; later `crew search` and `crew install <name>/<skill>` can find skills only reachable through bounded recursive fallback. |
+| C-TAP-23a | §16.6 | `crew search --tap <name> [<query>]` walks only the named configured tap: hits from other taps are absent, known-tap suggestions are omitted, and JSON reports `tap: <name>`. An unknown `<name>` is a `usage_error` naming it and pointing at `crew tap list`. Without `--tap`, JSON reports `tap: null`. |
 | C-TAP-23 | §16.2.1 / §16.6 | `crew search <query>` surfaces matching known-tap registry entries that are not already configured as suggestions after configured-tap hits, without cloning, fetching, mutating config, or listing them for `crew search` with no query. Suggestions include the canonical `crew tap add <source-ref> <name>` command. JSON includes those suggestions in `known_hits`. |
 | C-TAP-24 | §9 / §16.2.1 | `crew install <tap-source>` that cannot resolve from configured taps surfaces exact known-tap registry matches in the `invalid_ref` error, including canonical `crew tap add` and follow-up install commands, without cloning, fetching, mutating config, or installing from the known tap. JSON errors include `known_tap_suggestions`. |
 

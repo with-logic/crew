@@ -53,12 +53,12 @@ export const GROUPS: readonly CommandGroup[] = [
     commands: [
       {
         name: "search",
-        signature: <>crew search [&lt;query&gt;]</>,
+        signature: <>crew search [--tap &lt;name&gt;] [&lt;query&gt;]</>,
         description: (
           <>
-            Case-insensitive substring match across every configured tap. With no query, lists every
-            installable skill — installed ones are marked <code>✓</code>. With a query, also
-            suggests matching trusted taps to add.
+            Case-insensitive substring match across every configured tap, or just one with{" "}
+            <code>--tap</code>. With no query, lists every installable skill — installed ones are
+            marked <code>✓</code>. With a query, also suggests matching trusted taps to add.
           </>
         ),
       },
