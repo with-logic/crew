@@ -17,6 +17,11 @@
  * alive does NOT trigger pruning — the skill is still installed, so
  * its dependencies are still required.
  *
+ * With `--dry-run` (§7.4), every selector, filter, and safety check
+ * runs exactly as it would for real, but nothing is written: the
+ * per-agent step reports instead of removing, and the command skips
+ * the state write and auto-tap GC.
+ *
  * Per-skill removal and state mutation live in sibling modules
  * (`./core.ts`, `./state.ts`).
  */
@@ -60,13 +65,18 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
     if (prune) {
       state = pruneOrphans(state, ctx, records);
     }
+    if (ctx.flags.dryRun) return;
     writeState(state, ctx.home);
     // Auto-tap GC: any auto tap with no remaining state entries is
     // dropped from config and its clone deleted. Registered taps stay.
     gcAutoTaps(state, ctx.home);
   }, ctx.home);
 
-  return { exitCode, human: renderUninstall(records, ctx.style), json: { records } };
+  return {
+    exitCode,
+    human: renderUninstall(records, ctx.flags.dryRun, ctx.style),
+    json: { records, dry_run: ctx.flags.dryRun },
+  };
 }
 
 /**

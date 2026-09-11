@@ -21,6 +21,8 @@ export interface UninstallInput {
   readonly cwd: string;
   readonly skillName: string;
   readonly force: boolean;
+  /** Run every check but write nothing (§7.4 `--dry-run`). */
+  readonly dryRun?: boolean;
 }
 
 /** Outcome of one uninstall operation on a physical dest. */
@@ -62,7 +64,7 @@ function untrackedInstall(input: UninstallInput, dest: string): UninstallOutcome
       `\`${dest}\` exists but isn't crew-managed (no .crew.json) — refusing to remove`,
       { dest },
     );
-  rmrf(dest);
+  if (!input.dryRun) rmrf(dest);
   return { kind: "removed" };
 }
 
@@ -73,7 +75,7 @@ function inconsistentMarker(input: UninstallInput, marker: Marker, dest: string)
       `\`${dest}\` has a crew marker for \`${marker.name}\`, not \`${input.skillName}\` — investigate before forcing`,
       { dest, markerName: marker.name, incomingName: input.skillName },
     );
-  rmrf(dest);
+  if (!input.dryRun) rmrf(dest);
   return { kind: "removed" };
 }
 
@@ -85,9 +87,9 @@ function removeAdapterOwnership(
   const leaving = new Set(input.agents.map((a) => a.name));
   const remaining = (marker.agents ?? []).filter((a) => !leaving.has(a));
   if (remaining.length === 0) {
-    rmrf(dest);
+    if (!input.dryRun) rmrf(dest);
     return { kind: "removed" };
   }
-  writeJson(join(dest, ".crew.json"), { ...marker, agents: remaining.sort() });
+  if (!input.dryRun) writeJson(join(dest, ".crew.json"), { ...marker, agents: remaining.sort() });
   return { kind: "detached", remaining };
 }

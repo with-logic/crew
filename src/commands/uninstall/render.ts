@@ -16,18 +16,23 @@ const FAIL_REMEDIES: Record<string, string> = {
   not_installed_here: "wasn't installed here (pass --force to ignore)",
 };
 
-export function renderUninstall(records: readonly UninstallRecord[], style: Styler): string[] {
+export function renderUninstall(
+  records: readonly UninstallRecord[],
+  dryRun: boolean,
+  style: Styler,
+): string[] {
   const direct = records.filter((r) => !r.pruned);
   const pruned = records.filter((r) => r.pruned);
 
   const lines: string[] = [];
+  const dryTag = dryRun ? style.dim(" (dry run)") : "";
 
   if (direct.length > 0) {
     const subjects = direct.map((r) => r.name);
     const header =
       subjects.length === 1
-        ? `Uninstalling ${subjects[0]}`
-        : `Uninstalling ${plural(subjects.length, "skill")}`;
+        ? `Uninstalling ${subjects[0]}${dryTag}`
+        : `Uninstalling ${plural(subjects.length, "skill")}${dryTag}`;
     lines.push(style.bold(header));
     for (const r of direct) {
       lines.push("");
@@ -37,7 +42,9 @@ export function renderUninstall(records: readonly UninstallRecord[], style: Styl
 
   if (pruned.length > 0) {
     if (lines.length > 0) lines.push("");
-    lines.push(style.bold(`Pruned ${plural(pruned.length, "dependency", "dependencies")}`));
+    lines.push(
+      style.bold(`Pruned ${plural(pruned.length, "dependency", "dependencies")}${dryTag}`),
+    );
     for (const r of pruned) {
       lines.push("");
       lines.push(...renderRecord(r, style));
@@ -47,7 +54,7 @@ export function renderUninstall(records: readonly UninstallRecord[], style: Styl
   const totals = tally(records);
   if (totals.removals > 0 || totals.failures > 0) {
     lines.push("");
-    lines.push(style.dim(formatTotals(totals)));
+    lines.push(style.dim(formatTotals(totals, dryRun)));
   }
 
   return lines;
@@ -90,13 +97,14 @@ function tally(records: readonly UninstallRecord[]): Totals {
   return t;
 }
 
-function formatTotals(totals: Totals): string {
+function formatTotals(totals: Totals, dryRun: boolean): string {
   const parts: string[] = [];
   if (totals.removals > 0) {
-    parts.push(`removed from ${plural(totals.removals, "agent")}`);
+    parts.push(`${dryRun ? "would remove" : "removed"} from ${plural(totals.removals, "agent")}`);
   }
   if (totals.pruned > 0) {
-    parts.push(`pruned ${plural(totals.pruned, "dependency", "dependencies")}`);
+    const verb = dryRun ? "would prune" : "pruned";
+    parts.push(`${verb} ${plural(totals.pruned, "dependency", "dependencies")}`);
   }
   if (totals.failures > 0) {
     parts.push(plural(totals.failures, "failure"));

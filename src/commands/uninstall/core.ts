@@ -124,6 +124,7 @@ function removeFromAgents(
         cwd: entryCwd,
         skillName: name,
         force: ctx.flags.force,
+        dryRun: ctx.flags.dryRun,
       });
       if (outcome.kind === "absent") {
         for (const a of group) rec.absentFrom.push(a.name);
