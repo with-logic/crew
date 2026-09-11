@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { runCli } from "../../src/cli/main.ts";
+import type { StateEntry } from "../../src/core/types.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -47,6 +48,9 @@ function installDemo(home: string, scope: "user" | "project", cwd: string): void
 function seed(home: string): [string, string] {
   const p1 = makeTempDir("crew-proj-a-");
   const p2 = makeTempDir("crew-proj-b-");
+  // Each install gets its own source dir, so the user entry's tap name is
+  // distinct from both project entries' — that's what makes the positive
+  // row assertion in C-LIST-02 meaningful.
   installDemo(home, "user", p1);
   installDemo(home, "project", p1);
   installDemo(home, "project", p2);
@@ -57,9 +61,11 @@ function listJson(home: string, ...extra: string[]) {
   const cap = captureStreams();
   const code = runCli(["list", "--json", ...extra], { home, streams: cap.streams });
   if (code !== 0) throw new Error(`list --json exited ${code}: ${cap.stderr()}`);
+  // Derived from the canonical entry type so this shape can't drift from
+  // what `crew list --json` actually emits.
   return JSON.parse(cap.stdout()) as {
     scope: string | null;
-    installations: { scope: string; project_root?: string }[];
+    installations: StateEntry[];
   };
 }
 
@@ -89,8 +95,15 @@ describe("crew list --scope", () => {
     const json = listJson(home, "--scope", "user");
     expect(json.scope).toBe("user");
     expect(json.installations.map((e) => e.scope)).toEqual(["user"]);
+    // Each install has its own source dir, so the user entry's tap name is
+    // distinct from both project entries'.
+    const userTap = json.installations[0]!.source.tap;
     const out = listHuman(home, "--scope", "user");
     expect(out).toContain("Installed skills (1) at user scope");
+    // The row must actually render — this test would otherwise pass if the
+    // user installation disappeared entirely.
+    expect(out).toContain("demo");
+    expect(out).toContain(userTap);
     expect(out).not.toContain(`in ${p1}`);
     expect(out).not.toContain("└");
   });
