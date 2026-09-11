@@ -24,6 +24,53 @@ describe("crew install <browser-url>", () => {
     expect(payload.error.name).toBe("invalid_ref");
     expect(payload.error.message).toContain("SKILL.md");
   });
+
+  test("C-REF-28 a rejected URL never prints its credentials", () => {
+    const secret = "ghp_dummysecretvalue";
+    const home = makeCrewHome();
+    const cap = captureStreams();
+    const code = runCli(
+      ["install", `https://oauth2:${secret}@github.com/acme/skills/blob/main/py/README.md`],
+      { home, streams: cap.streams },
+    );
+    expect(code).toBe(4);
+    expect(cap.stdout()).not.toContain(secret);
+    expect(cap.stderr()).not.toContain(secret);
+    expect(cap.stderr()).toContain("***");
+  });
+
+  test("C-REF-28 the --json payload never carries credentials", () => {
+    const secret = "ghp_dummysecretvalue";
+    const home = makeCrewHome();
+    const cap = captureStreams();
+    const code = runCli(
+      [
+        "install",
+        `https://oauth2:${secret}@github.com/acme/skills/blob/main/py/README.md`,
+        "--json",
+      ],
+      { home, streams: cap.streams },
+    );
+    expect(code).toBe(4);
+    const raw = cap.stdout();
+    expect(raw).not.toContain(secret);
+    const payload = JSON.parse(raw);
+    expect(payload.error.name).toBe("invalid_ref");
+    expect(JSON.stringify(payload.error.details)).not.toContain(secret);
+  });
+
+  test("C-REF-30 a malformed URL exits 4 with invalid_ref, not usage_error", () => {
+    const home = makeCrewHome();
+    const cap = captureStreams();
+    const code = runCli(["install", "https://:::/acme/skills", "--json"], {
+      home,
+      streams: cap.streams,
+    });
+    expect(code).toBe(4);
+    const payload = JSON.parse(cap.stdout());
+    expect(payload.error.name).toBe("invalid_ref");
+    expect(payload.error.message).not.toContain("unexpected error");
+  });
 });
 
 describe("crew tap add <browser-url> (C-REF-27)", () => {
