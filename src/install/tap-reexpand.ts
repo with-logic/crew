@@ -21,7 +21,7 @@ import type { CrewError } from "../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
 import { isDirectory } from "../util/fs.ts";
-import { installedFromSameSource } from "./installed-lookup.ts";
+import { buildInstalledSourceIndex, indexHasSameSource } from "./installed-lookup.ts";
 import { currentTapChildren, groupChildrenByName } from "./tap-children.ts";
 
 /** One re-expansion outcome row. */
@@ -65,6 +65,9 @@ export function reexpandTaps(
   const sourceGone = new Set<string>();
   const rows: TapReexpandRow[] = [];
   let hardFailure = false;
+  // Built once: the per-child same-source check would otherwise rescan
+  // every state entry, and every tap row within it, for each candidate.
+  const installedIndex = buildInstalledSourceIndex(state, config);
 
   // Group state entries by (tap-name, scope, project_root). Entries
   // sharing all three are managed together: same tap clone, same
@@ -165,9 +168,7 @@ export function reexpandTaps(
       // §5.4: the same directory may already be installed through
       // another tap pointing at this repo. Same source, so there is
       // nothing to add — installing again would collide on the name.
-      const alreadyHere = installedFromSameSource({
-        state,
-        config,
+      const alreadyHere = indexHasSameSource(installedIndex, {
         name: child.name,
         scope: first.scope,
         projectRoot,

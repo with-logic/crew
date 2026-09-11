@@ -19,13 +19,15 @@
  * where there is none.
  *
  * When the existing entry sits on an auto tap and the incoming install
- * reaches the same location through a broader tap, the entry is
- * re-attributed to the broader tap (§16.5) instead of conflicting.
+ * reaches the same location through another tap covering it, the
+ * entry is re-attributed to the incoming tap (§16.5) instead of
+ * conflicting.
  */
 
 import { CrewError } from "../core/errors.ts";
 import type { ResolvedSkill, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
 import { identityOfStateSource, sameSourceIdentity, sourceIdentityOf } from "./source-identity.ts";
+import { narrowsTapRoot } from "./tap-breadth.ts";
 
 export interface AlreadyInstalled {
   readonly name: string;
@@ -33,7 +35,7 @@ export interface AlreadyInstalled {
   readonly resolvedSha: string | null;
   readonly scope: Scope;
   readonly agents: readonly string[];
-  /** Set when the entry moved to a broader tap covering the same source. */
+  /** Set when the entry moved to an incoming tap covering the same source. */
   readonly reattributedFrom?: string;
 }
 
@@ -126,7 +128,9 @@ export function applyDuplicateRules(
  * Decide whether `skill` may land on top of `existing`. Throws
  * `name_conflict` when the two name genuinely different sources.
  * Returns a `Reattribution` when the entry should move to the incoming
- * (broader) tap, or null when attribution already matches.
+ * tap covering the same location, or null when attribution already
+ * matches, the existing tap is the user's own, or the move would narrow
+ * a whole-tap subscription.
  */
 function classifySource(
   existing: StateEntry,
@@ -151,9 +155,16 @@ function classifySource(
   }
   // Same bytes, same place, different tap row. A registered tap is the
   // user's own naming choice — leave it alone. An auto tap is crew's
-  // bookkeeping, so move the entry onto the incoming tap.
+  // bookkeeping, so move the entry onto the tap covering the location.
   const existingTap = taps.find((t) => t.name === existing.source.tap);
   if (existingTap?.registered !== false) return null;
+  // Never trade a whole-tap subscription for a narrower one. The old tap
+  // is garbage-collected once its last entry leaves, so moving a
+  // `tracks_tap` entry onto a tap rooted deeper in the same repo would
+  // silently end sibling re-expansion (§10.1.1). Every direct git/path
+  // install sets `tracksTap`, so the test is which tap sees more: the
+  // incoming root must not be a strict descendant of the existing one.
+  if (existing.tracks_tap === true && narrowsTapRoot(existingTap, skill.tap)) return null;
   return {
     name: existing.name,
     scope: existing.scope,

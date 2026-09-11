@@ -10,28 +10,65 @@
  */
 
 import type { Config, Scope, StateFile, TapConfig } from "../core/types.ts";
-import { identityOfStateSource, sameSourceIdentity, sourceIdentityOf } from "./source-identity.ts";
+import { type SourceIdentity, sameSourceIdentity, sourceIdentityOf } from "./source-identity.ts";
+
+/**
+ * An index of installed source identities, built once so re-expansion
+ * doesn't rescan every state entry (and every tap row inside
+ * `identityOfStateSource`) for each upstream child it considers.
+ *
+ * Keyed by `name`, since that is the first thing every lookup filters on.
+ */
+export interface InstalledSourceIndex {
+  readonly byName: ReadonlyMap<string, readonly IndexedEntry[]>;
+}
+
+interface IndexedEntry {
+  readonly scope: Scope;
+  readonly projectRoot: string | null;
+  readonly identity: SourceIdentity;
+}
+
+/** Build the index for one re-expansion run. */
+export function buildInstalledSourceIndex(state: StateFile, config: Config): InstalledSourceIndex {
+  const byName = new Map<string, IndexedEntry[]>();
+  const tapsByName = new Map(config.taps.map((t) => [t.name, t]));
+  for (const entry of state.installations) {
+    const tap = tapsByName.get(entry.source.tap);
+    if (!tap) continue;
+    const bucket = byName.get(entry.name);
+    const indexed: IndexedEntry = {
+      scope: entry.scope,
+      projectRoot: entry.project_root ?? null,
+      identity: sourceIdentityOf(tap, entry.source.path),
+    };
+    if (bucket) bucket.push(indexed);
+    else byName.set(entry.name, [indexed]);
+  }
+  return { byName };
+}
 
 /**
  * True when `name` is already installed at this scope and project root
  * from the same canonical source, through any tap row.
  */
-export function installedFromSameSource(args: {
-  readonly state: StateFile;
-  readonly config: Config;
-  readonly name: string;
-  readonly scope: Scope;
-  readonly projectRoot: string | null;
-  readonly tap: TapConfig;
-  readonly tapRelativePath: string;
-}): boolean {
+export function indexHasSameSource(
+  index: InstalledSourceIndex,
+  args: {
+    readonly name: string;
+    readonly scope: Scope;
+    readonly projectRoot: string | null;
+    readonly tap: TapConfig;
+    readonly tapRelativePath: string;
+  },
+): boolean {
+  const candidates = index.byName.get(args.name);
+  if (!candidates) return false;
   const incoming = sourceIdentityOf(args.tap, args.tapRelativePath);
-  for (const entry of args.state.installations) {
-    if (entry.name !== args.name) continue;
-    if (entry.scope !== args.scope) continue;
-    if ((entry.project_root ?? null) !== args.projectRoot) continue;
-    const existing = identityOfStateSource(entry.source, args.config.taps);
-    if (existing && sameSourceIdentity(existing, incoming)) return true;
+  for (const c of candidates) {
+    if (c.scope !== args.scope) continue;
+    if (c.projectRoot !== args.projectRoot) continue;
+    if (sameSourceIdentity(c.identity, incoming)) return true;
   }
   return false;
 }
