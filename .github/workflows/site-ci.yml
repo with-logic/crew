@@ -5,8 +5,9 @@ name: Site CI
 # path-filtering it would let CLI-only PRs slip through unblocked.
 
 on:
+  # No `branches` filter: that key matches the PR's BASE branch, so
+  # `[main]` silently skipped every stacked PR (see ci.yml).
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 
