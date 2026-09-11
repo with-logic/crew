@@ -11,13 +11,21 @@
  *      re-staging.
  *
  * A different-source install of the same name throws `name_conflict`
- * (never overridden by --force — per §13). "Same source" now means
- * "same tap name + same path inside the tap" — the URL/filesystem
- * location lives on the tap row, not on the entry.
+ * (never overridden by --force — per §13). "Same source" means the same
+ * canonical location: the same repo (or directory) and the same path
+ * inside it, per `./source-identity.ts`. One repo can back several taps
+ * — installing `//skills/docx` and later the whole repo reaches the same
+ * directory two ways — so comparing tap names would report a conflict
+ * where there is none.
+ *
+ * When the existing entry sits on an auto tap and the incoming install
+ * reaches the same location through a broader tap, the entry is
+ * re-attributed to the broader tap (§16.5) instead of conflicting.
  */
 
 import { CrewError } from "../core/errors.ts";
-import type { ResolvedSkill, Scope, StateFile } from "../core/types.ts";
+import type { ResolvedSkill, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
+import { identityOfStateSource, sameSourceIdentity, sourceIdentityOf } from "./source-identity.ts";
 
 export interface AlreadyInstalled {
   readonly name: string;
@@ -25,12 +33,32 @@ export interface AlreadyInstalled {
   readonly resolvedSha: string | null;
   readonly scope: Scope;
   readonly agents: readonly string[];
+  /** Set when the entry moved to a broader tap covering the same source. */
+  readonly reattributedFrom?: string;
+}
+
+/** An entry whose tap attribution moves to a tap covering the same source. */
+export interface Reattribution {
+  readonly name: string;
+  readonly scope: Scope;
+  readonly projectRoot: string | null;
+  readonly fromTap: string;
+  readonly toTap: string;
+  readonly toPath: string;
 }
 
 export interface DuplicateAnalysis {
   readonly toInstall: ResolvedSkill[];
   readonly alreadyInstalled: AlreadyInstalled[];
   readonly promoteToExplicit: string[];
+  readonly reattributions: Reattribution[];
+}
+
+export interface DuplicateOptions {
+  readonly activeAgents: readonly string[];
+  readonly force: boolean;
+  /** Tap rows the existing state entries reference, for identity resolution. */
+  readonly taps: readonly TapConfig[];
 }
 
 export function applyDuplicateRules(
@@ -38,14 +66,12 @@ export function applyDuplicateRules(
   state: StateFile,
   scope: Scope,
   cwd: string,
-  options: { readonly activeAgents: readonly string[]; readonly force: boolean } = {
-    activeAgents: [],
-    force: false,
-  },
+  options: DuplicateOptions = { activeAgents: [], force: false, taps: [] },
 ): DuplicateAnalysis {
   const toInstall: ResolvedSkill[] = [];
   const alreadyInstalled: AlreadyInstalled[] = [];
   const promoteToExplicit: string[] = [];
+  const reattributions: Reattribution[] = [];
 
   const incomingProjectRoot = scope === "project" ? cwd : null;
   for (const skill of resolved) {
@@ -60,18 +86,8 @@ export function applyDuplicateRules(
       continue;
     }
 
-    const sameSource =
-      existing.source.tap === skill.tap.name && existing.source.path === skill.tapRelativePath;
-    if (!sameSource) {
-      throw new CrewError(
-        "name_conflict",
-        `a skill named \`${skill.name}\` is already installed from a different source — run \`crew uninstall ${skill.name}\` first, then install from the new source`,
-        {
-          existing: existing.source,
-          incoming: { tap: skill.tap.name, path: skill.tapRelativePath },
-        },
-      );
-    }
+    const reattribution = classifySource(existing, skill, options.taps, incomingProjectRoot);
+    if (reattribution) reattributions.push(reattribution);
 
     // The set of adapters active for this install — if it includes
     // any adapter the existing entry doesn't, the install still has
@@ -92,6 +108,7 @@ export function applyDuplicateRules(
         resolvedSha: existing.resolved_sha,
         scope: existing.scope,
         agents: existing.agents,
+        ...(reattribution ? { reattributedFrom: reattribution.fromTap } : {}),
       });
       if (skill.explicit && !existing.explicit) {
         promoteToExplicit.push(skill.name);
@@ -102,5 +119,47 @@ export function applyDuplicateRules(
     // → install (possibly as no-op byte-copy but with marker rewrite).
     toInstall.push(skill);
   }
-  return { toInstall, alreadyInstalled, promoteToExplicit };
+  return { toInstall, alreadyInstalled, promoteToExplicit, reattributions };
+}
+
+/**
+ * Decide whether `skill` may land on top of `existing`. Throws
+ * `name_conflict` when the two name genuinely different sources.
+ * Returns a `Reattribution` when the entry should move to the incoming
+ * (broader) tap, or null when attribution already matches.
+ */
+function classifySource(
+  existing: StateEntry,
+  skill: ResolvedSkill,
+  taps: readonly TapConfig[],
+  projectRoot: string | null,
+): Reattribution | null {
+  if (existing.source.tap === skill.tap.name && existing.source.path === skill.tapRelativePath) {
+    return null;
+  }
+  const existingIdentity = identityOfStateSource(existing.source, taps);
+  const incomingIdentity = sourceIdentityOf(skill.tap, skill.tapRelativePath);
+  if (existingIdentity === null || !sameSourceIdentity(existingIdentity, incomingIdentity)) {
+    throw new CrewError(
+      "name_conflict",
+      `a skill named \`${skill.name}\` is already installed from a different source — run \`crew uninstall ${skill.name}\` first, then install from the new source`,
+      {
+        existing: existing.source,
+        incoming: { tap: skill.tap.name, path: skill.tapRelativePath },
+      },
+    );
+  }
+  // Same bytes, same place, different tap row. A registered tap is the
+  // user's own naming choice — leave it alone. An auto tap is crew's
+  // bookkeeping, so move the entry onto the incoming tap.
+  const existingTap = taps.find((t) => t.name === existing.source.tap);
+  if (existingTap?.registered !== false) return null;
+  return {
+    name: existing.name,
+    scope: existing.scope,
+    projectRoot,
+    fromTap: existing.source.tap,
+    toTap: skill.tap.name,
+    toPath: skill.tapRelativePath,
+  };
 }

@@ -132,6 +132,9 @@ function renderAlreadyInstalled(
   // inside `style.dim` so color markup brackets the whole tag.
   const scopeTag = existing.scope === "project" ? style.dim(`  in ${shortenHome(cwd)}`) : "";
   lines.push(`  ${style.bold(existing.name)} ${tagParts.join(" ")}${scopeTag}`);
+  if (existing.reattributedFrom && resolved) {
+    lines.push(style.dim(`    now tracked via ${resolved.tap.name}`));
+  }
   if (resolved?.frontmatter.description) {
     const desc = firstSentences(resolved.frontmatter.description, 200);
     const indent = "    ";

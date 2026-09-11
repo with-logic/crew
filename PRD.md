@@ -170,6 +170,32 @@ Accepted on any command where they apply:
 - If the source matches but the ref differs, treat as an update (§10).
 - If the source differs, fail with a name-conflict error (§13) unless `--force` is given, in which case the previous install is removed first.
 
+**What "the source" means.** Two installs share a source when they name
+the same **canonical location**: the same repository (or the same local
+directory) and the same path inside it. The canonical location is the
+tap's repo URL (or path) joined with the tap's `subpath` and the entry's
+tap-relative path. Repo URLs compare after normalizing the spellings
+crew itself produces: a trailing `.git`, a trailing `/`, and host casing
+are ignored, so `gh:acme/skills`, `@acme/skills`, and
+`https://github.com/acme/skills` are one repository.
+
+The tap a skill is attributed to is NOT part of its source identity. One
+repository can back several taps: `crew install @acme/skills//skills/docx`
+records a tap with `subpath: skills/docx` and an entry path of `""`,
+while `crew install @acme/skills` records a tap with no subpath and an
+entry path of `skills/docx`. Both reach the same directory in the same
+repo at the same commit, so the second install is a duplicate, not a
+name conflict.
+
+**Re-attribution.** When the two installs agree on canonical location
+but the existing entry is attributed to an **auto** tap (§16.5) while the
+incoming install comes through a tap that also covers that location, the
+entry is re-attributed: `state.source` and the install-site markers are
+rewritten to the incoming tap, and the installed bytes are left alone.
+Implementations SHOULD say so in human output. An entry attributed to a
+**registered** tap is never re-attributed — the user named that tap
+deliberately — and is simply reported as already installed.
+
 ### 5.5 Help output
 
 Help is part of the product, not a footnote. Two independent
@@ -1344,7 +1370,7 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `ambiguous_reference` | 4 | A reference has more than one valid resolution across taps, skills, and namespaces, and the user is non-interactive or the prompt was aborted. |
 | `ambiguous_dependency` | 4 | A dependency's bare name is ambiguous across taps. |
 | `conflicting_dependencies` | 4 | Two skills in one install set have the same name but different source paths or resolved SHAs; also emitted by `crew update` when tap re-expansion finds multiple current children declaring the same `name`. |
-| `name_conflict` | 4 | Trying to install a skill whose name is already held by a different source, without `--force`. |
+| `name_conflict` | 4 | Trying to install a skill whose name is already held by a different source, without `--force`. "Different source" means a different canonical location per §5.4 — the same repo reached through a different tap is NOT a conflict. |
 | `untracked_directory` | 6 | Destination exists without a crew marker. |
 | `customized` | 6 | Destination has a marker but content hash differs. |
 | `inconsistent_marker` | 6 | Marker exists with an unexpected `name`. |
@@ -1577,8 +1603,12 @@ When `crew install` is given a reference that resolves to a source not currently
 Auto taps are functionally indistinguishable from registered taps for `crew update`, `crew tap update`, `crew search`, and `crew install <tap-name>` purposes. The only differences are:
 
 - They appear with `kind: auto` in `crew tap list`.
-- They are garbage-collected by `crew uninstall` when their last associated state entry is removed: the tap row is dropped from `config.yaml` and the local clone is deleted. (Registered taps are not garbage-collected.)
+- They are garbage-collected when their last associated state entry goes away: the tap row is dropped from `config.yaml` and the local clone is deleted. This happens when `crew uninstall` removes the last entry, and when `crew install` re-attributes the last entry to a broader tap covering the same canonical location (§5.4). (Registered taps are not garbage-collected.)
 - A user can convert an auto tap to registered by running `crew tap add <url-or-path>` against the same source — this idempotent promotion preserves the existing clone and installed skills.
+
+Because auto-tap names are crew's bookkeeping rather than something the
+user chose, re-attributing an entry away from one is not user-visible
+state loss: the skill, its bytes, and its install sites are unchanged.
 
 ### 16.6 Search and network policy
 
@@ -1730,6 +1760,11 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-11 | §9 | Installing an already-installed skill at the same SHA prints "already installed" and exits 0. |
 | C-INST-12 | §5.4 | Installing an already-installed skill from the same source at a different ref performs an update. |
 | C-INST-13 | §5.4 | Installing a skill with the same `name` from a different source produces `name_conflict`, exit 4, without `--force`. |
+| C-INST-13a | §5.4 | Installing a repo subpath (`<url>//skills/foo`) and then the whole repo (`<url>`) does NOT produce `name_conflict`: both reach the same canonical location, so `foo` is reported as already installed. |
+| C-INST-13b | §5.4, §16.5 | In that case the entry is re-attributed to the broader tap — `state.source` and the markers name it — and the emptied auto tap plus its clone are garbage-collected. |
+| C-INST-13c | §5.4 | An entry attributed to a **registered** tap is not re-attributed; the install reports it as already installed and leaves `state.source` alone. |
+| C-INST-13d | §5.4 | Canonical URL comparison ignores a trailing `.git`, a trailing `/`, and host casing, so those spellings of one repo are the same source. |
+| C-INST-13e | §10.1.1, §5.4 | Tap re-expansion does not "add" a child that is already installed at the same scope from the same canonical location through another tap. |
 | C-INST-14 | §5.4 | `--force` on a `name_conflict` is NOT honored (the spec forbids `--force` overriding name conflicts). |
 | C-INST-15 | §9 | `--dry-run` on install produces a summary of what would happen and writes no files. |
 | C-INST-16 | §9 | `--agent <skill>` restricts the operation to the named agent(s). |
