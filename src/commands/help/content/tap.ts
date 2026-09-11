@@ -10,7 +10,16 @@ export const tapHelp: CommandHelp = {
     "Shortcut: `crew tap <url>` is the same as `crew tap add <url>` — type whichever feels natural.",
   ],
   flags: [
-    { flag: "--force", description: "Allow removing the default `core` tap." },
+    {
+      flag: "--force",
+      description:
+        "Allow removing the default `core` tap, or drop a tap while keeping the skills you installed from it.",
+    },
+    {
+      flag: "--uninstall",
+      description:
+        "With `tap remove`, also uninstall every skill that came from the tap. Without it, a tap with installed skills won't be removed.",
+    },
     {
       flag: "--recursive",
       description:
@@ -59,6 +68,14 @@ export const tapHelp: CommandHelp = {
       description: "Only refresh the named collection(s).",
     },
     { command: "crew tap remove acme", description: "Stop using a collection." },
+    {
+      command: "crew tap remove --uninstall acme",
+      description: "Stop using it and remove the skills you installed from it.",
+    },
+    {
+      command: "crew tap remove --force acme",
+      description: "Stop using it but keep those skills installed.",
+    },
   ],
   sections: [
     {
@@ -113,6 +130,7 @@ export const tapHelp: CommandHelp = {
   ],
   notes: [
     "Adding a tap is safe — Homecrew just clones (or points at) the folder and reads the skills inside. Nothing is installed until you ask for it.",
+    "Removing a collection you've installed from needs a decision. Homecrew stops and asks: `--uninstall` removes those skills too, `--force` keeps them installed. Kept skills go on working, and `crew update` reports them as `tap_missing` until you add the collection back.",
     "Re-adding the same thing is fine; Homecrew notices and doesn't do extra work. If you try to add a different URL under a name that's taken, Homecrew asks you to pick another name.",
     "Promoting an auto tap keeps its existing discovery mode; pass `--recursive` while promoting to upgrade it if needed.",
     "If a skill name exists in two different collections, you can be specific with `collection/skill` to pick which one.",
