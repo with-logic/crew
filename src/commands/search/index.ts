@@ -10,8 +10,8 @@
  * they already have, not about taps they could add.
  */
 
+import { requireConfiguredTap } from "../../config/find-tap.ts";
 import { readConfig } from "../../config/load.ts";
-import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { readState } from "../../state/load.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
@@ -44,14 +44,5 @@ export function searchCommand(ctx: CommandContext): CommandOutput {
 function readTapFilter(ctx: CommandContext, taps: readonly TapConfig[]): TapConfig | null {
   const raw = ctx.flags.extras["tap"];
   if (typeof raw !== "string") return null;
-  const tap = taps.find((t) => t.name === raw);
-  if (!tap) {
-    throw new CrewError(
-      "usage_error",
-      `\`${raw}\` was not found in your list of taps.`,
-      { name: raw },
-      "This may have been a typo. View your configured taps with `crew tap list`.",
-    );
-  }
-  return tap;
+  return requireConfiguredTap(taps, raw);
 }
