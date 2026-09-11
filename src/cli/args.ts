@@ -48,6 +48,18 @@ const STRING_SUB: Record<string, readonly string[]> = {
   // `--version <tag>` pins a specific release (e.g. `v0.4.0`).
   "self-update": ["version"],
 };
+/**
+ * Bare command aliases, for flag-table lookup only.
+ *
+ * Only aliases that resolve to a canonical command with no positional
+ * prefix belong here. `taps` (→ `tap list`) and `untap` (→ `tap remove`)
+ * must NOT be listed: they target a subcommand that ignores `tap`'s own
+ * flags, and inheriting that table would start accepting flags nothing
+ * honors. Dispatch owns the real alias table (`src/cli/dispatch.ts`).
+ */
+const FLAG_TABLE_ALIASES: Record<string, string> = {
+  skills: "list",
+};
 /** Flags that should always be collected into a list. */
 const ARRAY_GLOBALS = ["agent"] as const;
 /** The subset of flags that is part of the public `CommandFlags` surface. */
@@ -61,8 +73,14 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   const command = effective[0]!;
   const rest = effective.slice(1);
 
-  const booleans = [...BOOLEAN_GLOBALS, ...(BOOLEAN_SUB[command] ?? [])];
-  const strings = [...STRING_GLOBALS, ...(STRING_SUB[command] ?? [])];
+  // Bare aliases (`skills` → `list`) take their canonical command's
+  // flags; without this the parser rejects a flag the alias documents.
+  // Prefixed aliases (`taps` → `tap list`) are deliberately excluded:
+  // they resolve to a *subcommand* that ignores the parent's flags, so
+  // they keep rejecting them.
+  const flagKey = FLAG_TABLE_ALIASES[command] ?? command;
+  const booleans = [...BOOLEAN_GLOBALS, ...(BOOLEAN_SUB[flagKey] ?? [])];
+  const strings = [...STRING_GLOBALS, ...(STRING_SUB[flagKey] ?? [])];
 
   let parsed: Record<string, unknown>;
   try {
@@ -103,6 +121,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
   const positional = ((parsed["_"] as unknown[]) ?? []).map(String);
 
+  rejectRepeatedScalars(parsed);
+
   const scope = stringOrUndefined(parsed["scope"]) ?? "user";
   if (scope !== "user" && scope !== "project")
     throw new CrewError(
@@ -136,6 +156,28 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   };
 
   return { command, subcommand: null, positional, flags };
+}
+
+/**
+ * Reject a non-repeatable flag that was given more than once.
+ *
+ * `duplicate-arguments-array` makes yargs hand back an array for a
+ * repeated flag. Only `--agent` is repeatable; for every other flag an
+ * array value would be silently dropped downstream (`extras` keeps only
+ * strings and booleans) or fall back to its default, so the user's
+ * explicit choice would vanish without a word. Fail loudly instead.
+ */
+function rejectRepeatedScalars(parsed: Record<string, unknown>): void {
+  const repeatable = new Set<string>(ARRAY_GLOBALS);
+  for (const [key, value] of Object.entries(parsed)) {
+    if (key === "_" || key === "$0" || repeatable.has(key)) continue;
+    if (!Array.isArray(value)) continue;
+    throw new CrewError(
+      "usage_error",
+      `\`--${key}\` was given more than once — it takes a single value`,
+      { flag: key },
+    );
+  }
 }
 
 function stringOrUndefined(v: unknown): string | undefined {

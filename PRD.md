@@ -160,6 +160,12 @@ selects rows, it does not hide data. `--json` reports the filters in
 the combined filters leave nothing and a `--agent` or `--tap` filter was
 given, the human output says no skills match those filters.
 
+A flag that takes a single value is rejected with a `usage_error` when
+given more than once, rather than silently falling back to unfiltered
+output. A bare command alias (`crew skills`) accepts exactly the flags
+its canonical command accepts; an alias that resolves to a subcommand
+(`crew taps` → `crew tap list`) accepts only that subcommand's flags.
+
 ### 5.2 Global flags
 
 Accepted on any command where they apply:
@@ -1968,6 +1974,7 @@ Implementations and test suites refer to criteria by ID.
 | C-LIST-04 | §5.1 | `crew list --agent <name>` shows only installations recorded against that agent (repeatable, any-of); an unknown agent is a `usage_error` naming the known agents; `--json` reports the filter in `agent`. |
 | C-LIST-05 | §5.1 | `crew list --tap <name>` shows only installations attributed to that tap; an unknown tap is a `usage_error` pointing at `crew tap list`; `--json` reports the filter in `tap`. |
 | C-LIST-06 | §5.1 | `--agent`, `--tap`, and `--scope` compose; when the combination matches nothing and an agent or tap filter was given, `crew list` says no skills match those filters. |
+| C-LIST-07 | §5.1 | A repeated single-value flag (e.g. `crew list --tap a --tap b`) is a `usage_error`; it never silently drops the filter. `crew skills` accepts every flag `crew list` accepts. |
 | C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same install location (`(scope, project_root)`). |
 | C-STATE-11 | §11.2 | `crew doctor` reports `missing_project_root` for any project-scope entry whose `project_root` directory no longer exists. |
 
