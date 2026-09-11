@@ -4,9 +4,10 @@
  * Every install attributes its skills to a tap (registered or auto).
  * `acquireTap` materializes that tap on disk:
  *
- *   - kind=git → `ensureClone` into `~/.crew/taps/<name>/`. No fetch
- *     by default (network policy: §16.6); the install flow that fetches
- *     does so explicitly via `refreshTaps` before calling here.
+ *   - kind=git → `ensureClone` into the repository's shared clone under
+ *     `~/.crew/repos/` (§6). No fetch by default (network policy:
+ *     §16.6); the install flow that fetches does so explicitly via
+ *     `refreshTaps` before calling here.
  *   - kind=path → just verify the directory exists.
  *
  * The result tells the caller where on disk to walk for skills, and
@@ -19,10 +20,12 @@
 
 import { join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
-import { crewHome, tapPath } from "../../core/paths.ts";
+import { crewHome } from "../../core/paths.ts";
+import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { ensureClone, resolveRef } from "../../git/repo.ts";
 import { isDirectory } from "../../util/fs.ts";
+import { migrateTapClone } from "../migrate-clones.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
@@ -45,7 +48,8 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
     return { rootDir: tap.path, resolvedSha: null };
   }
   // kind === "git"
-  const clonePath = tapPath(tap.name, home);
+  migrateTapClone(tap, home);
+  const clonePath = tapClonePath(tap, home);
   ensureClone(tap.url, clonePath);
   const sha = resolveRef(clonePath, null);
   const rootDir = tap.subpath.length > 0 ? join(clonePath, tap.subpath) : clonePath;

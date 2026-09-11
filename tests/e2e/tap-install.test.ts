@@ -12,6 +12,7 @@ import { runCli } from "../../src/cli/main.ts";
 import { readState } from "../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
+  cloneDirForTap,
   commitAll,
   makeGitRepo,
   makeSkill,
@@ -338,11 +339,11 @@ describe("C-UPD-19: crew update refreshes every configured tap", () => {
     expect(c.stdout()).toContain("gamma");
 
     // The clone's working tree is now at the new HEAD, so the file
-    // landed under ~/.crew/taps/mytap/gamma/SKILL.md — the same path
+    // landed under the repository's shared clone — the same path
     // `crew search` reads from.
     const { join } = require("node:path") as typeof import("node:path");
     const { existsSync } = require("node:fs") as typeof import("node:fs");
-    expect(existsSync(join(home, "taps", "mytap", "gamma", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(cloneDirForTap("mytap", home)!, "gamma", "SKILL.md"))).toBe(true);
   });
 });
 

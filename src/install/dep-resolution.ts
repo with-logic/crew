@@ -20,7 +20,7 @@
 
 import { join, posix } from "node:path";
 import { CrewError } from "../core/errors.ts";
-import { tapPath } from "../core/paths.ts";
+import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkill, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
@@ -45,7 +45,7 @@ export function findSiblingDep(
   home: string,
   config: Config,
 ): SiblingHit | null {
-  const tapClone = parent.tap.kind === "git" ? tapPath(parent.tap.name, home) : parent.tap.path;
+  const tapClone = tapClonePath(parent.tap, home);
   const tapRoot = tapRootDir(tapClone, parent.tap);
   if (parent.tap.kind === "git" && parent.tap.subpath === "" && parent.tapRelativePath === "") {
     return null;

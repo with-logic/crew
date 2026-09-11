@@ -10,7 +10,11 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readConfig } from "../../src/config/load.ts";
+import { paths } from "../../src/core/paths.ts";
+import { tapClonePath } from "../../src/core/repo-path.ts";
 import { runGit } from "../../src/git/exec.ts";
+import { isDirectory, listDir } from "../../src/util/fs.ts";
 
 /** Create a fresh tmp dir unique per call. */
 export function makeTempDir(prefix: string = "crew-test-"): string {
@@ -88,4 +92,24 @@ export function tagRepo(path: string, tag: string): void {
   runGit(["-c", "tag.gpgSign=false", "-c", "tag.forceSignAnnotated=false", "tag", tag], {
     cwd: path,
   });
+}
+
+/**
+ * The clone directory backing a configured tap, looked up by tap name.
+ *
+ * Clones are keyed by repository URL (§6), so a test can't derive the
+ * path from the tap name alone — it has to go through config. Returns
+ * null when no tap of that name is configured.
+ */
+export function cloneDirForTap(tapName: string, home: string): string | null {
+  const tap = readConfig(home).taps.find((t) => t.name === tapName);
+  if (!tap) return null;
+  return tapClonePath(tap, home);
+}
+
+/** Every repository clone directory that currently exists under `home`. */
+export function cloneDirs(home: string): string[] {
+  const dir = paths(home).reposDir;
+  if (!isDirectory(dir)) return [];
+  return listDir(dir).sort();
 }

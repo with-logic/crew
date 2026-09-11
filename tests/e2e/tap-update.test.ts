@@ -15,10 +15,10 @@
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../src/cli/main.ts";
 import { readConfig } from "../../src/config/load.ts";
-import { tapPath } from "../../src/core/paths.ts";
 import { runGit } from "../../src/git/exec.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
+  cloneDirForTap,
   commitAll,
   makeGitRepo,
   makeSkill,
@@ -50,7 +50,7 @@ describe("tap update + fetch policy", () => {
       home,
       streams: captureStreams().streams,
     });
-    const shaBefore = headSha(tapPath("local", home));
+    const shaBefore = headSha(cloneDirForTap("local", home)!);
 
     // Upstream adds a new skill + commit.
     makeSkill(repo, "beta", skillFrontmatter({ name: "beta", description: "added after add" }));
@@ -58,11 +58,11 @@ describe("tap update + fetch policy", () => {
 
     // Run search. This MUST NOT fetch; HEAD should not move.
     runCli(["search", "alpha"], { home, streams: captureStreams().streams });
-    expect(headSha(tapPath("local", home))).toBe(shaBefore);
+    expect(headSha(cloneDirForTap("local", home)!)).toBe(shaBefore);
 
     // Same invariant for bare-name install.
     runCli(["install", "alpha"], { home, streams: captureStreams().streams });
-    expect(headSha(tapPath("local", home))).toBe(shaBefore);
+    expect(headSha(cloneDirForTap("local", home)!)).toBe(shaBefore);
   });
 
   test("C-TAP-16 `crew tap update` fetches and fast-forwards every configured tap", () => {
@@ -78,8 +78,8 @@ describe("tap update + fetch policy", () => {
       home,
       streams: captureStreams().streams,
     });
-    const shaAStart = headSha(tapPath("tap-a", home));
-    const shaBStart = headSha(tapPath("tap-b", home));
+    const shaAStart = headSha(cloneDirForTap("tap-a", home)!);
+    const shaBStart = headSha(cloneDirForTap("tap-b", home)!);
 
     // Upstream changes on both.
     makeSkill(repoA, "new-a", skillFrontmatter({ name: "new-a", description: "a new skill" }));
@@ -94,8 +94,8 @@ describe("tap update + fetch policy", () => {
     expect(c.stdout()).toMatch(/tap-a\s+refreshed/);
     expect(c.stdout()).toMatch(/tap-b\s+refreshed/);
     // Both clones moved to their new tips.
-    expect(headSha(tapPath("tap-a", home))).not.toBe(shaAStart);
-    expect(headSha(tapPath("tap-b", home))).not.toBe(shaBStart);
+    expect(headSha(cloneDirForTap("tap-a", home)!)).not.toBe(shaAStart);
+    expect(headSha(cloneDirForTap("tap-b", home)!)).not.toBe(shaBStart);
   });
 
   test("C-TAP-16 `crew tap update <name>` restricts to the named tap", () => {
@@ -111,16 +111,16 @@ describe("tap update + fetch policy", () => {
       home,
       streams: captureStreams().streams,
     });
-    const shaAStart = headSha(tapPath("tap-a", home));
-    const shaBStart = headSha(tapPath("tap-b", home));
+    const shaAStart = headSha(cloneDirForTap("tap-a", home)!);
+    const shaBStart = headSha(cloneDirForTap("tap-b", home)!);
 
     commitAll(repoA, "noop A");
     commitAll(repoB, "noop B");
 
     runCli(["tap", "update", "tap-a"], { home, streams: captureStreams().streams });
     // Only tap-a advanced.
-    expect(headSha(tapPath("tap-a", home))).not.toBe(shaAStart);
-    expect(headSha(tapPath("tap-b", home))).toBe(shaBStart);
+    expect(headSha(cloneDirForTap("tap-a", home)!)).not.toBe(shaAStart);
+    expect(headSha(cloneDirForTap("tap-b", home)!)).toBe(shaBStart);
   });
 
   test("`crew tap update` with no taps is a clean no-op", () => {

@@ -9,16 +9,18 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
 import { runCli } from "../../src/cli/main.ts";
+import { repoClonePath } from "../../src/core/repo-path.ts";
 import { resetKnownTapsForTest, setKnownTapsForTest } from "../../src/known-taps/registry.ts";
 import type { KnownTap } from "../../src/known-taps/types.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
+  cloneDirForTap,
   commitAll,
   makeGitRepo,
   makeSkill,
@@ -380,17 +382,22 @@ describe("crew search output", () => {
     const { readConfig, writeConfig } =
       require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
     const cfg = readConfig(home);
+    const knownUrl = "https://github.com/example/supabase-skills.git";
+    // Re-point the tap at the known-tap URL it should dedupe against.
+    // Clones are keyed by URL, so move the already-cloned bytes to where
+    // the new URL resolves — otherwise the search would have to fetch,
+    // and tests never touch the network.
+    const clonedAt = cloneDirForTap("renamed-supabase", home)!;
     writeConfig(
       {
         ...cfg,
         taps: cfg.taps.map((tap) =>
-          tap.name === "renamed-supabase" && tap.kind === "git"
-            ? { ...tap, url: "https://github.com/example/supabase-skills.git" }
-            : tap,
+          tap.name === "renamed-supabase" && tap.kind === "git" ? { ...tap, url: knownUrl } : tap,
         ),
       },
       home,
     );
+    renameSync(clonedAt, repoClonePath(knownUrl, home));
 
     const c = captureStreams();
     runCli(["search", "--json", "schema"], { home, streams: c.streams });

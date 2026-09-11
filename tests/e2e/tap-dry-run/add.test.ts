@@ -15,10 +15,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { readConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
 import { readState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
-import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { cloneDirs, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { buildTapRepo, configBytes, markerBytes, run } from "./helpers.ts";
 
 const originals = {
@@ -47,7 +46,7 @@ describe("C-TAP-16b tap add --dry-run", () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("Would add tap mytap");
     expect(r.stdout).toContain("(dry run)");
-    expect(existsSync(tapPath("mytap", home))).toBe(false);
+    expect(cloneDirs(home)).toEqual([]);
     expect(configBytes(home)).toBe(before);
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(false);
   });
@@ -101,7 +100,8 @@ describe("C-TAP-16b tap add --dry-run", () => {
     expect(r.stdout).toContain("Would promote teamtap");
     expect(configBytes(home)).toBe(before);
     expect(readState(home).installations[0]!.source.tap).toBe(auto.name);
-    expect(existsSync(tapPath("teamtap", home))).toBe(false);
+    // The auto tap keeps the repository's one clone; nothing new appeared.
+    expect(cloneDirs(home)).toHaveLength(1);
     expect(markerBytes(join(ccUser, "alpha"))).toBe(markerBefore);
   });
 

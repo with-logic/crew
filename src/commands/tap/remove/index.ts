@@ -23,7 +23,7 @@
 
 import { readConfig, writeConfig } from "../../../config/load.ts";
 import { CrewError } from "../../../core/errors.ts";
-import { tapPath } from "../../../core/paths.ts";
+import { cloneStillReferenced, tapClonePath } from "../../../core/repo-path.ts";
 import type { StateEntry, TapConfig } from "../../../core/types.ts";
 import { readState, writeState } from "../../../state/load.ts";
 import { withStateLock } from "../../../state/lock.ts";
@@ -68,12 +68,21 @@ function runPlan(ctx: CommandContext, plan: RemovePlan, dryRun: boolean): Comman
   return removeTapOnly(ctx, plan.tap, ctx.flags.force ? plan.attached : [], dryRun);
 }
 
-/** Drop the tap row and its clone. Caller holds the state lock. */
+/**
+ * Drop the tap row and, when nothing else needs them, its clone's bytes.
+ * Caller holds the state lock.
+ *
+ * Clones are shared per repository (§6), so the directory is deleted only
+ * once no surviving tap row points at the same repo.
+ */
 function dropTap(home: string, tap: TapConfig): void {
   const config = readConfig(home);
-  writeConfig({ ...config, taps: config.taps.filter((t) => t.name !== tap.name) }, home);
+  const survivors = config.taps.filter((t) => t.name !== tap.name);
+  writeConfig({ ...config, taps: survivors }, home);
   // Path taps don't own their directory; never delete it.
-  if (tap.kind === "git") rmrf(tapPath(tap.name, home));
+  if (tap.kind !== "git") return;
+  if (cloneStillReferenced(tap, survivors)) return;
+  rmrf(tapClonePath(tap, home));
 }
 
 /** `--force` (or nothing attached): remove the tap, keep any installs. */

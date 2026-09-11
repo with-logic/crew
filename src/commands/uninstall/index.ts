@@ -30,7 +30,7 @@
 import { ALL_AGENTS, agentByName } from "../../agents/registry.ts";
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import { tapPath } from "../../core/paths.ts";
+import { cloneStillReferenced, tapClonePath } from "../../core/repo-path.ts";
 import type { Config, StateFile } from "../../core/types.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
@@ -148,8 +148,11 @@ function pruneOrphans(
 
 /**
  * Drop auto taps (registered: false) that no longer back any state
- * entry. Their on-disk clone is deleted. Registered taps are NEVER
- * gc'd by this — only the user's `crew tap remove` removes them.
+ * entry. Registered taps are NEVER gc'd by this — only the user's
+ * `crew tap remove` removes them.
+ *
+ * A clone is shared by every tap row on the same repository (§6), so its
+ * bytes are deleted only once no surviving row still points there.
  */
 function gcAutoTaps(state: StateFile, home: string): void {
   const config: Config = readConfig(home);
@@ -159,7 +162,9 @@ function gcAutoTaps(state: StateFile, home: string): void {
   const removed = config.taps.filter((t) => !survivors.includes(t));
   writeConfig({ ...config, taps: survivors }, home);
   for (const tap of removed) {
-    if (tap.kind === "git") rmrf(tapPath(tap.name, home));
     // Path taps own no clone dir; nothing to delete.
+    if (tap.kind !== "git") continue;
+    if (cloneStillReferenced(tap, survivors)) continue;
+    rmrf(tapClonePath(tap, home));
   }
 }

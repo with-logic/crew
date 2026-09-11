@@ -7,9 +7,10 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { readConfig } from "../../src/config/load.ts";
-import { tapPath } from "../../src/core/paths.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
+  cloneDirForTap,
+  cloneDirs,
   commitAll,
   makeGitRepo,
   makeSkill,
@@ -36,7 +37,7 @@ describe("crew tap", () => {
       streams: captureStreams().streams,
     });
     expect(code).toBe(0);
-    expect(existsSync(join(tapPath("mytap", home), ".git"))).toBe(true);
+    expect(existsSync(join(cloneDirForTap("mytap", home)!, ".git"))).toBe(true);
   });
 
   test("C-TAP-02 add with explicit name", () => {
@@ -70,7 +71,8 @@ describe("crew tap", () => {
     const code = runCli(["tap", "remove", "mytap"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(false);
-    expect(existsSync(tapPath("mytap", home))).toBe(false);
+    // The repository's shared clone goes with the last tap referencing it.
+    expect(cloneDirs(home)).toEqual([]);
   });
 
   test("C-TAP-04 list reports every tap", () => {
@@ -467,7 +469,7 @@ describe("crew tap", () => {
     // Config must NOT list the failed tap.
     expect(readConfig(home).taps.some((t) => t.name === "typo-tap")).toBe(false);
     // No leftover clone dir either.
-    expect(existsSync(tapPath("typo-tap", home))).toBe(false);
+    expect(cloneDirs(home)).toEqual([]);
   });
 
   test("`crew tap add <local-path>` against a non-existent path fails", () => {
