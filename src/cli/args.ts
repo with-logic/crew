@@ -29,8 +29,8 @@ export interface ParsedArgs {
 
 /** Global boolean flags. */
 const BOOLEAN_GLOBALS = ["dry-run", "json", "quiet", "verbose", "yes", "force"] as const;
-/** Global string flags (single-value except `target`, which is repeatable). */
-const STRING_GLOBALS = ["scope", "from-git"] as const;
+/** Global string flags (single-value). */
+const STRING_GLOBALS = ["scope"] as const;
 /** Subcommand-specific boolean flags. */
 const BOOLEAN_SUB: Record<string, readonly string[]> = {
   doctor: ["verify", "repair"],
@@ -42,6 +42,8 @@ const BOOLEAN_SUB: Record<string, readonly string[]> = {
 /** Subcommand-specific string flags. */
 const STRING_SUB: Record<string, readonly string[]> = {
   autoupdate: ["interval"],
+  // `--from-git <url>` is an explicit git source (§5.3); only install takes it.
+  install: ["from-git"],
   // `--version <tag>` pins a specific release (e.g. `v0.4.0`).
   "self-update": ["version"],
 };
