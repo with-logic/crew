@@ -6,6 +6,11 @@
  * failures) are listed; `up_to_date` and `skipped` rows are dropped as
  * noise. Tap-refresh warnings still show first so a stale answer is
  * visibly stale. Row formatting is shared with `crew update`.
+ *
+ * When a tap couldn't be refreshed or re-expanded, the answer is drawn
+ * from a possibly-stale local clone, so the closing line says results
+ * may be incomplete rather than claiming everything is up to date —
+ * "up to date" must never mean "we couldn't check" (C-UPD-18f).
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand.ts";
@@ -21,14 +26,25 @@ export interface RenderOutdatedInput {
   readonly tapRows: readonly TapRefreshRow[];
 }
 
-/** Outcome kinds that answer "what would change?". */
-const NOTEWORTHY = new Set(["would_update", "source_gone", "missing_project_root", "failed"]);
+/**
+ * Outcome kinds that answer "what would change?". Typed against the
+ * row union so a renamed or mistyped kind is a compile error rather
+ * than a row that silently stops being reported.
+ */
+const NOTEWORTHY: ReadonlySet<UpdateRow["outcome"]["kind"]> = new Set([
+  "would_update",
+  "source_gone",
+  "missing_project_root",
+  "failed",
+] satisfies UpdateRow["outcome"]["kind"][]);
 
 export function renderOutdated(input: RenderOutdatedInput, style: Styler): string[] {
   const lines: string[] = [];
+  let couldNotCheck = false;
 
   for (const tr of input.tapRows) {
     if (tr.kind === "failed") {
+      couldNotCheck = true;
       const code = tr.error?.code ?? "unreachable";
       lines.push(
         `${style.symbol("warn")} couldn't refresh tap ${style.bold(tr.name)} ${style.dim(`(${code})`)}`,
@@ -38,6 +54,7 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
   }
   for (const r of input.tapReexpandRows) {
     if (r.kind === "tap_error") {
+      couldNotCheck = true;
       lines.push(
         `${style.symbol("warn")} tap ${style.bold(r.tap)} ${style.dim(`(${r.error?.code ?? "unreachable"})`)}`,
       );
@@ -48,7 +65,13 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
   const rows = input.rows.filter((r) => NOTEWORTHY.has(r.outcome.kind));
   const added = input.tapReexpandRows.filter((r) => r.kind === "would_add");
   if (rows.length === 0 && added.length === 0) {
-    lines.push(`${style.symbol("ok")} Everything is up to date.`);
+    // A failed refresh means we never saw upstream — saying "up to
+    // date" would assert something we couldn't verify.
+    lines.push(
+      couldNotCheck
+        ? `${style.symbol("warn")} Nothing known to be out of date, but some collections couldn't be checked.`
+        : `${style.symbol("ok")} Everything is up to date.`,
+    );
     return lines;
   }
 
@@ -68,7 +91,9 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
   }
 
   if (added.length > 0) {
-    if (lines.length > 0) lines.push("");
+    // Only separate from a preceding row section — warnings already
+    // emit their own trailing blank line.
+    if (rows.length > 0) lines.push("");
     const byTap = new Map<string, string[]>();
     for (const r of added) {
       if (!byTap.has(r.tap)) byTap.set(r.tap, []);
@@ -83,5 +108,8 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
 
   lines.push("");
   lines.push(style.dim("Run `crew update` to apply."));
+  if (couldNotCheck) {
+    lines.push(style.dim("Some collections couldn't be checked; results may be incomplete."));
+  }
   return lines;
 }
