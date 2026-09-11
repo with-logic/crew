@@ -23,13 +23,11 @@ export function renderUninstall(records: readonly UninstallRecord[], style: Styl
   const lines: string[] = [];
 
   if (direct.length > 0) {
-    const subjects = direct.map((r) => r.name);
-    const header =
-      subjects.length === 1
-        ? `Uninstalling ${subjects[0]}`
-        : `Uninstalling ${plural(subjects.length, "skill")}`;
-    lines.push(style.bold(header));
+    lines.push(style.bold(headerFor(direct)));
     for (const r of direct) {
+      // A collection that matched nothing has no per-skill block of its
+      // own — the header already said so.
+      if (isEmptyCollection(r)) continue;
       lines.push("");
       lines.push(...renderRecord(r, style));
     }
@@ -51,6 +49,32 @@ export function renderUninstall(records: readonly UninstallRecord[], style: Styl
   }
 
   return lines;
+}
+
+/** True when a tap/namespace selector matched no installed skill. */
+function isEmptyCollection(r: UninstallRecord): boolean {
+  return (
+    r.collection !== undefined &&
+    r.removedFrom.length === 0 &&
+    r.absentFrom.length === 0 &&
+    r.failures.length === 0
+  );
+}
+
+/**
+ * The one-line header. A single collection selector names the collection
+ * and how many skills it covers; anything else counts skills.
+ */
+function headerFor(direct: readonly UninstallRecord[]): string {
+  const collections = new Set(direct.map((r) => r.collection?.name ?? null));
+  const first = direct[0]!.collection;
+  if (first && collections.size === 1) {
+    const covered = direct.filter((r) => !isEmptyCollection(r)).length;
+    if (covered === 0) return `Nothing installed from ${first.kind} ${first.name}`;
+    return `Uninstalling ${first.kind} ${first.name} (${plural(covered, "skill")})`;
+  }
+  if (direct.length === 1) return `Uninstalling ${direct[0]!.name}`;
+  return `Uninstalling ${plural(direct.length, "skill")}`;
 }
 
 function renderRecord(r: UninstallRecord, style: Styler): string[] {

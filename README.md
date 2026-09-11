@@ -164,9 +164,7 @@ When a command asks for an installed skill name, you can use the bare name
 | Command | What it does |
 |---|---|
 | `crew install <ref>…` | Install one or more skills into every detected agent; on misses, may suggest skills from trusted taps you haven't added yet. |
-| `crew install --from-git <source>` | Install from a git source without a positional ref. Forces the value to be read as git, so a bare `owner/repo` means GitHub rather than `<tap>/<skill>`. Combines with positional refs. |
-| `crew uninstall <name>…` | Remove installed skills from every agent they were installed into. Acts on one scope at a time: the system-wide install by default, or the current project's with `--scope project`. |
-| `crew remove <name>…`, `crew rm <name>…` | Aliases for `crew uninstall`. |
+| `crew uninstall <selector>…` | Remove installed skills from every agent they were installed into. A selector can be a skill name, or a tap or namespace to remove everything installed from it; `--all` removes everything at the target scope. Acts on one scope at a time: the user-scoped install by default, or the current project's with `--scope project`. |
 | `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. |
 | `crew upgrade [<name>…]` | Alias for `crew update`. |
 | `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. |
