@@ -99,6 +99,7 @@ Every command below is mandatory. Exit codes are defined in §15.
 crew install <ref> [<ref>...]     Install one or more skills.
 crew uninstall <selector> [<selector>...] Remove installed skills from every agent.
 crew update [<selector>...]       Update all installed skills, or only those selected.
+crew outdated [<selector>...]     Preview what `crew update` would change, without changing it.
 crew list                         List installed skills.
 crew skills                       Alias for `crew list`.
 crew search <query>               Search across configured taps.
@@ -938,6 +939,16 @@ rows as "would update" / "would add". `--json` output includes
 `dry_run: true` and uses the `would_update` / `would_add` kinds so
 scripts can tell a preview from a real run. `--force --dry-run`
 previews pinned skills as `would_update` instead of `skipped`.
+
+**`crew outdated`.** `crew outdated [<selector>...]` is the
+discoverable name for that preview (compare `brew outdated`). It runs
+exactly `crew update --dry-run` with the same selectors and flags
+(`--force`, `--json`) and the same exit-code rule, and its `--json`
+payload is identical to `crew update --dry-run --json` (including
+`dry_run: true`). Only the human rendering differs: it is trimmed to
+the rows that answer "what would change" — `would_update`, `would_add`,
+`source_gone`, and failures — and omits `up_to_date` and `skipped`
+rows. When nothing would change it prints a single line saying so.
 
 ### 10.2 `crew autoupdate`
 
@@ -1861,6 +1872,9 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. |
 | C-UPD-18d | §10.1.1, §14 | `crew update` holds a per-tap clone lock spanning refresh through source read, in both real and `--dry-run` runs, so a concurrent run cannot change the clone's checked-out commit between SHA resolution and byte read. A run blocked past the timeout exits `state_locked`. |
 | C-UPD-18e | §10.1.1 | A newly-discovered child that fails validation is named in human output along with its error code and message, and is counted as a failure in the run totals. |
+| C-UPD-18f | §10.1.1 | `crew outdated [<selector>...]` behaves as `crew update --dry-run`: identical `--json` payload (`dry_run: true`, `would_update` / `would_add` kinds), identical exit code, and the same write boundary — tap clones refresh, while installed skills, markers, store entries, and `state.json` are unchanged. Human output lists only rows that would change and prints a single "up to date" line when none would. |
+| C-UPD-18g | §10.1.1, §14 | `crew outdated` against a home with no `state.json` leaves it absent, and never acquires the state lock. |
+| C-UPD-18h | §10.1.1 | When a tap refresh or re-expansion fails, `crew outdated` reports the results as possibly stale rather than printing an unqualified "up to date", even if every locally-known row is up to date. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
 | C-UPD-23 | §10.1 / §16.6 | `crew update <selector>...` restricts fetching to taps that back the selected entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
 | C-UPD-24 | §10.1 | `crew update <selector>...` includes each selected entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the selected entries, marked as transitively required in `--json` output. |
