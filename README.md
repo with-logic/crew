@@ -169,8 +169,9 @@ When a command asks for an installed skill name, you can use the bare name
 | `crew remove <name>…`, `crew rm <name>…` | Aliases for `crew uninstall`. |
 | `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. |
 | `crew upgrade [<name>…]` | Alias for `crew update`. |
-| `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. |
+| `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. `--scope user` or `--scope project` narrows to one scope. |
 | `crew skills`, `crew ls` | Aliases for `crew list`. |
+| `crew skills` | Alias for `crew list`. |
 | `crew info <ref-or-name>` | Show details for an installed skill or one available in a tap. |
 
 **Discovery**

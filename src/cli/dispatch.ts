@@ -12,7 +12,7 @@ import { doctorCommand } from "../commands/doctor/index.ts";
 import { helpCommand, versionCommand } from "../commands/help/index.ts";
 import { infoCommand } from "../commands/info/index.ts";
 import { installCommand } from "../commands/install/index.ts";
-import { listCommand } from "../commands/list.ts";
+import { listCommand } from "../commands/list/index.ts";
 import { searchCommand } from "../commands/search/index.ts";
 import { selfUpdateCommand } from "../commands/self-update.ts";
 import { tapCommand } from "../commands/tap/index.ts";
