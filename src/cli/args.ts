@@ -102,6 +102,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
   const positional = ((parsed["_"] as unknown[]) ?? []).map(String);
 
+  rejectRepeatedScalars(parsed);
+
   const scope = stringOrUndefined(parsed["scope"]) ?? "user";
   if (scope !== "user" && scope !== "project")
     throw new CrewError(
@@ -134,6 +136,28 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   };
 
   return { command, subcommand: null, positional, flags };
+}
+
+/**
+ * Reject a scalar flag passed more than once.
+ *
+ * `duplicate-arguments-array` makes yargs hand back an array for a
+ * repeated flag. Only `--agent` is repeatable; for every other flag an
+ * array value would be silently dropped downstream (`extras` keeps only
+ * strings and booleans) or fall back to its default, so the user's
+ * explicit choice would vanish without a word. Fail loudly instead.
+ */
+function rejectRepeatedScalars(parsed: Record<string, unknown>): void {
+  const repeatable = new Set<string>(ARRAY_GLOBALS);
+  for (const [key, value] of Object.entries(parsed)) {
+    if (key === "_" || key === "$0" || repeatable.has(key)) continue;
+    if (!Array.isArray(value)) continue;
+    throw new CrewError(
+      "usage_error",
+      `\`--${key}\` was given more than once — it takes a single value`,
+      { flag: key },
+    );
+  }
 }
 
 function stringOrUndefined(v: unknown): string | undefined {

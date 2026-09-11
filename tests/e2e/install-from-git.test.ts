@@ -90,6 +90,50 @@ describe("crew install --from-git", () => {
     if (pinned.type === "git") expect(pinned.ref).toBe("v1.2.0");
   });
 
+  test("C-INST-02b a bare owner/repo value keeps its subpath and ref tails", () => {
+    // Both forms hit §8.5's "contains // → git" rule first, so the bare
+    // head has to be recognized before generic classification.
+    const withSub = parseRef(normalizeFromGit("acme/skills//tools/demo", "/tmp"));
+    expect(withSub.type).toBe("git");
+    if (withSub.type === "git") {
+      expect(withSub.url).toBe("https://github.com/acme/skills.git");
+      expect(withSub.subpath).toBe("tools/demo");
+      expect(withSub.ref).toBeNull();
+    }
+    const withBoth = parseRef(normalizeFromGit("acme/skills@v1.2.0//tools/demo", "/tmp"));
+    if (withBoth.type === "git") {
+      expect(withBoth.url).toBe("https://github.com/acme/skills.git");
+      expect(withBoth.ref).toBe("v1.2.0");
+      expect(withBoth.subpath).toBe("tools/demo");
+    }
+  });
+
+  test("C-INST-02b --from-git installs a subpath pinned to an older commit", () => {
+    const home = makeCrewHome();
+    const repo = makeTempDir("crew-fg-");
+    makeGitRepo(repo);
+    makeSkill(join(repo, "tools"), "demo", skillFrontmatter({ name: "demo" }));
+    const first = commitAll(repo, "add demo");
+    makeSkill(join(repo, "tools"), "later", skillFrontmatter({ name: "later" }));
+    commitAll(repo, "add later");
+
+    const code = runCli(["install", "--from-git", `file://${repo}@${first}//tools/demo`], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(code).toBe(0);
+    // The whole flag value — URL, ref, and subpath — reached acquisition:
+    // only the subpath could have selected `demo` over `later`, and only
+    // the ref tail could have been recorded.
+    const entry = readState(home).installations[0]!;
+    expect(entry.name).toBe("demo");
+    expect(entry.ref).toBe(first);
+    expect(entry.pinned).toBe(true);
+    // NOTE: `resolved_sha` is HEAD here, not `first`. That is the
+    // pre-existing bug PR #129 fixes on its own branch; asserting it
+    // would encode the defect, so this pins the ref instead.
+  });
+
   test("C-INST-02b explicit git forms pass through unchanged", () => {
     expect(normalizeFromGit("gh:acme/skills", "/tmp")).toBe("gh:acme/skills");
     expect(normalizeFromGit("  git@github.com:acme/skills.git ", "/tmp")).toBe(
