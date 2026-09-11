@@ -13,7 +13,7 @@ import { baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import type { LoadedSkill, StateEntry, TapConfig } from "../../core/types.ts";
+import type { Config, LoadedSkill, StateEntry, TapConfig } from "../../core/types.ts";
 import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { attributeRef } from "../../install/tap-attribution.ts";
 import { parseRef } from "../../refs/parse.ts";
@@ -22,6 +22,7 @@ import { acquireTap } from "../../sources/acquire/index.ts";
 import { expandSkills } from "../../sources/expand.ts";
 import { readState } from "../../state/load.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
+import { isAutoTapSource, sourceLabel } from "../source-label.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import type { InstalledInfo, SkillInfo } from "./render.ts";
 import { renderInstalled, renderSkills } from "./render.ts";
@@ -36,9 +37,10 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   const arg = ctx.positional[0]!;
 
   const state = readState(ctx.home);
+  const config = readConfig(ctx.home);
   const subject = resolveStateSubject(state, arg);
   if (subject.entries.length > 0) {
-    const installed = buildInstalledInfo(subject.entries, ctx.cwd);
+    const installed = buildInstalledInfo(subject.entries, config, ctx.cwd);
     return {
       exitCode: 0,
       human: renderInstalled(installed, ctx.style, ctx.width),
@@ -46,11 +48,11 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
         installed: installed.primary,
         entries: subject.entries,
         description: installed.description,
+        source_label: installed.sourceLabel,
       },
     };
   }
 
-  const config = readConfig(ctx.home);
   const source = parseRef(arg, ctx.cwd);
   const { tap, skills } = (() => {
     if (source.type === "tap" && source.tap === null) {
@@ -95,10 +97,23 @@ function candidateSkills(candidate: NonTapNameCandidate): {
   return { tap: candidate.tap, skills: buildSkillInfosFromDirs(candidate.members) };
 }
 
-function buildInstalledInfo(entries: readonly StateEntry[], fallbackCwd: string): InstalledInfo {
+function buildInstalledInfo(
+  entries: readonly StateEntry[],
+  config: Config,
+  fallbackCwd: string,
+): InstalledInfo {
   const primary = entries.find((e) => e.scope === "user") ?? entries[0]!;
   const description = loadDescriptionFromAny(entries, fallbackCwd);
-  return { primary, entries, description };
+  // The tap name is only worth showing when the label replaced it; for
+  // a registered tap the label already IS the name.
+  const tapName = isAutoTapSource(primary, config) ? primary.source.tap : null;
+  return {
+    primary,
+    entries,
+    description,
+    sourceLabel: sourceLabel(primary, config),
+    tapName,
+  };
 }
 
 function loadDescriptionFromAny(

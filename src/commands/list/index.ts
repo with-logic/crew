@@ -9,6 +9,7 @@
  * they got.
  */
 
+import { readConfig } from "../../config/load.ts";
 import type { StateEntry } from "../../core/types.ts";
 import { readState } from "../../state/load.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
@@ -23,7 +24,7 @@ export function listCommand(ctx: CommandContext): CommandOutput {
   const human =
     sorted.length === 0
       ? renderEmpty(filters.scope, hasAgentOrTapFilter(filters), ctx.style)
-      : renderList(sorted, filters.scope, ctx.style);
+      : renderList(sorted, filters.scope, readConfig(ctx.home), ctx.style);
 
   return {
     exitCode: 0,

@@ -20,6 +20,13 @@ export interface InstalledInfo {
   /** Every state entry for this skill (user + per-project installs). */
   readonly entries: readonly StateEntry[];
   readonly description: string | null;
+  /** Human source label for `primary` (see `../source-label.ts`). */
+  readonly sourceLabel: string;
+  /**
+   * Tap name to show beside the label, set only when the label hides a
+   * crew-derived auto-tap name the user still needs for `crew tap remove`.
+   */
+  readonly tapName: string | null;
 }
 
 export interface SkillInfo {
@@ -33,6 +40,10 @@ export interface SkillInfo {
 
 export function renderInstalled(info: InstalledInfo, style: Styler, width: number): string[] {
   const { primary, entries, description } = info;
+  const from =
+    info.tapName === null
+      ? info.sourceLabel
+      : `${info.sourceLabel} ${style.dim(`(tap ${info.tapName})`)}`;
   const lines: string[] = [];
   lines.push(style.bold(primary.name));
   lines.push("");
@@ -42,7 +53,7 @@ export function renderInstalled(info: InstalledInfo, style: Styler, width: numbe
   }
 
   const rows: [string, string][] = [];
-  rows.push([style.dim("from"), formatFrom(primary)]);
+  rows.push([style.dim("from"), from]);
   rows.push([style.dim("version"), formatVersion(primary, style)]);
   rows.push([style.dim("agents"), formatAgents(primary)]);
   rows.push([
@@ -139,13 +150,6 @@ function renderOneSkill(
     for (const l of twoColumnTable(metaRows, 2)) lines.push(`${indent}  ${l}`);
   }
   return lines;
-}
-
-function formatFrom(entry: StateEntry): string {
-  // `source.tap` is the collection name; `source.path` is the subpath
-  // inside it (empty for single-skill taps).
-  if (entry.source.path.length === 0) return entry.source.tap;
-  return `${entry.source.tap}/${entry.source.path}`;
 }
 
 function formatVersion(entry: StateEntry, style: Styler): string {

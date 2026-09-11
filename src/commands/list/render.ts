@@ -12,16 +12,20 @@
  * every project install is rendered as its own identity row with the
  * `in <path>` location folded into the name column.
  *
- * Columns (aligned): name, source (tap + path), short version, which
- * agents it's in, a trailing set of tags (pinned, dep). "all agents"
- * collapses the common case. A dim hint line at the bottom points the
- * user at `crew info` for more detail.
+ * Columns (aligned): name, source, short version, which agents it's in,
+ * a trailing set of tags (pinned, dep). "all agents" collapses the
+ * common case. A dim hint line at the bottom points the user at `crew
+ * info` for more detail.
+ *
+ * The source column is a human label, not the raw tap name — see
+ * `../source-label.ts` for why an auto tap renders as a reference.
  */
 
 import { ALL_AGENTS } from "../../agents/registry.ts";
-import type { Scope, StateEntry } from "../../core/types.ts";
+import type { Config, Scope, StateEntry } from "../../core/types.ts";
 import { columns, shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
+import { sourceLabel } from "../source-label.ts";
 
 export function renderEmpty(scope: Scope | null, rowFiltered: boolean, style: Styler): string[] {
   if (rowFiltered) return [style.dim("No skills match those filters.")];
@@ -36,6 +40,7 @@ export function renderEmpty(scope: Scope | null, rowFiltered: boolean, style: St
 export function renderList(
   entries: readonly StateEntry[],
   scope: Scope | null,
+  config: Config,
   style: Styler,
 ): string[] {
   const lines: string[] = [];
@@ -47,10 +52,10 @@ export function renderList(
   const rowCells: string[][] = [];
   for (const [, group] of grouped) {
     if (scope === "project") {
-      for (const p of group) rowCells.push(projectIdentityRow(p, style));
+      for (const p of group) rowCells.push(projectIdentityRow(p, config, style));
       continue;
     }
-    rowCells.push(...groupedRows(group, style));
+    rowCells.push(...groupedRows(group, config, style));
   }
   for (const line of columns(rowCells, 2)) lines.push(line);
 
@@ -60,7 +65,7 @@ export function renderList(
 }
 
 /** Default view: one identity row per skill, project installs as sub-rows. */
-function groupedRows(group: readonly StateEntry[], style: Styler): string[][] {
+function groupedRows(group: readonly StateEntry[], config: Config, style: Styler): string[][] {
   const adapterCount = ALL_AGENTS.length;
   const user = group.find((e) => e.scope === "user");
   const projects = group.filter((e) => e.scope === "project");
@@ -72,7 +77,7 @@ function groupedRows(group: readonly StateEntry[], style: Styler): string[][] {
   const rows: string[][] = [
     [
       `  ${style.bold(identity.name)}`,
-      style.dim(formatSource(identity)),
+      style.dim(formatSource(identity, config)),
       style.cyan(formatVersion(identity)),
       user ? formatAgents(user, adapterCount, style) : "",
       user ? formatTags(user, style) : "",
@@ -91,10 +96,10 @@ function groupedRows(group: readonly StateEntry[], style: Styler): string[][] {
 }
 
 /** `--scope project` view: every project install carries its own identity. */
-function projectIdentityRow(p: StateEntry, style: Styler): string[] {
+function projectIdentityRow(p: StateEntry, config: Config, style: Styler): string[] {
   return [
     `  ${style.bold(p.name)} ${formatLocation(p, style)}`,
-    style.dim(formatSource(p)),
+    style.dim(formatSource(p, config)),
     style.cyan(formatVersion(p)),
     formatAgents(p, ALL_AGENTS.length, style),
     formatTags(p, style),
@@ -114,10 +119,8 @@ function formatLocation(e: StateEntry, style: Styler): string {
   return style.dim(`in ${shortenHome(e.project_root ?? "")}`);
 }
 
-function formatSource(e: StateEntry): string {
-  // `e.source.path` is the skill's location inside its tap. Empty for
-  // single-skill taps where the root is the skill itself.
-  return e.source.path.length === 0 ? e.source.tap : `${e.source.tap}/${e.source.path}`;
+function formatSource(e: StateEntry, config: Config): string {
+  return sourceLabel(e, config);
 }
 
 function formatVersion(e: StateEntry): string {
