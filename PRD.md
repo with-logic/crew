@@ -626,6 +626,44 @@ gh:owner/repo@v1.2.0//skills/python
 
 A ref and a subpath may combine. Ref appears before the subpath.
 
+**Browser URLs.** A URL copied from a forge's web UI is accepted anywhere
+a git source is accepted (`crew install`, `crew info`, `crew tap add`,
+dependency lists). Homecrew rewrites it to the canonical
+`https://<host>/<owner>/<repo>.git[@<ref>][//<subpath>]` form before
+anything else looks at it, so a pasted link "just works":
+
+```
+https://github.com/<o>/<r>/tree/<ref>[/<path>]          → @<ref>//<path>
+https://github.com/<o>/<r>/blob/<ref>/<path>/SKILL.md    → @<ref>//<path>
+https://github.com/<o>/<r>/commit/<sha>                  → @<sha>
+https://github.com/<o>/<r>/releases/tag/<tag>            → @<tag>
+https://gitlab.com/<group>[/<sub>...]/<r>/-/tree/<ref>[/<path>]
+https://gitlab.com/<group>[/<sub>...]/<r>/-/blob/<ref>/<path>/SKILL.md
+https://gitlab.com/<group>[/<sub>...]/<r>/-/commit/<sha>
+https://gitlab.com/<group>[/<sub>...]/<r>/-/tags/<tag>
+https://bitbucket.org/<o>/<r>/src/<ref>[/<path>]
+https://bitbucket.org/<o>/<r>/commits/<sha>
+```
+
+Rules:
+
+- The GitLab shapes are recognised on any host whose path contains a
+  `/-/` segment (self-hosted GitLab included); GitHub and Bitbucket
+  shapes are recognised on `github.com` and `bitbucket.org` only.
+- A `?query`, `#fragment`, or trailing `/` is dropped from every
+  `http(s)` URL, and a leading `www.` is dropped from the host.
+- A `blob` link must end in `SKILL.md`; the skill directory is the
+  reference. A `blob` link to any other file is `invalid_ref` — a
+  reference must be a directory that contains `SKILL.md`.
+- The first path segment after `tree/`, `blob/`, or `src/` is the ref.
+  Branch names that themselves contain `/` are therefore mis-split;
+  use the explicit `<url>@<branch>//<subpath>` form for those.
+- If an explicit `@<ref>` or `//<subpath>` tail is also appended to a
+  browser URL, the explicit tail wins and the browser-derived value
+  for that part is discarded.
+- A repo-only URL (`https://github.com/<o>/<r>`) is unchanged; it is
+  already a valid git source.
+
 The resolved location inside the repo is either the repo root or the subpath. Behavior at the resolved location matches §9 step 5 (single skill if `SKILL.md` present, walk one level otherwise).
 
 Git sources are ad-hoc. They are never promoted to taps and do not appear in `crew search` results.
@@ -1524,7 +1562,8 @@ since the registry was built, the normal tap-add or install error applies.
 ### 16.3 Tap management
 
 - `crew tap add <url-or-path> [<name>]` registers a tap.
-  - `<url-or-path>` is either a git URL (with optional `//<subpath>` tail using the same syntax as §8.2 git refs — e.g. `crew tap add @with-logic/backend//skills`) or a filesystem path.
+  - `<url-or-path>` is either a git URL (with optional `//<subpath>` tail using the same syntax as §8.2 git refs — e.g. `crew tap add @with-logic/backend//skills`) or a filesystem path. Browser URLs (§8.2) are accepted; `crew tap add https://github.com/acme/skills/tree/main/skills` registers a tap at subpath `skills`.
+  - Taps track the default branch and cannot be pinned. A `@<ref>` tail — explicit, or derived from a browser URL — is a `usage_error`, with one exception: a ref of `main` or `master` is taken to name the default branch and is silently dropped, so a pasted `/tree/main/...` link works without editing.
   - If `<name>` is omitted, it is derived: for root git taps, the final URL path component (minus `.git`); for subpath git taps, `<last-repo-segment>-<last-subpath-segment>` (so `@with-logic/backend//skills` → `backend-skills`); for path taps, the basename of the directory.
   - For git taps, the initial clone runs **before** the tap is written to config. If the clone fails (bad URL, typo, network failure, no access), the tap is not added — neither `crew tap list` nor `config.yaml` shows it, and any partially-materialized clone directory is removed.
   - If the named tap already exists with a matching URL/path/subpath, the call is an idempotent no-op (exit 0). If an existing tap of the same name has a different URL/path/subpath, the call is a `usage_error` — the user must pick a different name.
@@ -1691,6 +1730,11 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-20 | §8.2 | `@owner/repo//sub/path` is parsed as a git source with subpath `sub/path`. |
 | C-REF-21 | §8.4 | Tap-source identifiers are case-insensitive and canonicalized to lowercase before lookup; path sources and git URLs are not case-normalized. |
 | C-REF-22 | §8.4 | A tap-source skill identifier may begin with a digit, e.g. `3-statement-model`. |
+| C-REF-23 | §8.2 | `https://github.com/o/r/tree/<ref>/<path>` is parsed as a git source with url `https://github.com/o/r.git`, ref `<ref>`, and subpath `<path>`; `/tree/<ref>` alone yields ref only; `/commit/<sha>` and `/releases/tag/<tag>` yield ref only. |
+| C-REF-24 | §8.2 | `https://github.com/o/r/blob/<ref>/<path>/SKILL.md` is parsed with subpath `<path>` (the `SKILL.md` leaf is dropped); a `blob` link to any other file produces `invalid_ref` (exit 4). |
+| C-REF-25 | §8.2 | GitLab `/-/tree/`, `/-/blob/`, `/-/commit/`, and `/-/tags/` URLs (including nested groups and self-hosted hosts) and Bitbucket `/src/` and `/commits/` URLs are parsed by the same rules as C-REF-23/24. |
+| C-REF-26 | §8.2 | A `?query`, `#fragment`, or trailing `/` is dropped from any `http(s)` git URL and a leading `www.` is dropped from the host; an explicit `@<ref>` or `//<subpath>` tail appended to a browser URL overrides the browser-derived value. |
+| C-REF-27 | §16.3 | `crew tap add` accepts a browser URL; a derived or explicit ref of `main`/`master` is dropped, any other ref is a `usage_error`. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 

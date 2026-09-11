@@ -14,6 +14,8 @@ export interface TapAddTarget {
   readonly path: string;
 }
 
+const DEFAULT_BRANCH_NAMES: ReadonlySet<string> = new Set(["main", "master"]);
+
 export function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {
   const source: Source = parseRef(raw, cwd);
   if (source.type === "tap")
@@ -23,7 +25,10 @@ export function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {
       { raw },
     );
   if (source.type === "path") return { kind: "path", url: "", subpath: "", path: source.path };
-  if (source.ref !== null)
+  // §16.3: taps track the default branch. `main`/`master` is taken to
+  // name it (so a pasted `/tree/main/...` link works); anything else is
+  // a pin we can't honour.
+  if (source.ref !== null && !DEFAULT_BRANCH_NAMES.has(source.ref))
     throw new CrewError(
       "usage_error",
       `\`${raw}\` carries a \`@${source.ref}\` tail — taps track the default branch and can't be pinned. Drop the \`@${source.ref}\` and try again.`,

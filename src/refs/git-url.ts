@@ -14,6 +14,7 @@
 
 import { CrewError } from "../core/errors.ts";
 import type { GitSource } from "../core/types.ts";
+import { normalizeBrowserUrl } from "./browser-url.ts";
 
 /** Shorthand host prefixes known to crew (§8.2). */
 const SHORTHAND_HOSTS: Record<string, string> = {
@@ -61,19 +62,22 @@ export function looksLikeAtShorthand(ref: string): boolean {
   return owner.length > 0 && repo.length > 0;
 }
 
-/** Parse a git source per §8.2. Handles URL, ref, and subpath. */
+/** Parse a git source per §8.2. Handles URL, ref, subpath, and browser URLs. */
 export function parseGit(ref: string): GitSource {
   const { head, subpath } = splitSubpath(ref);
   const { url: baseUrl, ref: gitRef } = splitGitRef(head);
-  const canonical = canonicalizeUrl(baseUrl);
+  // §8.2 "Browser URLs": an explicit `@ref` / `//subpath` tail wins over
+  // whatever the pasted URL encoded.
+  const browser = normalizeBrowserUrl(baseUrl);
+  const canonical = canonicalizeUrl(browser.url);
   if (canonical === null) {
     throw new CrewError("invalid_ref", `\`${ref}\` isn't a valid git reference`, { ref });
   }
   return {
     type: "git",
     url: canonical,
-    ref: gitRef,
-    subpath,
+    ref: gitRef ?? browser.ref,
+    subpath: subpath.length > 0 ? subpath : browser.subpath,
   };
 }
 
