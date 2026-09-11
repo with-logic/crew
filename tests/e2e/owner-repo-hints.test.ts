@@ -11,25 +11,30 @@ import { resetKnownTapsForTest, setKnownTapsForTest } from "../../src/known-taps
 import type { KnownTap } from "../../src/known-taps/types.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 
-const KNOWN_TAPS: readonly KnownTap[] = [
-  {
-    name: "anthropic",
-    url: "https://github.com/anthropics/skills.git",
-    subpath: "skills",
-    description: "Anthropic's skills.",
-    trust: "official",
-    skills: [{ name: "pdf", namespace: null, description: "PDF work.", path: "pdf" }],
-  },
-];
+/** The registry entry, parameterized over the `.git` suffix (C-TAP-24b). */
+function knownTaps(url: string): readonly KnownTap[] {
+  return [
+    {
+      name: "anthropic",
+      url,
+      subpath: "skills",
+      description: "Anthropic's skills.",
+      trust: "official",
+      skills: [{ name: "pdf", namespace: null, description: "PDF work.", path: "pdf" }],
+    },
+  ];
+}
+
+const KNOWN_TAPS = knownTaps("https://github.com/anthropics/skills.git");
 
 afterEach(() => {
   resetKnownTapsForTest();
 });
 
 /** Fresh home with no taps (so nothing is cloned) and the fixture registry. */
-function bareHome(): string {
+function bareHome(taps: readonly KnownTap[] = KNOWN_TAPS): string {
   const home = makeCrewHome();
-  setKnownTapsForTest(KNOWN_TAPS);
+  setKnownTapsForTest(taps);
   const setup = captureStreams();
   runCli(["tap", "remove", "core", "--force"], { home, streams: setup.streams });
   return home;
@@ -93,5 +98,56 @@ describe("owner/repo hints", () => {
     const code = runCli(["tap", "add", "skills"], { home, streams: c.streams });
     expect(code).toBe(4);
     expect(c.stderr()).not.toContain("crew tap add @");
+  });
+
+  test("C-TAP-24b a registry URL without the .git suffix matches identically", () => {
+    const home = bareHome(knownTaps("https://github.com/anthropics/skills"));
+    const c = captureStreams();
+    const code = runCli(["install", "anthropics/skills"], { home, streams: c.streams });
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("This is the tap for the GitHub repo anthropics/skills.");
+    expect(c.stderr()).toContain("crew install anthropic");
+
+    const j = captureStreams();
+    runCli(["install", "--json", "anthropics/skills"], { home, streams: j.streams });
+    const parsed = JSON.parse(j.stdout()) as {
+      error: { details: { known_tap_suggestions: { install: string; url: string }[] } };
+    };
+    expect(parsed.error.details.known_tap_suggestions.map((s) => s.install)).toEqual([
+      "crew install anthropic",
+    ]);
+  });
+
+  test("C-TAP-24d install owner/repo@ref keeps the ref in every suggestion", () => {
+    const home = bareHome();
+    const c = captureStreams();
+    const code = runCli(["install", "anthropics/skills@v1"], { home, streams: c.streams });
+    expect(code).toBe(4);
+    // The echoed reference shows what was typed...
+    expect(c.stderr()).toContain("`anthropics/skills@v1`");
+    // ...and every suggested command installs the revision requested.
+    expect(c.stderr()).toContain("use `@anthropics/skills@v1` instead");
+    expect(c.stderr()).toContain("crew install anthropic@v1");
+  });
+
+  test("C-TAP-24d info owner/repo@ref keeps the ref in the remedy", () => {
+    const home = bareHome();
+    const c = captureStreams();
+    const code = runCli(["info", "anthropics/skills@v1"], { home, streams: c.streams });
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("use `@anthropics/skills@v1` instead");
+  });
+
+  test("C-TAP-24d the JSON suggestion carries the ref too", () => {
+    const home = bareHome();
+    const c = captureStreams();
+    runCli(["install", "--json", "anthropics/skills@v1"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout()) as {
+      error: { details: { ref: string; known_tap_suggestions: { install: string }[] } };
+    };
+    expect(parsed.error.details.ref).toBe("v1");
+    expect(parsed.error.details.known_tap_suggestions.map((s) => s.install)).toEqual([
+      "crew install anthropic@v1",
+    ]);
   });
 });

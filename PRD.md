@@ -609,15 +609,28 @@ bb:<owner>/<repo>             # shorthand for https://bitbucket.org/<owner>/<rep
 <host>/<owner>/<repo>[...]    # scheme-less; treated as https://<host>/<owner>/<repo>[...]
 ```
 
-**Scheme-less hosts.** An argument whose first `/`-separated segment
-contains a `.` (`github.com/acme/skills`, `www.gitlab.com/acme/skills`,
-`git.example.com:8443/acme/skills`) and that has at least three
-segments is a git source: Homecrew prepends `https://` and parses the
-result exactly as it would the full URL, including the browser-URL
-rules below (`github.com/acme/skills/tree/main/skills/foo` works). A
-tap name can never contain a `.` (§8.4), so the rule is unambiguous.
-Two-segment arguments (`github.com/acme`) do not qualify — a clone URL
-needs an owner and a repo.
+**Scheme-less hosts.** An argument whose first `/`-separated segment is
+a bare `<host>[:<port>]` containing a `.` (`github.com/acme/skills`,
+`www.gitlab.com/acme/skills`, `git.example.com:8443/acme/skills`) and
+that has at least three segments is a git source: Homecrew prepends
+`https://` and parses the result exactly as it would the full URL,
+including the browser-URL rules below
+(`github.com/acme/skills/tree/main/skills/foo` works). A tap name can
+never contain a `.` (§8.4), so the rule is unambiguous. Two-segment
+arguments (`github.com/acme`) do not qualify — a clone URL needs an
+owner and a repo.
+
+Because this form synthesizes a URL from user input, the first segment
+MUST be a bare authority: dot-separated alphanumeric/hyphen DNS labels
+with an optional all-digit port. Userinfo (`@`), query (`?`), fragment
+(`#`), a non-numeric port, and empty or hyphen-edged labels all
+disqualify the argument, which then falls through to tap parsing and
+fails as `invalid_ref`. This is a security requirement, not a
+convenience: `github.com@evil.example/acme/skills` would otherwise be
+parsed with `github.com` as userinfo and `evil.example` as the host, so
+a reference that reads as GitHub would clone from an unrelated server.
+Implementations MUST NOT emit a native URL-parsing error for these
+inputs; the stable name is `invalid_ref` (§13).
 
 The leading-`@` form is an ergonomic alias for `gh:` — GitHub is the
 overwhelming common case, and the `@` prefix matches how users already
@@ -816,6 +829,12 @@ the known-tap registry (§16.2.1) contains a tap whose URL is
 `https://github.com/foo/bar` (with or without `.git`), the error also
 names that tap and gives its `crew tap add` command, per §9 step 2.
 `crew tap add foo/bar` gives the same `@foo/bar` suggestion (§16.3).
+
+When the argument carried an `@ref` tail (`foo/bar@v1`), every
+suggested command MUST preserve it (`@foo/bar@v1`, `crew install
+<tap>@v1`), and the echoed reference MUST show the tail the user
+typed. A suggestion that silently drops the ref would install a
+different revision than the one requested.
 
 Infix `@` inside git and tap sources (`gh:owner/repo@v1.0`,
 `core/python-testing@v1.0`) continues to denote a ref and does not
@@ -1844,6 +1863,7 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-30 | §8.2, §13 | `?query` and `#fragment` text is discarded before grammar parsing, so it cannot supply an `@<ref>` or `//<subpath>`; an explicit `@<ref>` may contain `/` (`@feature/foo//python`); an `http(s)` URL too malformed to parse is `invalid_ref` (exit 4). |
 | C-REF-31 | §8.2, §8.5 | `github.com/o/r`, `www.github.com/o/r`, `gitlab.com/o/r`, `git.example.com:8443/o/r`, and `github.com/o/r/tree/main/path` are parsed as git sources exactly as their `https://`-prefixed forms would be. |
 | C-REF-32 | §8.2, §8.5 | `core/python-testing` remains a tap source; `a.b` and `a.b/c` are not scheme-less hosts and produce `invalid_ref`. |
+| C-REF-32a | §8.2 | A scheme-less argument whose first segment is not a bare `<host>[:<port>]` is not a git source: `github.com@evil.example/o/r`, `github.com:443@evil.example/o/r`, and `github.com:abc/o/r` all produce `invalid_ref` (exit 4) and MUST NOT clone from the trailing host or surface a native URL-parsing error. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -2046,6 +2066,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-24 | §9 / §16.2.1 | `crew install <tap-source>` that cannot resolve from configured taps surfaces exact known-tap registry matches in the `invalid_ref` error, including canonical `crew tap add` and follow-up install commands, without cloning, fetching, mutating config, or installing from the known tap. JSON errors include `known_tap_suggestions`. |
 | C-TAP-24b | §8.5 / §9 / §16.2.1 | `crew install <owner>/<repo>` and `crew info <owner>/<repo>` where `<owner>` is neither a configured tap nor a namespace produce `invalid_ref` whose human output suggests `@<owner>/<repo>`; when the known-tap registry has a tap at `https://github.com/<owner>/<repo>`, the install error also carries that tap's `crew tap add` command and JSON `known_tap_suggestions` includes it. |
 | C-TAP-24c | §16.3 | `crew tap add <owner>/<repo>` is a `usage_error` whose remedy suggests `crew tap add @<owner>/<repo>`. |
+| C-TAP-24d | §8.5 / §9 | `crew install <owner>/<repo>@<ref>` and `crew info <owner>/<repo>@<ref>` preserve `@<ref>` in every suggested command and in the echoed reference. |
 
 #### C-STATE: State and markers (§11)
 
