@@ -6,7 +6,7 @@ import {
   resetLaunchctlRunner,
 } from "../../src/autoupdate/launchd.ts";
 import { readAutoupdateLogTail } from "../../src/autoupdate/log.ts";
-import { parseDuration } from "../../src/commands/autoupdate.ts";
+import { parseDuration } from "../../src/commands/autoupdate/duration.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import { paths } from "../../src/core/paths.ts";
 import { makeCrewHome } from "../helpers/env.ts";

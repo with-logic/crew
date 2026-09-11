@@ -13,6 +13,11 @@ export const autoupdateHelp: CommandHelp = {
       flag: "--interval <time>",
       description: "How often to check (e.g. `30m`, `2h`, `1d`). Default is every 4 hours.",
     },
+    {
+      flag: "--dry-run",
+      description:
+        "With `enable`/`disable`, show which scheduler files would be written or removed without touching anything.",
+    },
     { flag: "--json", description: "Machine-readable output for `status`." },
   ],
   examples: [

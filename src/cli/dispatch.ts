@@ -6,7 +6,7 @@
  */
 
 import { agentsCommand } from "../commands/agents.ts";
-import { autoupdateCommand } from "../commands/autoupdate.ts";
+import { autoupdateCommand } from "../commands/autoupdate/index.ts";
 import { cacheCommand } from "../commands/cache.ts";
 import { doctorCommand } from "../commands/doctor/index.ts";
 import { helpCommand, versionCommand } from "../commands/help/index.ts";

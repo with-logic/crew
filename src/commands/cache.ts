@@ -1,15 +1,17 @@
 /**
- * `crew cache clean` — remove ephemeral caches and GC the store (§5.1).
+ * `crew cache clean` — remove ephemeral caches and GC the store (§5.1, §6).
  *
  * Reports how much disk space was freed and how many store entries
  * went with it, in a single friendly line. If there was nothing to
- * clean, says so.
+ * clean, says so. With `--dry-run`, measures the same set and reports
+ * what would be freed without deleting anything.
  */
 
 import { statSync } from "node:fs";
+import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
-import { garbageCollectStore } from "../maintenance/gc.ts";
+import { garbageCollectStore, orphanStoreEntries } from "../maintenance/gc.ts";
 import { readState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { plural } from "../util/format.ts";
@@ -31,9 +33,21 @@ export function cacheCommand(ctx: CommandContext): CommandOutput {
       "Run `crew help cache` to see the cache commands.",
     );
   }
+  const p = paths(ctx.home);
+  if (ctx.flags.dryRun) {
+    // Read-only preview: no lock, no deletion. Measure exactly what the
+    // real run would remove.
+    const orphans = orphanStoreEntries(readState(ctx.home), ctx.home);
+    let wouldFree = dirSize(p.cacheDir);
+    for (const name of orphans) wouldFree += dirSize(join(p.storeDir, name));
+    return {
+      exitCode: 0,
+      human: [renderHuman(wouldFree, orphans.length, ctx.style, true)],
+      json: { removed_store: orphans, freed_bytes: wouldFree, dry_run: true },
+    };
+  }
   let removedStore: string[] = [];
   let freedBytes = 0;
-  const p = paths(ctx.home);
   withStateLock(() => {
     const state = readState(ctx.home);
     // Measure the cache and store BEFORE we touch them so the freed-
@@ -47,19 +61,26 @@ export function cacheCommand(ctx: CommandContext): CommandOutput {
   }, ctx.home);
   return {
     exitCode: 0,
-    human: [renderHuman(freedBytes, removedStore.length, ctx.style)],
-    json: { removed_store: removedStore, freed_bytes: freedBytes },
+    human: [renderHuman(freedBytes, removedStore.length, ctx.style, false)],
+    json: { removed_store: removedStore, freed_bytes: freedBytes, dry_run: false },
   };
 }
 
-function renderHuman(freedBytes: number, removedEntries: number, style: Styler): string {
+function renderHuman(
+  freedBytes: number,
+  removedEntries: number,
+  style: Styler,
+  dryRun: boolean,
+): string {
   if (freedBytes === 0 && removedEntries === 0) {
     return `${style.symbol("muted")} ${style.dim("Nothing to clean — cache was already empty.")}`;
   }
   const parts: string[] = [];
-  if (freedBytes > 0) parts.push(`${formatBytes(freedBytes)} freed`);
+  if (freedBytes > 0)
+    parts.push(`${formatBytes(freedBytes)} ${dryRun ? "would be freed" : "freed"}`);
   if (removedEntries > 0) parts.push(plural(removedEntries, "orphan", "orphans"));
-  return `${style.symbol("ok")} ${style.bold("Cache cleaned")} ${style.dim(`(${parts.join(" · ")})`)}`;
+  const headline = dryRun ? "Would clean cache (dry run)" : "Cache cleaned";
+  return `${style.symbol("ok")} ${style.bold(headline)} ${style.dim(`(${parts.join(" · ")})`)}`;
 }
 
 function dirSize(dir: string): number {
