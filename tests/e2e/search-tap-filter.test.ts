@@ -126,4 +126,43 @@ describe("crew search --tap", () => {
     expect(err).toContain("`nope` was not found in your list of taps");
     expect(err).toContain("crew tap list");
   });
+
+  // A repeated `--tap` used to become an array, which `extras` dropped, so the
+  // filter silently vanished and every tap was searched with `tap: null`.
+  test("C-TAP-23a repeated --tap is a usage_error, not a silent full search", () => {
+    const home = setupTwoTaps();
+    const c = captureStreams();
+    expect(
+      runCli(["search", "--tap", "tap-a", "--tap", "tap-b", "alpha"], {
+        home,
+        streams: c.streams,
+      }),
+    ).toBe(4);
+    const err = c.stderr();
+    expect(err).toContain("usage_error");
+    expect(err).toContain("`--tap` was given more than once");
+    expect(err).not.toContain("tap-b/alpha");
+  });
+
+  // The guard is keyed off the repeatable-flag list rather than `--tap`, so a
+  // repeated scalar is rejected on any command while `--agent` stays repeatable.
+  test("C-TAP-23a the repeated-scalar guard is generic, and spares --agent", () => {
+    const home = setupTwoTaps();
+    const scope = captureStreams();
+    expect(
+      runCli(["list", "--scope", "user", "--scope", "project"], {
+        home,
+        streams: scope.streams,
+      }),
+    ).toBe(4);
+    expect(scope.stderr()).toContain("`--scope` was given more than once");
+
+    const agents = captureStreams();
+    expect(
+      runCli(["list", "--agent", "claude-code", "--agent", "codex"], {
+        home,
+        streams: agents.streams,
+      }),
+    ).toBe(0);
+  });
 });

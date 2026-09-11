@@ -57,8 +57,9 @@ export const GROUPS: readonly CommandGroup[] = [
         description: (
           <>
             Case-insensitive substring match across every configured tap, or just one with{" "}
-            <code>--tap</code>. With no query, lists every installable skill — installed ones are
-            marked <code>✓</code>. With a query, also suggests matching trusted taps to add.
+            <code>--tap</code>. With no query, lists every installable skill in those taps —
+            installed ones are marked <code>✓</code>. With a query and without <code>--tap</code>,
+            also suggests matching trusted taps to add.
           </>
         ),
       },
