@@ -14,6 +14,7 @@
 
 import type { CommandOutput } from "../commands/types.ts";
 import type { CrewError, CrewErrorName } from "../core/errors.ts";
+import { sanitizeLine } from "../util/redact.ts";
 import type { Styler } from "../util/term.ts";
 
 /** Writable stream shape used by `writeOutput` — lets tests pass buffers. */
@@ -86,8 +87,14 @@ export function writeError(
 }
 
 function writeMessageBlock(message: string, streams: OutputStreams): void {
+  // Messages interpolate user-controlled values (paths, refs, and
+  // git's own stderr), so every line is escaped before it reaches a
+  // terminal — otherwise crafted input could reposition the cursor or
+  // forge output. Newlines are the block's own structure, so they are
+  // split on first and never escaped (see `util/redact.ts`).
   for (const line of message.split("\n")) {
-    streams.stderr(line.length === 0 ? "\n" : `  ${line}\n`);
+    const safe = sanitizeLine(line);
+    streams.stderr(safe.length === 0 ? "\n" : `  ${safe}\n`);
   }
 }
 

@@ -96,9 +96,14 @@ function runCliWithHome(
   };
 
   // §5.2 `--verbose`: progress lines go to stderr, so they never mix
-  // with a `--json` stdout payload. The sink is cleared after dispatch
-  // (success or error) so it can't leak into a later run.
-  if (parsed.flags.verbose) setProgressSink((line) => streams.stderr(`crew: ${line}\n`));
+  // with a `--json` stdout payload. Every invocation installs a sink —
+  // the writer when verbose, an explicit null otherwise — and restores
+  // its predecessor below, so a nested `runCli` (reachable through a
+  // `prompt` or stream callback) can neither write into this run's
+  // stderr nor silence it on the way out.
+  const previousSink = setProgressSink(
+    parsed.flags.verbose ? (line) => streams.stderr(`crew: ${line}\n`) : null,
+  );
 
   let exitCode: number;
   try {
@@ -124,9 +129,9 @@ function runCliWithHome(
       );
       exitCode = 4;
     }
+  } finally {
+    setProgressSink(previousSink);
   }
-  // The catch above never rethrows, so this runs on every path.
-  setProgressSink(null);
   // §10.2: scheduled updates append one status line before exit. Keeping
   // this at the CLI boundary covers both normal `update` exits and crashes.
   if (parsed.command === "update" && process.env["CREW_AUTOUPDATE_LOG"] === "1") {

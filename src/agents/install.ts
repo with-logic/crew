@@ -18,6 +18,7 @@ import { copyTree } from "../util/copy.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
 import { progress } from "../util/progress.ts";
+import { safePath } from "../util/redact.ts";
 import { nowIso } from "../util/time.ts";
 import { type AgentAdapter, baseFor } from "./adapter.ts";
 
@@ -105,7 +106,9 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
     }
   }
 
-  progress(`installing ${input.skillName} → ${dest} (${incomingAdapters.join(", ")})`);
+  progress(
+    `installing ${safePath(input.skillName)} → ${safePath(dest)} (${incomingAdapters.join(", ")})`,
+  );
   // Stage + atomic rename so a crash never leaves a half-copied directory.
   const staging = join(dirname(dest), `.crew-staging-${basename(dest)}-${Date.now()}`);
   if (exists(staging)) rmrf(staging);
