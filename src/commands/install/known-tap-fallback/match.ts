@@ -10,6 +10,8 @@ export interface KnownInstallSuggestion {
   readonly tap: KnownTap;
   readonly skill: KnownTapSkill | null;
   readonly installRef: string;
+  /** Set when the user typed the tap's GitHub `owner/repo` rather than a name in it (§8.5). */
+  readonly repo?: string;
 }
 
 export function knownMatchesForTap(tap: KnownTap, source: TapSource): KnownInstallSuggestion[] {
@@ -53,7 +55,16 @@ function twoSegmentMatches(
       out.push(skillSuggestion(tap, skill, ref));
     }
   }
+  if (out.length === 0 && matchesGitHubRepo(tap, sourceTap, name)) {
+    out.push({ tap, skill: null, installRef: tap.name, repo: `${sourceTap}/${name}` });
+  }
   return out;
+}
+
+/** `owner/repo` typed where a tap ref was expected, and the known tap lives at that GitHub repo. */
+function matchesGitHubRepo(tap: KnownTap, owner: string, repo: string): boolean {
+  const url = tap.url.endsWith(".git") ? tap.url.slice(0, -4) : tap.url;
+  return sameText(url, `https://github.com/${owner}/${repo}`);
 }
 
 function threeSegmentMatches(

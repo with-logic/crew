@@ -92,6 +92,7 @@ export const installHelp: CommandHelp = {
             "From any git repo",
             "  https://github.com/acme/skills.git",
             "  https://gitlab.com/acme/skills",
+            "  github.com/acme/skills             No scheme needed; https:// is assumed.",
             "  git@github.com:acme/skills.git     SSH style.",
             "  ssh://git@host/owner/repo.git",
             "  file:///abs/path/to/local.git      Local clone; great for testing.",
@@ -128,7 +129,7 @@ export const installHelp: CommandHelp = {
   notes: [
     "Pinning keeps a skill put. Anything with `@<tag>` or `@<sha>` is treated as pinned — `crew update` leaves it alone unless you ask for `--force`.",
     "Known-tap suggestions are local hints. Homecrew won't clone or add the suggested tap until you run the shown `crew tap add` command.",
-    "How Homecrew tells names apart: a plain word is a skill name. Paths start with `./`, `../`, `/`, or `~`. Git URLs start with `https://`, `git@`, `ssh://`, `file://`, `gh:`, `gl:`, `bb:`, or `@<owner>/<repo>`. Anything containing `//` is always treated as a git reference (that's the subfolder syntax).",
+    "How Homecrew tells names apart: a plain word is a skill name. Paths start with `./`, `../`, `/`, or `~`. Git URLs start with `https://`, `git@`, `ssh://`, `file://`, `gh:`, `gl:`, `bb:`, `@<owner>/<repo>`, or a host name with a dot in it (`github.com/<owner>/<repo>`). Anything containing `//` is always treated as a git reference (that's the subfolder syntax). A plain `<owner>/<repo>` is read as `<tap>/<skill>` — if you meant a GitHub repo, put an `@` in front.",
     "Browser links: a `/tree/<branch>/<folder>` link becomes `@<branch>//<folder>`, and a `/blob/.../SKILL.md` link points at the skill's folder. The first segment after `tree/` is taken as the branch, so for a branch name with a `/` in it use the explicit form instead — `crew install https://github.com/acme/skills@feature/new-api//python` installs the `python` folder from the `feature/new-api` branch.",
     "Private repos: a URL with credentials in it (`https://<user>:<token>@host/...`) works, and Homecrew never prints the token back at you — it's masked in every message and in `--json` output.",
   ],

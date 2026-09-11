@@ -8,8 +8,9 @@
  *   - path:  `./foo`, `../foo`, `/foo`, `~/foo`
  *   - git:   any https/ssh URL, optionally with `@ref` and/or `//subpath`.
  *            Shorthand hosts `gh:`, `gl:`, `bb:` expand to github/gitlab/
- *            bitbucket. A `.git` suffix is allowed and stripped for
- *            canonicalization.
+ *            bitbucket. A scheme-less `host.tld/owner/repo` gets
+ *            `https://` prepended. A `.git` suffix is allowed and
+ *            stripped for canonicalization.
  *   - tap:   `<skill>` or `<tap>/<skill>`, optionally `@ref`.
  *
  * The precedence rules in §8.5 disambiguate any overlap. `invalid_ref` is
@@ -27,7 +28,13 @@ import {
   looksLikeShorthand,
   parseGit,
 } from "./git-url.ts";
-import { looksLikePath, NAME_PATTERN, parsePath, parseTap } from "./parsers.ts";
+import {
+  looksLikePath,
+  looksLikeSchemelessHost,
+  NAME_PATTERN,
+  parsePath,
+  parseTap,
+} from "./parsers.ts";
 
 /** Parse a skill reference per §8. `cwd` is used to resolve relative paths. */
 export function parseRef(raw: string, cwd: string = process.cwd()): Source {
@@ -37,7 +44,7 @@ export function parseRef(raw: string, cwd: string = process.cwd()): Source {
   const ref = raw.trim();
 
   // §8.5 precedence: path > explicit URL / shorthand > leading-@ GitHub
-  // shorthand > contains // > tap.
+  // shorthand > scheme-less host > contains // > tap.
   if (looksLikePath(ref)) {
     return parsePath(ref, cwd);
   }
@@ -46,6 +53,9 @@ export function parseRef(raw: string, cwd: string = process.cwd()): Source {
   }
   if (looksLikeAtShorthand(ref)) {
     return parseGit(ref);
+  }
+  if (looksLikeSchemelessHost(ref)) {
+    return parseGit(`https://${ref}`);
   }
   if (ref.includes("//")) {
     return parseGit(ref);

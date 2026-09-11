@@ -3,7 +3,7 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
-import type { Source, TapConfig } from "../../core/types.ts";
+import type { Source, TapConfig, TapSource } from "../../core/types.ts";
 import { displayText, displayUrl } from "../../refs/display-url.ts";
 import { parseRef } from "../../refs/parse.ts";
 
@@ -24,6 +24,7 @@ export function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {
       "usage_error",
       `\`${raw}\` looks like a tap reference, not a source — \`crew tap add\` takes a git URL or local path (e.g. \`gh:owner/repo\` or \`./my-skills\`)`,
       { raw },
+      ownerRepoRemedy(source),
     );
   if (source.type === "path") return { kind: "path", url: "", subpath: "", path: source.path };
   // §16.3: taps track the default branch. `main`/`master` is taken to
@@ -39,6 +40,16 @@ export function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {
     );
   }
   return { kind: "git", url: source.url, subpath: source.subpath, path: "" };
+}
+
+/**
+ * §16.3: `crew tap add acme/skills` is almost always a GitHub repo with
+ * the `@` forgotten. Two plain segments get that suggestion; anything
+ * else keeps the default remedy.
+ */
+function ownerRepoRemedy(source: TapSource): string | undefined {
+  if (source.tap === null || source.namespace !== null || source.ref !== null) return undefined;
+  return `If you meant the GitHub repository ${source.tap}/${source.name}, run \`crew tap add @${source.tap}/${source.name}\`.`;
 }
 
 export function sameTap(a: TapConfig, t: TapAddTarget): boolean {

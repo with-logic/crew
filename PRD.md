@@ -600,7 +600,18 @@ gh:<owner>/<repo>             # shorthand for https://github.com/<owner>/<repo>.
 gl:<owner>/<repo>             # shorthand for https://gitlab.com/<owner>/<repo>.git
 bb:<owner>/<repo>             # shorthand for https://bitbucket.org/<owner>/<repo>.git
 @<owner>/<repo>               # shorthand for https://github.com/<owner>/<repo>.git (GitHub)
+<host>/<owner>/<repo>[...]    # scheme-less; treated as https://<host>/<owner>/<repo>[...]
 ```
+
+**Scheme-less hosts.** An argument whose first `/`-separated segment
+contains a `.` (`github.com/acme/skills`, `www.gitlab.com/acme/skills`,
+`git.example.com:8443/acme/skills`) and that has at least three
+segments is a git source: Homecrew prepends `https://` and parses the
+result exactly as it would the full URL, including the browser-URL
+rules below (`github.com/acme/skills/tree/main/skills/foo` works). A
+tap name can never contain a `.` (§8.4), so the rule is unambiguous.
+Two-segment arguments (`github.com/acme`) do not qualify — a clone URL
+needs an owner and a repo.
 
 The leading-`@` form is an ergonomic alias for `gh:` — GitHub is the
 overwhelming common case, and the `@` prefix matches how users already
@@ -754,14 +765,24 @@ When the argument could match multiple forms, crew applies these rules in order:
 1. If the argument starts with `./`, `../`, `/`, or `~` → path.
 2. If the argument matches `https://`, `http://`, `git@`, or `<shorthand>:` → git source.
 3. If the argument starts with `@` followed by `<owner>/<repo>` → git source (GitHub shorthand).
-4. If the argument contains `//` → git source (subpath syntax is git-only).
-5. Otherwise → tap source.
+4. If the first `/`-separated segment contains a `.` and the argument has at least three segments → git source (scheme-less host; `https://` is prepended).
+5. If the argument contains `//` → git source (subpath syntax is git-only).
+6. Otherwise → tap source.
 
 Between `@` forms, rule 2's `git@host:...` takes precedence over rule 3
 because rule 2 runs first. A bare `@` with nothing after it, or `@name`
 with no `/`, is not a valid git source — rule 3 does not match, and
-rule 5 sends it to tap-source parsing, which rejects it as `invalid_ref`
+rule 6 sends it to tap-source parsing, which rejects it as `invalid_ref`
 because tap names cannot start with `@`.
+
+**Two-segment misses.** A tap-source argument of the form `foo/bar`
+that names neither a configured tap nor a namespace (§8.3) is
+`invalid_ref`. Because that shape is also how people write a GitHub
+repository, the human-mode error MUST suggest the `@foo/bar` form. If
+the known-tap registry (§16.2.1) contains a tap whose URL is
+`https://github.com/foo/bar` (with or without `.git`), the error also
+names that tap and gives its `crew tap add` command, per §9 step 2.
+`crew tap add foo/bar` gives the same `@foo/bar` suggestion (§16.3).
 
 Infix `@` inside git and tap sources (`gh:owner/repo@v1.0`,
 `core/python-testing@v1.0`) continues to denote a ref and does not
@@ -779,7 +800,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Git URL or shorthand (`@org/repo`, `gh:org/repo`, etc.): if any configured tap already points at the same URL+subpath, use it; otherwise create an auto tap (§16.5) and use it. The new tap is cloned and refreshed.
    - Path reference (`./foo`, `/abs/foo`): if any configured tap already points at the same path, use it; otherwise create a path-kind auto tap and use it.
    In all cases, the resolved `state.installations[i].source` is `{ tap: <tap-name>, path: <skill-relative-path-inside-tap> }`. The URL/path of the tap itself lives in `config.yaml`.
-   - If a tap-source reference cannot be resolved from configured taps, Homecrew consults the known-tap registry (§16.2.1) before returning `invalid_ref`. Exact known-tap matches are suggestions only: Homecrew MUST NOT clone, fetch, add a tap to config, or install anything from a known tap until the user explicitly runs the suggested `crew tap add <source-ref> <name>` command (or a future interactive flow confirms that same action). The error MUST include the tap-add command and the follow-up `crew install <tap>/<skill>` or `crew install <tap>` command.
+   - If a tap-source reference cannot be resolved from configured taps, Homecrew consults the known-tap registry (§16.2.1) before returning `invalid_ref`. Exact known-tap matches are suggestions only: Homecrew MUST NOT clone, fetch, add a tap to config, or install anything from a known tap until the user explicitly runs the suggested `crew tap add <source-ref> <name>` command (or a future interactive flow confirms that same action). The error MUST include the tap-add command and the follow-up `crew install <tap>/<skill>` or `crew install <tap>` command. A two-segment reference `<owner>/<repo>` also matches a known tap whose URL is `https://github.com/<owner>/<repo>` — the user typed the repository, not a tap name — and the error suggests that tap the same way (§8.5 "Two-segment misses").
 3. **Resolve refs to SHAs.** For git sources and tap sources, the ref (tag, branch, or `HEAD`) is resolved to a full commit SHA. This SHA is what's recorded in state and markers, even if the user specified a tag or branch.
 4. **Validate each candidate skill** against the Agent Skills specification:
    - `SKILL.md` exists at the expected location.
@@ -1436,6 +1457,9 @@ is part of the product. Implementations SHOULD follow these guidelines:
   into one line.
 - **Speak as a peer.** "run `crew list` to see what's installed" lands
   better than "the requested skill is not present in the state file."
+- **Guess the spelling.** When an argument is one character away from
+  a form that would have worked (`acme/skills` vs `@acme/skills`), say
+  so and show the corrected command (§8.5 "Two-segment misses").
 - **Respect `--force` semantics.** If the error is one `--force`
   overrides (§13 list), say so. If it's one `--force` won't override,
   also say so — it saves a second attempt.
@@ -1589,7 +1613,7 @@ since the registry was built, the normal tap-add or install error applies.
   - If the named tap already exists with a matching URL/path/subpath, the call is an idempotent no-op (exit 0). If an existing tap of the same name has a different URL/path/subpath, the call is a `usage_error` — the user must pick a different name.
   - If the URL/path matches an existing **auto** tap, `crew tap add` promotes it: `registered` flips to `true`, and the `<name>` argument (if supplied) renames the tap. No re-clone.
 - `crew tap add --recursive <url-or-path> [<name>]` registers or promotes the tap with `discovery: recursive`. Re-running it against an existing registered tap with the same target upgrades that tap to recursive discovery. Promoting an existing auto tap preserves any recursive discovery mode already recorded for that tap; adding `--recursive` during promotion upgrades it at the same time. This is an explicit trust signal for non-standard repository layouts: standard discovery still runs first, and recursive discovery is only the fallback described in §9 step 5.4. There is no command-level downgrade flag. Editing `config.yaml` to remove `discovery` makes live tap resolution use standard discovery, but existing installed markers retain the discovery mode used at install time; `doctor --repair` can therefore reconstruct recursive discovery from those markers until the affected skills are reinstalled or markers are rewritten by a future command.
-- `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Bare `crew tap` (no positional at all) prints the command's help page (same as `crew help tap`) with exit 0. Any other input — an unknown subcommand, or a word that doesn't parse as a source — is a `usage_error` whose message names the offending input and points at `crew help tap`. Other commands that take subcommands (`crew cache`, `crew autoupdate`) behave the same way; `crew agents` lists agents when bare and errors on an unknown subcommand.
+- `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Bare `crew tap` (no positional at all) prints the command's help page (same as `crew help tap`) with exit 0. Any other input — an unknown subcommand, or a word that doesn't parse as a source — is a `usage_error` whose message names the offending input and points at `crew help tap`. When the rejected argument to `crew tap add` is a two-segment tap reference (`acme/skills`), the error's remedy suggests `crew tap add @acme/skills`, since that is almost always what was meant. Other commands that take subcommands (`crew cache`, `crew autoupdate`) behave the same way; `crew agents` lists agents when bare and errors on an unknown subcommand.
 - Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`). The subpath, URL, or path is entirely internal — it never appears in skill references.
 - `crew tap remove <name>` deletes the local clone and removes the tap from config. Auto taps are also removed automatically when their last associated state entry is uninstalled (see §16.5).
 - `crew tap list` prints each tap's name, kind (`registered` / `auto`), discovery mode when non-standard, source (URL`//subpath` or path), and last-fetched timestamp (for git-kind taps only). `--json` emits the structured shape.
@@ -1758,6 +1782,8 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-28 | §8.2, §13 | A reference echoed back in an error message or `--json` payload has its URL userinfo and credential-bearing query values redacted; the secret never appears on stdout or stderr. |
 | C-REF-29 | §8.2 | URL userinfo is preserved in the resolved clone URL (`https://user:token@host/o/r/tree/main/py` keeps its credentials), and is not mistaken for an `@<ref>` delimiter. |
 | C-REF-30 | §8.2, §13 | `?query` and `#fragment` text is discarded before grammar parsing, so it cannot supply an `@<ref>` or `//<subpath>`; an explicit `@<ref>` may contain `/` (`@feature/foo//python`); an `http(s)` URL too malformed to parse is `invalid_ref` (exit 4). |
+| C-REF-31 | §8.2, §8.5 | `github.com/o/r`, `www.github.com/o/r`, `gitlab.com/o/r`, `git.example.com:8443/o/r`, and `github.com/o/r/tree/main/path` are parsed as git sources exactly as their `https://`-prefixed forms would be. |
+| C-REF-32 | §8.2, §8.5 | `core/python-testing` remains a tap source; `a.b` and `a.b/c` are not scheme-less hosts and produce `invalid_ref`. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -1955,6 +1981,8 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-22b | §16.3 / §16.6 | `crew tap add --recursive <url-or-path> <name>` persists recursive discovery for that tap; later `crew search` and `crew install <name>/<skill>` can find skills only reachable through bounded recursive fallback. |
 | C-TAP-23 | §16.2.1 / §16.6 | `crew search <query>` surfaces matching known-tap registry entries that are not already configured as suggestions after configured-tap hits, without cloning, fetching, mutating config, or listing them for `crew search` with no query. Suggestions include the canonical `crew tap add <source-ref> <name>` command. JSON includes those suggestions in `known_hits`. |
 | C-TAP-24 | §9 / §16.2.1 | `crew install <tap-source>` that cannot resolve from configured taps surfaces exact known-tap registry matches in the `invalid_ref` error, including canonical `crew tap add` and follow-up install commands, without cloning, fetching, mutating config, or installing from the known tap. JSON errors include `known_tap_suggestions`. |
+| C-TAP-24b | §8.5 / §9 / §16.2.1 | `crew install <owner>/<repo>` and `crew info <owner>/<repo>` where `<owner>` is neither a configured tap nor a namespace produce `invalid_ref` whose human output suggests `@<owner>/<repo>`; when the known-tap registry has a tap at `https://github.com/<owner>/<repo>`, the install error also carries that tap's `crew tap add` command and JSON `known_tap_suggestions` includes it. |
+| C-TAP-24c | §16.3 | `crew tap add <owner>/<repo>` is a `usage_error` whose remedy suggests `crew tap add @<owner>/<repo>`. |
 
 #### C-STATE: State and markers (§11)
 
