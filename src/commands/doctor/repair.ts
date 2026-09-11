@@ -16,7 +16,6 @@ import { readConfig, writeConfig } from "../../config/load.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { garbageCollectStore } from "../../maintenance/gc.ts";
 import { readState, writeState } from "../../state/load.ts";
-import { withStateLock } from "../../state/lock.ts";
 import { isDirectory } from "../../util/fs.ts";
 import type { MarkerEntry } from "./markers.ts";
 
@@ -36,9 +35,14 @@ function isUnreadableProjectEntry(entry: StateEntry): boolean {
   );
 }
 
-/** Runs inside a state lock; caller just invokes and forgets. */
-export function repairState(markers: readonly MarkerEntry[], home: string): void {
-  withStateLock(() => {
+/**
+ * Rebuild state, config taps, and the store from markers. The caller
+ * holds the state lock (see `./coordinator.ts`) — this helper is
+ * lock-free so that the scheduler step can run under the same lock
+ * without nesting a second acquisition, which would deadlock.
+ */
+export function repairStateUnderLock(markers: readonly MarkerEntry[], home: string): void {
+  {
     let config = readConfig(home);
     let current = readState(home);
 
@@ -128,5 +132,5 @@ export function repairState(markers: readonly MarkerEntry[], home: string): void
 
     // Orphan store entries.
     garbageCollectStore(current, home);
-  }, home);
+  }
 }

@@ -373,6 +373,24 @@ describe("doctor warnings — orphan store", () => {
     expect(c.stdout()).toContain("couldn't be parsed");
   });
 
+  test("doctor --repair aborts on an unparseable config", () => {
+    const home = makeCrewHome();
+    mkdirSync(home, { recursive: true });
+    writeFileSync(join(home, "config.yaml"), "taps:\n\tbad-tab");
+    const orphan = join(home, "store", "ghost@00000000");
+    mkdirSync(orphan, { recursive: true });
+    const c = captureStreams();
+    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    // `repairState` re-reads config, so an unparseable file surfaces as
+    // `config_invalid` (exit 4) and nothing is rebuilt — plain `doctor`
+    // reports the same file as a finding instead. Pinning the current
+    // behavior; making `--repair` degrade gracefully here is its own
+    // change.
+    expect(code).toBe(4);
+    expect(JSON.parse(c.stdout()).error.name).toBe("config_invalid");
+    expect(existsSync(orphan)).toBe(true);
+  });
+
   test("doctor flags autoupdate drift", () => {
     const home = makeCrewHome();
     // Enable in config without touching launchctl.

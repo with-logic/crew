@@ -11,6 +11,7 @@ import { readConfig } from "../../config/load.ts";
 import { crewHome } from "../../core/paths.ts";
 import { readState } from "../../state/load.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
+import type { AutoupdateRepair } from "./autoupdate.ts";
 import {
   checkAgentDetection,
   checkAutoupdateDrift,
@@ -20,9 +21,9 @@ import {
   checkStateMarkerDrift,
   type Finding,
 } from "./checks.ts";
+import { applyRepairs } from "./coordinator.ts";
 import { buildMarkerIndex } from "./markers.ts";
 import { renderDoctor } from "./render.ts";
-import { repairState } from "./repair.ts";
 import { isRepairableCode } from "./repairable.ts";
 
 export function doctorCommand(ctx: CommandContext): CommandOutput {
@@ -56,19 +57,29 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   // markers, so an unparseable config makes it unsafe: report the
   // `config_invalid` finding instead of failing with a bare error.
   const dryRun = repair && ctx.flags.dryRun;
+  // An unparseable config still skips the repair entirely: the rebuild
+  // rewrites `config.yaml` taps from markers, so running it against a
+  // file we could not read would discard whatever the user has there.
   const applied = repair && !dryRun && config !== null;
-  if (applied) repairState(markers, home);
+  const repairs: AutoupdateRepair[] = applied ? applyRepairs(markers, home) : [];
 
-  const human = renderDoctor(findings, { repair, verify, dryRun, applied }, ctx.style);
+  const human = renderDoctor(findings, { repair, verify, dryRun, applied }, ctx.style, repairs);
   // A `--repair` run resolves the repairable drift classes, so those
   // findings stop counting against the exit code. Anything repair
   // can't fix (§11.2) still does — otherwise a repair would report
-  // success while a real problem remains. Without `--repair` (or on a
-  // dry run, or when an unparseable config skipped the repair), every
-  // error counts.
+  // success while a real problem remains — as does a repair that was
+  // attempted and failed. Without `--repair` (or on a dry run, or when
+  // an unparseable config skipped the repair), every error counts.
   const blocking = findings.filter(
     (f) => f.level === "error" && !(applied && isRepairableCode(f.code)),
   );
-  const exitCode = blocking.length > 0 ? 1 : 0;
-  return { exitCode, human, json: { findings, dry_run: dryRun } };
+  const failedRepairs = repairs.filter((r) => r.level === "error");
+  const exitCode = blocking.length > 0 || failedRepairs.length > 0 ? 1 : 0;
+  return {
+    exitCode,
+    human,
+    // §11.2: `repairs` describes what a repair did, so it appears only
+    // on a `--repair` response.
+    json: applied ? { findings, repairs, dry_run: dryRun } : { findings, dry_run: dryRun },
+  };
 }

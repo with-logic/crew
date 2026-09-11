@@ -23,15 +23,16 @@ import type { Finding } from "./checks.ts";
  *   - `missing_project_root` — `checks.ts` documents that removing a
  *     vanished project's install isn't doctor's job, so it is a
  *     permanent heads-up rather than pending work.
- *   - `autoupdate_not_loaded`, `autoupdate_unexpectedly_loaded` — no
- *     scheduler reconciliation exists here, so claiming them would
- *     promise a fix that never runs. They join this list in the same
- *     change that implements `repairAutoupdateDrift`.
  */
 const REPAIRABLE_CODES: Record<string, string> = {
   state_entry_without_marker: "repairState",
   marker_without_state: "repairState",
   orphan_store_entry: "repairState",
+  // Reconciled by `repairAutoupdateDrift` (§11.2 check 7). These two
+  // are listed here because this change implements that reconciliation;
+  // a branch without it must not claim them.
+  autoupdate_not_loaded: "repairAutoupdateDrift",
+  autoupdate_unexpectedly_loaded: "repairAutoupdateDrift",
 };
 
 /** True when `code` is one `crew doctor --repair` can actually fix. */

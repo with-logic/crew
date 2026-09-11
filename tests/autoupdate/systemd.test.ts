@@ -71,14 +71,40 @@ describe("systemd autoupdate commands", () => {
 
   test("disable without units is a no-op", () => {
     const home = makeCrewHome();
-    setSystemctlRunner(() => {
-      throw new Error("should not call systemctl");
+    const calls: string[][] = [];
+    // Missing unit files no longer imply an inactive timer: disable asks
+    // systemd whether the unit is still loaded, because a unit can
+    // outlive its file. With no units AND an inactive timer there is
+    // nothing to do, so `is-active` must be the only call.
+    setSystemctlRunner((args) => {
+      calls.push([...args]);
+      if (args[0] === "is-active") return failed("inactive");
+      throw new Error(`should not call systemctl ${args.join(" ")}`);
     });
     const code = runCli(["autoupdate", "disable"], {
       home,
       streams: captureStreams().streams,
     });
     expect(code).toBe(0);
+    expect(calls.every((a) => a[0] === "is-active")).toBe(true);
+  });
+
+  test("disable unloads a timer whose unit files are already gone", () => {
+    const home = makeCrewHome();
+    const calls: string[][] = [];
+    // The dangerous case: no unit files, but systemd still holds the
+    // timer. Returning early here would report success while the
+    // updater kept firing.
+    setSystemctlRunner((args) => {
+      calls.push([...args]);
+      return ok; // `is-active` succeeds → the timer is still loaded
+    });
+    const code = runCli(["autoupdate", "disable"], {
+      home,
+      streams: captureStreams().streams,
+    });
+    expect(code).toBe(0);
+    expect(calls.some((a) => a[0] === "disable")).toBe(true);
   });
 
   test("disable reports post-removal daemon-reload failure", () => {
