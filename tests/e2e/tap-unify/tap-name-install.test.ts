@@ -12,7 +12,7 @@ import { geminiCliAdapter } from "../../../src/agents/gemini-cli.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import type { PromptFn } from "../../../src/cli/prompt.ts";
 import { readConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
+import { paths } from "../../../src/core/paths.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
@@ -92,8 +92,8 @@ describe("C-TAP-21 path-kind tap", () => {
     const tap = config.taps.find((t) => t.name === "localtap")!;
     expect(tap.kind).toBe("path");
     expect(tap.path).toBe(root);
-    // No clone directory should exist under ~/.crew/taps.
-    expect(existsSync(tapPath("localtap", home))).toBe(false);
+    // A path tap owns no clone; nothing should have been cloned at all.
+    expect(existsSync(paths(home).reposDir)).toBe(false);
   });
 
   test("`crew tap add <same-path>` against an existing path tap is idempotent", () => {

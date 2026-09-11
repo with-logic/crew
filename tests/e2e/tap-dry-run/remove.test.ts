@@ -8,9 +8,8 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { readConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
-import { makeTempDir } from "../../helpers/fixtures.ts";
+import { cloneDirForTap, makeTempDir } from "../../helpers/fixtures.ts";
 import { buildTapRepo, configBytes, run } from "./helpers.ts";
 
 describe("C-TAP-16b tap remove --dry-run", () => {
@@ -23,7 +22,7 @@ describe("C-TAP-16b tap remove --dry-run", () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("Would remove tap mytap");
     expect(r.stdout).toContain("local clone would be deleted");
-    expect(existsSync(join(tapPath("mytap", home), ".git"))).toBe(true);
+    expect(existsSync(join(cloneDirForTap("mytap", home)!, ".git"))).toBe(true);
     expect(configBytes(home)).toBe(before);
   });
 

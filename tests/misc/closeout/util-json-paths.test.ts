@@ -12,9 +12,9 @@ import { join } from "node:path";
 import { parseDuration } from "../../../src/commands/autoupdate/duration.ts";
 import {
   crewHome as crewHomeDefault,
+  legacyTapPath,
   paths,
   storeEntryPath,
-  tapPath,
 } from "../../../src/core/paths.ts";
 import { readState, writeState } from "../../../src/state/load.ts";
 import { readJson, tryReadJson, writeJson } from "../../../src/util/json.ts";
@@ -67,9 +67,9 @@ describe("paths helpers", () => {
       }
     }
   });
-  test("tapPath and storeEntryPath", () => {
+  test("legacyTapPath and storeEntryPath", () => {
     const home = "/tmp/crew-x";
-    expect(tapPath("core", home)).toBe("/tmp/crew-x/taps/core");
+    expect(legacyTapPath("core", home)).toBe("/tmp/crew-x/taps/core");
     expect(storeEntryPath("demo", "abcdef12", home)).toBe("/tmp/crew-x/store/demo@abcdef12");
   });
   test("paths() shape", () => {

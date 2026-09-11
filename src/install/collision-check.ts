@@ -16,7 +16,7 @@
  * bare-name install). `crew tap add` normally clones taps up front.
  */
 
-import { tapPath } from "../core/paths.ts";
+import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
@@ -80,6 +80,6 @@ function tapRootOnDisk(tap: TapConfig, home: string): string | null {
   if (tap.kind === "path") {
     return isDirectory(tap.path) ? tap.path : null;
   }
-  const root = tapRootDir(tapPath(tap.name, home), tap);
+  const root = tapRootDir(tapClonePath(tap, home), tap);
   return isDirectory(root) ? root : null;
 }

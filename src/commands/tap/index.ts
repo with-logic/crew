@@ -14,7 +14,7 @@
 import { statSync } from "node:fs";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import { tapPath } from "../../core/paths.ts";
+import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { showCommandHelp } from "../help/index.ts";
@@ -111,7 +111,7 @@ function tapList(ctx: CommandContext, args: readonly string[]): CommandOutput {
   const rows: TapListRow[] = config.taps.map((t) => {
     let lastFetched: string | null = null;
     if (t.kind === "git") {
-      const p = tapPath(t.name, ctx.home);
+      const p = tapClonePath(t, ctx.home);
       try {
         lastFetched = new Date(statSync(p).mtimeMs).toISOString();
       } catch {
