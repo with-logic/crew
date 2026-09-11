@@ -12,6 +12,9 @@ import { helpHelp } from "./help.ts";
 import { infoHelp } from "./info.ts";
 import { installHelp } from "./install.ts";
 import { listHelp } from "./list.ts";
+import { lsHelp } from "./ls.ts";
+import { removeHelp } from "./remove.ts";
+import { rmHelp } from "./rm.ts";
 import { searchHelp } from "./search.ts";
 import { selfUpdateHelp } from "./self-update.ts";
 import { skillsHelp } from "./skills.ts";
@@ -21,6 +24,7 @@ import type { CommandHelp } from "./types.ts";
 import { uninstallHelp } from "./uninstall.ts";
 import { untapHelp } from "./untap.ts";
 import { updateHelp } from "./update.ts";
+import { upgradeHelp } from "./upgrade.ts";
 import { versionHelp } from "./version.ts";
 
 export type { CommandHelp, HelpSection } from "./types.ts";
@@ -34,7 +38,18 @@ export interface CommandGroup {
 export const GROUPS: readonly CommandGroup[] = [
   {
     title: "Managing skills",
-    commands: ["install", "uninstall", "update", "list", "skills", "info"],
+    commands: [
+      "install",
+      "uninstall",
+      "remove",
+      "rm",
+      "update",
+      "upgrade",
+      "list",
+      "skills",
+      "ls",
+      "info",
+    ],
   },
   { title: "Discovery", commands: ["search", "tap", "taps", "untap"] },
   { title: "Agents & automation", commands: ["agents", "autoupdate"] },
@@ -45,9 +60,13 @@ export const GROUPS: readonly CommandGroup[] = [
 export const COMMANDS: Record<string, CommandHelp> = {
   install: installHelp,
   uninstall: uninstallHelp,
+  remove: removeHelp,
+  rm: rmHelp,
   update: updateHelp,
+  upgrade: upgradeHelp,
   list: listHelp,
   skills: skillsHelp,
+  ls: lsHelp,
   info: infoHelp,
   search: searchHelp,
   tap: tapHelp,
@@ -66,9 +85,13 @@ export const COMMANDS: Record<string, CommandHelp> = {
 export const ONELINERS: Record<string, string> = {
   install: "Install a skill everywhere at once.",
   uninstall: "Remove a skill (use --prune to tidy up leftovers).",
+  remove: "Alias for `uninstall`.",
+  rm: "Alias for `uninstall`.",
   update: "Catch installed skills up to the latest.",
+  upgrade: "Alias for `update`.",
   list: "See what you have installed.",
   skills: "Alias for `list`.",
+  ls: "Alias for `list`.",
   info: "Get the details on a skill.",
   search: "Look for a skill by name or description.",
   tap: "Manage the collections you install from.",
