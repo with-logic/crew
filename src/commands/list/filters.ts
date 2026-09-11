@@ -6,7 +6,7 @@
  * typo doesn't silently produce an empty list.
  */
 
-import { ALL_AGENTS, agentByName } from "../../agents/registry.ts";
+import { assertKnownAgents } from "../../agents/validate.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { Scope, StateEntry } from "../../core/types.ts";
@@ -21,7 +21,8 @@ export interface ListFilters {
 /** Read and validate the filters from the parsed flags. */
 export function readListFilters(ctx: CommandContext): ListFilters {
   const scope: Scope | null = ctx.flags.scopeGiven ? ctx.flags.scope : null;
-  const agent = validateAgents(ctx.flags.agent);
+  assertKnownAgents(ctx.flags.agent);
+  const agent = ctx.flags.agent;
   const rawTap = ctx.flags.extras["tap"];
   const tap = typeof rawTap === "string" ? validateTap(rawTap, ctx.home) : null;
   return { scope, agent, tap };
@@ -43,19 +44,8 @@ export function applyListFilters(
 }
 
 /** True if an agent or tap filter is active (scope alone has its own empty message). */
-export function hasRowFilter(filters: ListFilters): boolean {
+export function hasAgentOrTapFilter(filters: ListFilters): boolean {
   return filters.agent.length > 0 || filters.tap !== null;
-}
-
-function validateAgents(agents: readonly string[]): readonly string[] {
-  const unknown = agents.filter((n) => !agentByName(n));
-  if (unknown.length === 0) return agents;
-  const known = ALL_AGENTS.map((a) => a.name).join(", ");
-  throw new CrewError(
-    "usage_error",
-    `unknown agent${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")} — known agents: ${known}`,
-    { unknown },
-  );
 }
 
 function validateTap(name: string, home: string): string {

@@ -12,7 +12,7 @@
 import type { StateEntry } from "../../core/types.ts";
 import { readState } from "../../state/load.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
-import { applyListFilters, hasRowFilter, readListFilters } from "./filters.ts";
+import { applyListFilters, hasAgentOrTapFilter, readListFilters } from "./filters.ts";
 import { renderEmpty, renderList } from "./render.ts";
 
 export function listCommand(ctx: CommandContext): CommandOutput {
@@ -22,7 +22,7 @@ export function listCommand(ctx: CommandContext): CommandOutput {
 
   const human =
     sorted.length === 0
-      ? renderEmpty(filters.scope, hasRowFilter(filters), ctx.style)
+      ? renderEmpty(filters.scope, hasAgentOrTapFilter(filters), ctx.style)
       : renderList(sorted, filters.scope, ctx.style);
 
   return {

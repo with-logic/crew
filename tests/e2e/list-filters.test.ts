@@ -7,14 +7,21 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import type { AgentAdapter } from "../../src/agents/adapter.ts";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
-type Mut = { userPath: () => string; projectPath: (c: string) => string; detect: () => boolean };
-const adapters = [claudeCodeAdapter, codexAdapter] as unknown as Mut[];
+type Mut = {
+  userPath: AgentAdapter["userPath"];
+  projectPath: AgentAdapter["projectPath"];
+  detect: AgentAdapter["detect"];
+};
+// Direct assignment (no double cast) so a change to the adapter contract
+// is a type error here rather than being erased by `as unknown as`.
+const adapters: Mut[] = [claudeCodeAdapter, codexAdapter];
 let originals: Mut[];
 
 beforeEach(() => {
@@ -40,13 +47,23 @@ afterEach(() => {
 
 const quiet = () => captureStreams().streams;
 
-/** `alpha` from its own path tap into both agents; `beta` from another tap into codex only. */
+/**
+ * `alpha` from its own path tap into both agents; `beta` from another tap
+ * into codex only.
+ *
+ * Both installs name their agents explicitly. An unrestricted `crew
+ * install` targets every *detected* adapter, and this file only redirects
+ * `claude-code` and `codex` — so on a host where a third adapter is
+ * detected it would join the install, making the expected agent lists
+ * below environment-dependent.
+ */
 function seed(home: string): void {
   const a = makeTempDir("crew-alpha-src-");
   const b = makeTempDir("crew-beta-src-");
   const alpha = makeSkill(a, "alpha", skillFrontmatter({ name: "alpha" }));
   const beta = makeSkill(b, "beta", skillFrontmatter({ name: "beta" }));
-  if (runCli(["install", alpha], { home, streams: quiet() }) !== 0) throw new Error("alpha");
+  const alphaArgs = ["install", "--agent", "claude-code", "--agent", "codex", alpha];
+  if (runCli(alphaArgs, { home, streams: quiet() }) !== 0) throw new Error("alpha");
   if (runCli(["install", "--agent", "codex", beta], { home, streams: quiet() }) !== 0)
     throw new Error("beta");
 }
@@ -126,6 +143,41 @@ describe("crew list --agent / --tap", () => {
     expect(r.code).toBe(4);
     expect(r.err).toContain("`nope` was not found in your list of taps");
     expect(r.err).toContain("crew tap list");
+  });
+
+  test("C-LIST-05 a repeated --tap is a usage_error, not a silent unfiltered list", () => {
+    const home = makeCrewHome();
+    seed(home);
+    const tap = json(home).installations[0]!.source.tap;
+    // Repeating a single-value flag used to yield an array, which
+    // `extras` dropped — so the filter silently vanished and neither
+    // value was validated. Failing loudly is the only safe behaviour.
+    const r = run(home, "--tap", tap, "--tap", "typo");
+    expect(r.code).toBe(4);
+    expect(r.err).toContain("`--tap` was given more than once");
+  });
+
+  test("C-LIST-05 the skills alias accepts list's own flags", () => {
+    const home = makeCrewHome();
+    seed(home);
+    const tap = json(home).installations[0]!.source.tap;
+    const aliased = run(home, "--json", "--tap", tap);
+    const cap = captureStreams();
+    const code = runCli(["skills", "--json", "--tap", tap], { home, streams: cap.streams });
+    expect(code).toBe(0);
+    expect(cap.stdout()).toBe(aliased.out);
+  });
+
+  test("C-LIST-07 prefixed aliases keep rejecting flags their subcommand ignores", () => {
+    // `taps`/`untap` resolve to `tap list` / `tap remove`, neither of
+    // which honours `--recursive`. Bare aliases like `skills` inherit
+    // their canonical command's flag table; prefixed ones must not.
+    const home = makeCrewHome();
+    for (const cmd of ["taps", "untap"]) {
+      const c = captureStreams();
+      expect(runCli([cmd, "--recursive"], { home, streams: c.streams })).toBe(4);
+      expect(c.stderr()).toContain("Unknown argument: recursive");
+    }
   });
 
   test("C-LIST-06 filters compose with each other and with --scope", () => {

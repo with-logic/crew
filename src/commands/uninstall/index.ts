@@ -21,7 +21,7 @@
  * (`./core.ts`, `./state.ts`).
  */
 
-import { ALL_AGENTS, agentByName } from "../../agents/registry.ts";
+import { assertKnownAgents } from "../../agents/validate.ts";
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
@@ -90,15 +90,7 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
  */
 function validateAgentFilter(agents: readonly string[]): readonly string[] | null {
   if (agents.length === 0) return null;
-  const unknown = agents.filter((n) => !agentByName(n));
-  if (unknown.length > 0) {
-    const known = ALL_AGENTS.map((a) => a.name).join(", ");
-    throw new CrewError(
-      "usage_error",
-      `unknown agent${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")} — known agents: ${known}`,
-      { unknown },
-    );
-  }
+  assertKnownAgents(agents);
   return agents;
 }
 
