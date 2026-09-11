@@ -21,6 +21,10 @@
  * way are marked `transitively_required_by: [<top-level name>...]`
  * in the rows so humans and scripts can tell them apart.
  *
+ * Collection selectors (§10.1): a positional may also be a tap name or a
+ * namespace (`state/collections.ts`); it contributes every installed
+ * entry it expands to, and re-expansion treats those members as named.
+ *
  * Fetch scope (§16.4): `crew update` with no args refreshes every
  * configured tap. `crew update <name>...` refreshes only the taps
  * that back the named entries (after dep-closure expansion) — other
@@ -78,10 +82,16 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
 
   if (!dryRun) garbageCollectStore(plan.state, home);
 
-  const { rows, tapReexpandRows, tapRows } = plan;
+  const { rows, tapReexpandRows, tapRows, collections, selectors } = plan;
   return {
     exitCode: plan.hardFailure ? 1 : 0,
-    human: renderUpdate({ rows, tapReexpandRows, tapRows, dryRun }, ctx.style),
-    json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows, dry_run: dryRun },
+    human: renderUpdate({ rows, tapReexpandRows, tapRows, dryRun, collections }, ctx.style),
+    json: {
+      rows,
+      tap_reexpand_rows: tapReexpandRows,
+      tap_rows: tapRows,
+      dry_run: dryRun,
+      selectors,
+    },
   };
 }

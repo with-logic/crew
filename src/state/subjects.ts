@@ -1,6 +1,9 @@
 /**
  * Installed skill selector resolution for state-oriented commands (§7.4, §10.1).
  *
+ * Collection selectors (tap and namespace names) build on this in
+ * `./collections.ts`.
+ *
  * Commands such as `info`, `update`, and `uninstall` operate on entries already
  * present in `state.json`. They accept either the stored skill name (`pdf`) or a
  * more specific tap-qualified selector (`anthropic/pdf`) that identifies the
@@ -56,7 +59,8 @@ function matchesTapSource(entry: StateEntry, source: TapSource): boolean {
   return namespaceForEntry(entry) === source.namespace;
 }
 
-function namespaceForEntry(entry: StateEntry): string | null {
+/** The namespace an entry lives under (`skills/<ns>/<name>`), or null. */
+export function namespaceForEntry(entry: StateEntry): string | null {
   const parts = entry.source.path.split("/");
   // §16 tap index paths use `skills/<namespace>/<name>` only for namespaced skills.
   if (parts.length === 3 && parts[0] === "skills") return parts[1]!;

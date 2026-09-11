@@ -811,10 +811,33 @@ or a tap-qualified installed skill reference (`<tap>/<skill>` or
 `<tap>/<namespace>/<skill>`), using the same installed-skill selector rules as
 `crew uninstall` (§7.4).
 
+**Collection selectors.** Mirroring `crew install <tap>` (§16.4), a selector
+may also name a collection of installed skills. Resolution order per argument:
+
+1. An installed skill (bare name or tap-qualified) — today's meaning, and it
+   always wins when a skill of that name is installed.
+2. Otherwise, a configured tap name (registered or auto) → every state entry
+   attributed to that tap, at every scope. A tap with zero installed entries is
+   not an error: the tap is still fetched (step 1) and the summary reports that
+   nothing is installed from it (exit 0).
+3. Otherwise, a namespace: `<tap>/<namespace>` selects the installed entries
+   whose tap-relative path is `skills/<namespace>/<skill>` in that tap; a bare
+   `<namespace>` selects the same set when exactly one tap has installed entries
+   under that namespace. A bare word that is both a tap name and a namespace
+   with installed entries in another tap, or a namespace with installed entries
+   in more than one tap, is `ambiguous_reference` naming each qualified form.
+4. Otherwise `unknown_skill`, whose message says the argument isn't an
+   installed skill, a tap, or a namespace.
+
+The dependency closure of step 2 and the tap re-expansion of step 2b apply to
+the entries a collection selector expands to, exactly as if each had been named
+individually. `--json` output carries `selectors: [{ raw, kind, name }]` where
+`kind` is `skill`, `tap`, or `namespace`.
+
 1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<selector>...`, it is the subset of taps that host the selected entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run.
 2. Build the list of skills to consider:
    - `crew update` with no args → every entry in `state.json`.
-   - `crew update <selector>...` → the selected entries, **plus their transitive dependency closure**. Concretely: for each selected entry, take its direct deps (from its SKILL.md `metadata.crew.dependencies`, resolved against `required_by` in state), then their deps, and so on. A dep that isn't in state — one that was never installed — is not added; Homecrew does not install new skills during update. Entries pulled in this way appear in the results alongside the selected entries, marked `transitively_required_by: [<name>...]` in JSON output so callers can tell them apart. An unknown top-level selector (no matching state entry) is an error per argument.
+   - `crew update <selector>...` → the selected entries (a collection selector contributes every entry it expands to), **plus their transitive dependency closure**. Concretely: for each selected entry, take its direct deps (from its SKILL.md `metadata.crew.dependencies`, resolved against `required_by` in state), then their deps, and so on. A dep that isn't in state — one that was never installed — is not added; Homecrew does not install new skills during update. Entries pulled in this way appear in the results alongside the selected entries, marked `transitively_required_by: [<name>...]` in JSON output so callers can tell them apart. An unknown top-level selector (no matching state entry, tap, or namespace) is an error per argument.
 2b. **Re-expand taps** per §10.1.1. For every git-kind tap with at
    least one state entry attributed to it (filtered by the same selector
    rule as step 2 — `crew update <selector>` only touches taps that
@@ -1870,6 +1893,11 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-23 | §10.1 / §16.6 | `crew update <selector>...` restricts fetching to taps that back the selected entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
 | C-UPD-24 | §10.1 | `crew update <selector>...` includes each selected entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the selected entries, marked as transitively required in `--json` output. |
 | C-UPD-25 | §10.1 | `crew update <tap>/<skill>` accepts a tap-qualified selector for an installed skill and updates the matching state entry. |
+| C-UPD-26 | §10.1 | `crew update <tap>` selects every installed entry attributed to that tap, fetches the tap, and (for whole-tap installs) re-expands it so newly added upstream skills are installed alongside the updates. |
+| C-UPD-27 | §10.1 | `crew update <tap>/<namespace>` and a bare `<namespace>` unique across taps select only the installed entries under `skills/<namespace>/`; sibling entries in other namespaces are left untouched. |
+| C-UPD-28 | §10.1 | An installed skill name wins over a same-named tap or namespace; a bare namespace with installed entries in more than one tap, or a word that is both a tap and a namespace elsewhere, is `ambiguous_reference` naming each qualified form. |
+| C-UPD-29 | §10.1 | `crew update <tap>` for a configured tap with no installed entries fetches the tap, reports that nothing is installed from it, and exits 0. |
+| C-UPD-30 | §10.1 | A selector matching no installed skill, tap, or namespace is `unknown_skill` and the message says so; `--json` carries `selectors` with each argument's resolved `kind`. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |

@@ -13,17 +13,35 @@
  * tap working tree, so the locks must be held across all three.
  */
 
-import type { Config, StateFile, TapConfig } from "../../core/types.ts";
+import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { installNewTapChild } from "../../install/install-new-tap-child.ts";
 import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import { updateOneEntry } from "../../install/update/entry.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
 import { withTapLocks } from "../../sources/tap-lock.ts";
+import {
+  type CollectionKind,
+  type CollectionSubject,
+  refreshCollectionSubjects,
+  resolveCollectionSubjects,
+} from "../../state/collections.ts";
 import { readState, upsertEntry } from "../../state/load.ts";
-import { resolveStateSubjects } from "../../state/subjects.ts";
 import { refreshTaps, type TapRefreshRow } from "../tap/refresh.ts";
 import type { CommandContext } from "../types.ts";
-import { chooseEntries, tapsToRefreshFor, withTransitive } from "./selection.ts";
+import type { CollectionSummary } from "./render.ts";
+import {
+  chooseEntries,
+  reexpandSelectionFor,
+  tapsToRefreshFor,
+  withTransitive,
+} from "./selection.ts";
+
+/** One resolved positional, echoed in `--json` so callers see how it was read. */
+export interface UpdateSelector {
+  readonly raw: string;
+  readonly kind: CollectionKind;
+  readonly name: string;
+}
 
 /** What an update run would do: the resulting state plus every output row. */
 export interface UpdatePlan {
@@ -32,6 +50,10 @@ export interface UpdatePlan {
   readonly tapReexpandRows: readonly TapReexpandRow[];
   readonly tapRows: readonly TapRefreshRow[];
   readonly hardFailure: boolean;
+  /** Collection selectors that expanded, for the human header. */
+  readonly collections: readonly CollectionSummary[];
+  /** Every resolved positional, echoed in `--json`. */
+  readonly selectors: readonly UpdateSelector[];
 }
 
 /**
@@ -52,26 +74,25 @@ export function planUpdate(
 
   // Dep-closure expansion — may add more entries, but they all live in
   // state already (we never install new skills during update).
-  const subjects = resolveStateSubjects(current, rawNames);
+  const subjects = resolveCollectionSubjects(current, config, rawNames);
   const { entries: initialSelected, transitiveSources } = chooseEntries(current, subjects);
-  const names = subjects.map((subject) => subject.name);
 
   // §10.1 step 1 (scoped): only the taps that back the entries this run
   // will actually touch. Their clones are locked for the whole plan —
   // refresh, re-expansion, and every per-skill source read — because
   // all three read or mutate the same working tree.
-  const taps = tapsToRefreshFor(config, names, initialSelected);
+  const taps = tapsToRefreshFor(config, subjects, initialSelected);
   return withTapLocks(taps, home, () =>
     planLockedUpdate({
       ctx,
       config,
       home,
       dryRun,
-      rawNames,
       taps,
       state: current,
       transitiveSources,
-      names,
+      subjects,
+      initialSelected,
     }),
   );
 }
@@ -82,11 +103,18 @@ interface LockedPlanInput {
   readonly config: Config;
   readonly home: string;
   readonly dryRun: boolean;
-  readonly rawNames: readonly string[];
   readonly taps: readonly TapConfig[];
   readonly state: StateFile;
   readonly transitiveSources: ReadonlyMap<string, readonly string[]>;
-  readonly names: readonly string[];
+  /**
+   * The resolved positionals. Carried whole rather than flattened to
+   * names: a selector's identity is `(tap, scope, project_root, name)`,
+   * and re-expansion must not rediscover a same-named entry from some
+   * other tap or scope (§10.1).
+   */
+  readonly subjects: readonly CollectionSubject[];
+  /** Entries the subjects expanded to, before re-expansion ran. */
+  readonly initialSelected: readonly StateEntry[];
 }
 
 /**
@@ -94,11 +122,22 @@ interface LockedPlanInput {
  * clone lock held.
  */
 function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
-  const { ctx, config, home, dryRun, rawNames, taps, transitiveSources, names } = input;
+  const { ctx, config, home, dryRun, taps, transitiveSources, subjects, initialSelected } =
+    input;
   const rows: UpdateRow[] = [];
   const tapReexpandRows: TapReexpandRow[] = [];
   let hardFailure = false;
   let current = input.state;
+  const selectors: UpdateSelector[] = subjects.map((s) => ({
+    raw: s.raw,
+    kind: s.kind,
+    name: s.name,
+  }));
+  const collections: CollectionSummary[] = [];
+  for (const s of subjects) {
+    if (s.kind === "skill") continue;
+    collections.push({ kind: s.kind, name: s.name, count: s.entries.length });
+  }
 
   const tapRows = refreshTaps(taps, home);
 
@@ -107,7 +146,7 @@ function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
     current,
     config,
     home,
-    names,
+    reexpandSelectionFor(subjects, initialSelected),
     (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
     dryRun,
   );
@@ -125,9 +164,13 @@ function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
   // tap-re-expansion state. In practice the set is stable — tap
   // re-expansion can add skills, but those come in as explicit
   // top-level entries and aren't part of the dep closure.
+  // Refresh membership against the post-re-expansion state WITHOUT
+  // re-resolving the raw strings: re-resolution would let a newly
+  // discovered same-named entry in another tap or scope capture a
+  // selector that was already bound elsewhere (§10.1).
   const { entries: targetEntries } = chooseEntries(
     current,
-    resolveStateSubjects(current, rawNames),
+    refreshCollectionSubjects(current, subjects),
   );
   for (const entry of targetEntries) {
     if (sourceGone.has(entry.name)) {
@@ -158,5 +201,13 @@ function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
     if (bumpHardFailure) hardFailure = true;
   }
 
-  return { state: current, rows, tapReexpandRows, tapRows, hardFailure };
+  return {
+    state: current,
+    rows,
+    tapReexpandRows,
+    tapRows,
+    hardFailure,
+    collections,
+    selectors,
+  };
 }

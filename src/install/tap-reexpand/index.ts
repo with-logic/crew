@@ -2,7 +2,7 @@
  * Tap re-expansion for `crew update` (§10.1.1).
  *
  * For every git-kind tap with at least one state entry attributed to it
- * (filtered by `restrictNames`), walk the tap one level deep and:
+ * (filtered by `ReexpandSelection`), walk the tap one level deep and:
  *
  *   1. ADDITIONS — children present upstream but not in state: validate
  *      in full (§9 step 4) and install via the caller-provided
@@ -24,10 +24,23 @@
 
 import type { CrewError } from "../../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
+import { entryIdentity } from "../../state/collections.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { groupChildrenByName } from "../tap-children.ts";
 import { collectAdditions } from "./additions.ts";
 import { type AcquiredTapScan, makeTapScanCache } from "./scan-cache.ts";
+
+/**
+ * Which groups a restricted run should re-expand. `memberIdentities`
+ * holds full entry identities (§11.1) rather than names, so a
+ * same-named skill from another tap or scope can't pull its group in;
+ * `tapNames` covers selectors that named a tap outright. `null` means
+ * no positionals — every group.
+ */
+export interface ReexpandSelection {
+  readonly memberIdentities: ReadonlySet<string>;
+  readonly tapNames: ReadonlySet<string>;
+}
 
 /** One re-expansion outcome row. */
 export interface TapReexpandRow {
@@ -62,7 +75,7 @@ export function reexpandTaps(
   state: StateFile,
   config: Config,
   home: string,
-  restrictNames: readonly string[],
+  selection: ReexpandSelection | null,
   installOne: InstallNewChild,
   dryRun: boolean = false,
 ): TapReexpandResult {
@@ -101,12 +114,14 @@ export function reexpandTaps(
     const tracksTap = members.some((m) => m.tracks_tap === true);
     if (!tracksTap) continue;
 
-    // Restrict by name filter — re-expand only if the user named a
-    // member of this group, or named the tap itself.
-    if (restrictNames.length > 0) {
-      const memberNames = new Set(members.map((m) => m.name));
-      const touchesMember = restrictNames.some((n) => memberNames.has(n));
-      const tapNamed = restrictNames.includes(tap.name);
+    // Restrict by selection — re-expand only if the user selected a
+    // member of THIS group, or named the tap itself. Membership is
+    // tested by full entry identity, not by name: a same-named skill
+    // in another tap or at another scope is a different install and
+    // must not drag this group into the run (§10.1).
+    if (selection !== null) {
+      const touchesMember = members.some((m) => selection.memberIdentities.has(entryIdentity(m)));
+      const tapNamed = selection.tapNames.has(tap.name);
       if (!(touchesMember || tapNamed)) continue;
     }
 
