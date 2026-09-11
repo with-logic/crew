@@ -201,6 +201,16 @@ shape of help output; wording is left to each implementation.
 - `crew help <unknown>` MUST fall back to the overview and exit 0.
 - `crew --json help` and `crew help <command> --json` MUST emit
   machine-readable structured help.
+- `--help` or `-h` anywhere on the command line MUST behave as
+  `crew help <command>`, where `<command>` is the first non-flag token
+  (skipping a leading `help`); with no such token it is `crew help`.
+  Other flags and positionals are ignored, except `--json`, which still
+  selects structured help. `crew tap remove --help` shows the `tap`
+  page — subcommand words are not separate help pages.
+- `--version`, `-v`, or `-V` as the FIRST token MUST behave as
+  `crew version` (honoring `--json`). After a command name (`crew
+  install -v`) these remain unknown flags — `usage_error`, exit 4 — so
+  `-v` stays free for a future `--verbose` short form.
 
 **Overview MUST contain:**
 
@@ -2033,6 +2043,9 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-12 | §5.5 | Per-command help for every command in §5.1 contains a USAGE synopsis and a description. Every command except `version` also contains at least one example. |
 | C-CLI-13 | §5.5 | `crew help --json` emits `{version, commands: [{name, synopsis, summary}]}` covering every command in §5.1. |
 | C-CLI-14 | §5.5 | `crew help <command> --json` emits `{name, synopsis, summary, ...}` with the per-command fields defined in §5.5. |
+| C-CLI-15 | §5.5 | `crew --help`, `crew -h`, `crew <command> --help`, and `crew <command> -h` print the same output as `crew help` / `crew help <command>` on stdout and exit 0; `--json` selects structured help. |
+| C-CLI-16 | §5.5 | `crew --version`, `crew -v`, and `crew -V` print the same output as `crew version` and exit 0; `--json` emits `{version}`. |
+| C-CLI-17 | §5.5 | `-v` after a command name (e.g. `crew install -v`) is an unknown flag: `usage_error`, exit 4. |
 
 ### 18.4 Worked examples
 

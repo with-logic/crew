@@ -29,8 +29,31 @@ export interface ParsedArgs {
   readonly flags: CommandFlags;
 }
 
+/**
+ * §5.5 conventional flags, applied as a pure argv rewrite before yargs
+ * sees anything:
+ *
+ *   - `--help` / `-h` anywhere → `help <command>`, where `<command>` is
+ *     the first non-flag token (a leading `help` is skipped). Only
+ *     `--json` survives the rewrite.
+ *   - `--version` / `-v` / `-V` as the FIRST token → `version`. After a
+ *     command name they stay unknown flags, so `-v` remains free for a
+ *     future `--verbose` short form.
+ */
+function rewriteConventionalFlags(argv: readonly string[]): readonly string[] {
+  const json = argv.includes("--json") ? ["--json"] : [];
+  const first = argv[0];
+  if (first === "--version" || first === "-v" || first === "-V") {
+    return ["version", ...json];
+  }
+  if (!argv.some((a) => a === "--help" || a === "-h")) return argv;
+  const command = argv.find((a) => !a.startsWith("-") && a !== "help");
+  return command === undefined ? ["help", ...json] : ["help", command, ...json];
+}
+
 /** Parse raw argv (already stripped of `node` and script name). */
-export function parseArgs(argv: readonly string[]): ParsedArgs {
+export function parseArgs(rawArgv: readonly string[]): ParsedArgs {
+  const argv = rewriteConventionalFlags(rawArgv);
   // Bare `crew` with no arguments: route to `help` so the user sees an
   // overview and examples rather than a "usage_error".
   const effective = argv.length === 0 ? (["help"] as readonly string[]) : argv;
