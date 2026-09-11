@@ -15,11 +15,11 @@ import { statSync } from "node:fs";
 import { DEFAULT_TAP_NAME } from "../../config/defaults.ts";
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import { tapPath } from "../../core/paths.ts";
+import { paths, tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { withStateLock } from "../../state/lock.ts";
-import { rmrf } from "../../util/fs.ts";
+import { rmrfInside } from "../../util/fs.ts";
 import { showCommandHelp } from "../help/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { tapAdd } from "./add.ts";
@@ -91,7 +91,9 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
     kind = tap.kind;
     const updated = { ...config, taps: config.taps.filter((t) => t.name !== name) };
     writeConfig(updated, ctx.home);
-    if (tap.kind === "git") rmrf(tapPath(name, ctx.home));
+    // The name came from config; keep the recursive delete inside the
+    // directory crew owns (see `rmrfInside`).
+    if (tap.kind === "git") rmrfInside(paths(ctx.home).tapsDir, tapPath(name, ctx.home));
     // Path taps don't own the directory; never delete it.
   }, ctx.home);
   return { exitCode: 0, human: renderTapRemove(name, kind, ctx.style), json: { name } };

@@ -1376,7 +1376,7 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `inconsistent_marker` | 6 | Marker exists with an unexpected `name`. |
 | `not_installed_here` | 6 | Uninstall agent has no marker. |
 | `no_agents` | 4 | No agent tools detected or all disabled. |
-| `config_invalid` | 4 | `config.yaml` did not parse. |
+| `config_invalid` | 4 | `config.yaml` did not parse, or a tap name is not a single directory component (contains `/`, `\`, or is `.`/`..`). |
 | `state_locked` | 7 | Could not acquire `state.json.lock` within timeout. |
 | `autoupdate_failure` | 8 | Autoupdate enable/disable couldn't load/unload the platform scheduler. |
 | `self_update_unavailable` | 5 | `crew self-update` couldn't reach the release feed, the asset is missing for the current arch, or the named `--version` doesn't exist. |
@@ -1923,6 +1923,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-22b | §16.3 / §16.6 | `crew tap add --recursive <url-or-path> <name>` persists recursive discovery for that tap; later `crew search` and `crew install <name>/<skill>` can find skills only reachable through bounded recursive fallback. |
 | C-TAP-23 | §16.2.1 / §16.6 | `crew search <query>` surfaces matching known-tap registry entries that are not already configured as suggestions after configured-tap hits, without cloning, fetching, mutating config, or listing them for `crew search` with no query. Suggestions include the canonical `crew tap add <source-ref> <name>` command. JSON includes those suggestions in `known_hits`. |
 | C-TAP-24 | §9 / §16.2.1 | `crew install <tap-source>` that cannot resolve from configured taps surfaces exact known-tap registry matches in the `invalid_ref` error, including canonical `crew tap add` and follow-up install commands, without cloning, fetching, mutating config, or installing from the known tap. JSON errors include `known_tap_suggestions`. |
+| C-TAP-25 | §6.1 / §16.5 | A tap name in `config.yaml` that is not a single directory component (contains `/` or `\`, or is `.`/`..`) is rejected with `config_invalid`, and no clone-directory deletion ever targets a path resolving outside `~/.crew/taps/`. |
 
 #### C-STATE: State and markers (§11)
 

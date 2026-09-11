@@ -66,20 +66,39 @@ export function identityOfStateSource(
  * Normalize a git URL so the spellings crew produces for one repository
  * compare equal: lowercase scheme and host, no trailing `.git`, no
  * trailing slash. Anything crew can't parse as a URL (`git@host:owner/repo`)
- * is lowercased and stripped the same way without host surgery.
+ * has only its host segment lowercased, since the path after the `:`
+ * is case-sensitive on the server.
  */
 export function canonicalRepoUrl(url: string): string {
   const trimmed = trimTrailingSlashes(url.trim());
   const withoutGit = trimmed.endsWith(".git") ? trimmed.slice(0, -4) : trimmed;
   const stripped = trimTrailingSlashes(withoutGit);
   const schemeEnd = stripped.indexOf("://");
-  if (schemeEnd < 0) return stripped;
+  if (schemeEnd < 0) return canonicalScpUrl(stripped);
   const scheme = stripped.slice(0, schemeEnd).toLowerCase();
   const rest = stripped.slice(schemeEnd + 3);
   const slash = rest.indexOf("/");
   const host = (slash < 0 ? rest : rest.slice(0, slash)).toLowerCase();
   const path = slash < 0 ? "" : rest.slice(slash);
   return `${scheme}://${host}${path}`;
+}
+
+/**
+ * Lowercase the host of an SCP-style remote (`git@GitHub.com:acme/repo`).
+ * Only the segment before the `:` is touched — the path after it is
+ * case-sensitive on the server, and the user part is left as typed.
+ * Anything without that shape is returned unchanged.
+ */
+function canonicalScpUrl(url: string): string {
+  const colon = url.indexOf(":");
+  if (colon < 0) return url;
+  const authority = url.slice(0, colon);
+  const path = url.slice(colon);
+  const at = authority.lastIndexOf("@");
+  const user = at < 0 ? "" : authority.slice(0, at + 1);
+  const host = authority.slice(at + 1);
+  if (host.length === 0) return url;
+  return `${user}${host.toLowerCase()}${path}`;
 }
 
 /** Join two POSIX path fragments, skipping empty ones. */

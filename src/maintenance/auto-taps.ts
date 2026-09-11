@@ -3,7 +3,7 @@
  *
  * Auto taps (`registered: false`) exist only to back state entries crew
  * created them for. Once the last entry attributed to one is gone —
- * uninstalled, or re-attributed to a broader tap covering the same
+ * uninstalled, or re-attributed to another tap covering the same
  * source — the tap row and its clone are dropped. Registered taps are
  * never collected here; only `crew tap remove` removes those.
  *
@@ -12,9 +12,9 @@
  */
 
 import { readConfig, writeConfig } from "../config/load.ts";
-import { tapPath } from "../core/paths.ts";
+import { paths, tapPath } from "../core/paths.ts";
 import type { StateFile } from "../core/types.ts";
-import { rmrf } from "../util/fs.ts";
+import { rmrfInside } from "../util/fs.ts";
 
 /**
  * Drop every auto tap that no longer backs a state entry. Returns the
@@ -27,8 +27,12 @@ export function garbageCollectAutoTaps(state: StateFile, home: string): string[]
   if (survivors.length === config.taps.length) return [];
   const removed = config.taps.filter((t) => !survivors.includes(t));
   writeConfig({ ...config, taps: survivors }, home);
+  const tapsDir = paths(home).tapsDir;
   for (const tap of removed) {
-    if (tap.kind === "git") rmrf(tapPath(tap.name, home));
+    // A tap name reaches us from `config.yaml`, so the clone path is
+    // built from persisted text. Refuse anything that resolves outside
+    // the taps directory rather than handing it to a recursive delete.
+    if (tap.kind === "git") rmrfInside(tapsDir, tapPath(tap.name, home));
     // Path taps own no clone dir; nothing to delete.
   }
   return removed.map((t) => t.name);
