@@ -745,7 +745,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    A location that produces zero valid skills through the applicable case aborts with `no_skills_found`.
    - Multi-skill expansions are how the user gets every skill in a tap installed at once. Each child becomes an independent state entry attributed to the same tap (`source.tap`); upstream additions to that tap are picked up automatically by `crew update` (§10.1.1).
 6. **Resolve dependencies.** For each skill in the install set, read `metadata.crew.dependencies` and add each to the install set. Continue recursively until no new dependencies appear. Cycles are allowed and terminate naturally (a skill already in the set is not re-added).
-   - **Install order:** the install set is ordered topologically — every dependency is installed before the skills that depend on it. When a cycle makes a strict ordering impossible, any order that respects the acyclic part is valid; the resulting installs are identical either way.
+   - **Install order:** the install set is ordered topologically — every dependency is installed before the skills that depend on it. Ordering uses the *resolved* name of each dependency (the `name` its `SKILL.md` declares), not the tail of the reference that selected it: a dependency referenced as `./dep-directory` but declaring `name: dep` is still ordered before its dependent. When a cycle makes a strict ordering impossible, any order that respects the acyclic part is valid; the resulting installs are identical either way.
    - **Bare-name resolution precedence:** (1) a sibling directory at the same source and ref (for sources where "sibling" is meaningful — git sources with a parent directory and path sources in a parent directory); (2) the tap the parent skill was installed from, if any; (3) search across all configured taps. An unqualified name matching multiple taps aborts with `ambiguous_dependency` naming the candidates.
    - **Conflict detection:** if two skills in the install set have the same `name` but come from different tap-relative source paths, or resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
 7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
@@ -758,7 +758,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
 
    **Exit code.** `crew install` computes its exit code from the set of attempted skills:
    - `0` — every attempted skill succeeded, or no work was needed because everything named was already installed (§5.4). "Nothing to do" is success, not a distinct exit code.
-   - `1` — at least one skill succeeded AND at least one skill failed (partial success). This is the rule for mixed outcomes across several root-listed skills: any root with zero successful agents makes the run exit 1.
+   - `1` — at least one skill succeeded AND at least one skill failed (partial success). This is the rule for mixed outcomes across several root-listed skills: in a run where at least one root succeeded, any root with zero successful agents makes the run exit 1. When *no* root succeeded, the rows below apply instead — a validation failure among them exits 4, not 1.
    - `4` — zero skills succeeded AND at least one skill failed validation. The error name is `invalid_skill` (§13).
    - `1` — zero skills succeeded AND no validation failures occurred (purely operational failures — agent errors, source unreachable, etc.).
 
@@ -1741,6 +1741,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-19 | §9 | `state.json` may contain multiple project-scope entries for the same skill name, each with a different `project_root` — they're independent installs, not duplicates. |
 | C-INST-20 | §9 step 9 | A validation failure on any skill is recorded as a failed skill; the run continues through the remaining skills. It does not abort the command. |
 | C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation). |
+| C-INST-21a | §9 step 9 | Two directly-named roots where one succeeds in ≥1 agent and the other fails in every selected agent: the run exits 1 and both roots appear in the output. |
 | C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
@@ -1762,7 +1763,7 @@ Implementations and test suites refer to criteria by ID.
 
 | ID | Reference | Assertion |
 |---|---|---|
-| C-DEP-01 | §9 step 6 | A skill with `dependencies` has each dependency installed before itself. |
+| C-DEP-01 | §9 step 6 | A skill with `dependencies` has each dependency installed before itself, including when the dependency's reference tail differs from the `name` its `SKILL.md` declares. |
 | C-DEP-02 | §9 step 6 | A bare-name dependency resolves first to a sibling at the same source and ref when present. |
 | C-DEP-03 | §9 step 6 | A bare-name dependency whose parent came from a tap falls back to that tap before searching other taps. |
 | C-DEP-04 | §9 step 6 | A bare-name dependency unambiguously present in only one configured tap resolves to that tap. |
