@@ -31,11 +31,18 @@ export type NameCandidate =
       readonly members: readonly SkillLocation[];
     };
 
-/** Walk every configured tap and collect candidates for `name`. */
+/**
+ * Walk every configured tap and collect candidates for `name`.
+ *
+ * `roots` supplies already-materialized directories per tap name, so a
+ * ref-carrying reference resolves against the requested commit instead
+ * of the shared clone's checked-out revision (§9 step 3).
+ */
 export function enumerateCandidates(
   name: string,
   config: Config,
   home: string,
+  roots: Readonly<Record<string, string | undefined>> = {},
 ): readonly NameCandidate[] {
   const out: NameCandidate[] = [];
   for (const tap of config.taps) {
@@ -44,7 +51,7 @@ export function enumerateCandidates(
     }
     let index: TapIndex;
     try {
-      index = indexTap(tap, home);
+      index = indexTap(tap, home, roots[tap.name]);
     } catch {
       // Soft-fail unreachable taps; same policy as search.
       continue;

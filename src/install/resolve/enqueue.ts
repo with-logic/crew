@@ -8,19 +8,20 @@
 
 import { join } from "node:path";
 import type { Config, LoadedSkill, TapConfig } from "../../core/types.ts";
-import { withAcquiredTap } from "../../sources/acquire/index.ts";
+import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { StoredSkill } from "../../sources/store.ts";
-import { type KindHint, resolveTapRef } from "../resolve-ref/index.ts";
+import { type KindHint, resolveTapRef, type TapRoots } from "../resolve-ref/index.ts";
 import { expandSkillsAsItems } from "./expand-items.ts";
 
 /**
  * Where a candidate's skill directory lives in the acquired tree.
  *
- * `resolveTapRef` indexes the tap's live clone, so `location.path` is
- * absolute inside it. When a ref was requested the content comes from a
- * scratch export instead, so rebuild the path from the tap-relative one
- * against the acquired root (§9 step 3).
+ * Without a ref, `resolveTapRef` indexed the live clone and
+ * `location.path` is absolute inside it. With a ref, resolution already
+ * ran against the scratch export, but rebuilding from the tap-relative
+ * path keeps this independent of which root produced the location
+ * (§9 step 3).
  */
 function memberDir(
   rootDir: string,
@@ -81,55 +82,91 @@ export function enqueueTapRef(
     }
   }
 
-  const candidate = resolveTapRef(
-    {
-      type: "tap",
-      tap: source.tap,
-      namespace: source.namespace,
-      name: source.name,
-      ref: source.ref,
-    },
-    config,
-    home,
-    kindHint,
-  );
-
-  if (candidate.kind === "namespace") {
-    const items: PendingItem[] = [];
-    const skipped: SkippedSkill[] = [];
-    withAcquiredTap(candidate.tap, source.ref, home, (acquired) => {
-      for (const member of candidate.members) {
-        const expansion = expandSkillsAsItems(
-          memberDir(acquired.rootDir, member, source.ref),
-          candidate.tap,
-          member.tapRelativePath,
-          acquired.resolvedSha,
-          source.ref,
-          acquired.pinned,
-          explicit,
-          true,
-          home,
-        );
-        items.push(...expansion.items);
-        skipped.push(...expansion.skipped);
-      }
-    });
-    return { items, config, skipped };
-  }
-
-  const skill = candidate as Extract<typeof candidate, { kind: "skill" }>;
-  const expansion = withAcquiredTap(skill.tap, source.ref, home, (acquired) =>
-    expandSkillsAsItems(
-      memberDir(acquired.rootDir, skill.location, source.ref),
-      skill.tap,
-      skill.location.tapRelativePath,
-      acquired.resolvedSha,
-      source.ref,
-      acquired.pinned,
-      explicit,
-      false,
+  // With a ref, the named tap's commit is exported FIRST and resolution
+  // runs against that tree: a skill present at `@v1` but deleted at HEAD
+  // is invisible to an index of the live clone (§9 step 3).
+  return withResolutionRoot(source, config, home, (roots, acquired) => {
+    const candidate = resolveTapRef(
+      {
+        type: "tap",
+        tap: source.tap,
+        namespace: source.namespace,
+        name: source.name,
+        ref: source.ref,
+      },
+      config,
       home,
-    ),
+      kindHint,
+      roots,
+    );
+
+    if (candidate.kind === "namespace") {
+      const items: PendingItem[] = [];
+      const skipped: SkippedSkill[] = [];
+      const run = (acq: AcquiredTap): void => {
+        for (const member of candidate.members) {
+          const expansion = expandSkillsAsItems(
+            memberDir(acq.rootDir, member, source.ref),
+            candidate.tap,
+            member.tapRelativePath,
+            acq.resolvedSha,
+            source.ref,
+            acq.pinned,
+            explicit,
+            true,
+            home,
+          );
+          items.push(...expansion.items);
+          skipped.push(...expansion.skipped);
+        }
+      };
+      if (acquired) run(acquired);
+      else withAcquiredTap(candidate.tap, source.ref, home, run);
+      return { items, config, skipped };
+    }
+
+    const skill = candidate as Extract<typeof candidate, { kind: "skill" }>;
+    const expand = (acq: AcquiredTap) =>
+      expandSkillsAsItems(
+        memberDir(acq.rootDir, skill.location, source.ref),
+        skill.tap,
+        skill.location.tapRelativePath,
+        acq.resolvedSha,
+        source.ref,
+        acq.pinned,
+        explicit,
+        false,
+        home,
+      );
+    const expansion = acquired
+      ? expand(acquired)
+      : withAcquiredTap(skill.tap, source.ref, home, expand);
+    return { items: expansion.items, config, skipped: expansion.skipped };
+  });
+}
+
+/**
+ * Run `fn` with the requested commit already materialized, when the
+ * reference both carries a ref and names a tap we can identify up front.
+ *
+ * A qualified ref (`<tap>/<skill>@v1`, `<tap>/<ns>/<skill>@v1`) names its
+ * tap directly, so the export can precede resolution. A bare name with a
+ * ref could live in any configured tap, so resolution has to come first;
+ * `fn` then acquires per-candidate as before. Without a ref there is
+ * nothing to export and the live clone is correct.
+ */
+function withResolutionRoot<T>(
+  source: { tap: string | null; ref: string | null },
+  config: Config,
+  home: string,
+  fn: (roots: TapRoots, acquired: AcquiredTap | null) => T,
+): T {
+  const named =
+    source.ref !== null && source.tap !== null
+      ? config.taps.find((t) => t.name === source.tap)
+      : undefined;
+  if (!named) return fn({}, null);
+  return withAcquiredTap(named, source.ref, home, (acquired) =>
+    fn({ [named.name]: acquired.rootDir }, acquired),
   );
-  return { items: expansion.items, config, skipped: expansion.skipped };
 }

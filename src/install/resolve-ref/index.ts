@@ -26,6 +26,13 @@ import { ambiguityError, flagFor } from "./errors.ts";
 /** Force-one-kind hint from a `--tap` / `--bundle` / `--skill` flag. */
 export type SpecificKindHint = "tap" | "namespace" | "skill";
 export type KindHint = SpecificKindHint | "non-tap" | null;
+/**
+ * Already-materialized root directories, keyed by tap name. A
+ * ref-carrying reference exports its commit first and passes the result
+ * here, so resolution reads the requested commit rather than the shared
+ * clone's checked-out revision (§9 step 3).
+ */
+export type TapRoots = Readonly<Record<string, string | undefined>>;
 export type NonTapNameCandidate = Exclude<NameCandidate, { readonly kind: "tap" }>;
 
 /**
@@ -37,34 +44,42 @@ export function resolveTapRef(
   config: Config,
   home: string,
   kindHint: "non-tap",
+  roots?: TapRoots,
 ): NonTapNameCandidate;
 export function resolveTapRef(
   source: TapSource,
   config: Config,
   home: string,
   kindHint?: KindHint,
+  roots?: TapRoots,
 ): NameCandidate;
 export function resolveTapRef(
   source: TapSource,
   config: Config,
   home: string,
   kindHint: KindHint = null,
+  roots: TapRoots = {},
 ): NameCandidate {
   // 3-segment: <tap>/<namespace>/<skill> — always unambiguous.
   if (source.tap !== null && source.namespace !== null) {
-    return resolveThreeSegment(source, config, home);
+    return resolveThreeSegment(source, config, home, roots);
   }
 
   // 2-segment: <first>/<second>. Try tap-first, then namespace-first.
   if (source.tap !== null && source.namespace === null) {
-    return resolveTwoSegment(source, config, home);
+    return resolveTwoSegment(source, config, home, roots);
   }
 
   // Bare name.
-  return resolveBare(source.name, config, home, kindHint);
+  return resolveBare(source.name, config, home, kindHint, roots);
 }
 
-function resolveThreeSegment(source: TapSource, config: Config, home: string): NonTapNameCandidate {
+function resolveThreeSegment(
+  source: TapSource,
+  config: Config,
+  home: string,
+  roots: TapRoots,
+): NonTapNameCandidate {
   const tap = config.taps.find((t) => t.name === source.tap);
   if (!tap) {
     throw new CrewError(
@@ -74,7 +89,7 @@ function resolveThreeSegment(source: TapSource, config: Config, home: string): N
       "View your configured taps with `crew tap list`.",
     );
   }
-  const index = indexTap(tap, home);
+  const index = indexTap(tap, home, roots[tap.name]);
   const locs = index.skills.get(source.name) ?? [];
   const match = locs.find((l) => l.namespace === source.namespace);
   if (!match) {
@@ -87,18 +102,23 @@ function resolveThreeSegment(source: TapSource, config: Config, home: string): N
   return { kind: "skill", tap, location: match };
 }
 
-function resolveTwoSegment(source: TapSource, config: Config, home: string): NonTapNameCandidate {
+function resolveTwoSegment(
+  source: TapSource,
+  config: Config,
+  home: string,
+  roots: TapRoots,
+): NonTapNameCandidate {
   const first = source.tap!;
   const second = source.name;
   const tap = config.taps.find((t) => t.name === first);
-  const asTapSkill = tap ? lookupInTap(tap, home, second) : null;
+  const asTapSkill = tap ? lookupInTap(tap, home, second, roots) : null;
 
   // Collect namespace candidates: `<first>` is a namespace in some tap
   // that holds a skill named `<second>`.
   const nsCandidates: NonTapNameCandidate[] = [];
   for (const t of config.taps) {
     if (t === tap) continue;
-    const idx = safeIndex(t, home);
+    const idx = safeIndex(t, home, roots);
     if (!idx) continue;
     const nsMembers = idx.namespaces.get(first);
     if (!nsMembers) continue;
@@ -133,8 +153,9 @@ function resolveBare(
   config: Config,
   home: string,
   kindHint: KindHint,
+  roots: TapRoots,
 ): NameCandidate {
-  const all = enumerateCandidates(name, config, home);
+  const all = enumerateCandidates(name, config, home, roots);
 
   if (kindHint === "non-tap") {
     const filtered = all.filter((c): c is NonTapNameCandidate => c.kind !== "tap");
@@ -176,8 +197,13 @@ function resolveBare(
   throw ambiguityError(name, all);
 }
 
-function lookupInTap(tap: TapConfig, home: string, name: string): NonTapNameCandidate | null {
-  const idx = safeIndex(tap, home);
+function lookupInTap(
+  tap: TapConfig,
+  home: string,
+  name: string,
+  roots: TapRoots,
+): NonTapNameCandidate | null {
+  const idx = safeIndex(tap, home, roots);
   if (!idx) return null;
   const locs = idx.skills.get(name);
   if (!locs || locs.length === 0) return null;
@@ -188,9 +214,9 @@ function lookupInTap(tap: TapConfig, home: string, name: string): NonTapNameCand
   return { kind: "skill", tap, location: unnamespaced ?? locs[0]! };
 }
 
-function safeIndex(tap: TapConfig, home: string): TapIndex | null {
+function safeIndex(tap: TapConfig, home: string, roots: TapRoots): TapIndex | null {
   try {
-    return indexTap(tap, home);
+    return indexTap(tap, home, roots[tap.name]);
   } catch {
     return null;
   }

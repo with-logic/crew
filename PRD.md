@@ -83,7 +83,7 @@ metadata:
 
 **`metadata.crew.dependencies`** (list of strings, optional). Other skills to install before this one. Each entry is a skill reference in any of the forms `crew install` accepts (§8). Bare names (`general-python-style`) resolve in the precedence order defined in §9.
 
-**Versions are git commit SHAs.** Homecrew does not define a version field. Every installed skill is identified by the SHA of the commit it was resolved from. Tags and branches resolve to SHAs at install time. Users pin with `@<sha>`, `@<tag>`, or `@<branch>`.
+**Versions are git commit SHAs.** Homecrew does not define a version field. Every installed skill is identified by the SHA of the commit it was resolved from. Tags and branches resolve to SHAs at install time. Users pin with `@<sha>` or `@<tag>`; `@<branch>` selects a branch to follow, and `crew update` advances it as that branch moves (§11.1).
 
 **Multi-skill directories.** A directory containing more than one skill has no special designation. When `crew install` is pointed at a source, Homecrew looks for a `SKILL.md` at the root. If present, one skill is installed. If not, Homecrew walks the standard tap layouts (§9 step 5). Trusted non-standard repositories can opt into bounded recursive fallback discovery. A skill's install name always comes from the `name` field in its `SKILL.md`; the source directory name is only a filesystem location and need not match.
 
@@ -763,7 +763,13 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - If a tap-source reference cannot be resolved from configured taps, Homecrew consults the known-tap registry (§16.2.1) before returning `invalid_ref`. Exact known-tap matches are suggestions only: Homecrew MUST NOT clone, fetch, add a tap to config, or install anything from a known tap until the user explicitly runs the suggested `crew tap add <source-ref> <name>` command (or a future interactive flow confirms that same action). The error MUST include the tap-add command and the follow-up `crew install <tap>/<skill>` or `crew install <tap>` command.
 3. **Resolve refs to SHAs.** For git sources and tap sources, the ref (tag, branch, or `HEAD`) is resolved to a full commit SHA. This SHA is what's recorded in state and markers, even if the user specified a tag or branch. If the ref is not present in the local clone, crew fetches once and re-resolves; a ref that is still unknown is `ref_not_found` (§13, exit 5).
 
-   Every subsequent step — validation (step 4), expansion (step 5), and staging (step 8) — reads the source **as of the resolved SHA**, so an `@<tag|branch|sha>` reference installs that commit's bytes. Implementations MUST NOT let a requested ref fall back to whatever revision the local clone happens to have checked out. Because a tap's clone is shared by `crew search`, tap re-expansion, and other installs, an implementation that materializes the commit MUST do so without leaving the shared clone on a different revision.
+   Every subsequent step — validation (step 4), expansion (step 5), and staging (step 8) — reads the source **as of the resolved SHA**, so an `@<tag|branch|sha>` reference installs that commit's bytes. Implementations MUST NOT let a requested ref fall back to whatever revision the local clone happens to have checked out. Because a tap's clone is shared by `crew search`, tap re-expansion, and other installs, an implementation that materializes the commit MUST do so without leaving the shared clone on a different revision — including when a missing ref prompts a fetch, which MUST NOT move the shared checkout.
+
+   **Resolution reads the same commit.** Deciding *which* skill or namespace a reference names is itself a read of the source, so it too happens as of the resolved SHA. A skill present at `@<ref>` but deleted at the default branch MUST still resolve, install, and preview.
+
+   **Dependencies inherit their parent's commit.** A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records the same ref and pinning. Recording the parent's SHA over content read from another revision would make state describe a provenance the bytes do not have.
+
+   **The materialized tree is a boundary.** The resolved location MUST be reached without traversing a symlink. A repository can commit a symlink at the very path a reference names; following it would read content from outside the requested commit — potentially from anywhere on the host filesystem.
 4. **Validate each candidate skill** against the Agent Skills specification:
    - `SKILL.md` exists at the expected location.
    - Frontmatter parses as YAML.
@@ -1782,6 +1788,9 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-05b | §8.2, §9 step 3 | `crew install <url>@<tag>` installs the bytes as of the tag's commit, not the default branch's, and records that commit as `resolved_sha`. The same holds for `@<sha>` and for a tap-source `<tap>/<skill>@<tag>`. |
 | C-INST-05c | §9 step 3 | A reference whose `@<ref>` does not exist in the repo fails with `ref_not_found`, exit 5. |
 | C-INST-05d | §9 step 3 | Installing at a ref leaves the tap's shared clone on its previous revision and leaves no scratch directories behind. |
+| C-INST-05e | §9 step 3 | Reference resolution reads the requested commit: `crew install <tap>/<skill>@<ref>` and `crew info <tap>/<skill>@<ref>` succeed for a skill present at that commit even when it has been deleted at the default branch. |
+| C-INST-05f | §9 step 3, §9 step 6 | A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records that ref. |
+| C-INST-05g | §9 step 3 | A reference whose resolved location is reached through a symlink is rejected; content outside the requested commit is never read or installed. |
 | C-INST-06 | §9 | `crew install gh:owner/repo` pointed at a repo with a root `SKILL.md` installs one skill. |
 | C-INST-07 | §9 step 5 | `crew install gh:owner/repo` pointed at a repo with no root `SKILL.md` but skill subdirectories installs every valid child one level deep. |
 | C-INST-08 | §9 step 5 | Nested skills more than one level deep are NOT installed by directory expansion. |
