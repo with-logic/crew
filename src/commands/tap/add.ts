@@ -26,11 +26,15 @@ import { promoteExistingTap } from "./promote.ts";
 import { renderTapAdd, type TapAddOutcome } from "./render.ts";
 import { displayTarget, parseTapAddTarget, sameTap, type TapAddTarget } from "./target.ts";
 
-/** What `planAdd` decided, plus the existing row it applies to (if any). */
-interface TapAddPlan {
-  readonly outcome: TapAddOutcome;
-  readonly sameTarget: TapConfig | undefined;
-}
+/**
+ * What `planAdd` decided. The outcomes that act on an existing row carry
+ * it in the variant, so `applyAdd` can't reach for a row that isn't there.
+ */
+type TapAddPlan =
+  | { readonly outcome: "added" }
+  | { readonly outcome: "no-op" }
+  | { readonly outcome: "updated"; readonly sameTarget: TapConfig }
+  | { readonly outcome: "promoted"; readonly sameTarget: TapConfig };
 
 export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
   if (args.length < 1)
@@ -81,7 +85,7 @@ function planAdd(
   if (sameTarget) {
     if (sameTarget.registered && (explicitName === undefined || explicitName === sameTarget.name)) {
       const upgrade = recursive && sameTarget.discovery !== "recursive";
-      return { outcome: upgrade ? "updated" : "no-op", sameTarget };
+      return upgrade ? { outcome: "updated", sameTarget } : { outcome: "no-op" };
     }
     return { outcome: "promoted", sameTarget };
   }
@@ -99,7 +103,7 @@ function planAdd(
       `\`${target.path}\` isn't a directory — \`crew tap add\` needs an existing local path`,
       { path: target.path },
     );
-  return { outcome: "added", sameTarget: undefined };
+  return { outcome: "added" };
 }
 
 /** The write-under-lock flow for a planned outcome. */
@@ -114,8 +118,7 @@ function applyAdd(
 ): void {
   if (plan.outcome === "no-op") return;
   if (plan.outcome === "updated") {
-    // `sameTarget` is always set for the updated/promoted outcomes.
-    const existing = plan.sameTarget!;
+    const existing = plan.sameTarget;
     writeConfig(
       {
         ...config,
@@ -137,7 +140,7 @@ function applyAdd(
       ctx.home,
       ctx.cwd,
       config,
-      plan.sameTarget!,
+      plan.sameTarget,
       target.kind,
       explicitName,
       recursive,

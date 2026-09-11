@@ -135,7 +135,9 @@ export function renderTapUpdate(
     return [style.dim("No taps to update.")];
   }
   const lines: string[] = [];
-  const refreshed = rows.filter((r) => r.kind === "refreshed" || r.kind === "pending").length;
+  // Counts both outcomes for a tap with an upstream: actually refreshed on a
+  // real run, `pending` on a preview.
+  const fetchable = rows.filter((r) => r.kind === "refreshed" || r.kind === "pending").length;
   const skipped = rows.filter((r) => r.kind === "skipped").length;
   const failed = rows.filter((r) => r.kind === "failed").length;
 
@@ -153,7 +155,7 @@ export function renderTapUpdate(
   for (const line of columns(cells, 2)) lines.push(line);
 
   lines.push("");
-  lines.push(style.dim(formatTapTotals(refreshed, skipped, failed, dryRun)));
+  lines.push(style.dim(formatTapTotals(fetchable, skipped, failed, dryRun)));
   return lines;
 }
 
@@ -171,19 +173,19 @@ function statusWord(r: TapRefreshRow, style: Styler): string {
 }
 
 function detailFor(r: TapRefreshRow, style: Styler): string {
-  if (r.kind === "refreshed" || r.kind === "pending") return style.dim(r.url ?? "");
+  if (r.kind === "refreshed" || r.kind === "pending") return style.dim(r.url);
   if (r.kind === "skipped") return style.dim(r.reason ?? "local folder, nothing to fetch");
   return style.red(r.error?.code ?? "unknown");
 }
 
 function formatTapTotals(
-  refreshed: number,
+  fetchable: number,
   skipped: number,
   failed: number,
   dryRun: boolean,
 ): string {
   const parts: string[] = [];
-  if (refreshed > 0) parts.push(`${refreshed} ${dryRun ? "would be fetched" : "refreshed"}`);
+  if (fetchable > 0) parts.push(`${fetchable} ${dryRun ? "would be fetched" : "refreshed"}`);
   if (skipped > 0) parts.push(`${skipped} skipped`);
   if (failed > 0) parts.push(plural(failed, "failure"));
   return parts.length === 0 ? "nothing changed" : parts.join(" · ");
