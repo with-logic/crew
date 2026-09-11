@@ -12,17 +12,16 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
-import { installSkillIntoAgents } from "../../agents/install.ts";
-import { agentByName } from "../../agents/registry.ts";
+import { cwdForEntry } from "../../agents/adapter.ts";
 import { CrewError } from "../../core/errors.ts";
-import type { Config, StateEntry, StateFile } from "../../core/types.ts";
+import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
-import { acquireTap } from "../../sources/acquire/index.ts";
+import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { nowIso } from "../../util/time.ts";
-import type { InternalOutcome, PerAgentUpdate, UpdateRow } from "./types.ts";
+import { reinstallIntoAgents } from "./reinstall.ts";
+import type { InternalOutcome, UpdateRow } from "./types.ts";
 
 export function updateOneEntry(
   entry: StateEntry,
@@ -114,7 +113,23 @@ function updateOne(
       { tap: entry.source.tap },
     );
   }
-  const acquired = acquireTap(tap, home);
+  // §10.1 step 3c: re-resolve the entry's own ref. A branch-pinned entry
+  // tracks that branch, and a forced tag update installs the tag's
+  // current commit — neither is the clone's `origin/HEAD`.
+  return withAcquiredTap(tap, entry.ref, home, (acquired) =>
+    applyUpdate(entry, acquired, tap, home, force, entryCwd),
+  );
+}
+
+/** Stage and reinstall one entry from an already-acquired tree. */
+function applyUpdate(
+  entry: StateEntry,
+  acquired: AcquiredTap,
+  tap: TapConfig,
+  home: string,
+  force: boolean,
+  entryCwd: string,
+): InternalOutcome {
   const newSha = acquired.resolvedSha;
 
   if (entry.pinned && !force && newSha !== null && newSha !== entry.resolved_sha) {
@@ -132,48 +147,15 @@ function updateOne(
 
   const loaded = loadSkill(skillDir);
   const staged = stageIntoStore(loaded.path, entry.name, newSha, home);
-  const perTarget: PerAgentUpdate[] = [];
-  // Group by resolved install path (§7.2 path sharing) so shared-path
-  // targets install once but every adapter reports its own outcome.
-  const groups = new Map<string, AgentAdapter[]>();
-  for (const targetName of entry.agents) {
-    const adapter = agentByName(targetName);
-    if (!adapter) continue;
-    const base = baseFor(adapter, entry.scope, entryCwd);
-    if (base === "") continue;
-    const dest = `${base}/${entry.name}`;
-    const existing = groups.get(dest);
-    if (existing) existing.push(adapter);
-    else groups.set(dest, [adapter]);
-  }
-  for (const group of groups.values()) {
-    try {
-      const res = installSkillIntoAgents({
-        agents: group,
-        scope: entry.scope,
-        cwd: entryCwd,
-        storePath: staged.storePath,
-        skillName: entry.name,
-        tap,
-        tapRelativePath: entry.source.path,
-        ref: entry.ref,
-        resolvedSha: newSha,
-        contentHash: staged.contentHash,
-        force,
-      });
-      for (const a of group) {
-        perTarget.push({
-          agent: a.name,
-          kind: res.kind === "installed" ? "installed" : "up_to_date",
-        });
-      }
-    } catch (err) {
-      const ce = err as CrewError;
-      for (const a of group) {
-        perTarget.push({ agent: a.name, kind: "skipped", reason: ce.code });
-      }
-    }
-  }
+  const perTarget = reinstallIntoAgents({
+    entry,
+    tap,
+    storePath: staged.storePath,
+    contentHash: staged.contentHash,
+    newSha,
+    force,
+    entryCwd,
+  });
   return {
     kind: "updated",
     new_sha: newSha,

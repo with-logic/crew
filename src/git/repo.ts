@@ -67,7 +67,10 @@ export function ensureClone(url: string, dest: string): boolean {
  */
 export function fetchAndCheckout(dest: string): void {
   try {
-    runGit(["fetch", "--tags", "--prune", "origin"], { cwd: dest });
+    // `--force` so a tag that moved upstream moves here too; plain
+    // `--tags` refuses to update a tag that already exists locally,
+    // which would hide the "tag moved" case §10.1 step 3b describes.
+    runGit(["fetch", "--tags", "--force", "--prune", "origin"], { cwd: dest });
   } catch (err) {
     const ge = err as GitProcessError;
     throw new CrewError(
