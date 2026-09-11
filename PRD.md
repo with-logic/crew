@@ -146,7 +146,7 @@ Accepted on any command where they apply:
 - `--dry-run` — describe what would happen without changing anything.
 - `--json` — emit machine-readable output. Required on `list`, `search`, `info`, `agents`, `autoupdate status`. Optional on all other commands; when provided, humans-readable output is suppressed and a structured result is emitted.
 - `--quiet` — suppress non-error output. Error output still goes to stderr.
-- `--verbose` — emit progress details to stderr.
+- `--verbose` — emit progress details to stderr: every `git` (and scheduler) subprocess invocation, tap clone/fetch, store staging, and per-agent install/uninstall step, one line each. Lines go to stderr only, so `--verbose --json` still leaves a clean JSON payload on stdout. Without the flag, none of these lines are emitted.
 - `--yes` — answer "yes" to any confirmation prompt.
 - `--force` — override safety checks as defined in §7 and §10. Never overrides spec validation failures or two-skills-same-name conflicts.
 
@@ -1965,6 +1965,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-04 | §5.1 | `crew version` prints a version string and exits 0. |
 | C-CLI-05 | §5.2 | `--json` on `list`, `search`, `info`, `agents`, `autoupdate status` produces valid JSON on stdout and no human-readable noise. |
 | C-CLI-06 | §5.2 | `--quiet` suppresses non-error stdout. Error output still reaches stderr. |
+| C-CLI-06a | §5.2 | `--verbose` emits progress lines (git invocations, store staging, per-agent install paths) on stderr and nothing extra on stdout; without the flag those lines are absent, including on the run after a failed `--verbose` run. |
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
 | C-CLI-09 | §5.5 | Bare `crew` is equivalent to `crew help` — same output, exit 0 (no "usage error"). |

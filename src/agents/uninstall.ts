@@ -11,6 +11,7 @@ import { CrewError } from "../core/errors.ts";
 import type { Marker, Scope } from "../core/types.ts";
 import { rmrf } from "../util/fs.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
+import { progress } from "../util/progress.ts";
 import { type AgentAdapter, baseFor } from "./adapter.ts";
 
 /** Input to uninstall from one `dest` shared by a group of agents. */
@@ -36,6 +37,9 @@ export type UninstallOutcome =
 export function uninstallSkillFromAgents(input: UninstallInput): UninstallOutcome {
   const base = baseFor(input.agents[0]!, input.scope, input.cwd);
   const dest = join(base, input.skillName);
+  progress(
+    `removing ${input.skillName} from ${dest} (${input.agents.map((a) => a.name).join(", ")})`,
+  );
   if (!existsSync(dest)) return missingInstall(input, dest, base);
   const marker = tryReadJson<Marker>(join(dest, ".crew.json"));
   if (!marker) return untrackedInstall(input, dest);

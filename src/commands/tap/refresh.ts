@@ -19,6 +19,7 @@ import type { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { ensureRepo } from "../../git/repo.ts";
+import { progress } from "../../util/progress.ts";
 
 export interface TapRefreshRow {
   readonly name: string;
@@ -42,6 +43,7 @@ export function refreshTaps(taps: readonly TapConfig[], home: string): TapRefres
       continue;
     }
     try {
+      progress(`refreshing tap ${tap.name} from ${tap.url}`);
       ensureRepo(tap.url, tapPath(tap.name, home));
       rows.push({ name: tap.name, url: tap.url, kind: "refreshed" });
     } catch (err) {

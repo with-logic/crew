@@ -35,6 +35,10 @@ export const installHelp: CommandHelp = {
         "For direct git/path sources, fall back to bounded recursive discovery when standard tap layouts find no skills.",
     },
     { flag: "--json", description: "Machine-readable output." },
+    {
+      flag: "--verbose",
+      description: "Show each git command, store step, and install path on stderr as it happens.",
+    },
   ],
   examples: [
     {
