@@ -1,14 +1,19 @@
 /**
- * `crew tap add <url-or-path> [<name>]` (§16.3). Three outcomes:
+ * `crew tap add <url-or-path> [<name>]` (§16.3). Four outcomes:
  * *added* (new tap row; git taps clone first), *no-op* (same target
  * already configured as registered), *promoted* (same target already
- * backs an auto tap — see `./promote.ts`).
+ * backs an auto tap — see `./promote.ts`), *updated* (same registered
+ * target upgraded to recursive discovery).
+ *
+ * Planning (`planAdd`) is pure — it reads config and decides the
+ * outcome or throws the usage errors — so `--dry-run` can report the
+ * outcome without cloning or writing anything (§16.3).
  */
 
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
-import type { TapConfig } from "../../core/types.ts";
+import type { Config, TapConfig } from "../../core/types.ts";
 import { ensureClone } from "../../git/repo.ts";
 import { rewriteTapMarkers } from "../../install/rewrite-tap-markers.ts";
 import { deriveAutoTapName } from "../../install/tap-naming.ts";
@@ -16,18 +21,16 @@ import { NAME_PATTERN } from "../../refs/parse.ts";
 import { readState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { exists, isDirectory, rmrf } from "../../util/fs.ts";
-import type { Styler } from "../../util/term.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promoteExistingTap } from "./promote.ts";
-import {
-  displayTarget,
-  parseTapAddTarget,
-  payloadOf,
-  sameTap,
-  type TapAddTarget,
-} from "./target.ts";
+import { renderTapAdd, type TapAddOutcome } from "./render.ts";
+import { displayTarget, parseTapAddTarget, sameTap, type TapAddTarget } from "./target.ts";
 
-type Outcome = "added" | "no-op" | "promoted" | "updated";
+/** What `planAdd` decided, plus the existing row it applies to (if any). */
+interface TapAddPlan {
+  readonly outcome: TapAddOutcome;
+  readonly sameTarget: TapConfig | undefined;
+}
 
 export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
   if (args.length < 1)
@@ -47,50 +50,40 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
       { name },
     );
   }
+  if (ctx.flags.dryRun) {
+    // Read-only preview: no lock, no clone, no config write (§16.3).
+    const plan = planAdd(readConfig(ctx.home), name, rawArg, explicitName, target, recursive);
+    return renderTapAdd(plan.outcome, name, target, true, ctx.style);
+  }
   // Wrap in an object so TS doesn't narrow the literal type via the
   // initial assignment — `withStateLock`'s callback assigns later but
   // TS doesn't trace control flow into closures.
-  const out: { value: Outcome } = { value: "added" };
+  const out: { value: TapAddOutcome } = { value: "added" };
   withStateLock(() => {
-    out.value = performAdd(ctx, name, rawArg, explicitName, target, recursive);
+    const config = readConfig(ctx.home);
+    const plan = planAdd(config, name, rawArg, explicitName, target, recursive);
+    applyAdd(ctx, config, plan, name, explicitName, target, recursive);
+    out.value = plan.outcome;
   }, ctx.home);
-  return formatOutcome(out.value, name, target, ctx.style);
+  return renderTapAdd(out.value, name, target, false, ctx.style);
 }
 
-/** The actual write-under-lock flow; returns the chosen outcome. */
-function performAdd(
-  ctx: CommandContext,
+/** Decide the outcome from config alone; throws the same-name usage error. */
+function planAdd(
+  config: Config,
   name: string,
   rawArg: string,
   explicitName: string | undefined,
   target: TapAddTarget,
   recursive: boolean,
-): Outcome {
-  const config = readConfig(ctx.home);
+): TapAddPlan {
   const sameTarget = config.taps.find((t) => sameTap(t, target));
   if (sameTarget) {
     if (sameTarget.registered && (explicitName === undefined || explicitName === sameTarget.name)) {
-      if (recursive && sameTarget.discovery !== "recursive") {
-        writeConfig(
-          {
-            ...config,
-            taps: config.taps.map((t) =>
-              t.name === sameTarget.name ? { ...t, discovery: "recursive" } : t,
-            ),
-          },
-          ctx.home,
-        );
-        rewriteTapMarkers(
-          { oldName: sameTarget.name, newName: sameTarget.name, discovery: "recursive" },
-          readState(ctx.home).installations,
-          ctx.cwd,
-        );
-        return "updated";
-      }
-      return "no-op";
+      const upgrade = recursive && sameTarget.discovery !== "recursive";
+      return { outcome: upgrade ? "updated" : "no-op", sameTarget };
     }
-    promoteExistingTap(ctx.home, ctx.cwd, config, sameTarget, target.kind, explicitName, recursive);
-    return "promoted";
+    return { outcome: "promoted", sameTarget };
   }
   const sameName = config.taps.find((t) => t.name === name);
   if (sameName) {
@@ -100,9 +93,59 @@ function performAdd(
       { name, existing: displayTarget(sameName), incoming: displayTarget(target) },
     );
   }
-  materializeNewTap(name, target, ctx.home);
+  if (target.kind === "path" && !isDirectory(target.path))
+    throw new CrewError(
+      "usage_error",
+      `\`${target.path}\` isn't a directory — \`crew tap add\` needs an existing local path`,
+      { path: target.path },
+    );
+  return { outcome: "added", sameTarget: undefined };
+}
+
+/** The write-under-lock flow for a planned outcome. */
+function applyAdd(
+  ctx: CommandContext,
+  config: Config,
+  plan: TapAddPlan,
+  name: string,
+  explicitName: string | undefined,
+  target: TapAddTarget,
+  recursive: boolean,
+): void {
+  if (plan.outcome === "no-op") return;
+  if (plan.outcome === "updated") {
+    // `sameTarget` is always set for the updated/promoted outcomes.
+    const existing = plan.sameTarget!;
+    writeConfig(
+      {
+        ...config,
+        taps: config.taps.map((t) =>
+          t.name === existing.name ? { ...t, discovery: "recursive" } : t,
+        ),
+      },
+      ctx.home,
+    );
+    rewriteTapMarkers(
+      { oldName: existing.name, newName: existing.name, discovery: "recursive" },
+      readState(ctx.home).installations,
+      ctx.cwd,
+    );
+    return;
+  }
+  if (plan.outcome === "promoted") {
+    promoteExistingTap(
+      ctx.home,
+      ctx.cwd,
+      config,
+      plan.sameTarget!,
+      target.kind,
+      explicitName,
+      recursive,
+    );
+    return;
+  }
+  if (target.kind === "git") cloneNewTap(name, target.url, ctx.home);
   writeConfig({ ...config, taps: [...config.taps, newTapOf(name, target, recursive)] }, ctx.home);
-  return "added";
 }
 
 function deriveName(target: TapAddTarget): string {
@@ -110,24 +153,15 @@ function deriveName(target: TapAddTarget): string {
   return target.path.split("/").filter(Boolean).pop() ?? "local";
 }
 
-/** Clone (git) or verify (path) the source backs a real directory. */
-function materializeNewTap(name: string, target: TapAddTarget, home: string): void {
-  if (target.kind === "git") {
-    const cloneDir = tapPath(name, home);
-    try {
-      ensureClone(target.url, cloneDir);
-    } catch (err) {
-      if (exists(cloneDir)) rmrf(cloneDir);
-      throw err;
-    }
-    return;
+/** Clone a new git tap; a failed clone leaves no partial directory (§16.3). */
+function cloneNewTap(name: string, url: string, home: string): void {
+  const cloneDir = tapPath(name, home);
+  try {
+    ensureClone(url, cloneDir);
+  } catch (err) {
+    if (exists(cloneDir)) rmrf(cloneDir);
+    throw err;
   }
-  if (!isDirectory(target.path))
-    throw new CrewError(
-      "usage_error",
-      `\`${target.path}\` isn't a directory — \`crew tap add\` needs an existing local path`,
-      { path: target.path },
-    );
 }
 
 function newTapOf(name: string, target: TapAddTarget, recursive: boolean): TapConfig {
@@ -139,54 +173,5 @@ function newTapOf(name: string, target: TapAddTarget, recursive: boolean): TapCo
     subpath: target.subpath,
     path: target.path,
     ...(recursive ? { discovery: "recursive" } : {}),
-  };
-}
-
-function formatOutcome(
-  outcome: Outcome,
-  name: string,
-  target: TapAddTarget,
-  style: Styler,
-): CommandOutput {
-  const targetStr = displayTarget(target);
-  const payload = { name, ...payloadOf(target) };
-  if (outcome === "no-op") {
-    return {
-      exitCode: 0,
-      human: [
-        `${style.symbol("muted")} Tap ${style.bold(name)} is already set up`,
-        style.dim(`  pointed at ${targetStr}`),
-      ],
-      json: { ...payload, already: true },
-    };
-  }
-  if (outcome === "promoted") {
-    return {
-      exitCode: 0,
-      human: [
-        `${style.symbol("ok")} Promoted ${style.bold(name)} to a saved tap`,
-        style.dim(`  now tracking ${targetStr}`),
-      ],
-      json: { ...payload, promoted: true },
-    };
-  }
-  if (outcome === "updated") {
-    return {
-      exitCode: 0,
-      human: [
-        `${style.symbol("ok")} Updated tap ${style.bold(name)}`,
-        style.dim(`  recursive discovery enabled for ${targetStr}`),
-      ],
-      json: { ...payload, updated: true, discovery: "recursive" },
-    };
-  }
-  return {
-    exitCode: 0,
-    human: [
-      `${style.symbol("ok")} Added tap ${style.bold(name)}`,
-      style.dim(`  from ${targetStr}`),
-      style.dim("  try `crew search <query>` or `crew install <name>` to use it"),
-    ],
-    json: payload,
   };
 }
