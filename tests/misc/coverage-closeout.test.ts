@@ -662,6 +662,7 @@ describe("targets/install — uninstall tolerates inconsistent marker with --for
       cwd: projCwd,
       skillName: "demo",
       force: true,
+      dryRun: false,
     });
     expect(res.kind).toBe("removed");
   });

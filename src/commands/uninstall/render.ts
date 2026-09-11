@@ -42,9 +42,10 @@ export function renderUninstall(
 
   if (pruned.length > 0) {
     if (lines.length > 0) lines.push("");
-    lines.push(
-      style.bold(`Pruned ${plural(pruned.length, "dependency", "dependencies")}${dryTag}`),
-    );
+    // Past tense would claim work that a dry run didn't do. The verb
+    // carries the tense, so the redundant "(dry run)" tag is dropped here.
+    const verb = dryRun ? "Would prune" : "Pruned";
+    lines.push(style.bold(`${verb} ${plural(pruned.length, "dependency", "dependencies")}`));
     for (const r of pruned) {
       lines.push("");
       lines.push(...renderRecord(r, style));
