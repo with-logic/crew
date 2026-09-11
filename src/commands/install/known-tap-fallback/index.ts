@@ -50,7 +50,10 @@ export function withKnownTapInstallSuggestions(
       ...err.details,
       known_tap_suggestions: suggestions.map(suggestionJson),
     },
-    null,
+    // Keep the resolver's own next step (e.g. the `@owner/repo` hint from
+    // §8.5) but never fall back to the generic `invalid_ref` remedy — the
+    // suggestions above already are the remedy.
+    err.remedy ?? null,
   );
 }
 
@@ -125,6 +128,7 @@ function renderKnownInstallError(
   for (const suggestion of suggestions) {
     lines.push("");
     lines.push(`  ${suggestion.installRef} (${suggestion.tap.trust})`);
+    if (suggestion.repo) lines.push(`    This is the tap for the GitHub repo ${suggestion.repo}.`);
     lines.push(`    Add the tap:`);
     lines.push(`      ${tapAddCommand(suggestion.tap)}`);
     lines.push(`    Then install:`);

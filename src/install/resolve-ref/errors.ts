@@ -13,6 +13,20 @@ export function flagFor(k: "tap" | "namespace" | "skill"): string {
   return "skill";
 }
 
+/**
+ * `invalid_ref` for a two-segment reference that names neither a tap
+ * nor a namespace (§8.5 "Two-segment misses"). The shape is also how
+ * people write a GitHub repo, so the remedy points at `@first/second`.
+ */
+export function twoSegmentMissError(first: string, second: string): CrewError {
+  return new CrewError(
+    "invalid_ref",
+    `\`${first}/${second}\` does not match any configured tap or namespace.\nNo tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
+    { first, second },
+    `If you meant the GitHub repository ${first}/${second}, use \`@${first}/${second}\` instead. Otherwise run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
+  );
+}
+
 /** Build the shared ambiguity error for tap, namespace, and skill collisions. */
 export function ambiguityError(
   name: string,

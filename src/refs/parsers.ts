@@ -4,6 +4,9 @@
  * `parsePath` normalizes `./foo`, `../foo`, `/foo`, `~/foo` to an
  * absolute path. `parseTap` handles bare names (`my-skill`) and
  * qualified names (`core/my-skill`), each with an optional `@ref` tail.
+ * `looksLikeSchemelessHost` spots `github.com/o/r`-style arguments
+ * (§8.2 "Scheme-less hosts") so the dispatcher can hand them to the
+ * git parser with `https://` prepended.
  *
  * The leaner git-URL logic lives in `refs/git-url.ts`.
  */
@@ -21,6 +24,19 @@ export function looksLikePath(ref: string): boolean {
   return (
     ref.startsWith("./") || ref.startsWith("../") || ref.startsWith("/") || ref.startsWith("~")
   );
+}
+
+/**
+ * True if `ref` is a scheme-less git host reference (§8.5 rule 4): the
+ * first `/`-segment contains a `.` (tap names can't) and there are at
+ * least `host/owner/repo` segments before any `//subpath` tail.
+ */
+export function looksLikeSchemelessHost(ref: string): boolean {
+  const head = ref.split("//", 1)[0]!;
+  const segments = head.split("/");
+  if (segments.length < 3) return false;
+  const host = segments[0]!;
+  return host.includes(".") && !host.startsWith(".") && !host.endsWith(".");
 }
 
 /** Parse a path source and resolve `~` + relatives to an absolute path. */
