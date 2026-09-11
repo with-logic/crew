@@ -4,6 +4,7 @@
  * edits to help copy never touch rendering logic or unrelated commands.
  */
 
+import type { VisibleCommand } from "../../../cli/aliases.ts";
 import { agentsHelp } from "./agents.ts";
 import { autoupdateHelp } from "./autoupdate.ts";
 import { cacheHelp } from "./cache.ts";
@@ -57,7 +58,13 @@ export const GROUPS: readonly CommandGroup[] = [
   { title: "Meta", commands: ["help", "version"] },
 ];
 
-export const COMMANDS: Record<string, CommandHelp> = {
+/**
+ * Every command word the user can type maps to exactly one help page.
+ * Typed as `Record<VisibleCommand, …>` (not `Record<string, …>`) so
+ * adding an alias to `COMMAND_ALIASES` without a help page is a
+ * compile error rather than a silent fallback to the overview.
+ */
+export const COMMANDS: Record<VisibleCommand, CommandHelp> = {
   install: installHelp,
   uninstall: uninstallHelp,
   remove: removeHelp,
@@ -81,8 +88,11 @@ export const COMMANDS: Record<string, CommandHelp> = {
   version: versionHelp,
 };
 
-/** Summary one-liners used in the overview, keyed by command name. */
-export const ONELINERS: Record<string, string> = {
+/**
+ * Summary one-liners used in the overview, keyed by command name.
+ * Exhaustive over `VisibleCommand` for the same reason as `COMMANDS`.
+ */
+export const ONELINERS: Record<VisibleCommand, string> = {
   install: "Install a skill everywhere at once.",
   uninstall: "Remove a skill (use --prune to tidy up leftovers).",
   remove: "Alias for `uninstall`.",
@@ -105,3 +115,13 @@ export const ONELINERS: Record<string, string> = {
   help: "Get help on any command.",
   version: "Print the version.",
 };
+
+/** Look up a help page by a user-typed word; undefined when it isn't a command. */
+export function helpFor(command: string): CommandHelp | undefined {
+  return (COMMANDS as Record<string, CommandHelp>)[command];
+}
+
+/** The overview blurb for a command word, or "" when it has none. */
+export function onelinerFor(command: string): string {
+  return (ONELINERS as Record<string, string>)[command] ?? "";
+}

@@ -9,30 +9,13 @@
 
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../src/cli/main.ts";
+import { COMMANDS } from "../../src/commands/help/content/index.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 
-const EVERY_COMMAND = [
-  "install",
-  "uninstall",
-  "remove",
-  "rm",
-  "update",
-  "upgrade",
-  "list",
-  "skills",
-  "ls",
-  "info",
-  "search",
-  "tap",
-  "taps",
-  "untap",
-  "agents",
-  "autoupdate",
-  "doctor",
-  "cache",
-  "help",
-  "version",
-];
+// Derived from the help registry so a new command or alias cannot be
+// added without also getting a help page — the hand-maintained list
+// this replaces had silently omitted `self-update`.
+const EVERY_COMMAND = Object.keys(COMMANDS);
 
 describe("help overview", () => {
   test("C-CLI-02 + C-CLI-09 + C-CLI-11 bare `crew` shows overview with getting-started and command groups", () => {

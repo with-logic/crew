@@ -5,7 +5,7 @@
 
 import { CREW_VERSION } from "../../core/version.ts";
 import type { CommandOutput } from "../types.ts";
-import { COMMANDS, type CommandHelp, GROUPS, ONELINERS } from "./content/index.ts";
+import { COMMANDS, type CommandHelp, GROUPS, onelinerFor } from "./content/index.ts";
 
 export function overview(): CommandOutput {
   const lines: string[] = [
@@ -36,7 +36,7 @@ export function overview(): CommandOutput {
   for (const group of GROUPS) {
     lines.push(`  ${group.title}`);
     for (const name of group.commands) {
-      const blurb = ONELINERS[name] ?? "";
+      const blurb = onelinerFor(name);
       lines.push(`    ${name.padEnd(12)} ${blurb}`);
     }
     lines.push("");

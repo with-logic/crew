@@ -18,7 +18,7 @@
 import yargsFactory from "yargs/yargs";
 import type { CommandFlags } from "../commands/types.ts";
 import { CrewError } from "../core/errors.ts";
-import { canonicalCommand } from "./aliases.ts";
+import { aliasFlagKey } from "./aliases.ts";
 
 /** Result of parsing. */
 export interface ParsedArgs {
@@ -59,10 +59,13 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   const command = effective[0]!;
   const rest = effective.slice(1);
 
-  // Aliases share their canonical command's flag tables (`crew rm --prune`).
-  const canonical = canonicalCommand(command);
-  const booleans = [...BOOLEAN_GLOBALS, ...(BOOLEAN_SUB[canonical] ?? [])];
-  const strings = [...STRING_GLOBALS, ...(STRING_SUB[canonical] ?? [])];
+  // A bare alias shares its canonical command's flag tables (`crew rm
+  // --prune`). A prefixed alias (`taps` → `tap list`) names one
+  // subcommand, so it inherits no subcommand flags — `crew taps
+  // --recursive` stays a usage_error.
+  const flagKey = aliasFlagKey(command);
+  const booleans = [...BOOLEAN_GLOBALS, ...(flagKey === null ? [] : (BOOLEAN_SUB[flagKey] ?? []))];
+  const strings = [...STRING_GLOBALS, ...(flagKey === null ? [] : (STRING_SUB[flagKey] ?? []))];
 
   let parsed: Record<string, unknown>;
   try {
