@@ -44,9 +44,9 @@ export function Demo() {
           <Prompt /> crew list
           {"\n"}
           <Warn>Installed skills (3)</Warn>
-          {"\n  founding-engineer   core         a1b2c3d   5 agents"}
-          {"\n  code-review         core         d4e5f6a   5 agents"}
-          {"\n  platform-engineer   acme@v1.2.0  9c8b7a6   5 agents"}
+          {"\n  founding-engineer   core                            a1b2c3d   5 agents"}
+          {"\n  code-review         core                            d4e5f6a   5 agents"}
+          {"\n  platform-engineer   @acme/skills//engineers/founding 9c8b7a6   5 agents"}
           {"\n"}
           {"\n  Run `crew info <name>` to see more about any of these."}
           {"\n\n"}

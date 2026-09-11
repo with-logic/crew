@@ -38,10 +38,23 @@ export function readText(path: string): string {
   return readFileSync(path, "utf8");
 }
 
-/** Write a file as UTF-8, creating parents as needed. */
+/**
+ * Write a file as UTF-8, creating parents as needed.
+ *
+ * Published atomically: the bytes land in a sibling temp file which is
+ * then renamed over `path`. Readers take no lock (§14 — read-only
+ * commands never lock), so a plain in-place write would let a concurrent
+ * `crew list` observe a truncated `config.yaml` and fail `config_invalid`.
+ * `renameSync` within one directory is atomic on POSIX and Windows, so a
+ * reader sees either the old file or the new one, never a partial one.
+ */
 export function writeText(path: string, contents: string): void {
   ensureDir(dirname(path));
-  writeFileSync(path, contents, { encoding: "utf8" });
+  // The suffix keeps the temp name out of any directory listing crew
+  // treats as meaningful (a skill dir, a tap root) if we crash mid-write.
+  const tmp = `${path}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(tmp, contents, { encoding: "utf8" });
+  renameSync(tmp, path);
 }
 
 /** Recursively remove a path if it exists. No-op if missing. */
