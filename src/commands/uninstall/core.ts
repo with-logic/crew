@@ -63,21 +63,29 @@ export function removeOne(
     }
     return { updatedState: state, rec };
   }
-  // Per-entry processing: each (skill, scope) pair potentially touches
-  // a different subset of agents.
+  // Per-entry processing: each (skill, scope, project_root) entry
+  // potentially touches a different subset of agents.
   let nextState = state;
   let anySurvives = false;
   for (const entry of entries) {
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
       : entry.agents;
+    const before = rec.failures.length;
     removeFromAgents(entry, agentsToRemove, name, ctx, rec);
-    const remainingAgents = entry.agents.filter((t) => !agentsToRemove.includes(t));
+    // An agent that aborted on a safety check still owns its bytes, so
+    // its ownership must stay in state. Dropping the entry anyway would
+    // hide the install from every later attachment check — a retry would
+    // then delete the tap and orphan it.
+    const failedAgents = rec.failures.slice(before).map((f) => f.agent);
+    const remainingAgents = entry.agents.filter(
+      (t) => !agentsToRemove.includes(t) || failedAgents.includes(t),
+    );
     if (remainingAgents.length > 0) {
-      nextState = reduceEntryAgents(nextState, name, entry.scope, remainingAgents);
+      nextState = reduceEntryAgents(nextState, entry, remainingAgents);
       anySurvives = true;
     } else {
-      nextState = dropScopedEntryAndUpdateRequiredBy(nextState, name, entry.scope);
+      nextState = dropScopedEntryAndUpdateRequiredBy(nextState, entry);
     }
   }
   if (anySurvives) rec.partial = true;

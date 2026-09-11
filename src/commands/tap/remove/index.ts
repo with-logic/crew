@@ -12,19 +12,28 @@
  *
  * The default-tap guard (§16.2) is evaluated first, so `core` still
  * needs `--force` regardless of what's attached.
+ *
+ * A non-dry run does every read, guard, and mutation inside ONE
+ * lock-held operation: an install landing between a preflight read and
+ * the tap deletion would otherwise leave dangling state. The dry-run
+ * path stays lock-free, matching every other preview in the CLI.
+ *
+ * Guard evaluation lives in `./plan.ts`.
  */
 
-import { DEFAULT_TAP_NAME } from "../../../config/defaults.ts";
 import { readConfig, writeConfig } from "../../../config/load.ts";
 import { CrewError } from "../../../core/errors.ts";
 import { tapPath } from "../../../core/paths.ts";
-import type { StateEntry, StateFile, TapConfig } from "../../../core/types.ts";
+import type { StateEntry, TapConfig } from "../../../core/types.ts";
 import { readState, writeState } from "../../../state/load.ts";
 import { withStateLock } from "../../../state/lock.ts";
 import { rmrf } from "../../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
 import { removeOne, type UninstallRecord } from "../../uninstall/core.ts";
+import { describe, planRemove, type RemovePlan } from "./plan.ts";
 import { renderTapRemove } from "./render.ts";
+
+export { attachedEntries, tapToRemove } from "./plan.ts";
 
 /** Entry point for `crew tap remove` / `crew untap`. */
 export function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput {
@@ -36,56 +45,26 @@ export function tapRemove(ctx: CommandContext, args: readonly string[]): Command
       "`crew tap remove` needs exactly one tap name — see `crew tap list`",
     );
   const name = args[0]!;
-  const dryRun = ctx.flags.dryRun;
   const uninstall = Boolean(ctx.flags.extras["uninstall"]);
+  const plan = () =>
+    planRemove({
+      taps: readConfig(ctx.home).taps,
+      state: readState(ctx.home),
+      name,
+      force: ctx.flags.force,
+      uninstall,
+    });
 
-  const config = readConfig(ctx.home);
-  const tap = tapToRemove(config.taps, name, ctx.flags.force);
-  const attached = attachedEntries(readState(ctx.home), name);
-  // `--uninstall` wins over `--force`: nothing is left to keep.
-  if (attached.length > 0 && !(uninstall || ctx.flags.force)) throw attachedError(name, attached);
-
-  if (uninstall && attached.length > 0) return removeWithSkills(ctx, tap, attached, dryRun);
-  return removeTapOnly(ctx, tap, ctx.flags.force ? attached : [], dryRun);
+  // A preview reads without the lock; a real run does everything under it
+  // so no install can land between the guard and the deletion.
+  if (ctx.flags.dryRun) return runPlan(ctx, plan(), true);
+  return withStateLock(() => runPlan(ctx, plan(), false), ctx.home);
 }
 
-/** Look up the tap to remove; unknown names and the unforced default tap are usage errors. */
-export function tapToRemove(taps: readonly TapConfig[], name: string, force: boolean): TapConfig {
-  const tap = taps.find((t) => t.name === name);
-  if (!tap) {
-    throw new CrewError(
-      "usage_error",
-      `\`${name}\` was not found in your list of taps.`,
-      { name },
-      "This may have been a typo. View your configured taps with `crew tap list`.",
-    );
-  }
-  if (name === DEFAULT_TAP_NAME && !force)
-    throw new CrewError(
-      "usage_error",
-      `\`${DEFAULT_TAP_NAME}\` is the default tap — pass \`--force\` if you're sure you want to remove it`,
-    );
-  return tap;
-}
-
-/** Every state entry, at any scope, attributed to `tapName`. */
-export function attachedEntries(state: StateFile, tapName: string): readonly StateEntry[] {
-  return state.installations.filter((e) => e.source.tap === tapName);
-}
-
-/** A short `<name> (<scope>)` label per attached entry, for messages. */
-function describe(entries: readonly StateEntry[]): string[] {
-  return entries.map((e) => `${e.name} (${e.scope})`);
-}
-
-function attachedError(name: string, attached: readonly StateEntry[]): CrewError {
-  const labels = describe(attached);
-  return new CrewError(
-    "usage_error",
-    `\`${name}\` still has ${labels.length === 1 ? "a skill" : "skills"} installed from it: ${labels.join(", ")}`,
-    { name, attached: labels },
-    `Run \`crew tap remove --uninstall ${name}\` to remove ${labels.length === 1 ? "it" : "them"} too, or \`crew tap remove --force ${name}\` to drop the tap and keep ${labels.length === 1 ? "it" : "them"} installed.`,
-  );
+/** Execute a plan. The caller decides whether the state lock is held. */
+function runPlan(ctx: CommandContext, plan: RemovePlan, dryRun: boolean): CommandOutput {
+  if (plan.uninstall) return removeWithSkills(ctx, plan, dryRun);
+  return removeTapOnly(ctx, plan.tap, ctx.flags.force ? plan.attached : [], dryRun);
 }
 
 /** Drop the tap row and its clone. Caller holds the state lock. */
@@ -103,7 +82,7 @@ function removeTapOnly(
   kept: readonly StateEntry[],
   dryRun: boolean,
 ): CommandOutput {
-  if (!dryRun) withStateLock(() => dropTap(ctx.home, tap), ctx.home);
+  if (!dryRun) dropTap(ctx.home, tap);
   const keptLabels = describe(kept);
   return {
     exitCode: 0,
@@ -124,50 +103,42 @@ function removeTapOnly(
 }
 
 /** `--uninstall`: run the §7.4 removal for each attached entry, then drop the tap. */
-function removeWithSkills(
-  ctx: CommandContext,
-  tap: TapConfig,
-  attached: readonly StateEntry[],
-  dryRun: boolean,
-): CommandOutput {
+function removeWithSkills(ctx: CommandContext, plan: RemovePlan, dryRun: boolean): CommandOutput {
   const records: UninstallRecord[] = [];
-  const run = () => {
-    let state = readState(ctx.home);
-    // Names can repeat across scopes; `removeOne` handles every entry
-    // of a name in one call, so visit each distinct name once.
-    for (const name of new Set(attached.map((e) => e.name))) {
-      const entries = state.installations.filter((e) => e.name === name);
-      const { updatedState, rec } = removeOne(
-        state,
-        { raw: name, name, entries },
-        ctx,
-        false,
-        null,
-      );
-      state = updatedState;
-      records.push(rec);
-    }
-    if (dryRun) return;
+  let state = readState(ctx.home);
+  // Group this tap's entries by skill name so each name is removed once,
+  // in a single state pass, and only entries belonging to THIS tap are
+  // touched — a same-named skill from another tap or project stays put.
+  const byName = new Map<string, StateEntry[]>();
+  for (const e of plan.attached) {
+    const list = byName.get(e.name);
+    if (list) list.push(e);
+    else byName.set(e.name, [e]);
+  }
+  for (const [name, entries] of byName) {
+    const { updatedState, rec } = removeOne(state, { raw: name, name, entries }, ctx, false, null);
+    state = updatedState;
+    records.push(rec);
+  }
+
+  const failed = records.some((r) => r.failures.length > 0);
+  if (!dryRun) {
     writeState(state, ctx.home);
     // Only drop the tap once every skill actually came off; a safety
     // abort leaves the tap in place so the user can retry with --force.
-    if (records.every((r) => r.failures.length === 0)) dropTap(ctx.home, tap);
-  };
-  if (dryRun) run();
-  else withStateLock(run, ctx.home);
-
-  const failed = records.some((r) => r.failures.length > 0);
+    if (!failed) dropTap(ctx.home, plan.tap);
+  }
   return {
     exitCode: failed ? 1 : 0,
     human: renderTapRemove({
-      name: tap.name,
-      kind: tap.kind,
+      name: plan.tap.name,
+      kind: plan.tap.kind,
       dryRun,
       tapRemoved: !failed,
       kept: [],
       uninstalled: records,
       style: ctx.style,
     }),
-    json: { name: tap.name, uninstalled: records, ...(dryRun ? { dry_run: true } : {}) },
+    json: { name: plan.tap.name, uninstalled: records, ...(dryRun ? { dry_run: true } : {}) },
   };
 }

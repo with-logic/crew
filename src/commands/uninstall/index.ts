@@ -66,7 +66,11 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
     gcAutoTaps(state, ctx.home);
   }, ctx.home);
 
-  return { exitCode, human: renderUninstall(records, ctx.style), json: { records } };
+  return {
+    exitCode,
+    human: renderUninstall(records, ctx.flags.dryRun, ctx.style),
+    json: { records },
+  };
 }
 
 /**

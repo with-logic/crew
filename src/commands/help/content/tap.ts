@@ -30,7 +30,7 @@ export const tapHelp: CommandHelp = {
       description:
         "With `tap add`, `tap remove`, or `tap update`, show what would happen without cloning, fetching, or changing config.",
     },
-    { flag: "--json", description: "Machine-readable output for `tap list`." },
+    { flag: "--json", description: "Machine-readable output." },
   ],
   examples: [
     {

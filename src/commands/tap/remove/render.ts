@@ -30,9 +30,11 @@ export function renderTapRemove(input: RenderTapRemoveInput): string[] {
   const tag = dryRun ? style.dim(" (dry run)") : "";
   const lines: string[] = [];
 
-  // `--uninstall`: the skill blocks read first, then the tap line.
+  // `--uninstall`: the skill blocks read first, then the tap line. The
+  // preview flag reaches the shared renderer so those blocks read
+  // "Would uninstall" rather than announcing work that hasn't happened.
   if (uninstalled && uninstalled.length > 0) {
-    lines.push(...renderUninstall(uninstalled, style));
+    lines.push(...renderUninstall(uninstalled, dryRun, style));
     lines.push("");
   }
 
