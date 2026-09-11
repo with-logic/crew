@@ -152,6 +152,18 @@ filter in a `scope` field (`"user"`, `"project"`, or `null` when unfiltered).
 When the filter leaves nothing, the human output says so for that scope
 rather than printing the first-run getting-started hint.
 
+**`crew list` agent and tap filters.** `--agent <name>` (repeatable) keeps
+only installations recorded against at least one of the named agents; an
+unknown agent name is a `usage_error` that lists the known agents. `--tap
+<name>` keeps only installations attributed to that configured tap
+(`state.source.tap`); an unknown tap name is a `usage_error` pointing at
+`crew tap list`. Filters compose with each other and with `--scope`. Rows
+that survive a filter still render their full agent list — the filter
+selects rows, it does not hide data. `--json` reports the filters in
+`agent` (array, empty when unfiltered) and `tap` (name or `null`). When
+the combined filters leave nothing and a `--agent` or `--tap` filter was
+given, the human output says no skills match those filters.
+
 ### 5.2 Global flags
 
 Accepted on any command where they apply:
@@ -2011,6 +2023,9 @@ Implementations and test suites refer to criteria by ID.
 | C-LIST-01 | §5.1 | `crew list` with no `--scope` shows user- and project-scope installations together; `--json` has `scope: null`. |
 | C-LIST-02 | §5.1 | `crew list --scope user` shows only user-scope installations and `crew list --scope project` shows only project-scope installations (one row per project root); `--json` filters `installations` identically and sets `scope` to the filter. |
 | C-LIST-03 | §5.1 | When a `--scope` filter matches nothing, `crew list` prints a scope-specific empty message (not the getting-started hint) and `--json` returns an empty `installations` array. |
+| C-LIST-04 | §5.1 | `crew list --agent <name>` shows only installations recorded against that agent (repeatable, any-of); an unknown agent is a `usage_error` naming the known agents; `--json` reports the filter in `agent`. |
+| C-LIST-05 | §5.1 | `crew list --tap <name>` shows only installations attributed to that tap; an unknown tap is a `usage_error` pointing at `crew tap list`; `--json` reports the filter in `tap`. |
+| C-LIST-06 | §5.1 | `--agent`, `--tap`, and `--scope` compose; when the combination matches nothing and an agent or tap filter was given, `crew list` says no skills match those filters. |
 | C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same install location (`(scope, project_root)`). |
 | C-STATE-11 | §11.2 | `crew doctor` reports `missing_project_root` for any project-scope entry whose `project_root` directory no longer exists. |
 | C-STATE-12 | §11.2 | `crew doctor --repair --dry-run` reports the findings a repair would address and changes nothing: state, config, and the store are byte-identical afterward. |
