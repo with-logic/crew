@@ -14,9 +14,13 @@ import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 const EVERY_COMMAND = [
   "install",
   "uninstall",
+  "remove",
+  "rm",
   "update",
+  "upgrade",
   "list",
   "skills",
+  "ls",
   "info",
   "search",
   "tap",

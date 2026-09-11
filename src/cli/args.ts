@@ -18,6 +18,7 @@
 import yargsFactory from "yargs/yargs";
 import type { CommandFlags } from "../commands/types.ts";
 import { CrewError } from "../core/errors.ts";
+import { canonicalCommand } from "./aliases.ts";
 
 /** Result of parsing. */
 export interface ParsedArgs {
@@ -58,8 +59,10 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   const command = effective[0]!;
   const rest = effective.slice(1);
 
-  const booleans = [...BOOLEAN_GLOBALS, ...(BOOLEAN_SUB[command] ?? [])];
-  const strings = [...STRING_GLOBALS, ...(STRING_SUB[command] ?? [])];
+  // Aliases share their canonical command's flag tables (`crew rm --prune`).
+  const canonical = canonicalCommand(command);
+  const booleans = [...BOOLEAN_GLOBALS, ...(BOOLEAN_SUB[canonical] ?? [])];
+  const strings = [...STRING_GLOBALS, ...(STRING_SUB[canonical] ?? [])];
 
   let parsed: Record<string, unknown>;
   try {
