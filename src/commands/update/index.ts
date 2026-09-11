@@ -26,6 +26,10 @@
  * that back the named entries (after dep-closure expansion) — other
  * taps are left untouched.
  *
+ * `--dry-run` (§10.1.1): taps are still fetched, but per-skill moves
+ * report `would_update`, tap additions report `would_add`, and neither
+ * state.json nor the store nor any agent directory is written.
+ *
  * Error isolation: a failure on one skill is recorded against that
  * skill only; processing continues. Exit code follows §10.1:
  *   - 0 if every skill is up-to-date / updated / cleanly-skipped / source_gone.
@@ -52,6 +56,7 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   const home = ctx.home ?? crewHome();
 
   const rawNames = ctx.positional;
+  const dryRun = ctx.flags.dryRun;
 
   const rows: UpdateRow[] = [];
   const tapReexpandRows: TapReexpandRow[] = [];
@@ -74,8 +79,13 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
     tapRows = refreshTaps(tapsToRefresh, home);
 
     // §10.1 step 2b: re-expand taps before walking per-skill updates.
-    const reexpanded = reexpandTaps(current, config, home, names, (args) =>
-      installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
+    const reexpanded = reexpandTaps(
+      current,
+      config,
+      home,
+      names,
+      (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
+      dryRun,
     );
     tapReexpandRows.push(...reexpanded.rows);
     if (reexpanded.hardFailure) hardFailure = true;
@@ -117,24 +127,26 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
         home,
         ctx.flags.force,
         ctx.cwd,
+        dryRun,
       );
       current = updatedState;
       rows.push(withTransitive(row, transitiveSources));
       if (bumpHardFailure) hardFailure = true;
     }
-    writeState(current, home);
+    if (!dryRun) writeState(current, home);
     return current;
   }, home);
 
-  // Post-state garbage collection.
-  garbageCollectStore(newState, home);
+  // Post-state garbage collection. Skipped on dry run: nothing was
+  // staged, and the user asked us not to change anything.
+  if (!dryRun) garbageCollectStore(newState, home);
 
   const exitCode = hardFailure ? 1 : 0;
-  const human = renderUpdate({ rows, tapReexpandRows, tapRows }, ctx.style);
+  const human = renderUpdate({ rows, tapReexpandRows, tapRows, dryRun }, ctx.style);
 
   return {
     exitCode,
     human,
-    json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows },
+    json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows, dry_run: dryRun },
   };
 }

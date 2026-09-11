@@ -2,6 +2,7 @@
  * Human-friendly output for `crew update`.
  *
  * Renders tap warnings, aligned per-skill rows, tap additions, and totals.
+ * Row-level formatting lives in `./rows.ts`.
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand.ts";
@@ -9,11 +10,14 @@ import type { UpdateRow } from "../../install/update/types.ts";
 import { columns, plural, shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
+import { formatRowParts, symbolFor } from "./rows.ts";
 
 export interface RenderUpdateInput {
   readonly rows: readonly UpdateRow[];
   readonly tapReexpandRows: readonly TapReexpandRow[];
   readonly tapRows: readonly TapRefreshRow[];
+  /** §10.1.1: preview mode — rows say "would update" / "would add". */
+  readonly dryRun?: boolean;
 }
 
 export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] {
@@ -35,13 +39,15 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
 
   // Header summarising what was checked.
   const checkedCount = input.rows.length;
-  const addedRows = input.tapReexpandRows.filter((r) => r.kind === "added");
+  const dryRun = input.dryRun === true;
+  const addedKind = dryRun ? "would_add" : "added";
+  const addedRows = input.tapReexpandRows.filter((r) => r.kind === addedKind);
   if (checkedCount === 0 && addedRows.length === 0) {
     lines.push(style.dim("Nothing to update — Homecrew isn't tracking any skills yet."));
     return lines;
   }
-  const header = checkedCount === 1 ? `Checked 1 skill` : `Checked ${checkedCount} skills`;
-  lines.push(style.bold(header));
+  const header = `${plural(checkedCount, "skill")}${dryRun ? " (dry run)" : ""}`;
+  lines.push(style.bold(`Checked ${header}`));
   lines.push("");
 
   // Per-skill rows, aligned. Project-scope rows get a dim "in <path>"
@@ -70,7 +76,8 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
     for (const [tap, names] of addedByTap) {
       const sym = style.symbol("ok");
       const count = plural(names.length, "new skill");
-      lines.push(`${sym} ${count} from ${style.bold(tap)}: ${names.join(", ")}`);
+      const verb = dryRun ? "would add " : "";
+      lines.push(`${sym} ${verb}${count} from ${style.bold(tap)}: ${names.join(", ")}`);
     }
   }
 
@@ -87,62 +94,9 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
 
   const totals = tally(input.rows, addedRows.length);
   lines.push("");
-  lines.push(style.dim(formatTotals(totals)));
+  lines.push(style.dim(formatTotals(totals, dryRun)));
 
   return lines;
-}
-
-interface RowParts {
-  readonly status: string;
-  readonly detail: string;
-  readonly required: string;
-}
-
-function formatRowParts(row: UpdateRow, style: Styler): RowParts {
-  const o = row.outcome;
-  const required =
-    row.transitively_required_by && row.transitively_required_by.length > 0
-      ? style.dim(`(required by ${row.transitively_required_by.join(", ")})`)
-      : "";
-
-  if (o.kind === "up_to_date") {
-    return { status: style.dim("up to date"), detail: "", required };
-  }
-  if (o.kind === "updated") {
-    const shortSha = o.new_sha ? o.new_sha.slice(0, 8) : "local";
-    return { status: style.green("updated"), detail: style.cyan(shortSha), required };
-  }
-  if (o.kind === "skipped") {
-    return { status: style.dim("skipped"), detail: style.dim(o.reason), required };
-  }
-  if (o.kind === "source_gone") {
-    return {
-      status: style.yellow("removed upstream"),
-      detail: style.dim("keeping your copy"),
-      required,
-    };
-  }
-  if (o.kind === "missing_project_root") {
-    return {
-      status: style.dim("skipped"),
-      detail: style.dim(`project folder no longer exists: ${o.root}`),
-      required,
-    };
-  }
-  return {
-    status: style.red("failed"),
-    detail: style.red(o.error.code.replace(/_/g, " ")),
-    required,
-  };
-}
-
-function symbolFor(row: UpdateRow, style: Styler): string {
-  const o = row.outcome;
-  if (o.kind === "updated") return style.symbol("ok");
-  if (o.kind === "up_to_date") return style.symbol("muted");
-  if (o.kind === "skipped" || o.kind === "missing_project_root") return style.symbol("muted");
-  if (o.kind === "source_gone") return style.symbol("warn");
-  return style.symbol("fail");
 }
 
 function groupByTap(rows: readonly TapReexpandRow[]): Map<string, string[]> {
@@ -174,7 +128,7 @@ function tally(rows: readonly UpdateRow[], addedCount: number): Totals {
   };
   for (const r of rows) {
     const k = r.outcome.kind;
-    if (k === "updated") t.updated++;
+    if (k === "updated" || k === "would_update") t.updated++;
     else if (k === "up_to_date") t.upToDate++;
     else if (k === "skipped" || k === "missing_project_root") t.skipped++;
     else if (k === "source_gone") t.sourceGone++;
@@ -183,10 +137,10 @@ function tally(rows: readonly UpdateRow[], addedCount: number): Totals {
   return t;
 }
 
-function formatTotals(t: Totals): string {
+function formatTotals(t: Totals, dryRun: boolean): string {
   const parts: string[] = [];
-  if (t.updated > 0) parts.push(`${t.updated} updated`);
-  if (t.added > 0) parts.push(`${t.added} new`);
+  if (t.updated > 0) parts.push(`${t.updated} ${dryRun ? "would update" : "updated"}`);
+  if (t.added > 0) parts.push(`${t.added} ${dryRun ? "would add" : "new"}`);
   if (t.upToDate > 0) parts.push(`${t.upToDate} up to date`);
   if (t.skipped > 0) parts.push(`${t.skipped} skipped`);
   if (t.sourceGone > 0) parts.push(`${t.sourceGone} removed upstream`);

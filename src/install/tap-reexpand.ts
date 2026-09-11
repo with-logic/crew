@@ -15,6 +15,9 @@
  *
  * Path-kind taps follow the same algorithm; they just don't fetch and
  * their `resolvedSha` is null.
+ *
+ * With `dryRun` (§10.1.1) additions are reported as `would_add` and the
+ * install callback is never invoked.
  */
 
 import type { CrewError } from "../core/errors.ts";
@@ -27,7 +30,7 @@ import { currentTapChildren, groupChildrenByName } from "./tap-children.ts";
 export interface TapReexpandRow {
   readonly name: string;
   readonly scope: Scope;
-  readonly kind: "added" | "source_gone" | "tap_error";
+  readonly kind: "added" | "would_add" | "source_gone" | "tap_error";
   readonly tap: string;
   readonly error?: { readonly code: string; readonly message: string };
 }
@@ -58,6 +61,7 @@ export function reexpandTaps(
   home: string,
   restrictNames: readonly string[],
   installOne: InstallNewChild,
+  dryRun: boolean = false,
 ): TapReexpandResult {
   const added: StateEntry[] = [];
   const updated: StateEntry[] = [];
@@ -161,6 +165,10 @@ export function reexpandTaps(
     for (const child of children) {
       if (conflictedNames.has(child.name)) continue;
       if (memberNames.has(child.name)) continue;
+      if (dryRun) {
+        rows.push({ name: child.name, scope: first.scope, tap: tap.name, kind: "would_add" });
+        continue;
+      }
       const entry = installOne({
         skillDir: child.path,
         skillName: child.name,
