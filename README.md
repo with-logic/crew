@@ -203,8 +203,8 @@ When a command asks for an installed skill name, you can use the bare name
 
 | Command | What it does |
 |---|---|
-| `crew help [<command>]` | Overview or per-command help, with realistic examples. |
-| `crew version` | Print the version string and exit. |
+| `crew help [<command>]` | Overview or per-command help, with realistic examples. `crew <command> --help` and `-h` work too. |
+| `crew version` | Print the version string and exit. `crew --version` and `-v` work too. |
 
 ## Taps: a tap is just a git repo full of skills
 
