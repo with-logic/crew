@@ -1,5 +1,5 @@
 /**
- * Acquire the on-disk contents for a tap (§9 step 2, §16).
+ * Acquire the on-disk contents for a tap (§9 step 2-3, §16).
  *
  * Every install attributes its skills to a tap (registered or auto).
  * `acquireTap` materializes that tap on disk:
@@ -12,6 +12,14 @@
  * The result tells the caller where on disk to walk for skills, and
  * (for git taps) the resolved SHA to record on every state entry.
  *
+ * **Refs.** When the caller passes a `ref` (from an `@<tag|branch|sha>`
+ * tail), that ref — not the clone's checked-out `HEAD` — decides both
+ * the recorded SHA and the bytes the caller reads. Since the clone is
+ * shared, the content is exported to a scratch directory rather than
+ * checked out in place; `withAcquiredTap` scopes that directory to the
+ * callback and deletes it afterwards. `acquireTap` without a ref is
+ * unchanged and needs no cleanup.
+ *
  * The "find or create the tap that backs this install ref" logic lives
  * in `install/flow.ts` — by the time we get here, we already know which
  * tap to acquire.
@@ -21,8 +29,9 @@ import { join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { crewHome, tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { ensureClone } from "../../git/repo/index.ts";
-import { resolveRef } from "../../git/repo/refs.ts";
+import { withExportedTree } from "../../git/export.ts";
+import { ensureClone, fetchAndCheckout } from "../../git/repo/index.ts";
+import { classifyRef, resolveRef } from "../../git/repo/refs.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 
@@ -32,6 +41,11 @@ export interface AcquiredTap {
   readonly rootDir: string;
   /** Full 40-char SHA for git taps; null for path taps. */
   readonly resolvedSha: string | null;
+  /**
+   * True when the requested ref names an immutable revision — a SHA or
+   * a tag (§11.1). A branch, or no ref at all, is not pinned.
+   */
+  readonly pinned: boolean;
 }
 
 /**
@@ -49,7 +63,7 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
         { tap: tap.name, path: tap.path },
       );
     }
-    return { rootDir: tap.path, resolvedSha: null };
+    return { rootDir: tap.path, resolvedSha: null, pinned: false };
   }
   // kind === "git"
   const clonePath = tapPath(tap.name, home);
@@ -64,7 +78,49 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
       { tap: tap.name, subpath: tap.subpath, sha },
     );
   }
-  return { rootDir, resolvedSha: sha };
+  return { rootDir, resolvedSha: sha, pinned: false };
+}
+
+/**
+ * Acquire a tap at `ref` and run `fn` against the result.
+ *
+ * With a null `ref` (or a path-kind tap, which has no commits) this is
+ * exactly `acquireTap` and `fn` sees the live clone. With a ref, the
+ * commit is resolved first — an unknown ref is `ref_not_found` (exit 5,
+ * §13) — and `fn` sees a scratch export of that commit that is deleted
+ * when `fn` returns or throws.
+ */
+export function withAcquiredTap<T>(
+  tap: TapConfig,
+  ref: string | null,
+  home: string,
+  fn: (acquired: AcquiredTap) => T,
+): T {
+  if (ref === null || tap.kind === "path") {
+    return fn(acquireTap(tap, home));
+  }
+  const clonePath = tapPath(tap.name, home);
+  ensureClone(tap.url, clonePath);
+  const sha = resolveRefFetchingIfNeeded(clonePath, ref);
+  const kind = classifyRef(clonePath, ref);
+  const pinned = kind === "sha" || kind === "tag";
+  return withExportedTree(clonePath, sha, tap.subpath, home, (rootDir) =>
+    fn({ rootDir, resolvedSha: sha, pinned }),
+  );
+}
+
+/**
+ * Resolve `ref` in the clone, fetching once if it isn't there yet — a
+ * tag published after the clone was made is the common case. A ref that
+ * is still missing after the fetch is `ref_not_found` (exit 5).
+ */
+function resolveRefFetchingIfNeeded(clonePath: string, ref: string): string {
+  try {
+    return resolveRef(clonePath, ref);
+  } catch {
+    fetchAndCheckout(clonePath);
+    return resolveRef(clonePath, ref);
+  }
 }
 
 /**

@@ -17,15 +17,14 @@ import { CrewError } from "../../core/errors.ts";
 import { crewHome } from "../../core/paths.ts";
 import type { Config, ResolvedSkill } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
-import { acquireTap } from "../../sources/acquire/index.ts";
+import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
-import { stageIntoStore } from "../../sources/store.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
 import { attributeRef } from "../tap-attribution.ts";
 import { topoSort } from "../topo.ts";
 import { enqueueDep } from "./dep.ts";
 import { enqueueTapRef, type PendingItem } from "./enqueue.ts";
-import { expandSkillsAsItems, sourcePinned, sourceRequestedRef } from "./expand-items.ts";
+import { expandSkillsAsItems, sourceRequestedRef } from "./expand-items.ts";
 
 /** Options for resolution. */
 export interface ResolveOptions {
@@ -115,7 +114,7 @@ export function resolveInstallSet(
       );
     }
 
-    const staged = stageIntoStore(item.loaded.path, name, item.resolvedSha, home);
+    const staged = item.staged;
     byName.set(name, {
       storePath: staged.storePath,
       name,
@@ -168,16 +167,19 @@ function enqueueRoot(
   // whole-tap install — the user pointed at a folder (or repo) and
   // said "install this". Future additions should follow.
   const attrib = attributeRef(source, config, recursive ? "recursive" : undefined);
-  const acquired = acquireTap(attrib.tap, home);
-  const expansion = expandSkillsAsItems(
-    acquired.rootDir,
-    attrib.tap,
-    "",
-    acquired.resolvedSha,
-    sourceRequestedRef(source),
-    sourcePinned(source, acquired.resolvedSha),
-    true,
-    true,
+  const requestedRef = sourceRequestedRef(source);
+  const expansion = withAcquiredTap(attrib.tap, requestedRef, home, (acquired) =>
+    expandSkillsAsItems(
+      acquired.rootDir,
+      attrib.tap,
+      "",
+      acquired.resolvedSha,
+      requestedRef,
+      acquired.pinned,
+      true,
+      true,
+      home,
+    ),
   );
   return { items: expansion.items, config: attrib.config, skipped: expansion.skipped };
 }

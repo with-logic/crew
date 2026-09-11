@@ -18,7 +18,7 @@ import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-r
 import { attributeRef } from "../../install/tap-attribution.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { hasSkillMd, loadSkill } from "../../skill/load.ts";
-import { acquireTap } from "../../sources/acquire/index.ts";
+import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import { expandSkills } from "../../sources/expand.ts";
 import { readState } from "../../state/load.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
@@ -52,17 +52,18 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
 
   const config = readConfig(ctx.home);
   const source = parseRef(arg, ctx.cwd);
+  // An `@ref` tail previews that commit's content, not the clone's HEAD (§9.1).
+  const ref = source.type === "path" ? null : source.ref;
   const { tap, skills } = (() => {
     if (source.type === "tap" && source.tap === null) {
       const namedTap = config.taps.find((t) => t.name === source.name);
       if (namedTap) {
-        const acq = acquireTap(namedTap, ctx.home);
-        return { tap: namedTap, skills: buildSkillInfos(acq.rootDir, namedTap) };
+        return { tap: namedTap, skills: skillsAtRef(namedTap, ref, ctx.home) };
       }
-      return candidateSkills(resolveTapRef(source, config, ctx.home, "non-tap"));
+      return candidateSkills(resolveTapRef(source, config, ctx.home, "non-tap"), ref, ctx.home);
     }
     if (source.type === "tap") {
-      return candidateSkills(resolveTapRef(source, config, ctx.home, "non-tap"));
+      return candidateSkills(resolveTapRef(source, config, ctx.home, "non-tap"), ref, ctx.home);
     }
     const matched = config.taps.find((t) => {
       if (source.type === "git")
@@ -70,12 +71,10 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
       return t.kind === "path" && t.path === source.path;
     });
     if (matched) {
-      const acq = acquireTap(matched, ctx.home);
-      return { tap: matched, skills: buildSkillInfos(acq.rootDir, matched) };
+      return { tap: matched, skills: skillsAtRef(matched, ref, ctx.home) };
     }
     const attrib = attributeRef(source, config);
-    const acq = acquireTap(attrib.tap, ctx.home);
-    return { tap: attrib.tap, skills: buildSkillInfos(acq.rootDir, attrib.tap) };
+    return { tap: attrib.tap, skills: skillsAtRef(attrib.tap, ref, ctx.home) };
   })();
 
   return {
@@ -85,10 +84,28 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   };
 }
 
-function candidateSkills(candidate: NonTapNameCandidate): {
+/** Expand a tap's skills, reading at `ref` when one was requested. */
+function skillsAtRef(tap: TapConfig, ref: string | null, home: string): SkillInfo[] {
+  return withAcquiredTap(tap, ref, home, (acq) => buildSkillInfos(acq.rootDir, tap));
+}
+
+function candidateSkills(
+  candidate: NonTapNameCandidate,
+  ref: string | null,
+  home: string,
+): {
   tap: TapConfig;
   skills: SkillInfo[];
 } {
+  // With a ref, the candidate's indexed paths point into the live clone;
+  // re-expand the whole tap at the requested commit and narrow by name.
+  if (ref !== null) {
+    const wanted = new Set(
+      (candidate.kind === "skill" ? [candidate.location] : candidate.members).map((l) => l.name),
+    );
+    const all = skillsAtRef(candidate.tap, ref, home);
+    return { tap: candidate.tap, skills: all.filter((s) => wanted.has(s.name)) };
+  }
   if (candidate.kind === "skill") {
     return { tap: candidate.tap, skills: buildSkillInfosFromDirs([candidate.location]) };
   }

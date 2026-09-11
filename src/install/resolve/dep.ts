@@ -4,12 +4,13 @@
 
 import type { Config } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
-import { acquireTap } from "../../sources/acquire/index.ts";
+import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
+import { stageIntoStore } from "../../sources/store.ts";
 import { findSiblingDep, type SiblingHit } from "../dep-resolution.ts";
 import { attributeRef } from "../tap-attribution.ts";
 import { enqueueTapRef, type PendingItem } from "./enqueue.ts";
-import { expandSkillsAsItems, sourcePinned, sourceRequestedRef } from "./expand-items.ts";
+import { expandSkillsAsItems, sourceRequestedRef } from "./expand-items.ts";
 
 /** Resolve and enqueue items for a dependency reference. */
 export function enqueueDep(
@@ -29,7 +30,7 @@ export function enqueueDep(
       home,
       config,
     );
-    if (sibling) return siblingItems(sibling, parent);
+    if (sibling) return siblingItems(sibling, parent, home);
     // Fall through to bare-name search across all configured taps.
   }
 
@@ -38,16 +39,19 @@ export function enqueueDep(
   // Git or path dep ref. Dep edges don't subscribe the user to every
   // sibling of the dep's source.
   const attrib = attributeRef(source, config);
-  const acquired = acquireTap(attrib.tap, home);
-  const expansion = expandSkillsAsItems(
-    acquired.rootDir,
-    attrib.tap,
-    "",
-    acquired.resolvedSha,
-    sourceRequestedRef(source),
-    sourcePinned(source, acquired.resolvedSha),
-    false,
-    false,
+  const requestedRef = sourceRequestedRef(source);
+  const expansion = withAcquiredTap(attrib.tap, requestedRef, home, (acquired) =>
+    expandSkillsAsItems(
+      acquired.rootDir,
+      attrib.tap,
+      "",
+      acquired.resolvedSha,
+      requestedRef,
+      acquired.pinned,
+      false,
+      false,
+      home,
+    ),
   );
   return { items: expansion.items, config: attrib.config, skipped: expansion.skipped };
 }
@@ -55,11 +59,18 @@ export function enqueueDep(
 function siblingItems(
   sibling: SiblingHit,
   parent: PendingItem,
+  home: string,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   return {
     items: [
       {
         loaded: sibling.loaded,
+        staged: stageIntoStore(
+          sibling.loaded.path,
+          sibling.loaded.frontmatter.name,
+          parent.resolvedSha,
+          home,
+        ),
         tap: sibling.tap,
         tapRelativePath: sibling.tapRelativePath,
         resolvedSha: parent.resolvedSha,
