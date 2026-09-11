@@ -21,6 +21,7 @@ import type { CrewError } from "../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
 import { isDirectory } from "../util/fs.ts";
+import { installedFromSameSource } from "./installed-lookup.ts";
 import { currentTapChildren, groupChildrenByName } from "./tap-children.ts";
 
 /** One re-expansion outcome row. */
@@ -161,6 +162,19 @@ export function reexpandTaps(
     for (const child of children) {
       if (conflictedNames.has(child.name)) continue;
       if (memberNames.has(child.name)) continue;
+      // §5.4: the same directory may already be installed through
+      // another tap pointing at this repo. Same source, so there is
+      // nothing to add — installing again would collide on the name.
+      const alreadyHere = installedFromSameSource({
+        state,
+        config,
+        name: child.name,
+        scope: first.scope,
+        projectRoot,
+        tap,
+        tapRelativePath: child.tapRelativePath,
+      });
+      if (alreadyHere) continue;
       const entry = installOne({
         skillDir: child.path,
         skillName: child.name,
