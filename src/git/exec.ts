@@ -62,9 +62,24 @@ export function setGitRunner(next: GitRunner): GitRunner {
   return prev;
 }
 
-/** Reset the git runner to the default (real subprocess). */
+/**
+ * What `resetGitRunner` restores. Normally the real subprocess runner;
+ * the test preload swaps in a wrapper so that a stub installed by one
+ * test and reset in its `afterEach` doesn't discard the suite-wide
+ * network tripwire (`tests/helpers/no-network.ts`).
+ */
+let baseRunner: GitRunner = defaultRunner;
+
+/** Replace the runner that `resetGitRunner` restores. Returns the previous base. */
+export function setBaseGitRunner(next: GitRunner): GitRunner {
+  const prev = baseRunner;
+  baseRunner = next;
+  return prev;
+}
+
+/** Reset the git runner to the base (real subprocess unless overridden). */
 export function resetGitRunner(): void {
-  runner = defaultRunner;
+  runner = baseRunner;
 }
 
 /** The real runner: invokes `git` via `Bun.spawnSync`. */

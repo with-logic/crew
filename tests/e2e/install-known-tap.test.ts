@@ -7,16 +7,31 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { readConfig, writeConfig } from "../../src/config/load.ts";
 import { resetKnownTapsForTest, setKnownTapsForTest } from "../../src/known-taps/registry.ts";
 import type { KnownTap } from "../../src/known-taps/types.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 
+/**
+ * A `file://` URL for a repo that does not exist. These tests only assert
+ * on suggestion text, but `crew install` materializes configured taps on
+ * demand, so a remote URL here would make the suite clone over the
+ * network. A nonexistent local path fails instantly and offline.
+ *
+ * No `.git` suffix: `knownTapSource` only folds that suffix away for
+ * GitHub HTTPS URLs, and the by-source dedupe in `knownTapIsConfigured`
+ * compares the rendered source strings. Using one spelling throughout
+ * keeps the fixture exercising dedupe rather than suffix handling.
+ */
+const UNREACHABLE_TAP_URL = `file://${join(tmpdir(), "crew-absent-supabase-skills")}`;
+
 const KNOWN_TAPS: readonly KnownTap[] = [
   {
     name: "supabase",
-    url: "https://github.com/example/supabase-skills.git",
+    url: UNREACHABLE_TAP_URL,
     subpath: "skills",
     description: "Supabase workflows.",
     trust: "curated",
@@ -49,9 +64,7 @@ describe("known-tap fallback for install misses", () => {
     expect(code).toBe(4);
     expect(c.stderr()).toContain("Homecrew found possible matches in known taps");
     expect(c.stderr()).toContain("Add the tap:");
-    expect(c.stderr()).toContain(
-      "crew tap add https://github.com/example/supabase-skills supabase",
-    );
+    expect(c.stderr()).toContain(`crew tap add ${UNREACHABLE_TAP_URL} supabase`);
     expect(c.stderr()).toContain("Then install:");
     expect(c.stderr()).toContain("crew install supabase/database/schema-review");
     expect(readConfig(home).taps).toEqual([]);
@@ -71,13 +84,13 @@ describe("known-tap fallback for install misses", () => {
     expect(parsed.error.details.known_tap_suggestions).toEqual([
       {
         tap: "supabase",
-        url: "https://github.com/example/supabase-skills.git",
+        url: UNREACHABLE_TAP_URL,
         subpath: "skills",
         trust: "curated",
         name: "schema-review",
         namespace: "database",
         description: "Review SQL migrations and RLS policies.",
-        tap_add: "crew tap add https://github.com/example/supabase-skills supabase",
+        tap_add: `crew tap add ${UNREACHABLE_TAP_URL} supabase`,
         install: "crew install supabase/database/schema-review",
       },
     ]);
@@ -113,13 +126,13 @@ describe("known-tap fallback for install misses", () => {
     expect(parsed.error.details.known_tap_suggestions).toEqual([
       {
         tap: "supabase",
-        url: "https://github.com/example/supabase-skills.git",
+        url: UNREACHABLE_TAP_URL,
         subpath: "skills",
         trust: "curated",
         name: null,
         namespace: null,
         description: "Supabase workflows.",
-        tap_add: "crew tap add https://github.com/example/supabase-skills supabase",
+        tap_add: `crew tap add ${UNREACHABLE_TAP_URL} supabase`,
         install: "crew install supabase",
       },
     ]);
@@ -147,7 +160,7 @@ describe("known-tap fallback for install misses", () => {
     const renamedSource = {
       ...configuredKnownSource(),
       name: "renamed",
-      url: "https://github.com/example/supabase-skills",
+      url: UNREACHABLE_TAP_URL,
       subpath: "",
     };
     writeConfig({ ...readConfig(bySource), taps: [renamedSource] }, bySource);
@@ -192,7 +205,7 @@ function configuredKnownSource() {
   return {
     kind: "git" as const,
     registered: true,
-    url: "https://github.com/example/supabase-skills.git",
+    url: UNREACHABLE_TAP_URL,
     subpath: "skills",
     path: "",
   };
