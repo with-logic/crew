@@ -630,7 +630,27 @@ gh:owner/repo//skills/python
 gh:owner/repo@v1.2.0//skills/python
 ```
 
-A ref and a subpath may combine. Ref appears before the subpath.
+A ref and a subpath may combine, in either order. These two forms are
+equivalent:
+
+```
+gh:owner/repo@v1.2.0//skills/python    # ref first
+gh:owner/repo//skills/python@v1.2.0    # ref last
+```
+
+In the ref-last form the ref is everything after the last `@` in the
+final segment of the subpath, subject to the usual `git-ref` rule
+(non-empty, no `/`, no whitespace).
+
+A ref spelled before the subpath takes precedence and suppresses the
+ref-last scan entirely, so the two positions can never disagree. That
+also makes the ref-first form the escape hatch for a subpath whose final
+directory name legitimately contains `@`:
+
+```
+gh:owner/repo@main//skills/foo@bar     # ref `main`, subpath `skills/foo@bar`
+gh:owner/repo//skills/foo@bar          # ref `bar`,  subpath `skills/foo`
+```
 
 **Browser URLs.** A URL copied from a forge's web UI is accepted anywhere
 a git source is accepted (`crew install`, `crew info`, `crew tap add`,
@@ -730,7 +750,8 @@ Informally:
 ```
 ref         := path | git-source | tap-source
 path        := "./..." | "../..." | "/..." | "~..."
-git-source  := git-url [ "@" git-ref ] [ "//" subpath ]
+git-source  := git-url "@" git-ref [ "//" subpath ]      (ref first; subpath kept verbatim)
+             | git-url [ "//" subpath [ "@" git-ref ] ]   (ref last, or no ref)
 git-url     := "https://..." | "git@...:..." | shorthand-host ":" owner "/" repo
              | "@" owner "/" repo
 shorthand-host := "gh" | "gl" | "bb"
@@ -1818,6 +1839,8 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-28 | §8.2, §13 | A reference echoed back in an error message or `--json` payload has its URL userinfo and credential-bearing query values redacted; the secret never appears on stdout or stderr. |
 | C-REF-29 | §8.2 | URL userinfo is preserved in the resolved clone URL (`https://user:token@host/o/r/tree/main/py` keeps its credentials), and is not mistaken for an `@<ref>` delimiter. |
 | C-REF-30 | §8.2, §13 | `?query` and `#fragment` text is discarded before grammar parsing, so it cannot supply an `@<ref>` or `//<subpath>`; an explicit `@<ref>` may contain `/` (`@feature/foo//python`); an `http(s)` URL too malformed to parse is `invalid_ref` (exit 4). |
+| C-REF-31 | §8.2 | `<git-url>//<subpath>@<ref>` parses identically to `<git-url>@<ref>//<subpath>` for every git-shaped form (https, ssh, `gh:`/`gl:`/`bb:`, `@owner/repo`, `file://`); the ref is the text after the last `@` in the subpath's final segment, and an `@` in an earlier segment is part of the path. |
+| C-REF-32 | §8.2 | A ref spelled before the subpath suppresses the trailing scan, so a final path segment containing a literal `@` is preserved: `gh:o/r@main//skills/foo@bar` resolves to ref `main` and subpath `skills/foo@bar`. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 

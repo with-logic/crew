@@ -5,6 +5,12 @@
  * a ref contain `/`: once `//python` is gone, everything after the final `@`
  * is the ref, slashes and all.
  *
+ * The ref may appear in either position — before the subpath
+ * (`<url>@<ref>//<sub>`) or after it (`<url>//<sub>@<ref>`). An explicit
+ * ref-first tail wins: when one is present the subpath is left alone, so a
+ * subpath whose final segment legitimately contains `@` has an escape hatch
+ * (§8.2).
+ *
  * Extracted from `git-url.ts` to keep that file under the 200-line cap.
  *
  * `hostEnd` exists because two legitimate `@` uses are not ref delimiters:
@@ -55,6 +61,24 @@ export function splitGitRef(head: string): { url: string; ref: string | null } {
     return { url: head, ref: null };
   }
   return { url: head.slice(0, atIdx), ref: possibleRef };
+}
+
+/**
+ * Split a ref-last tail (`sub/path@ref`) off a subpath. The ref is the
+ * text after the last `@` in the final segment; an `@` in an earlier
+ * segment is part of the path.
+ *
+ * Only consulted when the reference carries no ref-first tail (§8.2), so a
+ * final segment containing a literal `@` stays intact whenever the caller
+ * spelled the ref before the subpath.
+ */
+export function splitTrailingRef(subpath: string): { subpath: string; ref: string | null } {
+  const lastSlash = subpath.lastIndexOf("/");
+  const atIdx = subpath.lastIndexOf("@");
+  if (atIdx <= lastSlash + 1) return { subpath, ref: null };
+  const possibleRef = subpath.slice(atIdx + 1);
+  if (possibleRef.length === 0 || /\s/.test(possibleRef)) return { subpath, ref: null };
+  return { subpath: subpath.slice(0, atIdx), ref: possibleRef };
 }
 
 /**
