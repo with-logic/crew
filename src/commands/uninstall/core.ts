@@ -25,6 +25,8 @@ export interface UninstallRecord {
   pruned?: boolean;
   /** True if the state entry still survives after this call (partial --agent removal). */
   partial?: boolean;
+  /** Set when this record came from a tap or namespace selector (§7.4). */
+  collection?: { readonly kind: "skill" | "tap" | "namespace"; readonly name: string };
 }
 
 /**
@@ -55,6 +57,7 @@ export function removeOne(
   ctx: CommandContext,
   pruned: boolean,
   agentFilter: readonly string[] | null,
+  allowEmpty: boolean = false,
 ): { updatedState: StateFile; rec: UninstallRecord; meta: RemovalMeta } {
   const { name, entries, raw: errorName } = subject;
   const rec: UninstallRecord = {
@@ -66,7 +69,7 @@ export function removeOne(
   };
   const meta: RemovalMeta = { fullyRemovedRoots: [] };
   if (entries.length === 0) {
-    if (!(ctx.flags.force || pruned)) {
+    if (!(ctx.flags.force || pruned || allowEmpty)) {
       throw new CrewError(
         "not_installed_here",
         `\`${errorName}\` isn't in Homecrew's state — nothing to remove`,
