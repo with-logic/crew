@@ -176,6 +176,11 @@ Only flags documented as repeatable (`--agent`) may appear more than once. Passi
   `--yes` rather than removing anything. With nothing installed at the
   target scope it reports `not_installed_here`.
 
+  The confirmation happens *before* the state lock (§14) is taken, so a
+  prompt waiting on a human never blocks other crew processes. State is
+  re-read under the lock afterwards, so the removal acts on the installs
+  as they are when it runs rather than as they were at the prompt.
+
 ### 5.4 Duplicate installs
 
 `crew install <name>` on a skill already installed at the same scope:
@@ -517,10 +522,21 @@ may also name a collection of installed skills. Resolution order per argument:
    each qualified form.
 4. Otherwise `not_installed_here`, as for any unmatched selector.
 
+Collection membership — and therefore the ambiguity decision in step 3 — is
+evaluated only among entries at the targeted scope, using the same narrowing
+(including the lone-project fallback) that a skill selector gets. A namespace
+present in two taps at different scopes is unambiguous when only one of them is
+in scope.
+
 A collection expands to one removal per distinct skill name, each following
 the normal uninstall algorithm below; `--agent` and `--prune` compose with the
 expansion unchanged. `--json` records carry `collection: { kind, name }` on
 each record that came from a collection selector.
+
+Selectors in one run may overlap — `crew uninstall <tap> <skill-in-that-tap>`
+is legal. Each installed entry is removed at most once; a later selector that
+covers an already-removed entry contributes nothing rather than failing on the
+missing install directory.
 
 **Scope.** `--scope` (§5.2) selects which installed entry a selector
 refers to; it never widens to every scope. Without `--scope`, or with
@@ -1984,6 +2000,8 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-22 | §7.4 | A selector that is both a configured tap and a namespace with installed entries elsewhere (or a namespace present in several taps) is `ambiguous_reference`, exit 4, naming each qualified form; nothing is removed. |
 | C-UNINST-23 | §7.4 | `crew uninstall <tap>` for a configured tap with nothing installed from it reports that and exits 0. |
 | C-UNINST-24 | §5.3.1 | `crew uninstall --all` removes every skill at the target scope after confirmation (`--yes` or an interactive `[y/N]`); declining removes nothing, a non-TTY run without `--yes` is a `usage_error` naming `--yes`, combining `--all` with a selector is a `usage_error`, and nothing installed at that scope is `not_installed_here`. |
+| C-UNINST-25 | §7.4 | Overlapping selectors (`crew uninstall <tap> <skill-in-that-tap>`) remove each installed entry exactly once and exit 0; no entry is reported as a failure for already having been removed by an earlier selector in the same run. |
+| C-UNINST-26 | §7.4 | A collection selector narrows to the target scope exactly as a skill selector does, including the lone-project fallback, and collection ambiguity is decided only among entries at that scope. |
 | C-SHARE-01 | §7.2, §7.3 | When `codex` and `gemini-cli` are both active, `crew install <name>` writes bytes to `~/.agents/skills/<name>/` exactly once, and the per-agent summary reports both adapter names as installed. |
 | C-SHARE-02 | §7.5 | The `agents` field in `.crew.json` is non-empty, alphabetically sorted, and lists every agent currently owning the install. |
 | C-SHARE-03 | §7.3 | Installing into a path already owned by agent X with agent Y active (and not X) results in a marker whose `agents` contains both X and Y, preserving X's ownership. |
