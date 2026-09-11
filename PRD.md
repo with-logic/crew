@@ -1338,6 +1338,8 @@ off.
 
 `--repair` never overwrites user-customized skills or touches anything outside `~/.crew/` and the agent skill directories it already manages.
 
+Findings outside that list are **not repairable** and MUST NOT be counted as addressed by any `--repair` run or preview. `customized`, `agent_missing`, and `config_invalid` need a human decision; `missing_project_root` is a heads-up whose remedy (per check 8) is the user's own `crew uninstall`, not a repair. A `--repair` run reports how many findings it addressed and, when any remain, says so rather than implying everything was fixed. An unrepairable **error**-level finding keeps the exit code non-zero after `--repair`, so a repair never reports success while a real problem stands.
+
 `--repair --dry-run` runs the same checks, reports the findings a repair would address, and applies nothing. Because nothing was fixed, the exit code follows the plain `crew doctor` rule (non-zero if any error-level finding remains); `--json` output carries `dry_run: true`.
 
 ## 12. Hashing
@@ -1942,6 +1944,7 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same scope. |
 | C-STATE-11 | §11.2 | `crew doctor` reports `missing_project_root` for any project-scope entry whose `project_root` directory no longer exists. |
 | C-STATE-12 | §11.2 | `crew doctor --repair --dry-run` reports the findings a repair would address and changes nothing: state, config, and the store are byte-identical afterward. |
+| C-STATE-12a | §11.2 | Findings `--repair` cannot fix (`customized`, `agent_missing`, `config_invalid`, `missing_project_root`) are excluded from both the dry-run "would address" count and the post-repair "addressed" count; an unrepairable error-level finding keeps the exit code non-zero after `--repair`. |
 | C-STATE-13 | §6 | `crew cache clean --dry-run` reports the bytes and orphan store entries a clean would free and deletes nothing. |
 
 #### C-AUTO: Autoupdate (§10.2)

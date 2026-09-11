@@ -52,9 +52,14 @@ export function renderDoctor(
   }
 
   if (opts.repair && !opts.dryRun) {
+    const addressed = repairableCount(findings);
+    const remaining = findings.length - addressed;
     return [
       `${style.symbol("ok")} ${style.bold("Repaired what was fixable.")}`,
-      style.dim(`  ${plural(findings.length, "finding")} addressed`),
+      style.dim(`  ${plural(addressed, "finding")} addressed`),
+      ...(remaining > 0
+        ? [style.dim(`  ${plural(remaining, "finding")} left for you — rerun \`crew doctor\``)]
+        : []),
     ];
   }
 
@@ -137,10 +142,31 @@ function clusterByCode(findings: readonly Finding[]): Map<string, Finding[]> {
   return out;
 }
 
-// Most codes are mechanical drift that `--repair` reconciles. The
-// exceptions are ones that need user attention: customizations,
-// undetected agents, and an unparseable config.
-const NOT_REPAIRABLE = new Set(["customized", "agent_missing", "config_invalid"]);
+/**
+ * Codes `--repair` actually fixes, each mapped to the mechanism that
+ * fixes it. This is an allowlist on purpose: a new finding code is
+ * NOT repairable until someone adds the repair and lists it here, so
+ * the preview can never promise a fix that doesn't exist.
+ *
+ * Deliberately absent:
+ *   - `customized`, `agent_missing`, `config_invalid` — need a human.
+ *   - `missing_project_root` — `checks.ts` documents that removing a
+ *     vanished project's install isn't doctor's job, so it is a
+ *     permanent heads-up rather than pending work.
+ */
+const REPAIRABLE_CODES: Record<string, string> = {
+  state_entry_without_marker: "repairState",
+  marker_without_state: "repairState",
+  orphan_store_entry: "repairState",
+  // Reconciled by `repairAutoupdateDrift` (§11.2 check 7).
+  autoupdate_not_loaded: "repairAutoupdateDrift",
+  autoupdate_unexpectedly_loaded: "repairAutoupdateDrift",
+};
+
+/** True when `code` is one `crew doctor --repair` can actually fix. */
+export function isRepairableCode(code: string): boolean {
+  return code in REPAIRABLE_CODES;
+}
 
 function isRepairable(findings: readonly Finding[]): boolean {
   return repairableCount(findings) > 0;
@@ -149,7 +175,7 @@ function isRepairable(findings: readonly Finding[]): boolean {
 function repairableCount(findings: readonly Finding[]): number {
   let n = 0;
   for (const f of findings) {
-    if (!NOT_REPAIRABLE.has(f.code)) n++;
+    if (isRepairableCode(f.code)) n++;
   }
   return n;
 }

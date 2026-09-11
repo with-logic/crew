@@ -18,7 +18,7 @@ export const autoupdateHelp: CommandHelp = {
       description:
         "With `enable`/`disable`, show which scheduler files would be written or removed without touching anything.",
     },
-    { flag: "--json", description: "Machine-readable output for `status`." },
+    { flag: "--json", description: "Machine-readable output." },
   ],
   examples: [
     {
