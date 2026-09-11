@@ -45,6 +45,16 @@ export const MANAGING: CommandGroup = {
       description: ["Alias for ", <code key="crew-update">crew update</code>, "."],
     },
     {
+      name: "outdated",
+      signature: <>crew outdated [&lt;name&gt;…]</>,
+      description: (
+        <>
+          Preview what <code>crew update</code> would change — pending updates and new tap
+          skills. Refreshes your taps, but nothing installed changes.
+        </>
+      ),
+    },
+    {
       name: "list",
       signature: <>crew list</>,
       description: "List installed skills, grouped by scope, with sources and resolved SHAs.",

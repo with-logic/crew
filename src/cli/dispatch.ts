@@ -13,6 +13,7 @@ import { helpCommand, versionCommand } from "../commands/help/index.ts";
 import { infoCommand } from "../commands/info/index.ts";
 import { installCommand } from "../commands/install/index.ts";
 import { listCommand } from "../commands/list.ts";
+import { outdatedCommand } from "../commands/outdated/index.ts";
 import { searchCommand } from "../commands/search/index.ts";
 import { selfUpdateCommand } from "../commands/self-update.ts";
 import { tapCommand } from "../commands/tap/index.ts";
@@ -35,6 +36,7 @@ export const COMMAND_HANDLERS: Record<CanonicalCommand, CommandHandler> = {
   install: installCommand,
   uninstall: uninstallCommand,
   update: updateCommand,
+  outdated: outdatedCommand,
   list: listCommand,
   search: searchCommand,
   info: infoCommand,
