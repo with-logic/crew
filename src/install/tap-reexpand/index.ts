@@ -29,17 +29,26 @@ import { isDirectory } from "../../util/fs.ts";
 import { groupChildrenByName } from "../tap-children.ts";
 import { collectAdditions } from "./additions.ts";
 import { type AcquiredTapScan, makeTapScanCache } from "./scan-cache.ts";
+import { surveyGroup } from "./survey.ts";
 
 /**
  * Which groups a restricted run should re-expand. `memberIdentities`
- * holds full entry identities (§11.1) rather than names, so a
- * same-named skill from another tap or scope can't pull its group in;
- * `tapNames` covers selectors that named a tap outright. `null` means
- * no positionals — every group.
+ * holds entry identities (§11.1) rather than names, so a same-named
+ * skill from another tap or scope can't pull its group in; `tapNames`
+ * covers selectors that named a tap outright. `null` means no
+ * positionals — every group.
+ *
+ * `namespaces` bounds which NEW children may be installed. A selector
+ * naming one namespace pulls in its group, but the group spans the
+ * whole tap, so without this bound a user who asked to update
+ * `acme/alpha` would silently acquire a skill newly added to
+ * `acme/beta` (§10.1.1). `null` means unbounded: no namespace selector
+ * was involved, so every discovered child is in scope.
  */
 export interface ReexpandSelection {
   readonly memberIdentities: ReadonlySet<string>;
   readonly tapNames: ReadonlySet<string>;
+  readonly namespaces: ReadonlySet<string> | null;
 }
 
 /** One re-expansion outcome row. */
@@ -67,6 +76,13 @@ export interface TapReexpandResult {
   readonly added: readonly StateEntry[];
   readonly updated: readonly StateEntry[];
   readonly hardFailure: boolean;
+  /**
+   * Entries whose upstream directory vanished, keyed by full identity
+   * (§11.1) rather than name. The same skill name can be installed from
+   * two taps or at two scopes; a name-keyed set would report a still-
+   * present install as `source_gone` because its namesake disappeared
+   * from an unrelated group.
+   */
   readonly sourceGone: ReadonlySet<string>;
   readonly rows: readonly TapReexpandRow[];
 }
@@ -148,37 +164,12 @@ export function reexpandTaps(
 
     const children = cache.children(tap, home, acquired.rootDir);
     const childrenByName = groupChildrenByName(children);
-    const conflictedNames = new Set<string>();
-    for (const [name, locs] of childrenByName) {
-      if (locs.length < 2) continue;
-      conflictedNames.add(name);
-      hardFailure = true;
-      rows.push({
-        name,
-        scope: first.scope,
-        tap: tap.name,
-        kind: "tap_error",
-        error: {
-          code: "conflicting_dependencies",
-          message: `\`${name}\` appears multiple times in tap \`${tap.name}\` at ${locs.map((loc) => loc.tapRelativePath || "(root)").join(", ")}`,
-        },
-      });
-    }
-
-    // SOURCE_GONE: members no longer present upstream.
-    for (const m of members) {
-      if (conflictedNames.has(m.name)) continue;
-      const locs = childrenByName.get(m.name);
-      const child = locs?.[0];
-      if (!child) {
-        sourceGone.add(m.name);
-        rows.push({ name: m.name, scope: m.scope, tap: tap.name, kind: "source_gone" });
-        continue;
-      }
-      if (child.tapRelativePath !== m.source.path) {
-        updated.push({ ...m, source: { ...m.source, path: child.tapRelativePath } });
-      }
-    }
+    const survey = surveyGroup({ members, childrenByName, tap });
+    rows.push(...survey.rows);
+    updated.push(...survey.relocated);
+    for (const id of survey.sourceGone) sourceGone.add(id);
+    if (survey.hardFailure) hardFailure = true;
+    const conflictedNames = survey.conflictedNames;
 
     // ADDITIONS: children upstream not in state.
     const additions = collectAdditions({
@@ -193,6 +184,7 @@ export function reexpandTaps(
       dryRun,
       installOne,
       cache,
+      namespaces: selection?.namespaces ?? null,
     });
     added.push(...additions.added);
     rows.push(...additions.rows);

@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync } from "node:fs";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../src/core/types.ts";
 import { reexpandTaps } from "../../src/install/tap-reexpand/index.ts";
+import { entryIdentity } from "../../src/state/collections.ts";
 import { makeCrewHome } from "../helpers/env.ts";
 import { makeTempDir } from "../helpers/fixtures.ts";
 
@@ -52,7 +53,9 @@ describe("reexpandTaps", () => {
     const result = reexpandTaps(state, config, home, null, () => {
       throw new Error("empty tap should not add children");
     });
-    expect([...result.sourceGone]).toEqual(["missing"]);
+    // sourceGone carries entry identities, not bare names, so a relocated
+    // entry with the same name at another scope is never conflated.
+    expect([...result.sourceGone]).toEqual([entryIdentity(trackedEntry())]);
     expect(result.rows[0]).toMatchObject({ name: "missing", kind: "source_gone" });
   });
 

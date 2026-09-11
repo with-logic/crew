@@ -13,6 +13,7 @@ import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.
 import type { ReexpandSelection } from "../../install/tap-reexpand/index.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
 import { type CollectionSubject, entryIdentity } from "../../state/collections.ts";
+import { dependencyClosureFor, orderedEntries } from "./dep-closure.ts";
 
 /** Expanded update set + per-entry "who pulled you in" map. */
 export interface ChosenEntries {
@@ -22,11 +23,6 @@ export interface ChosenEntries {
    * names that transitively required it. A name in this map is never
    * one of the command-line positionals.
    */
-  readonly transitiveSources: ReadonlyMap<string, readonly string[]>;
-}
-
-interface DependencyClosure {
-  readonly selectedNames: ReadonlySet<string>;
   readonly transitiveSources: ReadonlyMap<string, readonly string[]>;
 }
 
@@ -75,10 +71,26 @@ export function reexpandSelectionFor(
   const memberIdentities = new Set<string>();
   for (const entry of expandedSelection) memberIdentities.add(entryIdentity(entry));
   const tapNames = new Set<string>();
+  const namespaces = new Set<string>();
+  let unbounded = false;
   for (const subject of subjects) {
-    if (subject.kind === "tap") tapNames.add(subject.name);
+    if (subject.kind === "tap") {
+      tapNames.add(subject.name);
+      // Naming a tap asks for the whole tap, so additions are unbounded.
+      unbounded = true;
+      continue;
+    }
+    if (subject.kind === "namespace") {
+      // `<tap>/<ns>` resolves with the tap qualifier still attached;
+      // the namespace is the last segment either way.
+      namespaces.add(subject.name.split("/").pop()!);
+      continue;
+    }
+    // A skill selector says nothing about which namespaces are in
+    // scope, so it cannot bound additions on its own.
+    unbounded = true;
   }
-  return { memberIdentities, tapNames };
+  return { memberIdentities, tapNames, namespaces: unbounded ? null : namespaces };
 }
 
 /** Attach `transitively_required_by` to a row when the entry is in the closure map. */
@@ -121,75 +133,4 @@ export function chooseEntries(
   const closure = dependencyClosureFor(state, names, topLevel);
   const entries = orderedEntries(state, subjects, closure.selectedNames, topLevel);
   return { entries, transitiveSources: closure.transitiveSources };
-}
-
-function dependencyClosureFor(
-  state: StateFile,
-  names: readonly string[],
-  topLevel: ReadonlySet<string>,
-): DependencyClosure {
-  const selectedNames = new Set<string>();
-  const ancestors = new Map<string, Set<string>>();
-  const visited = new Set<string>();
-  // Reverse dependency index, built once: `required_by` name -> the
-  // entries that declare it. The previous form rescanned every
-  // installation for each dequeue, which is quadratic on a large
-  // collection update.
-  const dependents = new Map<string, string[]>();
-  for (const candidate of state.installations) {
-    for (const parent of candidate.required_by) {
-      const bucket = dependents.get(parent);
-      if (bucket) bucket.push(candidate.name);
-      else dependents.set(parent, [candidate.name]);
-    }
-  }
-  // Cursor rather than `shift()`: shifting re-indexes the whole array
-  // on every step.
-  const queue = names.map((name) => ({ name, rootedAt: name }));
-  for (let cursor = 0; cursor < queue.length; cursor++) {
-    const { name, rootedAt } = queue[cursor]!;
-    const firstVisit = !visited.has(name);
-    visited.add(name);
-    selectedNames.add(name);
-    if (!topLevel.has(name)) {
-      if (!ancestors.has(name)) ancestors.set(name, new Set());
-      ancestors.get(name)!.add(rootedAt);
-    }
-    if (!firstVisit) continue;
-    for (const dependent of dependents.get(name) ?? []) {
-      queue.push({ name: dependent, rootedAt });
-    }
-  }
-  const transitiveSources = new Map<string, readonly string[]>();
-  for (const [name, set] of ancestors) transitiveSources.set(name, [...set].sort());
-  return { selectedNames, transitiveSources };
-}
-
-/** Preserve the user's requested entries first, then append dependency entries in state order. */
-function orderedEntries(
-  state: StateFile,
-  subjects: readonly CollectionSubject[],
-  selectedNames: ReadonlySet<string>,
-  topLevel: ReadonlySet<string>,
-): readonly StateEntry[] {
-  const entries: StateEntry[] = [];
-  const seen = new Set<string>();
-  const add = (entry: StateEntry) => {
-    const key = entryKey(entry);
-    if (seen.has(key)) return;
-    seen.add(key);
-    entries.push(entry);
-  };
-  for (const subject of subjects) {
-    for (const entry of subject.entries) add(entry);
-  }
-  for (const entry of state.installations) {
-    if (!selectedNames.has(entry.name) || topLevel.has(entry.name)) continue;
-    add(entry);
-  }
-  return entries;
-}
-
-function entryKey(entry: StateEntry): string {
-  return `${entry.name}::${entry.scope}::${entry.project_root ?? ""}`;
 }

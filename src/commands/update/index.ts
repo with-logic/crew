@@ -1,17 +1,20 @@
 /**
- * `crew update [<name>...]` (§10.1).
+ * `crew update [<selector>...]` (§10.1).
  *
- * For each installed skill (or the named subset + its transitive
- * dependency closure), re-resolve the ref to a SHA. If the SHA hasn't
- * moved, report up-to-date. If it has and the ref is not pinned (or
- * `--force`), re-stage into the store and re-run the install algorithm
- * against every currently-installed (target, scope) pair.
+ * A selector is an installed skill, a tap, or a namespace — see
+ * `state/collections.ts`. For each entry the selectors resolve to (plus
+ * its transitive dependency closure), re-resolve the ref to a SHA. If
+ * the SHA hasn't moved, report up-to-date. If it has and the ref is not
+ * pinned (or `--force`), re-stage into the store and re-run the install
+ * algorithm against every currently-installed (target, scope) pair.
  *
  * Tap re-expansion (§10.1.1) runs first: for every distinct tap that
- * backs any state entry (filtered by `names` if given), re-walk the
- * tap and install newly-added skills, mark removed skills as
+ * backs any state entry (filtered by the selectors if given), re-walk
+ * the tap and install newly-added skills, mark removed skills as
  * `source_gone`. This is how `crew install @org/skills` + autoupdate
- * pulls in new team skills.
+ * pulls in new team skills. A namespace selector bounds the additions
+ * to that namespace — the group spans the whole tap, but the user
+ * asked about one part of it.
  *
  * Dependency closure (§10.1 step 2): `crew update <name>...` expands
  * the update set to include every entry transitively required by a
