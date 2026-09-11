@@ -51,25 +51,63 @@ const ARRAY_GLOBALS = ["agent"] as const;
 const BUILT_IN_FLAGS = new Set<string>([...BOOLEAN_GLOBALS, ...STRING_GLOBALS, ...ARRAY_GLOBALS]);
 
 /**
- * §5.5 conventional flags, applied as a pure argv rewrite before yargs
- * sees anything:
+ * A yargs instance configured as a pure parser. Shared so the conventional
+ * flag rewrite reads `--json` exactly as the real parse later will.
+ */
+function baseParser() {
+  return yargsFactory().exitProcess(false).help(false).version(false).parserConfiguration({
+    "parse-numbers": false,
+    "camel-case-expansion": false,
+    "dot-notation": false,
+    "boolean-negation": false,
+    "duplicate-arguments-array": true,
+  });
+}
+
+/**
+ * The effective `--json` value for a rewritten argv, asked of the real
+ * parser rather than pattern-matched.
+ *
+ * `--json`, `--json=true`, and `--json=false` are all valid spellings and
+ * the last occurrence wins, so scanning for a bare `--json` token would
+ * disagree with `crew help --json=…` on exactly the forms it can't see.
+ */
+function effectiveJson(argv: readonly string[]): boolean {
+  const parsed = baseParser()
+    .boolean(["json"])
+    .parseSync([...argv]);
+  return Boolean(parsed["json"]);
+}
+
+/**
+ * §5.5 conventional flags, applied as an argv rewrite before the command
+ * is dispatched:
  *
  *   - `--help` / `-h` anywhere → `help <command>`, where `<command>` is
- *     the first non-flag token (a leading `help` is skipped). Only
- *     `--json` survives the rewrite.
+ *     the first non-flag token (skipping only a LEADING `help`, so
+ *     `crew help help --help` still reaches the `help` page). Every other
+ *     flag is dropped; `--json` is re-emitted at its effective value.
  *   - `--version` / `-v` / `-V` as the FIRST token → `version`. After a
  *     command name they stay unknown flags, so `-v` remains free for a
  *     future `--verbose` short form.
+ *
+ * `--help` wins over `--version` whenever both appear (§5.5): help is the
+ * broader request, and it makes `crew --version --help` order-independent.
  */
 function rewriteConventionalFlags(argv: readonly string[]): readonly string[] {
-  const json = argv.includes("--json") ? ["--json"] : [];
+  const wantsHelp = argv.some((a) => a === "--help" || a === "-h");
   const first = argv[0];
-  if (first === "--version" || first === "-v" || first === "-V") {
-    return ["version", ...json];
+  const wantsVersion = first === "--version" || first === "-v" || first === "-V";
+  if (!(wantsHelp || wantsVersion)) return argv;
+
+  const json = effectiveJson(argv) ? ["--json"] : [];
+  // §5.5 precedence: `--help` beats a first-token version flag.
+  if (wantsHelp) {
+    const rest = argv[0] === "help" ? argv.slice(1) : argv;
+    const command = rest.find((a) => !a.startsWith("-"));
+    return command === undefined ? ["help", ...json] : ["help", command, ...json];
   }
-  if (!argv.some((a) => a === "--help" || a === "-h")) return argv;
-  const command = argv.find((a) => !a.startsWith("-") && a !== "help");
-  return command === undefined ? ["help", ...json] : ["help", command, ...json];
+  return ["version", ...json];
 }
 
 /** Parse raw argv (already stripped of `node` and script name). */
@@ -86,21 +124,11 @@ export function parseArgs(rawArgv: readonly string[]): ParsedArgs {
 
   let parsed: Record<string, unknown>;
   try {
-    parsed = yargsFactory()
-      .exitProcess(false)
-      .help(false)
-      .version(false)
+    parsed = baseParser()
       // `.strictOptions()` rejects unknown `--flags` but leaves positional
       // arguments alone (our subcommand grammar is positional — `crew tap
       // list`, `crew install <ref>`).
       .strictOptions()
-      .parserConfiguration({
-        "parse-numbers": false,
-        "camel-case-expansion": false,
-        "dot-notation": false,
-        "boolean-negation": false,
-        "duplicate-arguments-array": true,
-      })
       .array([...ARRAY_GLOBALS])
       // `--agent` is repeatable but each occurrence takes exactly one
       // value (`--agent a --agent b`); without `nargs` yargs would

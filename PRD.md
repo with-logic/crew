@@ -197,7 +197,8 @@ shape of help output; wording is left to each implementation.
   machine-readable structured help.
 - `--help` or `-h` anywhere on the command line MUST behave as
   `crew help <command>`, where `<command>` is the first non-flag token
-  (skipping a leading `help`); with no such token it is `crew help`.
+  (skipping only a LEADING `help`, so `crew help help --help` still
+  resolves to `crew help help`); with no such token it is `crew help`.
   Other flags and positionals are ignored, except `--json`, which still
   selects structured help. `crew tap remove --help` shows the `tap`
   page — subcommand words are not separate help pages.
@@ -205,6 +206,15 @@ shape of help output; wording is left to each implementation.
   `crew version` (honoring `--json`). After a command name (`crew
   install -v`) these remain unknown flags — `usage_error`, exit 4 — so
   `-v` stays free for a future `--verbose` short form.
+- When both a help flag and a first-token version flag appear, `--help`
+  MUST win, regardless of their order: `crew --version --help` and
+  `crew --help --version` both print the overview.
+- The `--json` carried through either rewrite MUST be the flag's
+  effective parsed value, not the presence of a bare `--json` token.
+  Every spelling the parser accepts (`--json`, `--json=true`,
+  `--json=false`) and its last-occurrence-wins semantics MUST apply
+  identically to the rewritten and canonical forms, so
+  `crew --help --json=true` matches `crew help --json=true`.
 
 **Overview MUST contain:**
 
@@ -1986,6 +1996,9 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-15 | §5.5 | `crew --help`, `crew -h`, `crew <command> --help`, and `crew <command> -h` print the same output as `crew help` / `crew help <command>` on stdout and exit 0; `--json` selects structured help. |
 | C-CLI-16 | §5.5 | `crew --version`, `crew -v`, and `crew -V` print the same output as `crew version` and exit 0; `--json` emits `{version}`. |
 | C-CLI-17 | §5.5 | `-v` after a command name (e.g. `crew install -v`) is an unknown flag: `usage_error`, exit 4. |
+| C-CLI-17a | §5.5 | Every `--json` spelling the parser accepts behaves identically for a rewritten flag form and its canonical command: `crew --help --json=true` matches `crew help --json=true`, `crew --version --json=true` matches `crew version --json=true`, and last-occurrence-wins applies to both (`--json --json=false` selects human output). |
+| C-CLI-17b | §5.5 | `--help` takes precedence over a first-token version flag in either order: `crew --version --help` and `crew --help --version` both print the overview and exit 0. |
+| C-CLI-17c | §5.5 | Only a leading `help` token is skipped when resolving the help target, so `crew help help --help` prints the `help` command's page, not the overview. |
 
 ### 18.4 Worked examples
 
