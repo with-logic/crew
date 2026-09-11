@@ -22,7 +22,7 @@ import { acquireTap } from "../../sources/acquire/index.ts";
 import { expandSkills } from "../../sources/expand.ts";
 import { readState } from "../../state/load.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
-import { isAutoTapSource, sourceLabel } from "../source-label.ts";
+import { isAutoTapSource, sourceLabel, tapIndex } from "../source-label.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import type { InstalledInfo, SkillInfo } from "./render.ts";
 import { renderInstalled, renderSkills } from "./render.ts";
@@ -106,12 +106,13 @@ function buildInstalledInfo(
   const description = loadDescriptionFromAny(entries, fallbackCwd);
   // The tap name is only worth showing when the label replaced it; for
   // a registered tap the label already IS the name.
-  const tapName = isAutoTapSource(primary, config) ? primary.source.tap : null;
+  const taps = tapIndex(config);
+  const tapName = isAutoTapSource(primary, taps) ? primary.source.tap : null;
   return {
     primary,
     entries,
     description,
-    sourceLabel: sourceLabel(primary, config),
+    sourceLabel: sourceLabel(primary, taps),
     tapName,
   };
 }

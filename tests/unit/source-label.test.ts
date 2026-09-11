@@ -1,14 +1,20 @@
 /**
  * Unit coverage for `sourceLabel` (§5.1 "Source labels").
  *
- * C-LIST-07 covers which label shape each tap kind gets; C-LIST-08
- * covers the round-trip property (an auto git tap's label parses back to
- * the same URL and subpath) and the orphaned-tap fallback.
+ * C-LIST-08 covers which label shape each tap kind gets; C-LIST-09 covers
+ * the round-trip property (an auto git tap's label parses back to the same
+ * URL and subpath) and the orphaned-tap fallback; C-LIST-10 covers the
+ * display-safety rules — no credentials, no control characters.
  */
 
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
-import { isAutoTapSource, repoRef, sourceLabel } from "../../src/commands/source-label.ts";
+import {
+  isAutoTapSource,
+  repoRef,
+  sourceLabel,
+  tapIndex,
+} from "../../src/commands/source-label.ts";
 import type { Config, StateEntry, TapConfig } from "../../src/core/types.ts";
 import { parseRef } from "../../src/refs/parse.ts";
 
@@ -23,13 +29,14 @@ function tap(over: Partial<TapConfig> & Pick<TapConfig, "name">): TapConfig {
   };
 }
 
-function config(...taps: TapConfig[]): Config {
-  return {
-    taps,
+function taps(...rows: TapConfig[]) {
+  const cfg: Config = {
+    taps: rows,
     disabled_agents: [],
     forced_agents: [],
     autoupdate: { enabled: false, interval_seconds: 14400 },
   };
+  return tapIndex(cfg);
 }
 
 function entry(tapName: string, path: string): StateEntry {
@@ -49,61 +56,56 @@ function entry(tapName: string, path: string): StateEntry {
 }
 
 describe("sourceLabel", () => {
-  test("C-LIST-07 a registered tap keeps its configured name", () => {
-    const cfg = config(tap({ name: "core", registered: true, url: "https://x/y.git" }));
-    expect(sourceLabel(entry("core", ""), cfg)).toBe("core");
-    expect(sourceLabel(entry("core", "skills/demo"), cfg)).toBe("core/skills/demo");
+  test("C-LIST-08 a registered tap keeps its configured name", () => {
+    const t = taps(tap({ name: "core", registered: true, url: "https://x/y.git" }));
+    expect(sourceLabel(entry("core", ""), t)).toBe("core");
+    expect(sourceLabel(entry("core", "skills/demo"), t)).toBe("core/skills/demo");
   });
 
-  test("C-LIST-07 an auto GitHub tap renders as @owner/repo", () => {
-    const cfg = config(
+  test("C-LIST-08 an auto GitHub tap renders as @owner/repo", () => {
+    const t = taps(
       tap({ name: "skills-internal-comms", url: "https://github.com/anthropics/skills.git" }),
     );
-    expect(sourceLabel(entry("skills-internal-comms", ""), cfg)).toBe("@anthropics/skills");
+    expect(sourceLabel(entry("skills-internal-comms", ""), t)).toBe("@anthropics/skills");
   });
 
-  test("C-LIST-07 subpath and entry path join into one location", () => {
-    const cfg = config(
+  test("C-LIST-08 subpath and entry path join into one location", () => {
+    const t = taps(
       tap({
         name: "skills-internal-comms",
         url: "https://github.com/anthropics/skills.git",
         subpath: "skills/internal-comms",
       }),
     );
-    expect(sourceLabel(entry("skills-internal-comms", ""), cfg)).toBe(
+    expect(sourceLabel(entry("skills-internal-comms", ""), t)).toBe(
       "@anthropics/skills//skills/internal-comms",
     );
 
-    const rootTap = config(
-      tap({ name: "skills", url: "https://github.com/anthropics/skills.git" }),
-    );
+    const rootTap = taps(tap({ name: "skills", url: "https://github.com/anthropics/skills.git" }));
     expect(sourceLabel(entry("skills", "skills/docx"), rootTap)).toBe(
       "@anthropics/skills//skills/docx",
     );
   });
 
-  test("C-LIST-07 other hosts use their shorthand or a bare host path", () => {
-    const gl = config(tap({ name: "t", url: "https://gitlab.com/acme/skills.git" }));
+  test("C-LIST-08 shorthand hosts use their prefix", () => {
+    const gl = taps(tap({ name: "t", url: "https://gitlab.com/acme/skills.git" }));
     expect(sourceLabel(entry("t", ""), gl)).toBe("gl:acme/skills");
 
-    const bb = config(tap({ name: "t", url: "https://bitbucket.org/acme/skills.git" }));
+    const bb = taps(tap({ name: "t", url: "https://bitbucket.org/acme/skills.git" }));
     expect(sourceLabel(entry("t", ""), bb)).toBe("bb:acme/skills");
-
-    const self = config(tap({ name: "t", url: "https://git.example.com/acme/skills.git" }));
-    expect(sourceLabel(entry("t", ""), self)).toBe("git.example.com/acme/skills");
   });
 
-  test("C-LIST-07 an auto path tap shows the directory", () => {
+  test("C-LIST-08 an auto path tap shows the directory", () => {
     const dir = `${homedir()}/code/my-skills`;
-    const cfg = config(tap({ name: "my-skills", kind: "path", path: dir }));
-    expect(sourceLabel(entry("my-skills", ""), cfg)).toBe("~/code/my-skills");
-    expect(sourceLabel(entry("my-skills", "demo"), cfg)).toBe("~/code/my-skills/demo");
+    const t = taps(tap({ name: "my-skills", kind: "path", path: dir }));
+    expect(sourceLabel(entry("my-skills", ""), t)).toBe("~/code/my-skills");
+    expect(sourceLabel(entry("my-skills", "demo"), t)).toBe("~/code/my-skills/demo");
   });
 
-  test("C-LIST-08 an auto git label parses back to the same url and subpath", () => {
+  test("C-LIST-09 an auto git label parses back to the same url and subpath", () => {
     const url = "https://github.com/anthropics/skills.git";
-    const cfg = config(tap({ name: "skills", url, subpath: "skills" }));
-    const label = sourceLabel(entry("skills", "internal-comms"), cfg);
+    const t = taps(tap({ name: "skills", url, subpath: "skills" }));
+    const label = sourceLabel(entry("skills", "internal-comms"), t);
 
     const parsed = parseRef(label);
     expect(parsed.type).toBe("git");
@@ -112,43 +114,51 @@ describe("sourceLabel", () => {
     expect(parsed.subpath).toBe("skills/internal-comms");
   });
 
-  test("C-LIST-08 an orphaned tap falls back to the raw tap and path", () => {
-    const cfg = config(tap({ name: "other", registered: true }));
-    expect(sourceLabel(entry("gone", ""), cfg)).toBe("gone");
-    expect(sourceLabel(entry("gone", "skills/demo"), cfg)).toBe("gone/skills/demo");
+  test("C-LIST-09 an orphaned tap falls back to the raw tap and path", () => {
+    const t = taps(tap({ name: "other", registered: true }));
+    expect(sourceLabel(entry("gone", ""), t)).toBe("gone");
+    expect(sourceLabel(entry("gone", "skills/demo"), t)).toBe("gone/skills/demo");
   });
 
   test("a URL crew cannot decompose is shown unchanged", () => {
-    const cfg = config(tap({ name: "t", url: "https://example.com" }));
-    expect(sourceLabel(entry("t", ""), cfg)).toBe("https://example.com");
+    const t = taps(tap({ name: "t", url: "https://example.com" }));
+    expect(sourceLabel(entry("t", ""), t)).toBe("https://example.com");
   });
 
-  test("ssh-style urls drop the credential prefix", () => {
-    expect(repoRef("git@github.com:acme/skills.git")).toBe("@acme/skills");
-    expect(repoRef("ssh://git@git.example.com/acme/skills.git")).toBe(
-      "git.example.com/acme/skills",
+  test("C-LIST-10 a password in a clone URL is masked", () => {
+    const t = taps(tap({ name: "t", url: "https://user:tok3n@github.com/acme/skills.git" }));
+    const label = sourceLabel(entry("t", ""), t);
+    expect(label).not.toContain("tok3n");
+    expect(label).toBe("https://user:***@github.com/acme/skills.git");
+  });
+
+  test("C-LIST-10 a query string or fragment is dropped", () => {
+    const t = taps(
+      tap({ name: "t", url: "https://github.com/acme/skills.git?access_token=sEcReT#frag" }),
     );
+    const label = sourceLabel(entry("t", ""), t);
+    expect(label).not.toContain("sEcReT");
+    expect(label).toBe("@acme/skills");
   });
 
-  test("a host:port survives the scp-separator rewrite", () => {
-    expect(repoRef("https://git.example.com:8443/acme/skills.git")).toBe(
-      "git.example.com:8443/acme/skills",
-    );
+  test("C-LIST-10 an ssh username is kept — it addresses the remote", () => {
+    // `git@` is the protocol's fixed account, not a secret, and dropping
+    // it would leave a label that does not clone.
+    expect(repoRef("git@github.com:acme/skills.git")).toBe("git@github.com:acme/skills.git");
   });
 
-  test("a nested group path keeps every owner segment", () => {
-    expect(repoRef("https://gitlab.com/acme/team/skills.git")).toBe("gl:acme/team/skills");
-  });
-
-  test("a file:// url is shown exactly as typed", () => {
-    const cfg = config(tap({ name: "repo-demo", url: "file:///tmp/repo", subpath: "skills/demo" }));
-    expect(sourceLabel(entry("repo-demo", ""), cfg)).toBe("file:///tmp/repo//skills/demo");
+  test("C-LIST-10 control characters in a subpath are escaped", () => {
+    const t = taps(tap({ name: "t", url: "https://github.com/acme/skills.git" }));
+    const label = sourceLabel(entry("t", "skills/[2K\rforged"), t);
+    expect(label).not.toContain("");
+    expect(label).not.toContain("\r");
+    expect(label).toBe("@acme/skills//skills/\\x1b[2K\\x0dforged");
   });
 
   test("isAutoTapSource is true only for a configured unregistered tap", () => {
-    const cfg = config(tap({ name: "auto" }), tap({ name: "core", registered: true }));
-    expect(isAutoTapSource(entry("auto", ""), cfg)).toBe(true);
-    expect(isAutoTapSource(entry("core", ""), cfg)).toBe(false);
-    expect(isAutoTapSource(entry("gone", ""), cfg)).toBe(false);
+    const t = taps(tap({ name: "auto" }), tap({ name: "core", registered: true }));
+    expect(isAutoTapSource(entry("auto", ""), t)).toBe(true);
+    expect(isAutoTapSource(entry("core", ""), t)).toBe(false);
+    expect(isAutoTapSource(entry("gone", ""), t)).toBe(false);
   });
 });

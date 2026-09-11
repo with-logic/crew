@@ -25,7 +25,7 @@ import { ALL_AGENTS } from "../../agents/registry.ts";
 import type { Config, Scope, StateEntry } from "../../core/types.ts";
 import { columns, shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
-import { sourceLabel } from "../source-label.ts";
+import { sourceLabel, type TapsByName, tapIndex } from "../source-label.ts";
 
 export function renderEmpty(scope: Scope | null, rowFiltered: boolean, style: Styler): string[] {
   if (rowFiltered) return [style.dim("No skills match those filters.")];
@@ -44,6 +44,7 @@ export function renderList(
   style: Styler,
 ): string[] {
   const lines: string[] = [];
+  const taps = tapIndex(config);
   const grouped = groupByName(entries);
   const suffix = scope === null ? "" : ` at ${scope} scope`;
   lines.push(style.bold(`Installed skills (${grouped.size})${suffix}`));
@@ -52,10 +53,10 @@ export function renderList(
   const rowCells: string[][] = [];
   for (const [, group] of grouped) {
     if (scope === "project") {
-      for (const p of group) rowCells.push(projectIdentityRow(p, config, style));
+      for (const p of group) rowCells.push(projectIdentityRow(p, taps, style));
       continue;
     }
-    rowCells.push(...groupedRows(group, config, style));
+    rowCells.push(...groupedRows(group, taps, style));
   }
   for (const line of columns(rowCells, 2)) lines.push(line);
 
@@ -65,7 +66,7 @@ export function renderList(
 }
 
 /** Default view: one identity row per skill, project installs as sub-rows. */
-function groupedRows(group: readonly StateEntry[], config: Config, style: Styler): string[][] {
+function groupedRows(group: readonly StateEntry[], taps: TapsByName, style: Styler): string[][] {
   const adapterCount = ALL_AGENTS.length;
   const user = group.find((e) => e.scope === "user");
   const projects = group.filter((e) => e.scope === "project");
@@ -77,7 +78,7 @@ function groupedRows(group: readonly StateEntry[], config: Config, style: Styler
   const rows: string[][] = [
     [
       `  ${style.bold(identity.name)}`,
-      style.dim(formatSource(identity, config)),
+      style.dim(formatSource(identity, taps)),
       style.cyan(formatVersion(identity)),
       user ? formatAgents(user, adapterCount, style) : "",
       user ? formatTags(user, style) : "",
@@ -96,10 +97,10 @@ function groupedRows(group: readonly StateEntry[], config: Config, style: Styler
 }
 
 /** `--scope project` view: every project install carries its own identity. */
-function projectIdentityRow(p: StateEntry, config: Config, style: Styler): string[] {
+function projectIdentityRow(p: StateEntry, taps: TapsByName, style: Styler): string[] {
   return [
     `  ${style.bold(p.name)} ${formatLocation(p, style)}`,
-    style.dim(formatSource(p, config)),
+    style.dim(formatSource(p, taps)),
     style.cyan(formatVersion(p)),
     formatAgents(p, ALL_AGENTS.length, style),
     formatTags(p, style),
@@ -119,8 +120,8 @@ function formatLocation(e: StateEntry, style: Styler): string {
   return style.dim(`in ${shortenHome(e.project_root ?? "")}`);
 }
 
-function formatSource(e: StateEntry, config: Config): string {
-  return sourceLabel(e, config);
+function formatSource(e: StateEntry, taps: TapsByName): string {
+  return sourceLabel(e, taps);
 }
 
 function formatVersion(e: StateEntry): string {
