@@ -22,11 +22,13 @@ export const GROUPS: readonly CommandGroup[] = [
       },
       {
         name: "update",
-        signature: <>crew update [&lt;name&gt;…]</>,
+        signature: <>crew update [&lt;selector&gt;…]</>,
         description: (
           <>
-            Update all installed skills, or only those named. Names can be bare or tap-qualified.
-            Pinned SHAs are skipped unless <span className={styles.flag}>--force</span>.{" "}
+            Update all installed skills, or only those selected. A selector is a skill name (bare or
+            tap-qualified), a tap name, or a namespace — a tap or namespace updates everything you
+            installed from it. Pinned SHAs are skipped unless{" "}
+            <span className={styles.flag}>--force</span>.{" "}
             <span className={styles.flag}>--dry-run</span> previews what would change: taps still
             refresh, but nothing you have installed is touched.
           </>

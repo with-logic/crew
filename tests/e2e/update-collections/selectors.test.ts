@@ -2,80 +2,27 @@
  * E2E tests for collection selectors on `crew update` (PRD §10.1,
  * C-UPD-26..30): a positional may name a tap or a namespace and the
  * command updates everything installed from it.
+ *
+ * Selector-identity collisions live in `./collisions.test.ts`.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
-import { runCli } from "../../src/cli/main.ts";
-import { tapPath } from "../../src/core/paths.ts";
-import { runGit } from "../../src/git/exec.ts";
-import { captureStreams, makeCrewHome } from "../helpers/env.ts";
+import { describe, expect, test } from "bun:test";
+import { tapPath } from "../../../src/core/paths.ts";
+import { runGit } from "../../../src/git/exec.ts";
+import { commitAll, makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
 import {
-  commitAll,
-  makeGitRepo,
-  makeSkill,
-  makeTempDir,
-  skillFrontmatter,
-} from "../helpers/fixtures.ts";
+  addBrokenTap,
+  buildFlatTap,
+  buildNamespacedTap,
+  bump,
+  freshHome,
+  installedBody,
+  installRoot,
+  run,
+} from "./helpers.ts";
 
-let ccRoot = "";
-let restore: () => void;
-beforeEach(() => {
-  const originals = { user: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
-  ccRoot = makeTempDir("upd-coll-cc-");
-  (claudeCodeAdapter as { userPath: () => string }).userPath = () => ccRoot;
-  (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
-  restore = () => {
-    (claudeCodeAdapter as { userPath: () => string }).userPath = originals.user;
-    (claudeCodeAdapter as { detect: () => boolean }).detect = originals.detect;
-  };
-});
-afterEach(() => restore());
-
-function run(home: string, args: string[]): { code: number; out: string; json: () => any } {
-  const cap = captureStreams();
-  const code = runCli(args, { home, streams: cap.streams });
-  return { code, out: cap.stdout(), json: () => JSON.parse(cap.stdout()) };
-}
-
-/** Flat tap: `<repo>/<skill>/SKILL.md` per name. */
-function buildFlatTap(prefix: string, names: readonly string[]): string {
-  const repo = makeTempDir(prefix);
-  makeGitRepo(repo);
-  for (const name of names) makeSkill(repo, name, skillFrontmatter({ name }));
-  commitAll(repo, "init");
-  return repo;
-}
-
-/** Namespaced tap: `<repo>/skills/<ns>/<skill>/SKILL.md`. */
-function buildNamespacedTap(prefix: string, layout: Record<string, readonly string[]>): string {
-  const repo = makeTempDir(prefix);
-  makeGitRepo(repo);
-  mkdirSync(join(repo, "skills"));
-  for (const [ns, names] of Object.entries(layout)) {
-    mkdirSync(join(repo, "skills", ns));
-    for (const name of names) makeSkill(join(repo, "skills", ns), name, skillFrontmatter({ name }));
-  }
-  commitAll(repo, "init");
-  return repo;
-}
-
-function bump(repo: string, relSkillDir: string, name: string, body: string): void {
-  makeSkill(join(repo, relSkillDir), name, skillFrontmatter({ name }), body);
-  commitAll(repo, `bump ${name}`);
-}
-
-function installedBody(name: string): string {
-  return readFileSync(join(ccRoot, name, "SKILL.md"), "utf8");
-}
-
-function freshHome(): string {
-  const home = makeCrewHome();
-  run(home, ["tap", "remove", "core", "--force"]);
-  return home;
-}
+const ccRoot = installRoot("upd-coll-cc-");
+const body = (name: string) => installedBody(ccRoot(), name);
 
 describe("crew update <tap>", () => {
   test("C-UPD-26 a tap name updates every entry from it and picks up new siblings", () => {
@@ -84,18 +31,53 @@ describe("crew update <tap>", () => {
     expect(run(home, ["tap", "add", `file://${repo}`, "acme"]).code).toBe(0);
     expect(run(home, ["install", "acme"]).code).toBe(0);
 
-    bump(repo, "", "alpha", "v2");
+    // Both existing members move, so the test proves the whole tap is
+    // updated rather than just the first member.
+    bump(repo, "", "alpha", "alpha-v2");
+    bump(repo, "", "beta", "beta-v2");
     makeSkill(repo, "gamma", skillFrontmatter({ name: "gamma" }));
     commitAll(repo, "add gamma");
 
     const r = run(home, ["update", "acme"]);
     expect(r.code).toBe(0);
     expect(r.out).toContain("Updating tap acme (2 skills)");
-    expect(installedBody("alpha")).toContain("v2");
-    expect(installedBody("gamma")).toContain("name: gamma");
+    expect(body("alpha")).toContain("alpha-v2");
+    expect(body("beta")).toContain("beta-v2");
+    expect(body("gamma")).toContain("name: gamma");
 
     const j = run(home, ["update", "acme", "--json"]).json();
     expect(j.selectors).toEqual([{ raw: "acme", kind: "tap", name: "acme" }]);
+    // Every member appears in the rows, not just the one that changed.
+    expect(j.rows.map((row: { name: string }) => row.name).sort()).toEqual([
+      "alpha",
+      "beta",
+      "gamma",
+    ]);
+  });
+
+  test("C-UPD-35 an unreachable tap named as a selector is a hard failure", () => {
+    const home = freshHome();
+    addBrokenTap(home, "broken");
+
+    // The user asked for this tap by name and it could not be
+    // refreshed, so the run did not do what was asked: exit 1, not a
+    // warning that scrolls past.
+    const r = run(home, ["update", "broken"]);
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/couldn't refresh tap.*broken/);
+  });
+
+  test("C-UPD-35 an unreachable tap nobody named stays a warning", () => {
+    const home = freshHome();
+    const repo = buildFlatTap("upd-coll-warn-", ["alpha"]);
+    expect(run(home, ["tap", "add", `file://${repo}`, "acme"]).code).toBe(0);
+    expect(run(home, ["install", "acme"]).code).toBe(0);
+    addBrokenTap(home, "broken");
+
+    // Selecting `acme` does not name `broken`, so its failure falls
+    // under per-tap isolation (§10.1) and the run still exits 0.
+    const r = run(home, ["update", "acme"]);
+    expect(r.code).toBe(0);
   });
 
   test("C-UPD-29 a tap with nothing installed is fetched and reported, exit 0", () => {
@@ -126,13 +108,13 @@ describe("crew update <namespace>", () => {
     const r = run(home, ["update", "acme/marketing"]);
     expect(r.code).toBe(0);
     expect(r.out).toContain("Updating namespace marketing (2 skills)");
-    expect(installedBody("copy")).toContain("copy-v2");
-    expect(installedBody("lint")).not.toContain("lint-v2");
+    expect(body("copy")).toContain("copy-v2");
+    expect(body("lint")).not.toContain("lint-v2");
 
     const bare = run(home, ["update", "marketing", "--json"]).json();
     expect(bare.selectors).toEqual([{ raw: "marketing", kind: "namespace", name: "marketing" }]);
     expect(bare.rows.map((row: { name: string }) => row.name).sort()).toEqual(["copy", "seo"]);
-    expect(installedBody("lint")).not.toContain("lint-v2");
+    expect(body("lint")).not.toContain("lint-v2");
   });
 
   test("C-UPD-28 a bare namespace present in two taps is ambiguous", () => {
@@ -146,7 +128,7 @@ describe("crew update <namespace>", () => {
 
     const r = run(home, ["update", "marketing", "--json"]);
     expect(r.code).toBe(4);
-    const err = r.json().error;
+    const err = r.json().error!;
     expect(err.name).toBe("ambiguous_reference");
     expect(err.details.candidates).toEqual(["tap-a/marketing", "tap-b/marketing"]);
   });
@@ -161,7 +143,7 @@ describe("crew update <namespace>", () => {
 
     const r = run(home, ["update", "marketing", "--json"]);
     expect(r.code).toBe(4);
-    expect(r.json().error.details.candidates).toEqual(["marketing", "tap-a/marketing"]);
+    expect(r.json().error!.details.candidates).toEqual(["marketing", "tap-a/marketing"]);
   });
 });
 
@@ -179,11 +161,29 @@ describe("crew update selector precedence and errors", () => {
     expect(j.rows.map((row: { name: string }) => row.name)).toEqual(["pdf"]);
   });
 
+  test("C-UPD-28 an installed skill name wins over a same-named namespace", () => {
+    const home = freshHome();
+    // `acme` has a namespace `pdf` holding `reader`; a flat tap holds a
+    // skill literally named `pdf`. The bare word matches both, and the
+    // skill must win (§10.1 resolution order).
+    const acme = buildNamespacedTap("upd-coll-prec-ns-", { pdf: ["reader"] });
+    const flat = buildFlatTap("upd-coll-prec-flat-", ["pdf"]);
+    run(home, ["tap", "add", `file://${acme}`, "acme"]);
+    run(home, ["tap", "add", `file://${flat}`, "flat"]);
+    expect(run(home, ["install", "acme"]).code).toBe(0);
+    expect(run(home, ["install", "flat/pdf"]).code).toBe(0);
+
+    const j = run(home, ["update", "pdf", "--json"]).json();
+    expect(j.selectors).toEqual([{ raw: "pdf", kind: "skill", name: "pdf" }]);
+    // The namespace's member must not be dragged in.
+    expect(j.rows.map((row: { name: string }) => row.name)).toEqual(["pdf"]);
+  });
+
   test("C-UPD-30 an unmatched selector names all three things it could have been", () => {
     const home = freshHome();
     const r = run(home, ["update", "nope", "--json"]);
     expect(r.code).toBe(4);
-    const err = r.json().error;
+    const err = r.json().error!;
     expect(err.name).toBe("unknown_skill");
     expect(err.message).toContain("isn't an installed skill, a tap, or a namespace");
   });

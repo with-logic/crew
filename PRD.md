@@ -834,7 +834,47 @@ the entries a collection selector expands to, exactly as if each had been named
 individually. `--json` output carries `selectors: [{ raw, kind, name }]` where
 `kind` is `skill`, `tap`, or `namespace`.
 
-1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<selector>...`, it is the subset of taps that host the selected entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run.
+**A namespace selector bounds which additions are installed.** Re-expansion
+groups are keyed by `(tap, scope, project_root)`, so the group behind
+`<tap>/<namespace>` spans the whole tap — but the user asked about one part of
+it. When every selector in a run is a namespace, step 2b MUST install only
+newly-added children that live under one of the named namespaces
+(`skills/<namespace>/<skill>`); children added elsewhere in the tap are left
+alone. Naming the tap itself asks for the whole tap and imposes no such bound.
+A skill selector imposes none either: it says nothing about which namespaces
+are in scope, so a run mixing a skill selector with a namespace selector is
+unbounded.
+
+**Selector identity is fixed at resolution.** A selector resolves to exactly one
+kind before any fetching or re-expansion happens, and keeps it for the rest of
+the run. Two consequences are normative, because a run mutates `state.json`
+between resolution and targeting:
+
+- Selecting an installed skill named `foo` MUST NOT fetch or re-expand a tap
+  that merely happens to be named `foo`. Skill names and tap names are matched
+  against their own kind, never pooled into one namespace of strings.
+- A selector resolved as a tap MUST still select every member of that tap after
+  re-expansion, even when re-expansion installs a new child whose declared name
+  equals the tap's name. Re-resolving the raw argument after re-expansion would
+  demote the selector to a skill (rule 1 wins) and silently drop the tap's other
+  members.
+- A selector MUST stay bound to the state entries it resolved to, identified by
+  their full identity — tap, name, scope, and `project_root` (§11.1) — not by
+  name alone. Re-expansion installs new entries mid-run, so a run that re-reads
+  its selection by name can adopt a same-named skill from a different tap, or
+  the same skill at a different scope, that the user never selected. The same
+  rule governs which `(tap, scope, project_root)` groups step 2b re-expands: a
+  group is re-expanded only when the selection contains one of *its* entries,
+  or the user named its tap as a tap.
+
+  The entry's tap-relative source path is deliberately NOT part of this
+  identity. A skill relocated upstream — moved between namespaces, or into or
+  out of `skills/` — is still the same install, and step 2b rewrites its
+  recorded path in the same run that reads the selection back. Including the
+  path would make a relocated entry fail to match itself, silently dropping it
+  from the selection and leaving stale bytes installed.
+
+1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<selector>...`, it is the subset of taps that host the selected entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run: other taps and every per-skill update still process. A tap the user named *as a tap selector* is the exception — the run did not do what was asked, so its refresh failure is a hard failure (exit 1) in addition to the warning, even when nothing is installed from that tap. A tap that merely happens to be configured, or that backs a selected entry without having been named, stays a warning.
 2. Build the list of skills to consider:
    - `crew update` with no args → every entry in `state.json`.
    - `crew update <selector>...` → the selected entries (a collection selector contributes every entry it expands to), **plus their transitive dependency closure**. Concretely: for each selected entry, take its direct deps (from its SKILL.md `metadata.crew.dependencies`, resolved against `required_by` in state), then their deps, and so on. A dep that isn't in state — one that was never installed — is not added; Homecrew does not install new skills during update. Entries pulled in this way appear in the results alongside the selected entries, marked `transitively_required_by: [<name>...]` in JSON output so callers can tell them apart. An unknown top-level selector (no matching state entry, tap, or namespace) is an error per argument.
@@ -1898,6 +1938,13 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-28 | §10.1 | An installed skill name wins over a same-named tap or namespace; a bare namespace with installed entries in more than one tap, or a word that is both a tap and a namespace elsewhere, is `ambiguous_reference` naming each qualified form. |
 | C-UPD-29 | §10.1 | `crew update <tap>` for a configured tap with no installed entries fetches the tap, reports that nothing is installed from it, and exits 0. |
 | C-UPD-30 | §10.1 | A selector matching no installed skill, tap, or namespace is `unknown_skill` and the message says so; `--json` carries `selectors` with each argument's resolved `kind`. |
+| C-UPD-31 | §10.1 | Selecting an installed skill never re-expands or fetches an unrelated tap whose name equals that skill's name. |
+| C-UPD-32 | §10.1 | A selector's resolved kind is fixed at resolution: a tap selector still selects every member after re-expansion installs a new child whose declared name equals the tap's name. |
+| C-UPD-33 | §10.1 | A selector stays bound to the entries it resolved to by full identity: a same-named skill installed from another tap, or at another scope, that appears during the run is neither updated nor used to re-expand its group. |
+| C-UPD-34 | §10.1.1 | One tap installed as a whole at both user and project scope re-expands both groups: a newly added sibling is installed into each. |
+| C-UPD-35 | §10.1 | A tap named as a selector whose refresh fails is a hard failure (exit 1), even with nothing installed from it; an unnamed configured tap whose refresh fails remains a warning and the run exits 0. |
+| C-UPD-36 | §10.1, §10.1.1 | A namespace selector bounds re-expansion additions to that namespace: a child added upstream under a different namespace of the same tap is not installed. Naming the tap installs both. |
+| C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
