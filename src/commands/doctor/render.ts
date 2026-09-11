@@ -39,7 +39,7 @@ const GROUP_ORDER = ["Agents", "State", "Autoupdate", "Config", "Storage", "Othe
 
 export function renderDoctor(
   findings: readonly Finding[],
-  opts: { repair: boolean; verify: boolean },
+  opts: { repair: boolean; verify: boolean; dryRun: boolean },
   style: Styler,
 ): string[] {
   if (findings.length === 0) {
@@ -51,7 +51,7 @@ export function renderDoctor(
     ];
   }
 
-  if (opts.repair) {
+  if (opts.repair && !opts.dryRun) {
     return [
       `${style.symbol("ok")} ${style.bold("Repaired what was fixable.")}`,
       style.dim(`  ${plural(findings.length, "finding")} addressed`),
@@ -96,7 +96,14 @@ export function renderDoctor(
   if (lines[lines.length - 1] === "") lines.pop();
 
   lines.push("");
-  if (isRepairable(findings)) {
+  if (opts.dryRun) {
+    const fixable = repairableCount(findings);
+    lines.push(
+      style.dim(
+        `Dry run: \`crew doctor --repair\` would address ${plural(fixable, "finding")}. Nothing was changed.`,
+      ),
+    );
+  } else if (isRepairable(findings)) {
     lines.push(style.dim("Run `crew doctor --repair` to fix what's fixable."));
   } else {
     lines.push(style.dim("These are heads-ups, not errors — crew keeps working."));
@@ -130,10 +137,19 @@ function clusterByCode(findings: readonly Finding[]): Map<string, Finding[]> {
   return out;
 }
 
+// Most codes are mechanical drift that `--repair` reconciles. The
+// exceptions are ones that need user attention: customizations,
+// undetected agents, and an unparseable config.
+const NOT_REPAIRABLE = new Set(["customized", "agent_missing", "config_invalid"]);
+
 function isRepairable(findings: readonly Finding[]): boolean {
-  // Most codes are mechanical drift that `--repair` reconciles. The
-  // exceptions are ones that need user attention: customizations,
-  // undetected agents, and an unparseable config.
-  const notRepairable = new Set(["customized", "agent_missing", "config_invalid"]);
-  return findings.some((f) => !notRepairable.has(f.code));
+  return repairableCount(findings) > 0;
+}
+
+function repairableCount(findings: readonly Finding[]): number {
+  let n = 0;
+  for (const f of findings) {
+    if (!NOT_REPAIRABLE.has(f.code)) n++;
+  }
+  return n;
 }

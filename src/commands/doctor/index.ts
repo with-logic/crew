@@ -2,8 +2,9 @@
  * `crew doctor [--verify] [--repair]` (§11.2).
  *
  * Runs integrity checks (from `./checks.ts`) and optionally reconciles
- * recoverable drift via `./repair.ts`. Marker-index construction lives
- * in `./markers.ts` and is shared between the two.
+ * recoverable drift via `./repair.ts`. `--repair --dry-run` runs the
+ * checks and lists what a repair would address without applying it.
+ * Marker-index construction lives in `./markers.ts` and is shared.
  */
 
 import { readConfig } from "../../config/load.ts";
@@ -49,11 +50,16 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   findings.push(...checkProjectRoots(stateEntries));
   if (config) findings.push(...checkAutoupdateDrift(config));
 
-  if (repair) repairState(markers, home);
+  // `--repair --dry-run` reports what a repair would address and
+  // applies nothing.
+  const dryRun = repair && ctx.flags.dryRun;
+  if (repair && !dryRun) repairState(markers, home);
 
-  const human = renderDoctor(findings, { repair, verify }, ctx.style);
+  const human = renderDoctor(findings, { repair, verify, dryRun }, ctx.style);
   // After a successful `--repair`, drift-class findings are resolved, so
-  // exit 0. Without `--repair`, errors keep the non-zero exit code.
-  const exitCode = repair ? 0 : findings.some((f) => f.level === "error") ? 1 : 0;
-  return { exitCode, human, json: { findings } };
+  // exit 0. Without `--repair` (or on a dry run, which fixes nothing),
+  // errors keep the non-zero exit code.
+  const applied = repair && !dryRun;
+  const exitCode = applied ? 0 : findings.some((f) => f.level === "error") ? 1 : 0;
+  return { exitCode, human, json: { findings, dry_run: dryRun } };
 }

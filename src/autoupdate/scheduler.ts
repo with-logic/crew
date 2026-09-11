@@ -6,7 +6,7 @@
  */
 
 import { CrewError } from "../core/errors.ts";
-import { crewHome } from "../core/paths.ts";
+import { crewHome, paths } from "../core/paths.ts";
 import * as launchd from "./launchd.ts";
 import { readAutoupdateLogTail } from "./log.ts";
 import * as systemd from "./systemd.ts";
@@ -41,6 +41,20 @@ export function disableAutoupdate(home: string = crewHome()): void {
 export function isAutoupdateLoaded(): boolean {
   const selected = schedulerOrNull();
   return selected ? selected.isAutoupdateLoaded() : false;
+}
+
+/**
+ * The scheduler files `enableAutoupdate` would write (and
+ * `disableAutoupdate` would remove) on this platform. Used by
+ * `--dry-run` to describe the change without making it. Throws
+ * `autoupdate_failure` on an unsupported platform, same as enable.
+ */
+export function autoupdateArtifacts(home: string = crewHome()): readonly string[] {
+  scheduler(); // Reject unsupported platforms before describing anything.
+  const p = paths(home);
+  const platform = platformOverride ?? process.platform;
+  if (platform === "linux") return [p.autoupdateSystemdService, p.autoupdateSystemdTimer];
+  return [p.autoupdatePlist];
 }
 
 export { readAutoupdateLogTail };

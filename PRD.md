@@ -326,7 +326,7 @@ With `--json`, help MUST emit a structured payload:
         └── Info.plist
 ```
 
-All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable.
+All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
 
 ### 6.1 `config.yaml` schema
 
@@ -442,7 +442,7 @@ Adding a new adapter later requires updating this table, adding a file under `sr
 
 **`agent-skills` adapter.** The `agent-skills` row covers any spec-compliant agent Homecrew doesn't ship a dedicated adapter for. It detects as soon as `~/.agents/` is present on the filesystem — any spec-compliant tool's install creates that directory, which is enough signal to know a tool that reads `~/.agents/skills/` is on the machine. When `agent-skills` is active alongside known adapters that share the same path (Codex, Cursor, Gemini CLI, etc.), path-sharing (below) deduplicates the write — only one physical copy exists, and the marker lists every active adapter that owns it.
 
-**Detection.** Each adapter uses a best-effort signal: the tool's CLI binary on `PATH`, or the tool's user-scope configuration directory (`~/.<tool>/` or `~/.config/<tool>/`). Either signal makes the adapter "detected." A user may force-enable or force-disable any adapter through `forced_agents` / `disabled_agents` in `config.yaml`.
+**Detection.** Each adapter uses a best-effort signal: the tool's CLI binary on `PATH`, or the tool's user-scope configuration directory (`~/.<tool>/` or `~/.config/<tool>/`). Either signal makes the adapter "detected." A user may force-enable or force-disable any adapter through `forced_agents` / `disabled_agents` in `config.yaml`. `crew agents enable|disable <name> --dry-run` validates the name and reports the change it would make without writing `config.yaml`; `--json` output carries `dry_run: true`.
 
 **Install path shape.** Each agent has a base directory for skills (user scope and project scope). A skill named `python-testing` is installed by writing its files under `<base>/python-testing/`. The install directory name equals the skill's declared `name`, which is lowercase alphanumerics and hyphens and may begin with a letter or digit.
 
@@ -936,6 +936,8 @@ autoupdate would do.
 
 `crew autoupdate enable [--interval <duration>]` installs a per-user background scheduler that runs `crew update --quiet` on the given interval. Default interval is 4 hours. Accepted duration units: `s`, `m`, `h`, `d`. The interval quantity MUST be a positive integer; `0` with any unit is rejected with `usage_error`.
 
+`crew autoupdate enable --dry-run` and `crew autoupdate disable --dry-run` report the scheduler files that would be written and loaded (or unloaded and removed) and, for enable, the interval — without invoking the platform scheduler or writing config or scheduler files. `--json` output carries `dry_run: true` and an `artifacts` array of the file paths. An unsupported platform still fails with `autoupdate_failure` on a dry run.
+
 The scheduler backend is platform-specific:
 
 - macOS uses `launchd`.
@@ -1335,6 +1337,8 @@ off.
 - Autoupdate drift (config says enabled but the platform scheduler is not loaded, or vice versa): reconcile to the config's value.
 
 `--repair` never overwrites user-customized skills or touches anything outside `~/.crew/` and the agent skill directories it already manages.
+
+`--repair --dry-run` runs the same checks, reports the findings a repair would address, and applies nothing. Because nothing was fixed, the exit code follows the plain `crew doctor` rule (non-zero if any error-level finding remains); `--json` output carries `dry_run: true`.
 
 ## 12. Hashing
 
@@ -1937,6 +1941,8 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-08 | §11.2 | `crew doctor --repair` never modifies files outside `~/.crew/` and the managed skill directories. |
 | C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same scope. |
 | C-STATE-11 | §11.2 | `crew doctor` reports `missing_project_root` for any project-scope entry whose `project_root` directory no longer exists. |
+| C-STATE-12 | §11.2 | `crew doctor --repair --dry-run` reports the findings a repair would address and changes nothing: state, config, and the store are byte-identical afterward. |
+| C-STATE-13 | §6 | `crew cache clean --dry-run` reports the bytes and orphan store entries a clean would free and deletes nothing. |
 
 #### C-AUTO: Autoupdate (§10.2)
 
@@ -1952,6 +1958,7 @@ Implementations and test suites refer to criteria by ID.
 | C-AUTO-08 | §10.2 | Interval strings `30s`, `5m`, `2h`, `1d` are accepted; `0` with any unit is rejected with `usage_error`. |
 | C-AUTO-09 | §10.2 | On macOS, `crew autoupdate enable` writes an attribution bundle at `~/.crew/Homecrew.app/Contents/Info.plist` with `CFBundleIdentifier = sh.crew.autoupdater` and `CFBundleDisplayName = "Homecrew Skill Autoupdate"`. |
 | C-AUTO-10 | §10.2 | On macOS, the plist carries an `AssociatedBundleIdentifiers` array containing `sh.crew.autoupdater`. |
+| C-AUTO-11 | §10.2 | `crew autoupdate enable --dry-run` and `disable --dry-run` name the scheduler files they would touch, invoke no scheduler, and leave config and scheduler files unchanged. |
 
 #### C-SELF: Self-update (§10.3, §10.4)
 
@@ -1979,6 +1986,7 @@ Implementations and test suites refer to criteria by ID.
 | C-AGENT-06 | §7.3 | An adapter never modifies files outside `{base}/<name>/`. |
 | C-AGENT-07 | §7.2 | The `agent-skills` adapter's `detect()` returns true iff `~/.agents/` exists on the filesystem. |
 | C-AGENT-08 | §7.2 | When `agent-skills` is the only active adapter, `crew install` writes to `~/.agents/skills/<name>/` (user scope) or `<project>/.agents/skills/<name>/` (project scope) and the install summary reports the adapter as `agent-skills`. |
+| C-AGENT-09 | §7.2 | `crew agents enable|disable <name> --dry-run` reports the change and leaves `forced_agents` / `disabled_agents` unchanged; an unknown name is still a `usage_error`. |
 
 #### C-CONC: Concurrency (§14)
 

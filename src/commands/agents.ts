@@ -3,7 +3,8 @@
  *
  * With no arguments, shows every agent crew knows about with human
  * status descriptors (detected, forced on, disabled, not found). The
- * enable/disable subcommands toggle config flags.
+ * enable/disable subcommands toggle config flags; with `--dry-run`
+ * they validate the name and report the change without writing config.
  */
 
 import { ALL_AGENTS, agentByName } from "../agents/registry.ts";
@@ -97,6 +98,19 @@ function toggle(
       name,
     });
   }
+  const verb = mode === "enable" ? "Enabled" : "Disabled";
+  const detail =
+    mode === "enable" ? "crew will install into it from now on" : "crew will skip it from now on";
+  if (ctx.flags.dryRun) {
+    return {
+      exitCode: 0,
+      human: [
+        `${ctx.style.symbol("ok")} Would ${mode} ${ctx.style.bold(name)} ${ctx.style.dim("(dry run)")}`,
+        ctx.style.dim(`  ${detail} — nothing was changed`),
+      ],
+      json: { name, mode, dry_run: true },
+    };
+  }
   withStateLock(() => {
     const config = readConfig(ctx.home);
     const forced = new Set(config.forced_agents);
@@ -113,15 +127,12 @@ function toggle(
       ctx.home,
     );
   }, ctx.home);
-  const verb = mode === "enable" ? "Enabled" : "Disabled";
-  const detail =
-    mode === "enable" ? "crew will install into it from now on" : "crew will skip it from now on";
   return {
     exitCode: 0,
     human: [
       `${ctx.style.symbol("ok")} ${verb} ${ctx.style.bold(name)}`,
       ctx.style.dim(`  ${detail}`),
     ],
-    json: { name, mode },
+    json: { name, mode, dry_run: false },
   };
 }

@@ -19,10 +19,18 @@ export const doctorHelp: CommandHelp = {
       description:
         "Actually fix what's fixable: rebuild bookkeeping, tidy up leftover files, reconcile scheduled updates.",
     },
+    {
+      flag: "--dry-run",
+      description: "With `--repair`, list what a repair would fix without changing anything.",
+    },
     { flag: "--json", description: "Machine-readable list of findings." },
   ],
   examples: [
     { command: "crew doctor", description: "Quick health check." },
+    {
+      command: "crew doctor --repair --dry-run",
+      description: "Preview what `--repair` would do before letting it loose.",
+    },
     {
       command: "crew doctor --verify",
       description: "Thorough check that also flags any local edits you've made.",
