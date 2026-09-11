@@ -657,18 +657,36 @@ Rules:
   `/-/` segment (self-hosted GitLab included); GitHub and Bitbucket
   shapes are recognised on `github.com` and `bitbucket.org` only.
 - A `?query`, `#fragment`, or trailing `/` is dropped from every
-  `http(s)` URL, and a leading `www.` is dropped from the host.
-- A `blob` link must end in `SKILL.md`; the skill directory is the
-  reference. A `blob` link to any other file is `invalid_ref` — a
-  reference must be a directory that contains `SKILL.md`.
-- The first path segment after `tree/`, `blob/`, or `src/` is the ref.
-  Branch names that themselves contain `/` are therefore mis-split;
-  use the explicit `<url>@<branch>//<subpath>` form for those.
+  `http(s)` URL, and a leading `www.` is dropped from the host. This
+  happens **before** any `@<ref>` / `//<subpath>` tail is parsed, so
+  text inside a query or fragment is never read as grammar.
+- Userinfo (`https://<user>[:<token>]@host/...`) is preserved: an
+  authenticated HTTPS URL must still clone. Credentials MUST NOT
+  appear in any human message or `--json` payload; implementations
+  redact them wherever a reference is echoed back (§13).
+- A GitHub or GitLab `blob` link must end in `SKILL.md`; the skill
+  directory is the reference. A `blob` link to any other file is
+  `invalid_ref` — a reference must be a directory that contains
+  `SKILL.md`. A `blob` link naming a ref but no path at all is also
+  `invalid_ref`.
+- Bitbucket serves directories and files alike under `src/`, with
+  nothing in the URL to distinguish them. A trailing `SKILL.md` is
+  therefore stripped and **any other leaf is taken as a directory**,
+  rather than rejected as GitHub/GitLab `blob` links are. A `src/`
+  link to a non-skill file resolves to a location with no `SKILL.md`
+  and fails later with `no_skills_found`.
+- The first path segment after `tree/`, `blob/`, or `src/` is the ref,
+  so a branch name containing `/` is mis-split by a pasted browser
+  URL. Use the explicit `<url>@<branch>//<subpath>` form for those —
+  an explicit `@<ref>` may contain `/`, because the `//<subpath>`
+  delimiter is what ends it.
 - If an explicit `@<ref>` or `//<subpath>` tail is also appended to a
   browser URL, the explicit tail wins and the browser-derived value
   for that part is discarded.
 - A repo-only URL (`https://github.com/<o>/<r>`) is unchanged; it is
   already a valid git source.
+- An `http(s)` URL too malformed to parse is `invalid_ref` (§13), not
+  an unexpected internal error.
 
 The resolved location inside the repo is either the repo root or the subpath. Behavior at the resolved location matches §9 step 5 (single skill if `SKILL.md` present, walk one level otherwise).
 
@@ -721,7 +739,9 @@ tap-source  := [ tap-name "/" ] [ namespace-name "/" ] skill-name [ "@" tap-ref 
 tap-name    := [a-z0-9][a-z0-9-]*
 namespace-name := [a-z0-9][a-z0-9-]*
 skill-name  := [a-z0-9][a-z0-9-]*  (matches the Agent Skills spec's name rules)
-git-ref     := any non-empty string not containing "/" or whitespace; must not start with "//"
+git-ref     := any non-empty string not containing ":" or whitespace; may contain "/"
+               (a "//" ends the ref and starts the subpath, so `@feature/foo//python` is
+                ref `feature/foo` + subpath `python`); must not start with "//"
 tap-ref     := any non-empty string not containing "/" or whitespace
 subpath     := any POSIX relative path not starting with "/"
 ```
@@ -1782,9 +1802,12 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-22d | §8.4 | Containment is re-checked when a stored tap subpath is resolved, not only when a reference is parsed: a `subpath` in `config.yaml` that escapes its clone (via `..` or a symlink) is refused wherever the tap is indexed. Read-only commands that treat an unusable tap as a warning (§16.6) report the containment failure for what it is rather than as an unreachable source. |
 | C-REF-23 | §8.2 | `https://github.com/o/r/tree/<ref>/<path>` is parsed as a git source with url `https://github.com/o/r.git`, ref `<ref>`, and subpath `<path>`; `/tree/<ref>` alone yields ref only; `/commit/<sha>` and `/releases/tag/<tag>` yield ref only. |
 | C-REF-24 | §8.2 | `https://github.com/o/r/blob/<ref>/<path>/SKILL.md` is parsed with subpath `<path>` (the `SKILL.md` leaf is dropped); a `blob` link to any other file produces `invalid_ref` (exit 4). |
-| C-REF-25 | §8.2 | GitLab `/-/tree/`, `/-/blob/`, `/-/commit/`, and `/-/tags/` URLs (including nested groups and self-hosted hosts) and Bitbucket `/src/` and `/commits/` URLs are parsed by the same rules as C-REF-23/24. |
+| C-REF-25 | §8.2 | GitLab `/-/tree/`, `/-/blob/`, `/-/commit/`, and `/-/tags/` URLs (including nested groups and self-hosted hosts) are parsed by the same rules as C-REF-23/24. Bitbucket `/commits/` yields ref only; Bitbucket `/src/` strips a trailing `SKILL.md` and otherwise treats the leaf as a directory (it does not reject non-`SKILL.md` files the way C-REF-24 does, because `src/` is used for both). |
 | C-REF-26 | §8.2 | A `?query`, `#fragment`, or trailing `/` is dropped from any `http(s)` git URL and a leading `www.` is dropped from the host; an explicit `@<ref>` or `//<subpath>` tail appended to a browser URL overrides the browser-derived value. |
 | C-REF-27 | §16.3 | `crew tap add` accepts a browser URL; a derived or explicit ref of `main`/`master` is dropped, any other ref is a `usage_error`. |
+| C-REF-28 | §8.2, §13 | A reference echoed back in an error message or `--json` payload has its URL userinfo and credential-bearing query values redacted; the secret never appears on stdout or stderr. |
+| C-REF-29 | §8.2 | URL userinfo is preserved in the resolved clone URL (`https://user:token@host/o/r/tree/main/py` keeps its credentials), and is not mistaken for an `@<ref>` delimiter. |
+| C-REF-30 | §8.2, §13 | `?query` and `#fragment` text is discarded before grammar parsing, so it cannot supply an `@<ref>` or `//<subpath>`; an explicit `@<ref>` may contain `/` (`@feature/foo//python`); an `http(s)` URL too malformed to parse is `invalid_ref` (exit 4). |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
