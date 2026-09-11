@@ -19,8 +19,10 @@
  *
  * With `--dry-run` (§7.4), every selector, filter, and safety check
  * runs exactly as it would for real, but nothing is written: the
- * per-agent step reports instead of removing, and the command skips
- * the state write and auto-tap GC.
+ * per-agent step reports instead of removing, the command skips the
+ * state write and auto-tap GC, and it never takes the state lock —
+ * acquiring the lock would itself create `state.json` (§14 reserves
+ * the lock for commands that write).
  *
  * Per-skill removal and state mutation live in sibling modules
  * (`./core.ts`, `./state.ts`).
@@ -50,33 +52,57 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
   const prune = Boolean(ctx.flags.extras["prune"]);
   const agentFilter = validateAgentFilter(ctx.flags.agent);
 
-  const records: UninstallRecord[] = [];
-  let exitCode = 0;
-
-  withStateLock(() => {
-    let state = readState(ctx.home);
-    for (const raw of ctx.positional) {
-      const subject = resolveStateSubject(state, raw);
-      const { updatedState, rec } = removeOne(state, subject, ctx, false, agentFilter);
-      state = updatedState;
-      records.push(rec);
-      if (rec.failures.length > 0) exitCode = 1;
-    }
-    if (prune) {
-      state = pruneOrphans(state, ctx, records);
-    }
-    if (ctx.flags.dryRun) return;
-    writeState(state, ctx.home);
-    // Auto-tap GC: any auto tap with no remaining state entries is
-    // dropped from config and its clone deleted. Registered taps stay.
-    gcAutoTaps(state, ctx.home);
-  }, ctx.home);
+  // A dry run reads state and reports; it never locks, writes, or GCs.
+  const { records, exitCode } = ctx.flags.dryRun
+    ? planUninstall(ctx, prune, agentFilter)
+    : withStateLock(() => {
+        const plan = planUninstall(ctx, prune, agentFilter);
+        writeState(plan.state, ctx.home);
+        // Auto-tap GC: any auto tap with no remaining state entries is
+        // dropped from config and its clone deleted. Registered taps stay.
+        gcAutoTaps(plan.state, ctx.home);
+        return plan;
+      }, ctx.home);
 
   return {
     exitCode,
     human: renderUninstall(records, ctx.flags.dryRun, ctx.style),
     json: { records, dry_run: ctx.flags.dryRun },
   };
+}
+
+/** Outcome of walking the selectors: the state that would result, plus per-skill records. */
+interface UninstallPlan {
+  readonly state: StateFile;
+  readonly records: readonly UninstallRecord[];
+  readonly exitCode: number;
+}
+
+/**
+ * Walk every selector (and the `--prune` pass), returning what state
+ * would look like afterwards. The per-agent work honours `--dry-run`
+ * inside `removeOne`, so this one function drives both the preview and
+ * the real removal — they can never disagree about what happens.
+ */
+function planUninstall(
+  ctx: CommandContext,
+  prune: boolean,
+  agentFilter: readonly string[] | null,
+): UninstallPlan {
+  const records: UninstallRecord[] = [];
+  let exitCode = 0;
+  let state = readState(ctx.home);
+  for (const raw of ctx.positional) {
+    const subject = resolveStateSubject(state, raw);
+    const { updatedState, rec } = removeOne(state, subject, ctx, false, agentFilter);
+    state = updatedState;
+    records.push(rec);
+    if (rec.failures.length > 0) exitCode = 1;
+  }
+  if (prune) {
+    state = pruneOrphans(state, ctx, records);
+  }
+  return { state, records, exitCode };
 }
 
 /**

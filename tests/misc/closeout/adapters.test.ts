@@ -59,6 +59,7 @@ describe("uninstallSkillFromAgents edges", () => {
         cwd: process.cwd(),
         skillName: "ghost",
         force: false,
+        dryRun: false,
       }),
     ).toThrow(CrewError);
   });
@@ -70,6 +71,7 @@ describe("uninstallSkillFromAgents edges", () => {
       cwd: makeTempDir(),
       skillName: "ghost",
       force: true,
+      dryRun: false,
     });
     expect(res.kind).toBe("absent");
   });
@@ -87,6 +89,7 @@ describe("uninstallSkillFromAgents edges", () => {
         cwd: projCwd,
         skillName: "demo",
         force: false,
+        dryRun: false,
       }),
     ).toThrow(CrewError);
     void home;
@@ -119,6 +122,7 @@ describe("uninstallSkillFromAgents edges", () => {
         cwd: projCwd,
         skillName: "demo",
         force: false,
+        dryRun: false,
       }),
     ).toThrow(CrewError);
   });
@@ -134,6 +138,7 @@ describe("uninstallSkillFromAgents edges", () => {
       cwd: projCwd,
       skillName: "demo",
       force: true,
+      dryRun: false,
     });
     expect(res.kind).toBe("removed");
   });

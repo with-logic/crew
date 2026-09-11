@@ -7,12 +7,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { readConfig } from "../../src/config/load.ts";
+import { paths } from "../../src/core/paths.ts";
+import type { Marker } from "../../src/core/types.ts";
 import { readState } from "../../src/state/load.ts";
 import { readJson } from "../../src/util/json.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -53,11 +55,17 @@ function installFooWithDepBar(home: string): void {
 }
 
 describe("crew uninstall --dry-run", () => {
-  test("C-UNINST-19 leaves install dirs, markers, and state untouched", () => {
+  test("C-UNINST-19 leaves install dirs, markers, and state byte-identical", () => {
     const home = makeCrewHome();
     installFooWithDepBar(home);
-    const stateBefore = JSON.stringify(readState(home));
-    const markerBefore = JSON.stringify(readJson(join(ccRoot, "foo", ".crew.json")));
+    // Raw bytes, not parsed-and-reserialized: a write that changed
+    // formatting or key order would slip past a JSON comparison.
+    const stateFile = paths(home).stateFile;
+    const markerFile = join(ccRoot, "foo", ".crew.json");
+    const skillFile = join(ccRoot, "foo", "SKILL.md");
+    const stateBefore = readFileSync(stateFile);
+    const markerBefore = readFileSync(markerFile);
+    const skillBefore = readFileSync(skillFile);
 
     const out = captureStreams();
     const code = runCli(["uninstall", "--dry-run", "foo"], { home, streams: out.streams });
@@ -67,10 +75,31 @@ describe("crew uninstall --dry-run", () => {
     expect(out.stdout()).toContain("[ok] claude-code");
     expect(out.stdout()).toContain("[ok] codex");
     expect(out.stdout()).toContain("would remove from 2 agents");
-    expect(existsSync(join(ccRoot, "foo", "SKILL.md"))).toBe(true);
     expect(existsSync(join(coRoot, "foo", "SKILL.md"))).toBe(true);
-    expect(JSON.stringify(readJson(join(ccRoot, "foo", ".crew.json")))).toBe(markerBefore);
-    expect(JSON.stringify(readState(home))).toBe(stateBefore);
+    expect(readFileSync(skillFile).equals(skillBefore)).toBe(true);
+    expect(readFileSync(markerFile).equals(markerBefore)).toBe(true);
+    expect(readFileSync(stateFile).equals(stateBefore)).toBe(true);
+  });
+
+  test("C-UNINST-19a a dry run against a fresh home does not create state.json", () => {
+    // `makeCrewHome()` creates the directory; use a path inside it that
+    // crew has never touched, so nothing exists before the run.
+    const home = join(makeCrewHome(), "untouched");
+    const stateFile = paths(home).stateFile;
+    expect(existsSync(home)).toBe(false);
+
+    const out = captureStreams();
+    // Nothing is installed, so the selector misses; `--force` turns the
+    // miss into a no-op so we exercise the write-free path end to end.
+    const code = runCli(["uninstall", "--dry-run", "--force", "ghost"], {
+      home,
+      streams: out.streams,
+    });
+
+    expect(code).toBe(0);
+    expect(existsSync(stateFile)).toBe(false);
+    expect(existsSync(`${stateFile}.lock`)).toBe(false);
+    expect(existsSync(home)).toBe(false);
   });
 
   test("C-UNINST-19 --prune --dry-run lists the orphan without removing it", () => {
@@ -84,7 +113,8 @@ describe("crew uninstall --dry-run", () => {
     });
 
     expect(code).toBe(0);
-    expect(out.stdout()).toContain("Pruned 1 dependency (dry run)");
+    expect(out.stdout()).toContain("Would prune 1 dependency");
+    expect(out.stdout()).not.toContain("Pruned 1 dependency");
     expect(out.stdout()).toContain("would prune 1 dependency");
     expect(existsSync(join(ccRoot, "bar", "SKILL.md"))).toBe(true);
     expect(
@@ -117,8 +147,8 @@ describe("crew uninstall --dry-run", () => {
     // partial removal takes the "detached" (marker rewrite) branch.
     (codexAdapter as { userPath: () => string }).userPath = () => ccRoot;
     installFooWithDepBar(home);
-    const marker = readJson<{ agents: string[] }>(join(ccRoot, "foo", ".crew.json"));
-    expect(marker.agents.sort()).toEqual(["claude-code", "codex"]);
+    const marker = readJson<Marker>(join(ccRoot, "foo", ".crew.json"));
+    expect([...(marker.agents ?? [])].sort()).toEqual(["claude-code", "codex"]);
 
     const out = captureStreams();
     const code = runCli(["uninstall", "--dry-run", "--agent", "codex", "foo"], {
@@ -128,34 +158,68 @@ describe("crew uninstall --dry-run", () => {
 
     expect(code).toBe(0);
     expect(out.stdout()).toContain("(kept elsewhere)");
-    const after = readJson<{ agents: string[] }>(join(ccRoot, "foo", ".crew.json"));
-    expect(after.agents.sort()).toEqual(["claude-code", "codex"]);
+    const after = readJson<Marker>(join(ccRoot, "foo", ".crew.json"));
+    expect([...(after.agents ?? [])].sort()).toEqual(["claude-code", "codex"]);
     const entry = readState(home).installations.find((e) => e.name === "foo");
     expect([...(entry?.agents ?? [])].sort()).toEqual(["claude-code", "codex"]);
   });
 
-  test("C-UNINST-19 safety checks still abort, and --force --dry-run removes nothing", () => {
+  test("C-UNINST-19 an untracked dest aborts the dry run with exit 1", () => {
     const home = makeCrewHome();
     installFooWithDepBar(home);
     // Drop the marker so the dest looks untracked.
     rmSync(join(ccRoot, "foo", ".crew.json"));
 
     const abort = captureStreams();
-    runCli(["uninstall", "--dry-run", "foo"], { home, streams: abort.streams });
+    const code = runCli(["uninstall", "--dry-run", "foo"], { home, streams: abort.streams });
+
+    expect(code).toBe(1);
     expect(abort.stdout()).toContain("something else owns that folder");
     expect(existsSync(join(ccRoot, "foo", "SKILL.md"))).toBe(true);
+  });
 
-    // A wrong-name marker takes the inconsistent_marker branch.
-    mkdirSync(join(ccRoot, "foo"), { recursive: true });
-    writeFileSync(join(ccRoot, "foo", ".crew.json"), JSON.stringify({ name: "other" }));
+  test("C-UNINST-19 --force --dry-run leaves an untracked dest in place", () => {
+    const home = makeCrewHome();
+    installFooWithDepBar(home);
+    // No marker and a sentinel file: forcing must take the
+    // `untracked_directory` branch, which is the one that would rmrf.
+    rmSync(join(ccRoot, "foo", ".crew.json"));
+    const sentinel = join(ccRoot, "foo", "sentinel.txt");
+    writeFileSync(sentinel, "keep me");
+
     const forced = captureStreams();
     const code = runCli(["uninstall", "--dry-run", "--force", "foo"], {
       home,
       streams: forced.streams,
     });
+
     expect(code).toBe(0);
+    expect(existsSync(join(ccRoot, "foo"))).toBe(true);
+    expect(existsSync(sentinel)).toBe(true);
     expect(existsSync(join(ccRoot, "foo", "SKILL.md"))).toBe(true);
     expect(existsSync(join(coRoot, "foo", "SKILL.md"))).toBe(true);
+    expect(readState(home).installations.some((e) => e.name === "foo")).toBe(true);
+  });
+
+  test("C-UNINST-19 --force --dry-run leaves a mismatched marker in place", () => {
+    const home = makeCrewHome();
+    installFooWithDepBar(home);
+    // A wrong-name marker takes the inconsistent_marker branch, which
+    // also ends in an rmrf on a real forced run.
+    const markerFile = join(ccRoot, "foo", ".crew.json");
+    mkdirSync(join(ccRoot, "foo"), { recursive: true });
+    writeFileSync(markerFile, JSON.stringify({ name: "other" }));
+    const markerBefore = readFileSync(markerFile);
+
+    const forced = captureStreams();
+    const code = runCli(["uninstall", "--dry-run", "--force", "foo"], {
+      home,
+      streams: forced.streams,
+    });
+
+    expect(code).toBe(0);
+    expect(existsSync(join(ccRoot, "foo", "SKILL.md"))).toBe(true);
+    expect(readFileSync(markerFile).equals(markerBefore)).toBe(true);
     expect(readState(home).installations.some((e) => e.name === "foo")).toBe(true);
   });
 
