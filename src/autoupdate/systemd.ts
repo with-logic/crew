@@ -78,8 +78,12 @@ export function enableAutoupdate(input: EnableInput): void {
  */
 export function disableAutoupdate(home: string = crewHome()): void {
   const p = paths(home);
+  // Missing unit files don't mean the timer is inactive — systemd can
+  // still hold a loaded unit after its file is removed. Only skip when
+  // the timer really is inactive, so a disable never reports success
+  // while the updater keeps firing.
   const hadUnits = exists(p.autoupdateSystemdService) || exists(p.autoupdateSystemdTimer);
-  if (!hadUnits) return;
+  if (!(hadUnits || isAutoupdateLoaded())) return;
   const disable = runSystemctl(["disable", "--now", "sh.crew.autoupdate.timer"]);
   if (!disable.ok) {
     throw systemdFailure("disable the autoupdate timer", disable.stderr);

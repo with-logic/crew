@@ -70,50 +70,94 @@ export function enableAutoupdate(input: EnableInput): void {
     p.autoupdatePlist,
     plistXml(input.crewBinaryPath, input.intervalSeconds, p.autoupdateLog, home),
   );
-  if (!runLaunchctl(["bootstrap", `gui/${process.getuid?.() ?? 0}`, p.autoupdatePlist])) {
-    if (!runLaunchctl(["load", p.autoupdatePlist])) {
-      throw new CrewError(
-        "autoupdate_failure",
-        "launchctl refused to load the autoupdate agent — check `log show --predicate 'subsystem == \"com.apple.xpc.launchd\"' --last 5m` for details",
-      );
+  const bootstrapped = runLaunchctl([
+    "bootstrap",
+    `gui/${process.getuid?.() ?? 0}`,
+    p.autoupdatePlist,
+  ]);
+  if (!bootstrapped.ok) {
+    const loaded = runLaunchctl(["load", p.autoupdatePlist]);
+    if (!loaded.ok) {
+      throw new CrewError("autoupdate_failure", loadFailureMessage(bootstrapped, loaded));
     }
   }
 }
 
-/** Unload the plist and delete it. */
+/** The launchctl diagnostic, when we have one, else the generic hint. */
+function launchctlDetail(...results: readonly LaunchctlResult[]): string {
+  for (const r of results) {
+    if (r.stderr.length > 0) return r.stderr;
+  }
+  return "check `log show --predicate 'subsystem == \"com.apple.xpc.launchd\"' --last 5m` for details";
+}
+
+function loadFailureMessage(...results: readonly LaunchctlResult[]): string {
+  return `launchctl refused to load the autoupdate agent — ${launchctlDetail(...results)}`;
+}
+
+/**
+ * Unload the agent and delete its plist. The unload is attempted even
+ * when the plist is already gone: launchd can still hold a loaded job
+ * whose file was removed out from under it, and returning early there
+ * would report a successful disable while the updater kept running.
+ */
 export function disableAutoupdate(home: string = crewHome()): void {
   const p = paths(home);
-  if (exists(p.autoupdatePlist)) {
-    runLaunchctl(["bootout", `gui/${process.getuid?.() ?? 0}/sh.crew.autoupdate`]);
-    runLaunchctl(["unload", p.autoupdatePlist]);
-    rmrf(p.autoupdatePlist);
+  const booted = runLaunchctl(["bootout", `gui/${process.getuid?.() ?? 0}/sh.crew.autoupdate`]);
+  const plistExists = exists(p.autoupdatePlist);
+  const unloaded: LaunchctlResult = plistExists
+    ? runLaunchctl(["unload", p.autoupdatePlist])
+    : { ok: false, stderr: "" };
+  if (plistExists) rmrf(p.autoupdatePlist);
+  // Either command succeeding means the job is gone. Both failing while
+  // the agent is still loaded is a real failure, not a no-op.
+  if (!(booted.ok || unloaded.ok) && isAutoupdateLoaded()) {
+    throw new CrewError(
+      "autoupdate_failure",
+      `launchctl refused to unload the autoupdate agent — ${launchctlDetail(booted, unloaded)}`,
+    );
   }
 }
 
 /** Is the agent currently loaded? */
 export function isAutoupdateLoaded(): boolean {
-  return runLaunchctl(["list", "sh.crew.autoupdate"]);
+  return runLaunchctl(["list", "sh.crew.autoupdate"]).ok;
 }
 
 /**
  * Test seam for `launchctl`. Replace with a stub in tests; the default
  * invokes the real binary on macOS. On any platform where `launchctl`
  * isn't available (e.g. Linux CI runners), `Bun.spawnSync` throws
- * `ENOENT` — we catch and return `false`, which is the right answer
+ * `ENOENT` — we catch and report failure, which is the right answer
  * ("agent is not loaded") for a platform that can't load it in the
  * first place.
+ *
+ * The runner returns stderr as well as the status so a failed repair
+ * can name the platform error (§11.2). A stub may return a bare
+ * boolean; `runLaunchctl` normalizes both shapes.
  */
-export type LaunchctlRunner = (args: string[]) => boolean;
-function defaultRunner(args: string[]): boolean {
+export interface LaunchctlResult {
+  readonly ok: boolean;
+  readonly stderr: string;
+}
+export type LaunchctlRunner = (args: string[]) => boolean | LaunchctlResult;
+
+/** launchctl's diagnostics are short; cap them so an error stays readable. */
+const MAX_STDERR = 500;
+
+function defaultRunner(args: string[]): LaunchctlResult {
   try {
     const proc = Bun.spawnSync({
       cmd: ["launchctl", ...args],
       stdout: "pipe",
       stderr: "pipe",
     });
-    return (proc.exitCode ?? -1) === 0;
+    return {
+      ok: (proc.exitCode ?? -1) === 0,
+      stderr: (proc.stderr?.toString() ?? "").trim().slice(0, MAX_STDERR),
+    };
   } catch {
-    return false;
+    return { ok: false, stderr: "" };
   }
 }
 let launchctlRunner: LaunchctlRunner = defaultRunner;
@@ -128,6 +172,12 @@ export function resetLaunchctlRunner(): void {
   launchctlRunner = defaultRunner;
 }
 
-function runLaunchctl(args: string[]): boolean {
-  return launchctlRunner(args);
+/**
+ * Normalize the seam's two accepted shapes into a result. A stub that
+ * returns a bare boolean carries no diagnostic, which is why the
+ * platform-error tests drive the systemd seam.
+ */
+function runLaunchctl(args: string[]): LaunchctlResult {
+  const r = launchctlRunner(args);
+  return typeof r === "boolean" ? { ok: r, stderr: "" } : r;
 }
