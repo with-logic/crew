@@ -2,7 +2,7 @@ import type { CommandHelp } from "./types.ts";
 
 export const installHelp: CommandHelp = {
   name: "install",
-  synopsis: "crew install <skill> [<skill>...]",
+  synopsis: "crew install <skill> [<skill>...] | crew install --from-git <source>",
   summary: [
     "Install a skill and make it available in every agent coder on your machine.",
     "Homecrew installs the same skill into every supported agent coder you have — Claude Code, Codex, Cursor, Gemini, and more. One command, all your agents. You don't have to think about where the skill goes; Homecrew figures out the right place for each tool.",

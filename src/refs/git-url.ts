@@ -14,6 +14,7 @@
 
 import { CrewError } from "../core/errors.ts";
 import type { GitSource } from "../core/types.ts";
+import { normalizeSubpath } from "./subpath.ts";
 
 /** Shorthand host prefixes known to crew (§8.2). */
 const SHORTHAND_HOSTS: Record<string, string> = {
@@ -73,7 +74,8 @@ export function parseGit(ref: string): GitSource {
     type: "git",
     url: canonical,
     ref: gitRef,
-    subpath,
+    // §8.4: the subpath must stay inside the repository.
+    subpath: normalizeSubpath(subpath, ref),
   };
 }
 

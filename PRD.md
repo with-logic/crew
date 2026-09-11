@@ -150,9 +150,11 @@ Accepted on any command where they apply:
 - `--yes` — answer "yes" to any confirmation prompt.
 - `--force` — override safety checks as defined in §7 and §10. Never overrides spec validation failures or two-skills-same-name conflicts.
 
+Only flags documented as repeatable (`--agent`) may appear more than once. Passing any single-value flag twice is a `usage_error` naming the flag; an implementation MUST NOT silently keep one occurrence or discard the value.
+
 ### 5.3 Install-time flags
 
-- `--from-git <url>[@<ref>][//<subpath>]` — explicit git source. The value is always parsed as a git source (§8.2), never as a tap reference or path. Any git URL or shorthand form from §8.2 is accepted, and a bare `<owner>/<repo>` value — which as a positional would be read as a tap reference — is treated as GitHub, exactly as if the user had written `@<owner>/<repo>`. The resulting source is installed alongside any positional references on the same command. A value that cannot be parsed as a git source is `invalid_ref`. The flag is only accepted by `crew install`; on any other command it is an unknown flag (`usage_error`).
+- `--from-git <url>[@<ref>][//<subpath>]` — explicit git source. The value is always parsed as a git source (§8.2), never as a tap reference or path. Any git URL or shorthand form from §8.2 is accepted, and a bare `<owner>/<repo>` value — which as a positional would be read as a tap reference — is treated as GitHub, exactly as if the user had written `@<owner>/<repo>`. The resulting source is installed alongside any positional references on the same command. The bare form accepts the same `@<ref>` and `//<subpath>` tails as every other git reference (`acme/skills@v1.2.0//tools/demo`). A value that cannot be parsed as a git source is `invalid_ref`. The flag is only accepted by `crew install`; on any other command it is an unknown flag (`usage_error`). Like every flag that takes a single value, passing it more than once is a `usage_error` (§5.2).
 - `--recursive` — for direct git/path installs only, fall back to bounded recursive discovery when standard layouts find no skill candidates. Tap-name installs use the tap's configured discovery mode; combining `--recursive` with a tap-name ref is a `usage_error`. Dependencies declared by a skill installed with `--recursive` do not inherit the flag; each dependency resolves with its own standard discovery unless its source is already a recursive tap.
 
 ### 5.3.1 Uninstall-time flags
@@ -681,6 +683,13 @@ git-ref     := any non-empty string not containing "/" or whitespace; must not s
 tap-ref     := any non-empty string not containing "/" or whitespace
 subpath     := any POSIX relative path not starting with "/"
 ```
+
+A subpath resolves inside the repository it accompanies. Implementations
+MUST reject a subpath that starts with `/`, contains a `..` component, or
+contains a backslash, with `invalid_ref` naming the offending value; `.`
+components and repeated `/` separators are collapsed. Without this rule a
+reference such as `gh:acme/skills//../../../etc` would resolve outside the
+clone once joined to it.
 
 Tap-source identifiers are matched case-insensitively and canonicalized to
 lowercase before lookup. For example, `crew install Core/Python-Testing`
@@ -1691,6 +1700,8 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-20 | §8.2 | `@owner/repo//sub/path` is parsed as a git source with subpath `sub/path`. |
 | C-REF-21 | §8.4 | Tap-source identifiers are case-insensitive and canonicalized to lowercase before lookup; path sources and git URLs are not case-normalized. |
 | C-REF-22 | §8.4 | A tap-source skill identifier may begin with a digit, e.g. `3-statement-model`. |
+| C-REF-22a | §8.4 | A git subpath containing a `..` component, starting with `/`, or containing a backslash is `invalid_ref` (exit 4) at every entry point that accepts a git reference — positional install, `--from-git`, `crew tap add`, and `crew info`. |
+| C-REF-22b | §8.4 | A git subpath's `.` components and repeated `/` separators are collapsed, so `//./a//b` resolves to `a/b`. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -1717,7 +1728,7 @@ Implementations and test suites refer to criteria by ID.
 |---|---|---|
 | C-INST-01 | §9 | `crew install ./local-skill` installs from a local path into every detected agent. |
 | C-INST-02 | §9 | `crew install gh:owner/repo` installs from a GitHub URL with no prior `crew tap add`. |
-| C-INST-02b | §5.3 | `crew install --from-git <value>` installs from `<value>` parsed as a git source. A bare `owner/repo` value resolves to `https://github.com/owner/repo.git`. A value that does not parse as a git source is `invalid_ref`, exit 4. Combining `--from-git` with positional references installs both. `--from-git` on any command other than `install` is `usage_error`. |
+| C-INST-02b | §5.3 | `crew install --from-git <value>` installs from `<value>` parsed as a git source. A bare `owner/repo` value resolves to `https://github.com/owner/repo.git`, including when it carries an `@<ref>` and/or `//<subpath>` tail. A value that does not parse as a git source is `invalid_ref`, exit 4. Combining `--from-git` with positional references installs both. `--from-git` on any command other than `install` is `usage_error`. |
 | C-INST-03 | §9, §7.3 | After install, `SKILL.md` and every other file in the source appear under `{base}/<name>/`, preserving relative paths. |
 | C-INST-04 | §7.5 | A `.crew.json` marker is written into the installed skill directory with the fields listed in §7.5. |
 | C-INST-05 | §9 | `crew install gh:owner/repo//sub/path` installs only the skill at that subpath. |
@@ -1968,6 +1979,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-06 | §5.2 | `--quiet` suppresses non-error stdout. Error output still reaches stderr. |
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
+| C-CLI-08a | §5.2 | A single-value flag passed more than once is a `usage_error` (exit 4) naming the flag; the repeatable `--agent` collects every occurrence. |
 | C-CLI-09 | §5.5 | Bare `crew` is equivalent to `crew help` — same output, exit 0 (no "usage error"). |
 | C-CLI-10 | §5.5 | `crew help <unknown>` falls back to the overview and exits 0. |
 | C-CLI-11 | §5.5 | The overview contains a one-sentence description of crew, a getting-started section with at least three example invocations, and a command list covering every command from §5.1. |
