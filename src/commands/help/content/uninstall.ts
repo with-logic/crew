@@ -12,7 +12,8 @@ export const uninstallHelp: CommandHelp = {
   flags: [
     {
       flag: "--scope {user,project}",
-      description: "Remove the system-wide copy (default) or just the project-scoped one.",
+      description:
+        "Remove the system-wide copy (default) or just the copy installed in the current project. The other scope is never touched.",
     },
     {
       flag: "--agent <name>",
@@ -55,6 +56,7 @@ export const uninstallHelp: CommandHelp = {
     "`--prune` only touches dependencies Homecrew auto-installed for you. Anything you installed yourself stays put.",
     "If you only uninstall from some agents (`--agent`), the skill is still installed elsewhere, so its dependencies still count as needed — pruning won't touch them.",
     "Homecrew never reaches outside its own install folders. `--force` lets you get past a tampered marker, but it won't let you delete anything you didn't install through Homecrew.",
+    "If the skill is installed at a different scope than the one you asked for, Homecrew tells you where it is and the exact command to remove it, instead of guessing.",
   ],
   seeAlso: ["list", "install", "agents"],
 };
