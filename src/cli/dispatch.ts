@@ -20,7 +20,7 @@ import type { CommandContext, CommandOutput } from "../commands/types.ts";
 import { uninstallCommand } from "../commands/uninstall/index.ts";
 import { updateCommand } from "../commands/update/index.ts";
 import { CrewError } from "../core/errors.ts";
-import { COMMAND_ALIASES } from "./aliases.ts";
+import { aliasFor } from "./aliases.ts";
 
 export type CommandHandler = (ctx: CommandContext) => CommandOutput;
 
@@ -43,7 +43,7 @@ export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
 
 /** Dispatch a command name to its handler, returning the result. */
 export function dispatch(command: string, ctx: CommandContext): CommandOutput {
-  const alias = COMMAND_ALIASES[command];
+  const alias = aliasFor(command);
   const canonical = alias?.[0] ?? command;
   const positionalPrefix = alias?.slice(1) ?? [];
   const aliasCtx =
