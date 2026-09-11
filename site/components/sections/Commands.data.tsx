@@ -26,7 +26,9 @@ export const GROUPS: readonly CommandGroup[] = [
         description: (
           <>
             Update all installed skills, or only those named. Names can be bare or tap-qualified.
-            Pinned SHAs are skipped unless <span className={styles.flag}>--force</span>.
+            Pinned SHAs are skipped unless <span className={styles.flag}>--force</span>.{" "}
+            <span className={styles.flag}>--dry-run</span> previews what would change without
+            writing anything.
           </>
         ),
       },

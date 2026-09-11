@@ -899,9 +899,29 @@ tap re-expansion is automatic. The expected flow: a user runs
 enables autoupdate; as the team adds skills, they appear in the
 user's agents on the next autoupdate tick without further action.
 
-**`--dry-run` on update** reports tap additions and deletions
-separately from per-skill updates so users can preview what
-autoupdate would do.
+**`--dry-run` on update.** `crew update --dry-run` is a preview of
+what a real run would do. Step 1 of §10.1 (tap fetch) still runs —
+refreshing local tap clones is how crew learns what changed upstream,
+and clones are not user-visible install state. Everything after that
+is read-only:
+
+- A per-skill row whose SHA (or, for path-kind taps, content hash) has
+  moved is reported with outcome `would_update` carrying the `new_sha`
+  a real run would install. The skill is still validated, so a broken
+  upstream version still surfaces as `failed`.
+- A newly-added tap child is reported with kind `would_add` instead of
+  being installed.
+- `up_to_date`, `skipped`, `source_gone`, `missing_project_root`, and
+  `failed` rows are reported exactly as a real run would.
+- Nothing is staged into the store, no agent directory is written, no
+  marker is touched, `state.json` is not written, and the store is not
+  garbage-collected.
+
+Human output tags the header with `(dry run)` and renders the pending
+rows as "would update" / "would add". `--json` output includes
+`dry_run: true` and uses the `would_update` / `would_add` kinds so
+scripts can tell a preview from a real run. `--force --dry-run`
+previews pinned skills as `would_update` instead of `skipped`.
 
 ### 10.2 `crew autoupdate`
 
@@ -1816,7 +1836,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). |
 | C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
 | C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`, its clone deleted. Registered taps are NOT garbage-collected by uninstall. |
-| C-UPD-18 | §10.1.1 | `crew update --dry-run` on a tap with pending additions lists those additions without installing anything. |
+| C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps, then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, and state are byte-identical before and after; `--json` carries `dry_run: true`. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
 | C-UPD-23 | §10.1 / §16.6 | `crew update <selector>...` restricts fetching to taps that back the selected entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
 | C-UPD-24 | §10.1 | `crew update <selector>...` includes each selected entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the selected entries, marked as transitively required in `--json` output. |
