@@ -531,6 +531,17 @@ skill pulled in only as a dependency stays on disk until the user
 names it directly or asks for a prune. This matches `apt-get remove` /
 `brew uninstall` defaults, not `apt-get autoremove`.
 
+**`--dry-run`.** With `--dry-run` (§5.2), `crew uninstall` runs the
+selector resolution, agent grouping, and every safety check above
+(`not_installed_here`, `untracked_directory`, `inconsistent_marker`
+still abort exactly as they would for a real run), but writes nothing:
+no install directory is removed, no marker is rewritten, `state.json`
+is not written, and no auto tap is garbage-collected. The output
+reports what would have been removed — including the orphans a
+`--prune` pass would remove and the agents a `--agent` filter would
+leave in place — and is tagged as a dry run. `--json` carries
+`dry_run: true`.
+
 ### 7.5 Marker format (`.crew.json`)
 
 Written into every Homecrew-installed skill directory. JSON, UTF-8, trailing newline. The marker is Homecrew's authoritative record at the install site; `state.json` is a convenience index but can be rebuilt from markers (§13, `crew doctor --repair`).
@@ -1905,6 +1916,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-16 | §7.4 | When two agents share a `dest` (e.g. `codex` + `gemini-cli` both at `~/.agents/skills/<name>/`), `crew uninstall --agent codex <name>` removes `codex` from the marker's `agents` list but leaves the bytes on disk; `gemini-cli` continues to work. |
 | C-UNINST-17 | §7.4 | After `crew uninstall --agent codex <name>` in a path-shared install, the marker at `dest` contains every remaining owning adapter and no others. |
 | C-UNINST-18 | §7.4 | `crew uninstall <tap>/<skill>` accepts a tap-qualified selector for an installed skill and removes the matching state entry. |
+| C-UNINST-19 | §7.4 | `crew uninstall --dry-run <selector>` reports what would be removed (including `--prune` orphans) but leaves every install directory, marker, and `state.json` untouched; `--json` output carries `dry_run: true`. |
 | C-SHARE-01 | §7.2, §7.3 | When `codex` and `gemini-cli` are both active, `crew install <name>` writes bytes to `~/.agents/skills/<name>/` exactly once, and the per-agent summary reports both adapter names as installed. |
 | C-SHARE-02 | §7.5 | The `agents` field in `.crew.json` is non-empty, alphabetically sorted, and lists every agent currently owning the install. |
 | C-SHARE-03 | §7.3 | Installing into a path already owned by agent X with agent Y active (and not X) results in a marker whose `agents` contains both X and Y, preserving X's ownership. |
