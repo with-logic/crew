@@ -2,43 +2,65 @@
  * State mutations for `crew uninstall` (§7.4).
  *
  * - `reduceEntryAgents` — partial removal: entry stays but loses some agents.
- * - `dropScopedEntryAndUpdateRequiredBy` — full removal at one (name, scope);
- *    also scrubs the removed name from every surviving `required_by`.
+ * - `dropScopedEntryAndUpdateRequiredBy` — full removal of one entry
+ *    (name, scope, project root); also scrubs the removed name from
+ *    every surviving `required_by`.
  * - `findOrphan` — identifies a skill that `--prune` should autoremove.
  */
 
 import type { StateEntry, StateFile } from "../../core/types.ts";
 
-/** Replace the (name, scope) entry's `agents` array with `remaining`. */
+/** True when `e` is the same installed entry as `target` (name, scope, project root). */
+function sameEntry(e: StateEntry, target: StateEntry): boolean {
+  return (
+    e.name === target.name &&
+    e.scope === target.scope &&
+    (e.project_root ?? null) === (target.project_root ?? null)
+  );
+}
+
+/** Replace `target`'s `agents` array with `remaining`. */
 export function reduceEntryAgents(
   state: StateFile,
-  name: string,
-  scope: StateEntry["scope"],
+  target: StateEntry,
   remaining: readonly string[],
 ): StateFile {
   return {
     schema_version: 1,
     installations: state.installations.map((e) =>
-      e.name === name && e.scope === scope ? { ...e, agents: [...remaining] } : e,
+      sameEntry(e, target) ? { ...e, agents: [...remaining] } : e,
     ),
   };
 }
 
-/** Drop the (name, scope) entry and scrub `name` from every surviving `required_by`. */
+/** Drop `target` and scrub its name from every surviving `required_by`. */
 export function dropScopedEntryAndUpdateRequiredBy(
   state: StateFile,
-  name: string,
-  scope: StateEntry["scope"],
+  target: StateEntry,
 ): StateFile {
   return {
     schema_version: 1,
     installations: state.installations
-      .filter((e) => !(e.name === name && e.scope === scope))
-      .map((e) => ({ ...e, required_by: e.required_by.filter((n) => n !== name) })),
+      .filter((e) => !sameEntry(e, target))
+      .map((e) => ({ ...e, required_by: e.required_by.filter((n) => n !== target.name) })),
   };
 }
 
-/** An autoremovable orphan: `explicit: false` AND empty `required_by`. */
-export function findOrphan(state: StateFile): StateEntry | undefined {
-  return state.installations.find((e) => !e.explicit && e.required_by.length === 0);
+/**
+ * An autoremovable orphan at the given scope: `explicit: false` AND
+ * empty `required_by`. For project scope, only entries whose
+ * `project_root` is in `roots` qualify (§7.4 step 5: same scope).
+ */
+export function findOrphan(
+  state: StateFile,
+  scope: StateEntry["scope"],
+  roots: ReadonlySet<string | null>,
+): StateEntry | undefined {
+  return state.installations.find(
+    (e) =>
+      !e.explicit &&
+      e.required_by.length === 0 &&
+      e.scope === scope &&
+      roots.has(e.project_root ?? null),
+  );
 }

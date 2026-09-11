@@ -486,6 +486,19 @@ Tap-qualified selectors are accepted even though `state.json` stores the skill
 under its unqualified name. If no installed state entry matches the selector,
 the command reports `not_installed_here` for the selector the user typed.
 
+**Scope.** `--scope` (§5.2) selects which installed entry a selector
+refers to; it never widens to every scope. Without `--scope`, or with
+`--scope user`, only the user-scope entry is a candidate. With
+`--scope project`, the candidate is the project-scope entry whose
+`project_root` is the current working directory; if no entry matches
+the cwd but exactly one project-scope entry exists for that name, that
+entry is the candidate (so the command can be run from any directory,
+e.g. by a scheduler). When the selector matches entries only at other
+scopes or other project roots, the command reports `not_installed_here`
+and the human remedy names where the skill *is* installed together with
+the command that would remove it; `--force` turns this into a no-op as
+usual.
+
 **Agent set.** The default is to remove the skill from every agent
 it's recorded against in state. `--agent <name>` (repeatable,
 §5.2) restricts removal to the named agents only — other agents
@@ -1850,6 +1863,9 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-13 | §7.4 | `--prune` does not cascade through a partial (`--agent`) uninstall that leaves the entry alive. Pruning only triggers when the entry was fully removed. |
 | C-UNINST-14 | §7.4 | `--agent <name>` naming an agent the skill isn't installed in is a silent per-agent no-op; it never causes `not_installed_here` on its own. |
 | C-UNINST-15 | §11.1 | `crew uninstall --scope project <name>` removes the install at the entry's recorded `project_root`, NOT the user's current working directory. Run from any cwd, it finds and removes the correct files. |
+| C-UNINST-15a | §7.4 | `crew uninstall <name>` without `--scope` removes only the user-scope entry; a project-scope entry with the same name is untouched. |
+| C-UNINST-15b | §7.4 | With one skill installed at project scope in two different project roots, `crew uninstall --scope project <name>` run from one of those roots removes only that root's entry. |
+| C-UNINST-15c | §7.4 | `crew uninstall --scope project <name>` when the skill is installed only at user scope (or vice versa) produces `not_installed_here`, exit 6, and the `--json` details list every scope/project root where the skill is installed; `--force` turns it into a no-op. |
 | C-UNINST-16 | §7.4 | When two agents share a `dest` (e.g. `codex` + `gemini-cli` both at `~/.agents/skills/<name>/`), `crew uninstall --agent codex <name>` removes `codex` from the marker's `agents` list but leaves the bytes on disk; `gemini-cli` continues to work. |
 | C-UNINST-17 | §7.4 | After `crew uninstall --agent codex <name>` in a path-shared install, the marker at `dest` contains every remaining owning adapter and no others. |
 | C-UNINST-18 | §7.4 | `crew uninstall <tap>/<skill>` accepts a tap-qualified selector for an installed skill and removes the matching state entry. |

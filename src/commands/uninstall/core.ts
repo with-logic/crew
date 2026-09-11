@@ -25,27 +25,25 @@ export interface UninstallRecord {
   pruned?: boolean;
   /** True if the state entry still survives after this call (partial --agent removal). */
   partial?: boolean;
+  /** Project roots of the entries this record removed from (project scope only). */
+  projectRoots?: string[];
 }
 
 /**
- * Remove one named skill. If `agentFilter` is null, removes from every
- * agent the skill is on (full uninstall). If non-null, removes only
- * from the named agents; the state entry survives with a reduced
+ * Remove the entries a resolved subject names (already narrowed to the
+ * target scope by the caller). If `agentFilter` is null, removes from
+ * every agent the skill is on (full uninstall). If non-null, removes
+ * only from the named agents; the state entry survives with a reduced
  * `agents` list if any remain.
  */
 export function removeOne(
   state: StateFile,
-  subject: string | StateSubject,
+  subject: StateSubject,
   ctx: CommandContext,
   pruned: boolean,
   agentFilter: readonly string[] | null,
 ): { updatedState: StateFile; rec: UninstallRecord } {
-  const name = typeof subject === "string" ? subject : subject.name;
-  const entries =
-    typeof subject === "string"
-      ? state.installations.filter((e) => e.name === name)
-      : subject.entries;
-  const errorName = typeof subject === "string" ? subject : subject.raw;
+  const { name, entries, raw: errorName } = subject;
   const rec: UninstallRecord = {
     name,
     removedFrom: [],
@@ -68,16 +66,19 @@ export function removeOne(
   let nextState = state;
   let anySurvives = false;
   for (const entry of entries) {
+    if (entry.project_root !== undefined) {
+      rec.projectRoots = [...(rec.projectRoots ?? []), entry.project_root];
+    }
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
       : entry.agents;
     removeFromAgents(entry, agentsToRemove, name, ctx, rec);
     const remainingAgents = entry.agents.filter((t) => !agentsToRemove.includes(t));
     if (remainingAgents.length > 0) {
-      nextState = reduceEntryAgents(nextState, name, entry.scope, remainingAgents);
+      nextState = reduceEntryAgents(nextState, entry, remainingAgents);
       anySurvives = true;
     } else {
-      nextState = dropScopedEntryAndUpdateRequiredBy(nextState, name, entry.scope);
+      nextState = dropScopedEntryAndUpdateRequiredBy(nextState, entry);
     }
   }
   if (anySurvives) rec.partial = true;

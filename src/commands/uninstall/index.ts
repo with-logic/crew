@@ -33,6 +33,7 @@ import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
+import { narrowSubjectToScope } from "./scope.ts";
 import { findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
@@ -51,14 +52,20 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
   withStateLock(() => {
     let state = readState(ctx.home);
     for (const raw of ctx.positional) {
-      const subject = resolveStateSubject(state, raw);
+      // §7.4 "Scope": a selector only ever targets one scope.
+      const subject = narrowSubjectToScope(
+        resolveStateSubject(state, raw),
+        ctx.flags.scope,
+        ctx.cwd,
+        ctx.flags.force,
+      );
       const { updatedState, rec } = removeOne(state, subject, ctx, false, agentFilter);
       state = updatedState;
       records.push(rec);
       if (rec.failures.length > 0) exitCode = 1;
     }
     if (prune) {
-      state = pruneOrphans(state, ctx, records);
+      state = pruneOrphans(state, ctx, records, prunedRoots(records, ctx.flags.scope, ctx.cwd));
     }
     writeState(state, ctx.home);
     // Auto-tap GC: any auto tap with no remaining state entries is
@@ -91,7 +98,8 @@ function validateAgentFilter(agents: readonly string[]): readonly string[] | nul
 
 /**
  * Recursively remove any skill that is now an autoremovable orphan:
- * `explicit: false` AND empty `required_by`. Runs until a full pass
+ * `explicit: false` AND empty `required_by`, at the scope (and project
+ * root) this run removed from (§7.4 step 5). Runs until a full pass
  * finds no new orphans. Prune never respects `--agent` filters —
  * when we auto-remove a dep, we remove it fully.
  */
@@ -99,16 +107,35 @@ function pruneOrphans(
   state: StateFile,
   ctx: CommandContext,
   records: UninstallRecord[],
+  roots: ReadonlySet<string | null>,
 ): StateFile {
   let current = state;
-  let orphan = findOrphan(current);
+  let orphan = findOrphan(current, ctx.flags.scope, roots);
   while (orphan) {
-    const { updatedState, rec } = removeOne(current, orphan.name, ctx, true, null);
+    const subject = { raw: orphan.name, name: orphan.name, entries: [orphan] };
+    const { updatedState, rec } = removeOne(current, subject, ctx, true, null);
     records.push(rec);
     current = updatedState;
-    orphan = findOrphan(current);
+    orphan = findOrphan(current, ctx.flags.scope, roots);
   }
   return current;
+}
+
+/**
+ * The project roots `--prune` may sweep: for user scope always `null`;
+ * for project scope, the roots of the entries this run actually removed
+ * (which may differ from cwd when the lone-project fallback applied).
+ */
+function prunedRoots(
+  records: readonly UninstallRecord[],
+  scope: CommandContext["flags"]["scope"],
+  cwd: string,
+): ReadonlySet<string | null> {
+  if (scope === "user") return new Set([null]);
+  const roots = new Set<string | null>();
+  for (const rec of records) for (const root of rec.projectRoots ?? []) roots.add(root);
+  if (roots.size === 0) roots.add(cwd);
+  return roots;
 }
 
 /**
