@@ -19,6 +19,7 @@ import { hashDirectory } from "../hash/content.ts";
 import { copyTree } from "../util/copy.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
+import { safePath } from "../util/redact.ts";
 
 /** Record returned after staging. */
 export interface StoredSkill {
@@ -46,11 +47,11 @@ export function stageIntoStore(
   const storePath = storeEntryPath(name, shortSha, home);
 
   if (existsSync(storePath)) {
-    progress(`reusing store entry ${name}@${shortSha}`);
+    progress(`reusing store entry ${safePath(name)}@${shortSha}`);
     const existingHash = hashDirectory(storePath);
     return { storePath, contentHash: existingHash, shortSha, reused: true };
   }
-  progress(`staging ${name}@${shortSha} into ${storePath}`);
+  progress(`staging ${safePath(name)}@${shortSha} into ${safePath(storePath)}`);
 
   const staging = `${storePath}.staging-${Date.now()}`;
   if (exists(staging)) rmrf(staging);

@@ -17,6 +17,7 @@
 
 import { CrewError } from "../../core/errors.ts";
 import { exists, isDirectory } from "../../util/fs.ts";
+import { safeUrl } from "../../util/redact.ts";
 import { type GitProcessError, runGit } from "../exec.ts";
 
 /** Clone a repo into `dest`. Shallow unless `full` is true. */
@@ -28,9 +29,11 @@ export function cloneRepo(url: string, dest: string, full: boolean = false): voi
     // `runGit` only ever throws `GitProcessError`, so this narrow is
     // safe. Translate to the user-facing error category.
     const ge = err as GitProcessError;
+    // The URL can carry credentials; user-visible errors get the same
+    // redaction as verbose output (`util/redact.ts`).
     throw new CrewError(
       "source_unreachable",
-      `couldn't clone \`${url}\` — ${ge.result.stderr.trim()}`,
+      `couldn't clone \`${safeUrl(url)}\` — ${ge.result.stderr.trim()}`,
       { url },
     );
   }

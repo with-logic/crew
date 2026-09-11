@@ -20,6 +20,7 @@ import { tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { ensureRepo } from "../../git/repo/index.ts";
 import { progress } from "../../util/progress.ts";
+import { safeUrl } from "../../util/redact.ts";
 
 /** Fields every refresh row carries, whatever its outcome. */
 interface TapRefreshBase {
@@ -69,7 +70,7 @@ export function refreshTaps(taps: readonly TapConfig[], home: string): TapRefres
       continue;
     }
     try {
-      progress(`refreshing tap ${tap.name} from ${tap.url}`);
+      progress(`refreshing tap ${tap.name} from ${safeUrl(tap.url)}`);
       ensureRepo(tap.url, tapPath(tap.name, home));
       rows.push({ name: tap.name, url: tap.url, kind: "refreshed" });
     } catch (err) {
