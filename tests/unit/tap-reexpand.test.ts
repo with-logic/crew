@@ -49,7 +49,7 @@ describe("reexpandTaps", () => {
     };
     const state: StateFile = { schema_version: 1, installations: [trackedEntry()] };
 
-    const result = reexpandTaps(state, config, home, [], () => {
+    const result = reexpandTaps(state, config, home, null, () => {
       throw new Error("empty tap should not add children");
     });
     expect([...result.sourceGone]).toEqual(["missing"]);
@@ -70,7 +70,7 @@ describe("reexpandTaps", () => {
 
     chmodSync(path, 0);
     try {
-      expect(() => reexpandTaps(state, config, home, [], () => null)).toThrow();
+      expect(() => reexpandTaps(state, config, home, null, () => null)).toThrow();
     } finally {
       chmodSync(path, 0o755);
     }
