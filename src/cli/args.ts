@@ -45,6 +45,19 @@ const STRING_SUB: Record<string, readonly string[]> = {
   // `--version <tag>` pins a specific release (e.g. `v0.4.0`).
   "self-update": ["version"],
 };
+/**
+ * Flag tables for prefixed aliases (§5.1). An alias like `untap` is its own
+ * argv command word, so strict parsing happens before dispatch rewrites it —
+ * without an entry here, `crew untap --uninstall` rejects a flag the
+ * documented alias supports.
+ *
+ * These list only the flags the alias's *resolved subcommand* accepts, not
+ * the whole canonical table: `crew untap` is `crew tap remove`, which ignores
+ * `--recursive`, so passing it stays a usage error exactly as it is today.
+ */
+const BOOLEAN_ALIAS_SUB: Record<string, readonly string[]> = {
+  untap: ["uninstall"],
+};
 /** Flags that should always be collected into a list. */
 const ARRAY_GLOBALS = ["agent"] as const;
 /** The subset of flags that is part of the public `CommandFlags` surface. */
@@ -58,7 +71,11 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   const command = effective[0]!;
   const rest = effective.slice(1);
 
-  const booleans = [...BOOLEAN_GLOBALS, ...(BOOLEAN_SUB[command] ?? [])];
+  const booleans = [
+    ...BOOLEAN_GLOBALS,
+    ...(BOOLEAN_SUB[command] ?? []),
+    ...(BOOLEAN_ALIAS_SUB[command] ?? []),
+  ];
   const strings = [...STRING_GLOBALS, ...(STRING_SUB[command] ?? [])];
 
   let parsed: Record<string, unknown>;

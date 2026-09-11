@@ -1,0 +1,120 @@
+/**
+ * `crew tap remove --uninstall` (§16.3, C-TAP-16d): removing the
+ * attached skills before the tap, and what happens when one aborts.
+ */
+
+import { describe, expect, test } from "bun:test";
+import { existsSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { readConfig } from "../../../src/config/load.ts";
+import { tapPath } from "../../../src/core/paths.ts";
+import { readState } from "../../../src/state/load.ts";
+import {
+  agentRoot,
+  buildTapRepo,
+  makeCrewHome,
+  run,
+  tapWithInstall,
+  useTempAgentRoot,
+} from "./helpers.ts";
+
+useTempAgentRoot();
+
+describe("C-TAP-16d tap remove --uninstall", () => {
+  test("removes the skills and then the tap", () => {
+    const home = makeCrewHome();
+    expect(tapWithInstall(home, buildTapRepo())).toBe(0);
+    expect(existsSync(join(agentRoot(), "alpha"))).toBe(true);
+
+    const r = run(home, ["tap", "remove", "--uninstall", "mytap"]);
+
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("Uninstalling alpha");
+    expect(r.stdout).toContain("Removed tap mytap");
+    expect(existsSync(join(agentRoot(), "alpha"))).toBe(false);
+    expect(readState(home).installations).toHaveLength(0);
+    expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(false);
+    expect(existsSync(tapPath("mytap", home))).toBe(false);
+  });
+
+  test("a safety abort keeps the tap so the user can retry", () => {
+    const home = makeCrewHome();
+    expect(tapWithInstall(home, buildTapRepo())).toBe(0);
+    // Drop the marker so removal hits `untracked_directory` (§7.4 step 1).
+    rmSync(join(agentRoot(), "alpha", ".crew.json"));
+
+    const r = run(home, ["tap", "remove", "--uninstall", "mytap"]);
+
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("Kept tap mytap");
+    expect(r.stdout).toContain("--force --uninstall");
+    // The tap survives so the retry has something to act on.
+    expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(true);
+    expect(existsSync(join(agentRoot(), "alpha"))).toBe(true);
+  });
+
+  test("C-TAP-16d an aborted removal keeps its state entry so a retry can't orphan it", () => {
+    const home = makeCrewHome();
+    expect(tapWithInstall(home, buildTapRepo())).toBe(0);
+    rmSync(join(agentRoot(), "alpha", ".crew.json"));
+
+    expect(run(home, ["tap", "remove", "--uninstall", "mytap"]).code).toBe(1);
+    // The bytes still exist, so state must still claim them. Dropping the
+    // entry would hide the install from the guard, and the forced retry
+    // below would then delete the tap and leave the skill unattributed.
+    expect(readState(home).installations).toHaveLength(1);
+
+    const retry = run(home, ["tap", "remove", "--force", "--uninstall", "mytap"]);
+
+    expect(retry.code).toBe(0);
+    expect(existsSync(join(agentRoot(), "alpha"))).toBe(false);
+    expect(readState(home).installations).toHaveLength(0);
+    expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(false);
+  });
+
+  test("C-TAP-16d only the removed tap's skills come off", () => {
+    const home = makeCrewHome();
+    expect(tapWithInstall(home, buildTapRepo("alpha"), "tapa")).toBe(0);
+    expect(tapWithInstall(home, buildTapRepo("beta"), "tapb")).toBe(0);
+
+    const r = run(home, ["tap", "remove", "--uninstall", "tapa"]);
+
+    expect(r.code).toBe(0);
+    // `beta` belongs to another tap and must survive untouched.
+    const survivors = readState(home).installations.map((e) => `${e.name}/${e.source.tap}`);
+    expect(survivors).toEqual(["beta/tapb"]);
+    expect(existsSync(join(agentRoot(), "beta"))).toBe(true);
+    expect(existsSync(join(agentRoot(), "alpha"))).toBe(false);
+    expect(readConfig(home).taps.some((t) => t.name === "tapb")).toBe(true);
+  });
+
+  test("--dry-run changes nothing", () => {
+    const home = makeCrewHome();
+    expect(tapWithInstall(home, buildTapRepo())).toBe(0);
+
+    const r = run(home, ["tap", "remove", "--uninstall", "--dry-run", "mytap", "--json"]);
+
+    expect(r.code).toBe(0);
+    const payload = JSON.parse(r.stdout) as { dry_run: boolean; uninstalled: unknown[] };
+    expect(payload.dry_run).toBe(true);
+    expect(payload.uninstalled).toHaveLength(1);
+    // Install, state, config, and clone all survive the preview.
+    expect(existsSync(join(agentRoot(), "alpha"))).toBe(true);
+    expect(existsSync(join(agentRoot(), "alpha", ".crew.json"))).toBe(true);
+    expect(readState(home).installations).toHaveLength(1);
+    expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(true);
+    expect(existsSync(tapPath("mytap", home))).toBe(true);
+  });
+
+  test("--dry-run output reads as a preview, not as work already done", () => {
+    const home = makeCrewHome();
+    expect(tapWithInstall(home, buildTapRepo())).toBe(0);
+
+    const r = run(home, ["tap", "remove", "--uninstall", "--dry-run", "mytap"]);
+
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("Would uninstall alpha");
+    expect(r.stdout).not.toContain("Uninstalling alpha");
+    expect(r.stdout).toContain("Would remove tap mytap");
+  });
+});
