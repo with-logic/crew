@@ -17,6 +17,10 @@ export const listHelp: CommandHelp = {
   examples: [
     { command: "crew list", description: "See what's installed." },
     {
+      command: "crew list --scope project",
+      description: "Only the project-scoped installs, one row per project.",
+    },
+    {
       command: "crew list --json | jq '.installations[].name'",
       description: "Pipe names into a script.",
     },
