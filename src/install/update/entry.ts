@@ -20,6 +20,7 @@ import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.t
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { nowIso } from "../../util/time.ts";
+import { peekResolvedSha } from "./peek.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
@@ -113,9 +114,20 @@ function updateOne(
       { tap: entry.source.tap },
     );
   }
-  // §10.1 step 3c: re-resolve the entry's own ref. A branch-pinned entry
-  // tracks that branch, and a forced tag update installs the tag's
-  // current commit — neither is the clone's `origin/HEAD`.
+  // §10.1 step 3c: re-resolve the entry's own ref. An entry installed at
+  // a branch follows that branch (a branch is not pinned), and a forced
+  // tag update installs the tag's current commit — neither is the
+  // clone's `origin/HEAD`.
+  //
+  // Resolution happens before materialization: an up-to-date tap needs
+  // only its SHA, and exporting a large tree just to discard it is the
+  // common case on a routine `crew update`.
+  // `--force` reinstalls a pinned entry even at an unchanged SHA, so it
+  // still needs the bytes.
+  const peeked = peekResolvedSha(tap, entry.ref, home);
+  if (peeked !== null && peeked === entry.resolved_sha && !(force && entry.pinned)) {
+    return { kind: "up_to_date" };
+  }
   return withAcquiredTap(tap, entry.ref, home, (acquired) =>
     applyUpdate(entry, acquired, tap, home, force, entryCwd),
   );

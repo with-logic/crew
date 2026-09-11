@@ -13,7 +13,7 @@ import { baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import type { LoadedSkill, StateEntry, TapConfig } from "../../core/types.ts";
+import type { Config, LoadedSkill, StateEntry, TapConfig, TapSource } from "../../core/types.ts";
 import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { attributeRef } from "../../install/tap-attribution.ts";
 import { parseRef } from "../../refs/parse.ts";
@@ -60,10 +60,10 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
       if (namedTap) {
         return { tap: namedTap, skills: skillsAtRef(namedTap, ref, ctx.home) };
       }
-      return candidateSkills(resolveTapRef(source, config, ctx.home, "non-tap"), ref, ctx.home);
+      return tapCandidate(source, config, ref, ctx.home);
     }
     if (source.type === "tap") {
-      return candidateSkills(resolveTapRef(source, config, ctx.home, "non-tap"), ref, ctx.home);
+      return tapCandidate(source, config, ref, ctx.home);
     }
     const matched = config.taps.find((t) => {
       if (source.type === "git")
@@ -82,6 +82,40 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
     human: renderSkills(skills, tap, ctx.style, ctx.width),
     json: { skills },
   };
+}
+
+/**
+ * Resolve a tap-source reference and preview it.
+ *
+ * A qualified reference carrying a ref (`<tap>/<skill>@v1`) names its
+ * tap up front, so the commit is exported BEFORE resolution — otherwise
+ * a skill deleted at HEAD is unfindable even though it exists at the
+ * requested commit (§9 step 3). A bare name could live in any tap, so it
+ * resolves against the clone and re-expands at the ref afterwards.
+ */
+function tapCandidate(
+  source: TapSource,
+  config: Config,
+  ref: string | null,
+  home: string,
+): { tap: TapConfig; skills: SkillInfo[] } {
+  const named =
+    ref !== null && source.tap !== null
+      ? config.taps.find((t) => t.name === source.tap)
+      : undefined;
+  if (named) {
+    return withAcquiredTap(named, ref, home, (acq) => {
+      const candidate = resolveTapRef(source, config, home, "non-tap", {
+        [named.name]: acq.rootDir,
+      });
+      const wanted = new Set(
+        (candidate.kind === "skill" ? [candidate.location] : candidate.members).map((l) => l.name),
+      );
+      const all = buildSkillInfos(acq.rootDir, candidate.tap);
+      return { tap: candidate.tap, skills: all.filter((sk) => wanted.has(sk.name)) };
+    });
+  }
+  return candidateSkills(resolveTapRef(source, config, home, "non-tap"), ref, home);
 }
 
 /** Expand a tap's skills, reading at `ref` when one was requested. */
