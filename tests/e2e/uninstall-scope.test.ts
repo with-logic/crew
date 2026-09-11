@@ -4,60 +4,45 @@
  * Covers C-UNINST-15a..c: a selector only ever targets one scope, the
  * cwd picks among project roots, and an "installed elsewhere" miss is
  * `not_installed_here` with a remedy that names where the skill lives.
+ *
+ * The `--prune` interaction with scope lives in
+ * `uninstall-scope-prune.test.ts`; both share `helpers/scoped-install.ts`.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { runCli } from "../../src/cli/main.ts";
-import { readState } from "../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
-import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
+import { makeTempDir } from "../helpers/fixtures.ts";
+import {
+  installSkill,
+  locationsOf,
+  quiet,
+  redirectClaudeCode,
+  restoreClaudeCode,
+} from "../helpers/scoped-install.ts";
 
 let ccUser: string;
-let originals: { user: () => string; project: (c: string) => string; detect: () => boolean };
+let originals: ReturnType<typeof redirectClaudeCode>["originals"];
 
 beforeEach(() => {
-  ccUser = makeTempDir("crew-cc-");
-  originals = {
-    user: claudeCodeAdapter.userPath,
-    project: claudeCodeAdapter.projectPath,
-    detect: claudeCodeAdapter.detect,
-  };
-  (claudeCodeAdapter as { userPath: () => string }).userPath = () => ccUser;
-  (claudeCodeAdapter as { projectPath: (c: string) => string }).projectPath = (c) =>
-    join(c, ".claude", "skills");
-  (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
+  const redirected = redirectClaudeCode();
+  ccUser = redirected.userRoot;
+  originals = redirected.originals;
 });
 afterEach(() => {
-  (claudeCodeAdapter as { userPath: () => string }).userPath = originals.user;
-  (claudeCodeAdapter as { projectPath: (c: string) => string }).projectPath = originals.project;
-  (claudeCodeAdapter as { detect: () => boolean }).detect = originals.detect;
+  restoreClaudeCode(originals);
 });
 
-const quiet = () => captureStreams().streams;
-
-function installDemo(home: string, scope: "user" | "project", cwd: string): void {
-  const src = makeTempDir("crew-src-");
-  const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-  const args = scope === "project" ? ["install", "--scope", "project", skill] : ["install", skill];
-  if (runCli(args, { home, cwd, streams: quiet() }) !== 0) throw new Error("install failed");
-}
-
-function scopesOf(home: string): string[] {
-  return readState(home)
-    .installations.filter((e) => e.name === "demo")
-    .map((e) => (e.scope === "user" ? "user" : `project:${e.project_root}`))
-    .sort();
-}
+const scopesOf = (home: string) => locationsOf(home, "demo");
 
 describe("uninstall targets one scope", () => {
   test("C-UNINST-15a plain uninstall removes only the user-scope entry", () => {
     const home = makeCrewHome();
     const project = makeTempDir("crew-proj-");
-    installDemo(home, "user", project);
-    installDemo(home, "project", project);
+    expect(installSkill(home, "demo", "user", project)).toBe(0);
+    expect(installSkill(home, "demo", "project", project)).toBe(0);
 
     const code = runCli(["uninstall", "demo"], { home, cwd: project, streams: quiet() });
     expect(code).toBe(0);
@@ -70,9 +55,9 @@ describe("uninstall targets one scope", () => {
     const home = makeCrewHome();
     const projA = makeTempDir("crew-projA-");
     const projB = makeTempDir("crew-projB-");
-    installDemo(home, "user", projA);
-    installDemo(home, "project", projA);
-    installDemo(home, "project", projB);
+    expect(installSkill(home, "demo", "user", projA)).toBe(0);
+    expect(installSkill(home, "demo", "project", projA)).toBe(0);
+    expect(installSkill(home, "demo", "project", projB)).toBe(0);
 
     const code = runCli(["uninstall", "--scope", "project", "demo"], {
       home,
@@ -88,7 +73,7 @@ describe("uninstall targets one scope", () => {
   test("C-UNINST-15 a lone project install is reachable from any cwd", () => {
     const home = makeCrewHome();
     const project = makeTempDir("crew-proj-");
-    installDemo(home, "project", project);
+    expect(installSkill(home, "demo", "project", project)).toBe(0);
 
     const code = runCli(["uninstall", "--scope", "project", "demo"], {
       home,
@@ -103,8 +88,8 @@ describe("uninstall targets one scope", () => {
     const home = makeCrewHome();
     const projA = makeTempDir("crew-projA-");
     const projB = makeTempDir("crew-projB-");
-    installDemo(home, "project", projA);
-    installDemo(home, "project", projB);
+    expect(installSkill(home, "demo", "project", projA)).toBe(0);
+    expect(installSkill(home, "demo", "project", projB)).toBe(0);
 
     const c = captureStreams();
     const code = runCli(["uninstall", "--scope", "project", "demo"], {
@@ -123,7 +108,7 @@ describe("uninstall at a scope where the skill isn't installed", () => {
   test("C-UNINST-15c user-only install + --scope project → not_installed_here with hint", () => {
     const home = makeCrewHome();
     const project = makeTempDir("crew-proj-");
-    installDemo(home, "user", project);
+    expect(installSkill(home, "demo", "user", project)).toBe(0);
 
     const c = captureStreams();
     const code = runCli(["uninstall", "--scope", "project", "demo"], {
@@ -143,7 +128,7 @@ describe("uninstall at a scope where the skill isn't installed", () => {
   test("C-UNINST-15c project-only install + plain uninstall → hint names the project root", () => {
     const home = makeCrewHome();
     const project = makeTempDir("crew-proj-");
-    installDemo(home, "project", project);
+    expect(installSkill(home, "demo", "project", project)).toBe(0);
 
     const c = captureStreams();
     const code = runCli(["uninstall", "--json", "demo"], {
@@ -167,7 +152,7 @@ describe("uninstall at a scope where the skill isn't installed", () => {
   test("C-UNINST-15c --force turns the miss into a no-op", () => {
     const home = makeCrewHome();
     const project = makeTempDir("crew-proj-");
-    installDemo(home, "user", project);
+    expect(installSkill(home, "demo", "user", project)).toBe(0);
 
     const c = captureStreams();
     const code = runCli(["uninstall", "--force", "--scope", "project", "demo"], {
@@ -181,33 +166,17 @@ describe("uninstall at a scope where the skill isn't installed", () => {
   });
 });
 
-describe("--prune stays within the targeted scope", () => {
-  test("pruning after a project-scope uninstall does not sweep user-scope orphans", () => {
+describe("the remedy command survives awkward project paths", () => {
+  test("a project root containing spaces is shell-quoted in the hint", () => {
     const home = makeCrewHome();
-    const project = makeTempDir("crew-proj-");
-    const src = makeTempDir("crew-src-");
-    makeSkill(src, "bar", skillFrontmatter({ name: "bar" }));
-    makeSkill(src, "foo", skillFrontmatter({ name: "foo", dependencies: [join(src, "bar")] }));
-    expect(runCli(["install", join(src, "foo")], { home, cwd: project, streams: quiet() })).toBe(0);
-    expect(
-      runCli(["install", "--scope", "project", join(src, "foo")], {
-        home,
-        cwd: project,
-        streams: quiet(),
-      }),
-    ).toBe(0);
+    const project = join(makeTempDir("crew-proj-"), "my project");
+    expect(installSkill(home, "demo", "project", project)).toBe(0);
 
-    // Remove user-scope foo directly so user-scope bar becomes an orphan.
-    expect(runCli(["uninstall", "foo"], { home, cwd: project, streams: quiet() })).toBe(0);
-
-    // Project-scope uninstall with --prune: prunes project bar, not user bar.
-    const code = runCli(["uninstall", "--prune", "--scope", "project", "foo"], {
-      home,
-      cwd: project,
-      streams: quiet(),
-    });
-    expect(code).toBe(0);
-    const remaining = readState(home).installations.map((e) => `${e.name}@${e.scope}`);
-    expect(remaining).toEqual(["bar@user"]);
+    const c = captureStreams();
+    const code = runCli(["uninstall", "demo"], { home, cwd: project, streams: c.streams });
+    expect(code).toBe(6);
+    // The `cd` target must be pasteable: quoted, not bare.
+    expect(c.stderr()).toContain(`cd '${project}'`);
+    expect(c.stderr()).not.toContain(`cd ${project} &&`);
   });
 });

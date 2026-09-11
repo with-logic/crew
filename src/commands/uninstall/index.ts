@@ -51,6 +51,7 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
 
   withStateLock(() => {
     let state = readState(ctx.home);
+    const removedRoots: (string | null)[] = [];
     for (const raw of ctx.positional) {
       // §7.4 "Scope": a selector only ever targets one scope.
       const subject = narrowSubjectToScope(
@@ -59,13 +60,17 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
         ctx.cwd,
         ctx.flags.force,
       );
-      const { updatedState, rec } = removeOne(state, subject, ctx, false, agentFilter);
+      const { updatedState, rec, meta } = removeOne(state, subject, ctx, false, agentFilter);
       state = updatedState;
       records.push(rec);
+      removedRoots.push(...meta.fullyRemovedRoots);
       if (rec.failures.length > 0) exitCode = 1;
     }
-    if (prune) {
-      state = pruneOrphans(state, ctx, records, prunedRoots(records, ctx.flags.scope, ctx.cwd));
+    // §7.4 step 5: pruning is a consequence of a full removal. A forced
+    // miss or a surviving partial `--agent` removal frees nothing, so
+    // there is nothing to sweep and no root to sweep it in.
+    if (prune && removedRoots.length > 0) {
+      state = pruneOrphans(state, ctx, records, new Set(removedRoots));
     }
     writeState(state, ctx.home);
     // Auto-tap GC: any auto tap with no remaining state entries is
@@ -98,10 +103,10 @@ function validateAgentFilter(agents: readonly string[]): readonly string[] | nul
 
 /**
  * Recursively remove any skill that is now an autoremovable orphan:
- * `explicit: false` AND empty `required_by`, at the scope (and project
- * root) this run removed from (§7.4 step 5). Runs until a full pass
- * finds no new orphans. Prune never respects `--agent` filters —
- * when we auto-remove a dep, we remove it fully.
+ * `explicit: false` AND empty `required_by`, restricted to the scope and
+ * project roots this run fully removed from (§7.4 step 5). Runs until a
+ * full pass finds no new orphans. Prune never respects `--agent`
+ * filters — when we auto-remove a dep, we remove it fully.
  */
 function pruneOrphans(
   state: StateFile,
@@ -119,23 +124,6 @@ function pruneOrphans(
     orphan = findOrphan(current, ctx.flags.scope, roots);
   }
   return current;
-}
-
-/**
- * The project roots `--prune` may sweep: for user scope always `null`;
- * for project scope, the roots of the entries this run actually removed
- * (which may differ from cwd when the lone-project fallback applied).
- */
-function prunedRoots(
-  records: readonly UninstallRecord[],
-  scope: CommandContext["flags"]["scope"],
-  cwd: string,
-): ReadonlySet<string | null> {
-  if (scope === "user") return new Set([null]);
-  const roots = new Set<string | null>();
-  for (const rec of records) for (const root of rec.projectRoots ?? []) roots.add(root);
-  if (roots.size === 0) roots.add(cwd);
-  return roots;
 }
 
 /**

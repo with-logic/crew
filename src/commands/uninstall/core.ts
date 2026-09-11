@@ -25,8 +25,21 @@ export interface UninstallRecord {
   pruned?: boolean;
   /** True if the state entry still survives after this call (partial --agent removal). */
   partial?: boolean;
-  /** Project roots of the entries this record removed from (project scope only). */
-  projectRoots?: string[];
+}
+
+/**
+ * Internal routing data about one `removeOne` call. Kept out of
+ * `UninstallRecord` because that type is serialized verbatim into
+ * `--json`, and these absolute paths are an implementation detail of
+ * prune routing rather than part of the command's output contract.
+ */
+export interface RemovalMeta {
+  /**
+   * Project roots of the entries this call FULLY removed (project scope
+   * only). Empty when nothing was removed, or when every entry survived
+   * a partial `--agent` removal — `--prune` keys off exactly that.
+   */
+  fullyRemovedRoots: (string | null)[];
 }
 
 /**
@@ -42,7 +55,7 @@ export function removeOne(
   ctx: CommandContext,
   pruned: boolean,
   agentFilter: readonly string[] | null,
-): { updatedState: StateFile; rec: UninstallRecord } {
+): { updatedState: StateFile; rec: UninstallRecord; meta: RemovalMeta } {
   const { name, entries, raw: errorName } = subject;
   const rec: UninstallRecord = {
     name,
@@ -51,6 +64,7 @@ export function removeOne(
     failures: [],
     ...(pruned ? { pruned: true } : {}),
   };
+  const meta: RemovalMeta = { fullyRemovedRoots: [] };
   if (entries.length === 0) {
     if (!(ctx.flags.force || pruned)) {
       throw new CrewError(
@@ -59,16 +73,13 @@ export function removeOne(
         { name: errorName },
       );
     }
-    return { updatedState: state, rec };
+    return { updatedState: state, rec, meta };
   }
   // Per-entry processing: each (skill, scope) pair potentially touches
   // a different subset of agents.
   let nextState = state;
   let anySurvives = false;
   for (const entry of entries) {
-    if (entry.project_root !== undefined) {
-      rec.projectRoots = [...(rec.projectRoots ?? []), entry.project_root];
-    }
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
       : entry.agents;
@@ -78,11 +89,14 @@ export function removeOne(
       nextState = reduceEntryAgents(nextState, entry, remainingAgents);
       anySurvives = true;
     } else {
+      // Only a FULL removal frees this location's dependencies (§7.4
+      // step 5); a surviving partial `--agent` removal still needs them.
+      meta.fullyRemovedRoots.push(entry.project_root ?? null);
       nextState = dropScopedEntryAndUpdateRequiredBy(nextState, entry);
     }
   }
   if (anySurvives) rec.partial = true;
-  return { updatedState: nextState, rec };
+  return { updatedState: nextState, rec, meta };
 }
 
 /**

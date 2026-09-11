@@ -1914,7 +1914,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-12 | §7.4 | When `--agent` removal empties the `agents` list, the entry is removed entirely and `required_by` on other entries is scrubbed — as with a full uninstall. |
 | C-UNINST-13 | §7.4 | `--prune` does not cascade through a partial (`--agent`) uninstall that leaves the entry alive. Pruning only triggers when the entry was fully removed. |
 | C-UNINST-14 | §7.4 | `--agent <name>` naming an agent the skill isn't installed in is a silent per-agent no-op; it never causes `not_installed_here` on its own. |
-| C-UNINST-15 | §11.1 | `crew uninstall --scope project <name>` removes the install at the entry's recorded `project_root`, NOT the user's current working directory. Run from any cwd, it finds and removes the correct files. |
+| C-UNINST-15 | §11.1 | `crew uninstall --scope project <name>` removes the install at the targeted entry's recorded `project_root`, NOT the user's current working directory. When the skill has exactly one project-scope entry, the command finds and removes the correct files from any cwd; when it has several, the cwd selects which one (C-UNINST-15b) and an unrelated cwd is `not_installed_here` (C-UNINST-15c). |
 | C-UNINST-15a | §7.4 | `crew uninstall <name>` without `--scope` removes only the user-scope entry; a project-scope entry with the same name is untouched. |
 | C-UNINST-15b | §7.4 | With one skill installed at project scope in two different project roots, `crew uninstall --scope project <name>` run from one of those roots removes only that root's entry. |
 | C-UNINST-15c | §7.4 | `crew uninstall --scope project <name>` when the skill is installed only at user scope (or vice versa) produces `not_installed_here`, exit 6, and the `--json` details list every scope/project root where the skill is installed; `--force` turns it into a no-op. |
@@ -1963,7 +1963,7 @@ Implementations and test suites refer to criteria by ID.
 | ID | Reference | Assertion |
 |---|---|---|
 | C-STATE-01 | §11.1 | `state.json` is valid JSON after every successful command. |
-| C-STATE-02 | §11.1 | Every installed skill has exactly one entry per (skill, scope) pair. |
+| C-STATE-02 | §11.1 | Every installed skill has exactly one entry per (skill, scope, project_root) triple. User-scope entries carry no `project_root`, so a skill has at most one user-scope entry; project-scope entries with different `project_root` values are independent installs. |
 | C-STATE-03 | §7.5 | Every crew-installed skill directory contains a `.crew.json` marker with matching `name` and `resolved_sha`. |
 | C-STATE-04 | §11.1 | `pinned: true` in state iff the ref was a SHA or a tag at install time. |
 | C-STATE-05 | §11.2 | `crew doctor` detects state-vs-marker drift and reports every inconsistency. |

@@ -15,7 +15,7 @@
 import { CrewError } from "../../core/errors.ts";
 import type { Scope, StateEntry } from "../../core/types.ts";
 import type { StateSubject } from "../../state/subjects.ts";
-import { shortenHome } from "../../util/format.ts";
+import { shellQuote, shortenHome } from "../../util/format.ts";
 
 /** Narrow `subject.entries` to the ones the requested scope targets. */
 export function narrowSubjectToScope(
@@ -66,8 +66,13 @@ function remedyFor(subject: StateSubject, scope: Scope): string {
       const flag = scope === "user" ? "" : " — drop `--scope project`";
       return `installed at user scope${flag}: crew uninstall ${subject.raw}`;
     }
-    const root = shortenHome(e.project_root ?? "");
-    return `installed at project scope in ${root}: cd ${root} && crew uninstall --scope project ${subject.raw}`;
+    // Two renderings of one path: `display` is for reading (`~/...`),
+    // `target` is pasted into a shell and so must survive spaces and
+    // metacharacters. Shortening and quoting are deliberately not mixed.
+    const raw = e.project_root ?? "";
+    const display = shortenHome(raw);
+    const target = shellQuote(raw);
+    return `installed at project scope in ${display}: cd ${target} && crew uninstall --scope project ${subject.raw}`;
   });
   return `${lines.join("\n")}\nOr add \`--force\` to treat this as a no-op.`;
 }
