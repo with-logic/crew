@@ -38,7 +38,7 @@ import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
 import { narrowSubjectToScope } from "./scope.ts";
-import { allTargets, selectedTargets } from "./select.ts";
+import { allowsEmpty, allTargets, confirmAll, countAllTargets, selectedTargets } from "./select.ts";
 import { findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
@@ -51,6 +51,12 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
   }
   const prune = Boolean(ctx.flags.extras["prune"]);
   const agentFilter = validateAgentFilter(ctx.flags.agent);
+
+  // §14: the state lock must not span a human decision. `--all` counts
+  // and confirms against an unlocked read, then re-reads under the lock
+  // so the removal acts on state as it is *now*, not as it was at the
+  // prompt.
+  if (all) confirmAll(ctx, countAllTargets(ctx, readState(ctx.home)));
 
   const records: UninstallRecord[] = [];
   let exitCode = 0;
@@ -67,10 +73,10 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
         ctx,
         false,
         agentFilter,
-        target.allowEmpty ?? false,
+        allowsEmpty(target),
       );
       state = updatedState;
-      if (target.collection) rec.collection = target.collection;
+      if (target.kind === "collection") rec.collection = target.collection;
       records.push(rec);
       removedRoots.push(...meta.fullyRemovedRoots);
       if (rec.failures.length > 0) exitCode = 1;

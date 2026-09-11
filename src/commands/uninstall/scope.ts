@@ -45,7 +45,13 @@ export function narrowSubjectToScope(
   );
 }
 
-function entriesAtScope(
+/**
+ * The entries a scope targets: user-scope, or this project root's —
+ * falling back to a lone project install so the command works from any
+ * cwd. Shared with `./select.ts` so collection selectors narrow exactly
+ * the way skill selectors do.
+ */
+export function entriesAtScope(
   entries: readonly StateEntry[],
   scope: Scope,
   cwd: string,

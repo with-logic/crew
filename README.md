@@ -164,7 +164,11 @@ When a command asks for an installed skill name, you can use the bare name
 | Command | What it does |
 |---|---|
 | `crew install <ref>…` | Install one or more skills into every detected agent; on misses, may suggest skills from trusted taps you haven't added yet. |
+<<<<<<< HEAD
 | `crew uninstall <selector>…` | Remove installed skills from every agent they were installed into. A selector can be a skill name, or a tap or namespace to remove everything installed from it; `--all` removes everything at the target scope. Acts on one scope at a time: the user-scoped install by default, or the current project's with `--scope project`. |
+=======
+| `crew uninstall <selector>…` | Remove installed skills from every agent they were installed into. A selector is a skill (`pdf`, `anthropic/pdf`), a tap (`acme`) to remove everything installed from it, or a namespace — qualified (`acme/marketing`) or bare when unique across your taps. `--all` removes everything at the target scope. |
+>>>>>>> bf228b2 (fix(uninstall): dedupe overlapping selectors, scope collections, unlock the prompt)
 | `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. |
 | `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. |
 | `crew skills` | Alias for `crew list`. |

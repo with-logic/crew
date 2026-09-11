@@ -2,11 +2,11 @@ import type { CommandHelp } from "./types.ts";
 
 export const uninstallHelp: CommandHelp = {
   name: "uninstall",
-  synopsis: "crew uninstall <name> [<name>...] | crew uninstall --all",
+  synopsis: "crew uninstall <selector> [<selector>...] | crew uninstall --all",
   summary: [
     "Remove an installed skill from every agent on your machine.",
-    "You can name the installed skill directly (`pdf`) or use a tap-qualified name like `anthropic/pdf`.",
-    "You can also name a whole collection: a tap (`acme`) removes everything you installed from it, and a namespace (`acme/marketing`) removes that bundle. A skill name always wins if one is installed under that name.",
+    "A selector is usually a skill: name it directly (`pdf`) or tap-qualified (`anthropic/pdf`).",
+    "A selector can also name a whole collection. A tap (`acme`) removes everything you installed from it. A namespace removes that bundle — write it qualified (`acme/marketing`), or bare (`marketing`) when only one of your taps has skills under that name. A skill name always wins if one is installed under that name.",
     "Homecrew only touches skills it installed — anything else in your agents' skills folders is left alone.",
     "If the skill pulled in dependencies, those stick around by default in case you want them. Pass `--prune` to also clean up anything that's now unused, like `apt autoremove`.",
   ],

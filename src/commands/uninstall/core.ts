@@ -14,7 +14,7 @@ import { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
-import { dropInstallLocation, reduceEntryAgents } from "./state.ts";
+import { dropScopedEntriesAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
 
 export interface UninstallRecord {
   name: string;
@@ -78,10 +78,12 @@ export function removeOne(
     }
     return { updatedState: state, rec, meta };
   }
-  // Per-entry processing: each (skill, scope) pair potentially touches
-  // a different subset of agents.
+  // Filesystem removal per entry first; state is then updated in one
+  // pass, so a large collection removal doesn't rebuild the whole
+  // installations array once per skill while holding the lock.
   let nextState = state;
   let anySurvives = false;
+  const fullyRemoved: StateEntry[] = [];
   for (const entry of entries) {
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
@@ -106,9 +108,10 @@ export function removeOne(
       // Only a FULL removal frees this location's dependencies (§7.4
       // step 5); a surviving partial `--agent` removal still needs them.
       meta.fullyRemovedRoots.push(entry.project_root ?? null);
-      nextState = dropInstallLocation(nextState, entry);
+      fullyRemoved.push(entry);
     }
   }
+  nextState = dropScopedEntriesAndUpdateRequiredBy(nextState, fullyRemoved);
   if (anySurvives) rec.partial = true;
   return { updatedState: nextState, rec, meta };
 }

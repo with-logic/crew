@@ -19,6 +19,11 @@
  * qualified form. `crew uninstall` and `crew update` both consume this;
  * the `command` argument only picks the verb shown in that error's
  * copy-pasteable suggestions.
+ *
+ * Callers that target a single scope (`crew uninstall`, §7.4 "Scope")
+ * pass a pre-narrowed `state` so tap and namespace membership — and the
+ * ambiguity decision that follows from it — only ever considers entries
+ * the command could actually remove.
  */
 
 import { CrewError } from "../core/errors.ts";
@@ -31,25 +36,34 @@ export interface CollectionSubject extends StateSubject {
   readonly kind: CollectionKind;
 }
 
-/** Resolve one argument to an installed skill, a tap, or a namespace. */
+/**
+ * Resolve one argument to an installed skill, a tap, or a namespace.
+ *
+ * `skillState` is what skill-kind resolution sees; `collectionState`
+ * (defaulting to it) is what tap/namespace membership sees. `crew
+ * uninstall` passes the full state for the former so a cross-scope skill
+ * keeps its "it's installed over here" remedy, and a scope-narrowed state
+ * for the latter.
+ */
 export function resolveCollectionSubject(
   state: StateFile,
   config: Config,
   raw: string,
   command: string = "uninstall",
+  collectionState: StateFile = state,
 ): CollectionSubject {
   const skill = resolveStateSubject(state, raw);
   if (skill.entries.length > 0) return { ...skill, kind: "skill" };
 
   const lowered = raw.trim().toLowerCase();
   const tapNamed = config.taps.some((t) => t.name === lowered);
-  const namespaced = namespaceCandidates(state, lowered);
+  const namespaced = namespaceCandidates(collectionState, lowered);
 
   if (tapNamed && namespaced.length > 0) {
     throw ambiguousCollection(raw, [lowered, ...namespaced.map((c) => c.qualified)], command);
   }
   if (tapNamed) {
-    const entries = state.installations.filter((e) => e.source.tap === lowered);
+    const entries = collectionState.installations.filter((e) => e.source.tap === lowered);
     return { raw, name: lowered, kind: "tap", entries };
   }
   if (namespaced.length > 1) {
@@ -70,8 +84,11 @@ export function resolveCollectionSubjects(
   config: Config,
   rawSubjects: readonly string[],
   command: string = "uninstall",
+  collectionState: StateFile = state,
 ): readonly CollectionSubject[] {
-  return rawSubjects.map((raw) => resolveCollectionSubject(state, config, raw, command));
+  return rawSubjects.map((raw) =>
+    resolveCollectionSubject(state, config, raw, command, collectionState),
+  );
 }
 
 interface NamespaceCandidate {
