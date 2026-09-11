@@ -10,10 +10,14 @@ import { normalizeConfig, readConfig, writeConfig } from "../../src/config/load.
 import { CrewError } from "../../src/core/errors.ts";
 import { paths } from "../../src/core/paths.ts";
 import { makeCrewHome } from "../helpers/env.ts";
+import { makeTempDir } from "../helpers/fixtures.ts";
 
 describe("readConfig", () => {
   test("missing file returns defaults", () => {
-    const home = makeCrewHome();
+    // Not `makeCrewHome()`: that seeds a config.yaml whose `core` tap is
+    // redirected offline, and this test is specifically about the
+    // no-config-file case.
+    const home = makeTempDir("crew-empty-home-");
     const c = readConfig(home);
     expect(c.taps).toEqual([
       {
