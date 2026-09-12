@@ -17,58 +17,73 @@ import { type SourceIdentity, sameSourceIdentity, sourceIdentityOf } from "./sou
  * doesn't rescan every state entry (and every tap row inside
  * `identityOfStateSource`) for each upstream child it considers.
  *
- * Keyed by `name`, since that is the first thing every lookup filters on.
+ * Keyed by the full install location — name, scope, and project root —
+ * rather than by name alone. A skill installed in several projects has
+ * one bucket per project instead of one shared bucket every lookup has
+ * to filter, so a multi-project re-expansion stays O(1) per child.
+ *
+ * The index is mutable on purpose: re-expansion installs as it walks,
+ * and a later tap group must see what an earlier one just added (see
+ * `noteInstalled`).
  */
 export interface InstalledSourceIndex {
-  readonly byName: ReadonlyMap<string, readonly IndexedEntry[]>;
+  readonly byLocation: Map<string, SourceIdentity[]>;
 }
 
-interface IndexedEntry {
-  readonly scope: Scope;
-  readonly projectRoot: string | null;
-  readonly identity: SourceIdentity;
+/** Bucket key: one install location. */
+function locationKey(name: string, scope: Scope, projectRoot: string | null): string {
+  return JSON.stringify([name, scope, projectRoot ?? ""]);
 }
 
 /** Build the index for one re-expansion run. */
 export function buildInstalledSourceIndex(state: StateFile, config: Config): InstalledSourceIndex {
-  const byName = new Map<string, IndexedEntry[]>();
+  const byLocation = new Map<string, SourceIdentity[]>();
   const tapsByName = new Map(config.taps.map((t) => [t.name, t]));
   for (const entry of state.installations) {
     const tap = tapsByName.get(entry.source.tap);
     if (!tap) continue;
-    const bucket = byName.get(entry.name);
-    const indexed: IndexedEntry = {
-      scope: entry.scope,
-      projectRoot: entry.project_root ?? null,
-      identity: sourceIdentityOf(tap, entry.source.path),
-    };
-    if (bucket) bucket.push(indexed);
-    else byName.set(entry.name, [indexed]);
+    const key = locationKey(entry.name, entry.scope, entry.project_root ?? null);
+    const identity = sourceIdentityOf(tap, entry.source.path);
+    const bucket = byLocation.get(key);
+    if (bucket) bucket.push(identity);
+    else byLocation.set(key, [identity]);
   }
-  return { byName };
+  return { byLocation };
+}
+
+/** Arguments identifying one candidate install location + source. */
+interface LookupArgs {
+  readonly name: string;
+  readonly scope: Scope;
+  readonly projectRoot: string | null;
+  readonly tap: TapConfig;
+  readonly tapRelativePath: string;
 }
 
 /**
  * True when `name` is already installed at this scope and project root
  * from the same canonical source, through any tap row.
  */
-export function indexHasSameSource(
-  index: InstalledSourceIndex,
-  args: {
-    readonly name: string;
-    readonly scope: Scope;
-    readonly projectRoot: string | null;
-    readonly tap: TapConfig;
-    readonly tapRelativePath: string;
-  },
-): boolean {
-  const candidates = index.byName.get(args.name);
+export function indexHasSameSource(index: InstalledSourceIndex, args: LookupArgs): boolean {
+  const candidates = index.byLocation.get(locationKey(args.name, args.scope, args.projectRoot));
   if (!candidates) return false;
   const incoming = sourceIdentityOf(args.tap, args.tapRelativePath);
-  for (const c of candidates) {
-    if (c.scope !== args.scope) continue;
-    if (c.projectRoot !== args.projectRoot) continue;
-    if (sameSourceIdentity(c.identity, incoming)) return true;
-  }
-  return false;
+  return candidates.some((identity) => sameSourceIdentity(identity, incoming));
+}
+
+/**
+ * Record a skill this run just installed, so a later tap group sees it.
+ *
+ * Two tap rows can point at the same repository (one at the root, one at
+ * a subpath), which puts their entries in different re-expansion groups.
+ * Without this, both groups would discover the same new upstream child
+ * against a stale snapshot and install it twice, leaving the marker and
+ * the state entry attributed to different taps.
+ */
+export function noteInstalled(index: InstalledSourceIndex, args: LookupArgs): void {
+  const key = locationKey(args.name, args.scope, args.projectRoot);
+  const identity = sourceIdentityOf(args.tap, args.tapRelativePath);
+  const bucket = index.byLocation.get(key);
+  if (bucket) bucket.push(identity);
+  else index.byLocation.set(key, [identity]);
 }

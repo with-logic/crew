@@ -50,9 +50,17 @@ export function rmrf(path: string): void {
 }
 
 /**
- * True when `candidate` resolves to `root` itself or something beneath
- * it. Both sides are resolved first, so `..` segments, duplicate
- * separators, and relative inputs are all accounted for.
+ * True when `candidate` resolves to something STRICTLY BENEATH `root`.
+ * The root itself is not "inside" itself and returns false.
+ *
+ * That exclusion is deliberate, not an oversight. The caller this exists
+ * for is `rmrfInside`, which guards a recursive delete: a bug or a
+ * corrupted config that collapsed a target down to the managed root
+ * would otherwise wipe every tap clone at once. Refusing the root makes
+ * that class of mistake a no-op instead.
+ *
+ * Both sides are resolved first, so `..` segments, duplicate separators,
+ * and relative inputs are all accounted for.
  */
 export function isInside(root: string, candidate: string): boolean {
   const rel = relative(resolve(root), resolve(candidate));

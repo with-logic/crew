@@ -179,6 +179,18 @@ crew itself produces: a trailing `.git`, a trailing `/`, and host casing
 are ignored, so `gh:acme/skills`, `@acme/skills`, and
 `https://github.com/acme/skills` are one repository.
 
+Only the **host** is case-folded. Userinfo and the path after it are
+compared as written, because both can be significant on the server:
+`ssh://Alice@host/acme/skills` and `ssh://alice@host/acme/skills` may be
+different accounts, and `acme/Skills` a different repository from
+`acme/skills`. Folding them would let one install silently overwrite a
+genuinely different source instead of raising `name_conflict`.
+
+Path taps follow the same rule with the directory in place of the repo:
+`crew install /src/skills/docx` and `crew install /src` reach the same
+directory, so the second is a duplicate rather than a conflict, exactly
+as for the git case above.
+
 The tap a skill is attributed to is NOT part of its source identity. One
 repository can back several taps: `crew install @acme/skills//skills/docx`
 records a tap with `subpath: skills/docx` and an entry path of `""`,
@@ -1765,6 +1777,12 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-13c | §5.4 | An entry attributed to a **registered** tap is not re-attributed; the install reports it as already installed and leaves `state.source` alone. |
 | C-INST-13d | §5.4 | Canonical URL comparison ignores a trailing `.git`, a trailing `/`, and host casing, so those spellings of one repo are the same source. |
 | C-INST-13e | §10.1.1, §5.4 | Tap re-expansion does not "add" a child that is already installed at the same scope from the same canonical location through another tap. |
+| C-INST-13f | §5.4, §16.5 | A re-attribution in one project rewrites only that project's marker; a sibling project's install of the same skill is left alone. |
+| C-INST-13g | §5.4, §11.1 | Re-attribution writes the destination tap's discovery mode into the marker rather than inheriting the old tap's, so a marker-only rebuild lands on the destination. |
+| C-INST-13h | §5.4, §10.1.1 | An entry subscribed to a whole tap is NOT re-attributed onto a tap rooted strictly deeper in the same source, which would lose the sibling subscription. |
+| C-INST-13i | §5.4 | Canonical URL comparison folds host case only. Userinfo and the path are compared as written, so `ssh://Alice@host/a/B` and `ssh://alice@host/a/b` are different sources. |
+| C-INST-13j | §5.4 | Path taps use the same rule with the directory in place of the repo: installing `/src/skills/foo` and then `/src` reaches one canonical location, so the second install is a duplicate, not a `name_conflict`. |
+| C-INST-13k | §10.1.1, §5.4 | When two tap rows cover one source, a child installed while re-expanding the first is not installed again by the second in the same run. |
 | C-INST-14 | §5.4 | `--force` on a `name_conflict` is NOT honored (the spec forbids `--force` overriding name conflicts). |
 | C-INST-15 | §9 | `--dry-run` on install produces a summary of what would happen and writes no files. |
 | C-INST-16 | §9 | `--agent <skill>` restricts the operation to the named agent(s). |

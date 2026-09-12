@@ -16,8 +16,11 @@ import { canonicalRepoUrl } from "./source-identity.ts";
  * than `existing` — it would see fewer siblings on re-expansion.
  * Different repositories never narrow each other, and identical roots
  * don't either.
+ *
+ * Named for its direction: the subject is `incoming`, and the question
+ * is whether moving an entry onto it would lose breadth.
  */
-export function narrowsTapRoot(existing: TapConfig, incoming: TapConfig): boolean {
+export function isTapRootNarrowerThan(incoming: TapConfig, existing: TapConfig): boolean {
   if (existing.kind !== incoming.kind) return false;
   if (existing.kind === "path") return isStrictlyDeeper(existing.path, incoming.path);
   if (canonicalRepoUrl(existing.url) !== canonicalRepoUrl(incoming.url)) return false;
