@@ -71,13 +71,17 @@ export function splitGitRef(head: string): { url: string; ref: string | null } {
  * Only consulted when the reference carries no ref-first tail (§8.2), so a
  * final segment containing a literal `@` stays intact whenever the caller
  * spelled the ref before the subpath.
+ *
+ * Rejects the same characters as the ref-first form: §8.4 excludes whitespace
+ * and `:` from `git-ref`. A rejected tail stays part of the subpath, which is
+ * legal path text, rather than becoming a ref that cannot resolve.
  */
 export function splitTrailingRef(subpath: string): { subpath: string; ref: string | null } {
   const lastSlash = subpath.lastIndexOf("/");
   const atIdx = subpath.lastIndexOf("@");
   if (atIdx <= lastSlash + 1) return { subpath, ref: null };
   const possibleRef = subpath.slice(atIdx + 1);
-  if (possibleRef.length === 0 || /\s/.test(possibleRef)) return { subpath, ref: null };
+  if (possibleRef.length === 0 || /[\s:]/.test(possibleRef)) return { subpath, ref: null };
   return { subpath: subpath.slice(0, atIdx), ref: possibleRef };
 }
 
