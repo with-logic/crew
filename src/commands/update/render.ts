@@ -5,7 +5,7 @@
  * Row-level formatting lives in `./rows.ts`.
  */
 
-import type { TapReexpandRow } from "../../install/tap-reexpand.ts";
+import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { columns, plural, shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
@@ -81,18 +81,20 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
     }
   }
 
-  // Tap-level fetch errors surfaced by re-expansion (distinct from the
-  // initial tapRefresh step — this is when the tap was needed and still
-  // couldn't be reached).
-  for (const r of input.tapReexpandRows) {
-    if (r.kind === "tap_error") {
-      lines.push(
-        `${style.symbol("warn")} tap ${style.bold(r.tap)} ${style.dim(`(${r.error?.code ?? "unreachable"})`)}`,
-      );
-    }
+  // Errors surfaced by re-expansion: a tap that couldn't be reached, or
+  // a discovered child that failed validation (§9 step 4). Both name the
+  // subject and the reason — an invalid child is the user's to fix, so
+  // "tap acme (invalid_skill)" alone would tell them nothing.
+  const errorRows = input.tapReexpandRows.filter((r) => r.kind === "tap_error");
+  for (const r of errorRows) {
+    const code = r.error?.code ?? "unreachable";
+    lines.push(
+      `${style.symbol("fail")} ${style.bold(r.name)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
+    );
+    if (r.error?.message) lines.push(style.dim(`  ${r.error.message}`));
   }
 
-  const totals = tally(input.rows, addedRows.length);
+  const totals = tally(input.rows, addedRows.length, errorRows.length);
   lines.push("");
   lines.push(style.dim(formatTotals(totals, dryRun)));
 
@@ -117,13 +119,15 @@ interface Totals {
   added: number;
 }
 
-function tally(rows: readonly UpdateRow[], addedCount: number): Totals {
+function tally(rows: readonly UpdateRow[], addedCount: number, tapErrorCount: number): Totals {
   const t: Totals = {
     updated: 0,
     upToDate: 0,
     skipped: 0,
     sourceGone: 0,
-    failed: 0,
+    // Re-expansion errors are failures too: a child that failed
+    // validation was not added, and the run exits 1 for it.
+    failed: tapErrorCount,
     added: addedCount,
   };
   for (const r of rows) {

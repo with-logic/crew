@@ -10,7 +10,7 @@
  * validation still run, but a moved entry reports `would_update` and
  * nothing is staged or installed.
  *
- * Tap re-expansion (additions / source_gone) lives in `tap-reexpand.ts`;
+ * Tap re-expansion (additions / source_gone) lives in `tap-reexpand/index.ts`;
  * this module handles only the per-existing-entry update.
  */
 

@@ -1,17 +1,16 @@
 /**
  * Newly-added tap children during re-expansion (§10.1.1 step 1).
  *
- * Split out of `tap-reexpand.ts` (200-line cap): given the children a
+ * Split out of `./index.ts` (200-line cap): given the children a
  * tap currently exposes and the names already in state, decide which
  * are new, validate each in full, and either report the addition
  * (`--dry-run`) or install it.
  */
 
-import type { CrewError } from "../core/errors.ts";
-import type { Scope, StateEntry, TapConfig } from "../core/types.ts";
-import { loadSkill } from "../skill/load.ts";
-import type { CurrentTapChild } from "./tap-children.ts";
-import type { InstallNewChild, TapReexpandRow } from "./tap-reexpand.ts";
+import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
+import type { CurrentTapChild } from "../tap-children.ts";
+import type { InstallNewChild, TapReexpandRow } from "./index.ts";
+import type { TapScanCache } from "./scan-cache.ts";
 
 export interface AdditionsInput {
   readonly children: readonly CurrentTapChild[];
@@ -24,6 +23,7 @@ export interface AdditionsInput {
   readonly projectRoot: string | null;
   readonly dryRun: boolean;
   readonly installOne: InstallNewChild;
+  readonly cache: TapScanCache;
 }
 
 export interface AdditionsResult {
@@ -45,7 +45,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
     // can reach here with (say) no `description`. Validate in full
     // before reporting or installing, so the preview and the real run
     // agree and an invalid child never lands on disk.
-    const invalid = validationErrorFor(child.path);
+    const invalid = input.cache.validate(child.path);
     if (invalid) {
       hardFailure = true;
       rows.push({
@@ -83,19 +83,4 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
   }
 
   return { added, rows, hardFailure };
-}
-
-/**
- * Full spec validation (§9 step 4) for a discovered child, returning
- * the failure instead of throwing. `loadSkill` is the same validator
- * the install flow uses.
- */
-function validationErrorFor(skillDir: string): CrewError | null {
-  try {
-    loadSkill(skillDir);
-    return null;
-  } catch (err) {
-    // `loadSkill` only throws `invalid_skill` CrewErrors.
-    return err as CrewError;
-  }
 }
