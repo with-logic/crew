@@ -138,10 +138,12 @@ User-facing help may describe these values as skill names rather than
 selectors; the distinction is spec terminology, not product language.
 
 **`crew list` scope filter.** With no `--scope`, `crew list` shows every
-installation at both scopes, grouping project-scope rows under the skill's
-user-scope row. With `--scope user` it shows only user-scope installations;
-with `--scope project` it shows only project-scope installations, one row per
-project root. `--json` filters `installations` the same way and reports the
+installation at both scopes, grouping a skill's project-scope rows under a
+single identity row for that skill — the user-scope installation when one
+exists, and otherwise a neutral row carrying the skill's name and source, so
+a skill installed only in projects still groups correctly. With `--scope user`
+it shows only user-scope installations; with `--scope project` it shows only
+project-scope installations, one row per project root. `--json` filters `installations` the same way and reports the
 filter in a `scope` field (`"user"`, `"project"`, or `null` when unfiltered).
 When the filter leaves nothing, the human output says so for that scope
 rather than printing the first-run getting-started hint.

@@ -10,7 +10,7 @@
  *
  * Under `--scope project` there is no user row to hang sub-rows on, so
  * every project install is rendered as its own identity row with the
- * `in <path>` location folded into the source column.
+ * `in <path>` location folded into the name column.
  *
  * Columns (aligned): name, source (tap + path), short version, which
  * agents it's in, a trailing set of tags (pinned, dep). "all agents"
