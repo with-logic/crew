@@ -9,6 +9,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -86,6 +88,46 @@ describe("reference and flag guards", () => {
     });
     expect(code).toBe(4);
     expect(capture.stderr()).toContain("..");
+  });
+
+  test("C-REF-22c a committed symlink subpath cannot escape the clone", () => {
+    const home = makeCrewHome();
+    // A skill that lives entirely outside the repository...
+    const outside = makeTempDir("crew-outside-");
+    makeSkill(outside, "pwned", skillFrontmatter({ name: "pwned" }));
+    // ...reachable only through a symlink the repo commits. The subpath
+    // `evil` is lexically clean, so only a filesystem check catches it.
+    const repo = makeTempDir("crew-guard-");
+    makeGitRepo(repo);
+    makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
+    symlinkSync(join(outside, "pwned"), join(repo, "evil"));
+    commitAll(repo, "add symlink");
+
+    const capture = captureStreams();
+    const code = runCli(["install", "--json", `file://${repo}//evil`], {
+      home,
+      streams: capture.streams,
+    });
+
+    expect(code).toBe(4);
+    expect(errorName(capture.stdout())).toBe("invalid_ref");
+    expect(existsSync(join(ccRoot, "pwned"))).toBe(false);
+  });
+
+  test("C-CLI-08a a repeated boolean flag is a usage_error", () => {
+    const home = makeCrewHome();
+    // Yargs collapses a repeated boolean to `true`, leaving no trace in
+    // the parsed result — so only raw argv can witness these.
+    for (const argv of [
+      ["install", "--json", "--json", "foo"],
+      ["install", "--force", "--force", "foo"],
+      ["install", "--recursive", "--recursive", "foo"],
+    ]) {
+      const capture = captureStreams();
+      const code = runCli(argv, { home, streams: capture.streams });
+      expect(code).toBe(4);
+      expect(capture.stderr()).toContain("more than once");
+    }
   });
 
   test("C-CLI-08a a repeated single-value flag is a usage_error", () => {

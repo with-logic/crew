@@ -150,7 +150,7 @@ Accepted on any command where they apply:
 - `--yes` — answer "yes" to any confirmation prompt.
 - `--force` — override safety checks as defined in §7 and §10. Never overrides spec validation failures or two-skills-same-name conflicts.
 
-Only flags documented as repeatable (`--agent`) may appear more than once. Passing any single-value flag twice is a `usage_error` naming the flag; an implementation MUST NOT silently keep one occurrence or discard the value.
+Only flags documented as repeatable (`--agent`) may appear more than once. Passing any other flag twice is a `usage_error` naming the flag. This covers boolean flags (`--json --json`) as well as value flags (`--scope user --scope project`): a repeated boolean is indistinguishable from a single one once parsed, so an implementation MUST detect the repetition from the raw arguments. An implementation MUST NOT silently keep one occurrence or discard the value.
 
 ### 5.3 Install-time flags
 
@@ -690,6 +690,14 @@ contains a backslash, with `invalid_ref` naming the offending value; `.`
 components and repeated `/` separators are collapsed. Without this rule a
 reference such as `gh:acme/skills//../../../etc` would resolve outside the
 clone once joined to it.
+
+That check is lexical, and a lexically valid subpath can still leave the
+repository: a source may commit a symlink at the named path, or at any
+directory above it. Before reading a resolved subpath, implementations
+MUST verify that no path segment between the source root and the resolved
+location is a symlink, and reject with `invalid_ref` naming the offending
+segment. Otherwise `gh:acme/skills//outside`, where `outside` is a
+committed symlink, would install content that was never in the source.
 
 Tap-source identifiers are matched case-insensitively and canonicalized to
 lowercase before lookup. For example, `crew install Core/Python-Testing`
@@ -1702,6 +1710,7 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-22 | §8.4 | A tap-source skill identifier may begin with a digit, e.g. `3-statement-model`. |
 | C-REF-22a | §8.4 | A git subpath containing a `..` component, starting with `/`, or containing a backslash is `invalid_ref` (exit 4) at every entry point that accepts a git reference — positional install, `--from-git`, `crew tap add`, and `crew info`. |
 | C-REF-22b | §8.4 | A git subpath's `.` components and repeated `/` separators are collapsed, so `//./a//b` resolves to `a/b`. |
+| C-REF-22c | §8.4 | A subpath that is lexically valid but resolves through a committed symlink — at the named path or any directory above it — is `invalid_ref` (exit 4), and nothing from the symlink's target is installed. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -1979,7 +1988,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-06 | §5.2 | `--quiet` suppresses non-error stdout. Error output still reaches stderr. |
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
-| C-CLI-08a | §5.2 | A single-value flag passed more than once is a `usage_error` (exit 4) naming the flag; the repeatable `--agent` collects every occurrence. |
+| C-CLI-08a | §5.2 | A non-repeatable flag passed more than once is a `usage_error` (exit 4) naming the flag — boolean (`--json --json`) as well as value (`--scope user --scope project`); the repeatable `--agent` collects every occurrence. |
 | C-CLI-09 | §5.5 | Bare `crew` is equivalent to `crew help` — same output, exit 0 (no "usage error"). |
 | C-CLI-10 | §5.5 | `crew help <unknown>` falls back to the overview and exits 0. |
 | C-CLI-11 | §5.5 | The overview contains a one-sentence description of crew, a getting-started section with at least three example invocations, and a command list covering every command from §5.1. |

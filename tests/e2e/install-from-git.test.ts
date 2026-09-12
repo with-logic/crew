@@ -129,9 +129,10 @@ describe("crew install --from-git", () => {
     expect(entry.name).toBe("demo");
     expect(entry.ref).toBe(first);
     expect(entry.pinned).toBe(true);
-    // NOTE: `resolved_sha` is HEAD here, not `first`. That is the
-    // pre-existing bug PR #129 fixes on its own branch; asserting it
-    // would encode the defect, so this pins the ref instead.
+    // Scope: this suite proves the flag's value is forwarded intact and
+    // its ref metadata recorded. Resolving a ref to the commit whose
+    // bytes get installed is a separate concern with its own tests, so
+    // `resolved_sha` is deliberately not asserted here.
   });
 
   test("C-INST-02b explicit git forms pass through unchanged", () => {

@@ -23,6 +23,7 @@ import { crewHome, tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { ensureClone, resolveRef } from "../../git/repo.ts";
 import { isDirectory } from "../../util/fs.ts";
+import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
@@ -56,6 +57,9 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
       { tap: tap.name, subpath: tap.subpath, sha },
     );
   }
+  // A lexically valid subpath can still be a committed symlink out of
+  // the clone; only the filesystem can say. (CLAUDE.md decision #9.)
+  assertNoSymlinkEscape(clonePath, rootDir, `tap \`${tap.name}\` subpath \`${tap.subpath}\``);
   return { rootDir, resolvedSha: sha };
 }
 
