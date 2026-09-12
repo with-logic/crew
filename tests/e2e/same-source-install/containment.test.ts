@@ -47,38 +47,52 @@ describe("C-TAP-25 deletion stays inside the managed root", () => {
     expect(isInside(root, makeTempDir("crew-other-"))).toBe(false);
   });
 
-  test("C-TAP-25 a traversal tap name in config is rejected on load", () => {
-    const home = makeCrewHome();
-    const p = paths(home);
-    mkdirSync(p.tapsDir, { recursive: true });
-    const victim = join(home, "PRECIOUS");
-    mkdirSync(victim, { recursive: true });
-    writeFileSync(join(victim, "data.txt"), "must survive");
+  // C-TAP-25 names four shapes a tap name must not take. Each one is a
+  // different way to escape the taps directory (or, for `.`, to resolve
+  // back onto it), so each is asserted rather than trusting one to
+  // stand in for the rest. YAML-quoted so `.`/`..` stay strings.
+  const unsafeNames = [
+    ["parent traversal", "'../PRECIOUS'"],
+    ["forward slash", "'nested/child'"],
+    ["backslash", "'nested\\child'"],
+    ["dot", "'.'"],
+    ["dot dot", "'..'"],
+  ] as const;
 
-    // Hand-write a config carrying a traversal name, as a corrupted or
-    // hostile file would.
-    writeFileSync(
-      p.configFile,
-      [
-        "taps:",
-        "  - name: ../PRECIOUS",
-        "    kind: git",
-        "    registered: false",
-        "    url: https://example.com/acme/skills.git",
-        "    subpath: ''",
-        "disabled_agents: []",
-        "forced_agents: []",
-        "",
-      ].join("\n"),
-    );
+  for (const [label, yamlName] of unsafeNames) {
+    test(`C-TAP-25 a tap name with a ${label} is rejected on load`, () => {
+      const home = makeCrewHome();
+      const p = paths(home);
+      mkdirSync(p.tapsDir, { recursive: true });
+      const victim = join(home, "PRECIOUS");
+      mkdirSync(victim, { recursive: true });
+      writeFileSync(join(victim, "data.txt"), "must survive");
 
-    // `tap list` reads config; `list` reads only state, so it would
-    // never reach the parser this test is about.
-    const cap = captureStreams();
-    const code = runCli(["tap", "list"], { home, streams: cap.streams });
+      // Hand-write a config carrying the name, as a corrupted or
+      // hostile file would.
+      writeFileSync(
+        p.configFile,
+        [
+          "taps:",
+          `  - name: ${yamlName}`,
+          "    kind: git",
+          "    registered: false",
+          "    url: https://example.com/acme/skills.git",
+          "    subpath: ''",
+          "disabled_agents: []",
+          "forced_agents: []",
+          "",
+        ].join("\n"),
+      );
 
-    expect(code).toBe(4);
-    expect(cap.stderr()).toContain("config_invalid");
-    expect(existsSync(join(victim, "data.txt"))).toBe(true);
-  });
+      // `tap list` reads config; `list` reads only state, so it would
+      // never reach the parser this test is about.
+      const cap = captureStreams();
+      const code = runCli(["tap", "list"], { home, streams: cap.streams });
+
+      expect(code).toBe(4);
+      expect(cap.stderr()).toContain("config_invalid");
+      expect(existsSync(join(victim, "data.txt"))).toBe(true);
+    });
+  }
 });

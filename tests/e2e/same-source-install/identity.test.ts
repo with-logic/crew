@@ -63,6 +63,22 @@ describe("C-INST-13d canonical URL comparison", () => {
     expect(canonicalRepoUrl("MyHost.com:acme/repo")).toBe("myhost.com:acme/repo");
   });
 
+  test("C-INST-13i userinfo case is preserved in scheme'd URLs", () => {
+    // `Alice` and `alice` can be different accounts, so folding them
+    // would make two genuinely different sources compare equal — and
+    // §5.4 reads "same source" as permission to overwrite without
+    // `--force`. The host beside them still folds.
+    expect(canonicalRepoUrl("ssh://Alice@github.com/acme/skills")).not.toBe(
+      canonicalRepoUrl("ssh://alice@github.com/acme/skills"),
+    );
+    expect(canonicalRepoUrl("https://Token@github.com/acme/skills.git")).not.toBe(
+      canonicalRepoUrl("https://token@github.com/acme/skills.git"),
+    );
+    expect(canonicalRepoUrl("ssh://Alice@GitHub.com/acme/skills")).toBe(
+      canonicalRepoUrl("ssh://Alice@github.com/acme/skills"),
+    );
+  });
+
   test("C-INST-13d subpath tap and whole-repo tap resolve to one location", () => {
     const narrow = sourceIdentityOf(
       {

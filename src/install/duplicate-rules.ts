@@ -27,7 +27,7 @@
 import { CrewError } from "../core/errors.ts";
 import type { ResolvedSkill, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
 import { identityOfStateSource, sameSourceIdentity, sourceIdentityOf } from "./source-identity.ts";
-import { narrowsTapRoot } from "./tap-breadth.ts";
+import { isTapRootNarrowerThan } from "./tap-breadth.ts";
 
 export interface AlreadyInstalled {
   readonly name: string;
@@ -164,7 +164,7 @@ function classifySource(
   // silently end sibling re-expansion (§10.1.1). Every direct git/path
   // install sets `tracksTap`, so the test is which tap sees more: the
   // incoming root must not be a strict descendant of the existing one.
-  if (existing.tracks_tap === true && narrowsTapRoot(existingTap, skill.tap)) return null;
+  if (existing.tracks_tap === true && isTapRootNarrowerThan(skill.tap, existingTap)) return null;
   return {
     name: existing.name,
     scope: existing.scope,

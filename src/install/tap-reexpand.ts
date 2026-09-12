@@ -21,7 +21,11 @@ import type { CrewError } from "../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
 import { isDirectory } from "../util/fs.ts";
-import { buildInstalledSourceIndex, indexHasSameSource } from "./installed-lookup.ts";
+import {
+  buildInstalledSourceIndex,
+  indexHasSameSource,
+  noteInstalled,
+} from "./installed-lookup.ts";
 import { currentTapChildren, groupChildrenByName } from "./tap-children.ts";
 
 /** One re-expansion outcome row. */
@@ -168,14 +172,14 @@ export function reexpandTaps(
       // §5.4: the same directory may already be installed through
       // another tap pointing at this repo. Same source, so there is
       // nothing to add — installing again would collide on the name.
-      const alreadyHere = indexHasSameSource(installedIndex, {
+      const lookup = {
         name: child.name,
         scope: first.scope,
         projectRoot,
         tap,
         tapRelativePath: child.tapRelativePath,
-      });
-      if (alreadyHere) continue;
+      };
+      if (indexHasSameSource(installedIndex, lookup)) continue;
       const entry = installOne({
         skillDir: child.path,
         skillName: child.name,
@@ -188,6 +192,9 @@ export function reexpandTaps(
       });
       if (entry) {
         added.push(entry);
+        // Keep the index current: another tap row pointing at this same
+        // repo forms its own group, and must not add this child again.
+        noteInstalled(installedIndex, lookup);
         rows.push({ name: child.name, scope: first.scope, tap: tap.name, kind: "added" });
       }
     }

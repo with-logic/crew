@@ -16,21 +16,46 @@ import type { Marker, StateFile, TapConfig } from "../core/types.ts";
 import { writeJson } from "../util/json.ts";
 import type { Reattribution } from "./duplicate-rules.ts";
 
+/**
+ * Key one move by the install location it targets. Bulk re-attribution
+ * runs under the state lock, so both callers index once rather than
+ * scanning the move list per entry and per marker.
+ */
+function moveKey(name: string, scope: string, projectRoot: string | null): string {
+  return JSON.stringify([name, scope, projectRoot ?? ""]);
+}
+
+/** Marker key: a move only claims markers still naming its old tap. */
+function markerMoveKey(
+  name: string,
+  scope: string,
+  projectRoot: string | null,
+  fromTap: string,
+): string {
+  return JSON.stringify([name, scope, projectRoot ?? "", fromTap]);
+}
+
+function movesByLocation(
+  reattributions: readonly Reattribution[],
+): ReadonlyMap<string, Reattribution> {
+  const byLocation = new Map<string, Reattribution>();
+  for (const r of reattributions) {
+    byLocation.set(moveKey(r.name, r.scope, r.projectRoot), r);
+  }
+  return byLocation;
+}
+
 /** Apply every re-attribution to `state`, returning the updated file. */
 export function applyReattributions(
   state: StateFile,
   reattributions: readonly Reattribution[],
 ): StateFile {
   if (reattributions.length === 0) return state;
+  const moves = movesByLocation(reattributions);
   return {
     schema_version: 1,
     installations: state.installations.map((entry) => {
-      const move = reattributions.find(
-        (r) =>
-          r.name === entry.name &&
-          r.scope === entry.scope &&
-          r.projectRoot === (entry.project_root ?? null),
-      );
+      const move = moves.get(moveKey(entry.name, entry.scope, entry.project_root ?? null));
       if (!move) return entry;
       return { ...entry, source: { tap: move.toTap, path: move.toPath } };
     }),
@@ -53,6 +78,12 @@ export function rewriteReattributedMarkers(
 ): void {
   if (reattributions.length === 0) return;
   const tapsByName = new Map(taps.map((t) => [t.name, t]));
+  // Markers additionally match on the tap they came FROM: the old tap
+  // may still own other skills, so only markers naming it move.
+  const movesByMarker = new Map<string, Reattribution>();
+  for (const r of reattributions) {
+    movesByMarker.set(markerMoveKey(r.name, r.scope, r.projectRoot, r.fromTap), r);
+  }
   const hasUserMove = reattributions.some((r) => r.scope === "user");
   // Only visit the roots a move actually names. Scanning every root
   // remembered in state would walk unrelated projects under the lock,
@@ -65,12 +96,12 @@ export function rewriteReattributedMarkers(
   for (const adapter of ALL_AGENTS) {
     if (hasUserMove) {
       for (const rec of listInstalledForAgent(adapter, "user", cwd)) {
-        maybeRewrite(rec.installDir, rec.marker, reattributions, tapsByName, "user", null);
+        maybeRewrite(rec.installDir, rec.marker, movesByMarker, tapsByName, "user", null);
       }
     }
     for (const root of projectRoots) {
       for (const rec of listInstalledForAgent(adapter, "project", root)) {
-        maybeRewrite(rec.installDir, rec.marker, reattributions, tapsByName, "project", root);
+        maybeRewrite(rec.installDir, rec.marker, movesByMarker, tapsByName, "project", root);
       }
     }
   }
@@ -79,18 +110,12 @@ export function rewriteReattributedMarkers(
 function maybeRewrite(
   installDir: string,
   marker: Marker,
-  reattributions: readonly Reattribution[],
+  movesByMarker: ReadonlyMap<string, Reattribution>,
   tapsByName: ReadonlyMap<string, TapConfig>,
   scope: "user" | "project",
   projectRoot: string | null,
 ): void {
-  const move = reattributions.find(
-    (r) =>
-      r.name === marker.name &&
-      r.scope === scope &&
-      r.fromTap === marker.tap_name &&
-      r.projectRoot === projectRoot,
-  );
+  const move = movesByMarker.get(markerMoveKey(marker.name, scope, projectRoot, marker.tap_name));
   if (!move) return;
   const tap = tapsByName.get(move.toTap);
   if (!tap) return;
