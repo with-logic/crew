@@ -31,7 +31,14 @@ export function searchCommand(ctx: CommandContext): CommandOutput {
   const taps = tapFilter === null ? config.taps : [tapFilter];
   const { hits, warnings } = collectConfiguredHits(taps, query, installIndex, ctx.home);
   const knownHits = tapFilter === null ? collectKnownHits(query, config.taps) : [];
-  const human = formatSearchResults(hits, knownHits, rawQuery, ctx.style, ctx.width);
+  const human = formatSearchResults({
+    hits,
+    knownHits,
+    query: rawQuery,
+    tap: tapFilter?.name ?? null,
+    style: ctx.style,
+    width: ctx.width,
+  });
   return {
     exitCode: 0,
     human,

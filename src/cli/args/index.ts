@@ -107,7 +107,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 }
 
 /**
- * Reject a non-repeatable flag passed more than once.
+ * Reject a non-repeatable flag passed more than once (§5.2).
  *
  * Two detections are needed because yargs represents the two flag
  * kinds differently. `duplicate-arguments-array` hands back an ARRAY

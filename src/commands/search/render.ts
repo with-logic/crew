@@ -9,13 +9,19 @@ import type { KnownSearchHit, SearchHit } from "./types.ts";
 
 const SAME_NAME_NOTE = "same name installed elsewhere";
 
-export function formatSearchResults(
-  hits: readonly SearchHit[],
-  knownHits: readonly KnownSearchHit[],
-  query: string,
-  style: Styler,
-  width: number,
-): string[] {
+/** What `crew search` rendered from, including the `--tap` scope if any. */
+export interface SearchRender {
+  readonly hits: readonly SearchHit[];
+  readonly knownHits: readonly KnownSearchHit[];
+  readonly query: string;
+  /** The `--tap <name>` filter's tap, or null when unscoped. */
+  readonly tap: string | null;
+  readonly style: Styler;
+  readonly width: number;
+}
+
+export function formatSearchResults(input: SearchRender): string[] {
+  const { hits, knownHits, query, tap, style, width } = input;
   if (hits.length > 0) {
     const lines = formatConfiguredHits(hits, query, style, width);
     if (knownHits.length > 0) lines.push("", ...formatKnownSection(knownHits, style, width));
@@ -27,6 +33,21 @@ export function formatSearchResults(
       "",
       ...formatKnownSection(knownHits, style, width),
     ];
+  }
+  // Scoped: the user named a tap they already have, so "add a tap" is the
+  // wrong next step and "any tap you've added" misdescribes what was searched.
+  if (tap !== null) {
+    return query === ""
+      ? [
+          style.dim(`No skills in \`${tap}\`.`),
+          "",
+          style.dim("Run `crew search` to look across every tap you've added."),
+        ]
+      : [
+          style.dim(`No skills match "${query}" in \`${tap}\`.`),
+          "",
+          style.dim(`Run \`crew search ${query}\` to look across every tap you've added.`),
+        ];
   }
   if (query === "") {
     return [
