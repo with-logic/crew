@@ -1,5 +1,5 @@
 /**
- * Ref-last git reference through the real CLI (§8.2, C-REF-28):
+ * Ref-last git reference through the real CLI (§8.2, C-REF-31):
  * `file://<repo>//<sub>@<sha>` is recorded exactly like `@<sha>//<sub>`.
  */
 

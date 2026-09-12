@@ -73,6 +73,31 @@ describe("parseRef: @ref after //subpath", () => {
     });
   });
 
+  test("C-REF-31 a ref containing a colon is not a ref", () => {
+    // §8.4 excludes `:` from `git-ref`. Reading it as one would produce a ref
+    // git cannot resolve and surface as `ref_not_found`, when the text is
+    // perfectly legal subpath content — so the tail stays in the subpath.
+    expect(parseRef("gh:acme/skills//skill@release:bad")).toEqual({
+      type: "git",
+      url: "https://github.com/acme/skills.git",
+      ref: null,
+      subpath: "skill@release:bad",
+    });
+  });
+
+  test("C-REF-31 both ref positions reject a colon identically", () => {
+    // The ref-first form already rejected `:`; ref-last must agree, or the
+    // same reference means different things depending on where it is spelled.
+    expect(parseRef("gh:acme/skills@release:bad//skill")).toMatchObject({
+      type: "git",
+      ref: null,
+    });
+    expect(parseRef("gh:acme/skills//skill@release:bad")).toMatchObject({
+      type: "git",
+      ref: null,
+    });
+  });
+
   test("C-REF-32 a ref spelled first preserves a literal @ in the final segment", () => {
     // The documented escape hatch: ref-first suppresses the trailing scan,
     // so `foo@bar` stays a directory name. This is also the behavior on the
