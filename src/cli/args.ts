@@ -18,6 +18,7 @@
 import yargsFactory from "yargs/yargs";
 import type { CommandFlags } from "../commands/types.ts";
 import { CrewError } from "../core/errors.ts";
+import { lookup } from "../util/registry.ts";
 import { aliasFlagKey } from "./aliases.ts";
 
 /** Result of parsing. */
@@ -66,8 +67,14 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   // subcommand, so it inherits no subcommand flags — `crew taps
   // --recursive` stays a usage_error.
   const flagKey = aliasFlagKey(command);
-  const booleans = [...BOOLEAN_GLOBALS, ...(flagKey === null ? [] : (BOOLEAN_SUB[flagKey] ?? []))];
-  const strings = [...STRING_GLOBALS, ...(flagKey === null ? [] : (STRING_SUB[flagKey] ?? []))];
+  const booleans = [
+    ...BOOLEAN_GLOBALS,
+    ...(flagKey === null ? [] : (lookup(BOOLEAN_SUB, flagKey) ?? [])),
+  ];
+  const strings = [
+    ...STRING_GLOBALS,
+    ...(flagKey === null ? [] : (lookup(STRING_SUB, flagKey) ?? [])),
+  ];
 
   let parsed: Record<string, unknown>;
   try {

@@ -13,18 +13,21 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { COMMAND_ALIASES } from "../../src/cli/aliases.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { helpFor } from "../../src/commands/help/content/index.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 
-/** Bare aliases, paired with the canonical command whose flags they share. */
-const BARE_ALIASES: readonly (readonly [string, string])[] = [
-  ["ls", "list"],
-  ["skills", "list"],
-  ["remove", "uninstall"],
-  ["rm", "uninstall"],
-  ["upgrade", "update"],
-];
+/**
+ * Bare aliases, paired with the canonical command whose flags they
+ * share — derived from `COMMAND_ALIASES` so a new alias is covered
+ * automatically instead of needing to be remembered here. Prefixed
+ * aliases (`taps` -> `tap list`) are excluded: they name one
+ * subcommand and deliberately do not inherit the whole flag table.
+ */
+const BARE_ALIASES: readonly (readonly [string, string])[] = Object.entries(COMMAND_ALIASES)
+  .filter(([, target]) => target.length === 1)
+  .map(([alias, target]) => [alias, target[0]!] as const);
 
 describe("alias help lists the canonical flags", () => {
   for (const [alias, canonical] of BARE_ALIASES) {

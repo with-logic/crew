@@ -5,6 +5,7 @@
  */
 
 import type { VisibleCommand } from "../../../cli/aliases.ts";
+import { lookup } from "../../../util/registry.ts";
 import { agentsHelp } from "./agents.ts";
 import { autoupdateHelp } from "./autoupdate.ts";
 import { cacheHelp } from "./cache.ts";
@@ -30,10 +31,17 @@ import { versionHelp } from "./version.ts";
 
 export type { CommandHelp, HelpSection } from "./types.ts";
 
-/** How commands are grouped in the overview. */
+/**
+ * How commands are grouped in the overview.
+ *
+ * `commands` is `VisibleCommand[]` rather than `string[]` so a typo or a
+ * command that no longer exists is a compile error. §5.5 also requires
+ * every command to appear in exactly one group; `tests/e2e/help.test.ts`
+ * asserts that, since types alone can't catch an omission or a repeat.
+ */
 export interface CommandGroup {
   readonly title: string;
-  readonly commands: readonly string[];
+  readonly commands: readonly VisibleCommand[];
 }
 
 export const GROUPS: readonly CommandGroup[] = [
@@ -116,12 +124,20 @@ export const ONELINERS: Record<VisibleCommand, string> = {
   version: "Print the version.",
 };
 
-/** Look up a help page by a user-typed word; undefined when it isn't a command. */
+/**
+ * Look up a help page by a user-typed word; undefined when it isn't a
+ * command.
+ *
+ * `Object.hasOwn` guards the lookup — the word comes from argv, and a
+ * plain object resolves inherited members, so `crew help __proto__`
+ * would otherwise return a prototype value and crash the renderer
+ * instead of falling back to the overview.
+ */
 export function helpFor(command: string): CommandHelp | undefined {
-  return (COMMANDS as Record<string, CommandHelp>)[command];
+  return lookup(COMMANDS, command);
 }
 
 /** The overview blurb for a command word, or "" when it has none. */
 export function onelinerFor(command: string): string {
-  return (ONELINERS as Record<string, string>)[command] ?? "";
+  return lookup(ONELINERS, command) ?? "";
 }
