@@ -4,6 +4,7 @@
 
 import { CrewError } from "../../core/errors.ts";
 import type { Source, TapConfig } from "../../core/types.ts";
+import { displayText, displayUrl } from "../../refs/display-url.ts";
 import { parseRef } from "../../refs/parse.ts";
 
 /** Parsed source of a `tap add` argument: git or path. */
@@ -28,12 +29,15 @@ export function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {
   // §16.3: taps track the default branch. `main`/`master` is taken to
   // name it (so a pasted `/tree/main/...` link works); anything else is
   // a pin we can't honour.
-  if (source.ref !== null && !DEFAULT_BRANCH_NAMES.has(source.ref))
+  if (source.ref !== null && !DEFAULT_BRANCH_NAMES.has(source.ref)) {
+    // `raw` is the user's argument and may carry credentials (§16.3).
+    const shown = displayText(raw);
     throw new CrewError(
       "usage_error",
-      `\`${raw}\` carries a \`@${source.ref}\` tail — taps track the default branch and can't be pinned. Drop the \`@${source.ref}\` and try again.`,
-      { raw, ref: source.ref },
+      `\`${shown}\` carries a \`@${source.ref}\` tail — taps track the default branch and can't be pinned. Drop the \`@${source.ref}\` and try again.`,
+      { raw: shown, ref: source.ref },
     );
+  }
   return { kind: "git", url: source.url, subpath: source.subpath, path: "" };
 }
 
@@ -43,12 +47,22 @@ export function sameTap(a: TapConfig, t: TapAddTarget): boolean {
   return a.path === t.path;
 }
 
+/**
+ * Render a tap's target for output. Credentials are redacted here rather than
+ * at each call site: a tap URL may legitimately carry them (§16.3), and this
+ * is the one function every human and JSON surface renders through.
+ */
 export function displayTarget(t: TapConfig | TapAddTarget): string {
-  if (t.kind === "path") return t.path;
-  return t.subpath.length > 0 ? `${t.url}//${t.subpath}` : t.url;
+  if (t.kind === "path") return displayText(t.path);
+  const url = displayUrl(t.url);
+  return t.subpath.length > 0 ? `${url}//${displayText(t.subpath)}` : url;
 }
 
 export function payloadOf(t: TapAddTarget): Record<string, string> {
-  if (t.kind === "path") return { kind: "path", path: t.path };
-  return { kind: "git", url: t.url, ...(t.subpath.length > 0 ? { subpath: t.subpath } : {}) };
+  if (t.kind === "path") return { kind: "path", path: displayText(t.path) };
+  return {
+    kind: "git",
+    url: displayUrl(t.url),
+    ...(t.subpath.length > 0 ? { subpath: displayText(t.subpath) } : {}),
+  };
 }
