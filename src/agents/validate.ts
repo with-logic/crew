@@ -12,8 +12,16 @@
  * a plain `usage_error`. That is the one axis callers vary.
  */
 
-import { CrewError, type CrewErrorName } from "../core/errors.ts";
+import { CrewError } from "../core/errors.ts";
 import { ALL_AGENTS, agentByName } from "./registry.ts";
+
+/**
+ * The only two codes this diagnostic is ever raised under. Narrower than
+ * `CrewErrorName` on purpose: a caller reaching for a third code is
+ * describing a different failure and wants its own message, so the
+ * compiler should say so rather than let the wording spread.
+ */
+export type UnknownAgentCode = "usage_error" | "no_agents";
 
 /**
  * Throw if any name is not a registered adapter. Returns nothing; the
@@ -21,7 +29,7 @@ import { ALL_AGENTS, agentByName } from "./registry.ts";
  */
 export function assertKnownAgents(
   names: readonly string[],
-  code: CrewErrorName = "usage_error",
+  code: UnknownAgentCode = "usage_error",
 ): void {
   const unknown = names.filter((n) => !agentByName(n));
   if (unknown.length === 0) return;
