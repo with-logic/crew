@@ -767,6 +767,10 @@ Given one or more skill references on the command line, `crew install` proceeds 
 
    **Resolution reads the same commit.** Deciding *which* skill or namespace a reference names is itself a read of the source, so it too happens as of the resolved SHA. A skill present at `@<ref>` but deleted at the default branch MUST still resolve, install, and preview.
 
+   **A fetch reflects upstream deletions.** Refreshing a clone MUST bring local tags into line with upstream, deletions included. A tag removed upstream MUST stop resolving locally, so an entry pinned to it reports `ref_not_found` rather than appearing up to date against a ref the source no longer has.
+
+   **Failing to materialize is not the same as finding nothing.** When the commit resolves and its tree is readable but the reference's subpath is absent at that commit, the result is `no_skills_found` — a reference the user can correct. When the source cannot be materialized at all (an unreadable object, an unreadable repository, a scratch location that cannot be written), the result is `source_unreachable`: nothing was read, so nothing can be concluded about what the source contains.
+
    **Dependencies inherit their parent's commit.** A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records the same ref and pinning. Recording the parent's SHA over content read from another revision would make state describe a provenance the bytes do not have.
 
    **The materialized tree is a boundary.** The resolved location MUST be reached without traversing a symlink. A repository can commit a symlink at the very path a reference names; following it would read content from outside the requested commit — potentially from anywhere on the host filesystem.
@@ -1791,6 +1795,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-05e | §9 step 3 | Reference resolution reads the requested commit: `crew install <tap>/<skill>@<ref>` and `crew info <tap>/<skill>@<ref>` succeed for a skill present at that commit even when it has been deleted at the default branch. |
 | C-INST-05f | §9 step 3, §9 step 6 | A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records that ref. |
 | C-INST-05g | §9 step 3 | A reference whose resolved location is reached through a symlink is rejected; content outside the requested commit is never read or installed. |
+| C-INST-05h | §9 step 3, §13 | A subpath absent at an otherwise-readable commit is `no_skills_found`; a commit that cannot be materialized at all (unreadable object or repository, unwritable scratch location) is `source_unreachable`. |
 | C-INST-06 | §9 | `crew install gh:owner/repo` pointed at a repo with a root `SKILL.md` installs one skill. |
 | C-INST-07 | §9 step 5 | `crew install gh:owner/repo` pointed at a repo with no root `SKILL.md` but skill subdirectories installs every valid child one level deep. |
 | C-INST-08 | §9 step 5 | Nested skills more than one level deep are NOT installed by directory expansion. |
@@ -1877,6 +1882,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-04 | §10.1 | A skill pinned to a tag: if the tag has not moved, reports up-to-date; if moved, skipped without `--force`. |
 | C-UPD-04b | §10.1 step 3b | `crew update --force` on a skill pinned to a tag that moved installs the tag's new commit's content. |
 | C-UPD-04c | §10.1 step 3c | A skill installed from `@<branch>` is updated from that branch, not from the tap's default branch. |
+| C-UPD-04d | §9 step 3, §10.1 | A skill pinned to a tag deleted upstream fails with `ref_not_found` (exit 1 for the run) rather than reporting up-to-date, and its installed bytes and state entry are preserved. |
 | C-UPD-05 | §10.1 | `crew update <skill>` restricts processing to the named skill(s). |
 | C-UPD-06 | §10.1 | A network failure on one skill does NOT stop processing of others. |
 | C-UPD-07 | §10.1 | A customized install on one skill does NOT stop processing of others. |

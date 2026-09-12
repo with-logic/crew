@@ -65,21 +65,31 @@ describe("updating an entry installed at a ref", () => {
     expect(readState(home).installations[0]!.resolved_sha).toBe(sideTwo);
   });
 
-  test("C-UPD-04c an entry whose ref vanished upstream still reports cleanly", () => {
+  test("C-UPD-04d an entry whose ref vanished upstream fails hard and keeps the install", () => {
     // The cheap pre-resolve can't answer for a ref that no longer
     // exists locally; the update falls through to full acquisition,
     // which fetches and then reports the ref as gone.
     const home = makeCrewHome();
     const { repo } = twoCommitRepo();
     runCli(["install", `file://${repo}@v1//demo`], { home, streams: captureStreams().streams });
+    const before = installedBody();
+    const beforeSha = readState(home).installations[0]!.resolved_sha;
 
-    runGit(["tag", "-d", "v1"], { cwd: repo });
+    runGit(["tag", "--delete", "v1"], { cwd: repo });
 
     const c = captureStreams();
     const code = runCli(["update"], { home, streams: c.streams });
 
-    // Pinned to a tag that is gone: crew reports rather than crashing.
-    expect([0, 1]).toContain(code);
+    // A ref that no longer exists is a hard failure, not a silent
+    // "up to date": without `--prune-tags` the fetch leaves the deleted
+    // tag locally resolvable and this run would report success against
+    // a ref upstream no longer has.
+    expect(code).toBe(1);
+    expect(c.stdout()).toContain("ref not found");
+    // The local install survives — §10.1 keeps working bytes in place
+    // when the source can no longer supply them.
+    expect(installedBody()).toBe(before);
+    expect(readState(home).installations[0]!.resolved_sha).toBe(beforeSha);
   });
 
   test("C-INST-05c a tag published after the clone is fetched and resolved", () => {

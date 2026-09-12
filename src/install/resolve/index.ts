@@ -16,15 +16,12 @@
 import { CrewError } from "../../core/errors.ts";
 import { crewHome } from "../../core/paths.ts";
 import type { Config, ResolvedSkill } from "../../core/types.ts";
-import { parseRef } from "../../refs/parse.ts";
-import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
-import { attributeRef } from "../tap-attribution.ts";
 import { topoSort } from "../topo.ts";
-import { enqueueDep } from "./dep.ts";
-import { enqueueTapRef, type PendingItem } from "./enqueue.ts";
-import { expandSkillsAsItems, sourceRequestedRef } from "./expand-items.ts";
+import { enqueueDeps } from "./dep.ts";
+import type { PendingItem } from "./enqueue.ts";
+import { enqueueRoot, sameInstallSetSource, sourceLabel } from "./root.ts";
 
 /** Options for resolution. */
 export interface ResolveOptions {
@@ -129,10 +126,11 @@ export function resolveInstallSet(
       tracksTap: item.tracksTap,
     });
 
-    // Enqueue dependencies (if any).
+    // Enqueue dependencies (if any). Batched so a pinned parent's
+    // commit is exported once for all of them, not once per edge.
     const deps = item.loaded.frontmatter.metadata?.crew?.dependencies ?? [];
-    for (const depRef of deps) {
-      const enqueued = enqueueDep(depRef, item, config, cwd, home);
+    if (deps.length > 0) {
+      const enqueued = enqueueDeps(deps, item, config, cwd, home);
       config = enqueued.config;
       skipped.push(...enqueued.skipped);
       for (const depItem of enqueued.items) {
@@ -145,56 +143,4 @@ export function resolveInstallSet(
   }
 
   return { skills: topoSort(byName, requiredBy), requiredBy, config, skipped };
-}
-
-/** Resolve and enqueue the items produced by a single root reference. */
-function enqueueRoot(
-  raw: string,
-  config: Config,
-  cwd: string,
-  home: string,
-  kindHint: KindHint,
-  recursive: boolean,
-): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
-  const source = parseRef(raw, cwd);
-
-  // Bare-name (`<skill>`) and qualified (`<tap>/<skill>`, `<tap>/<ns>/<skill>`) tap refs.
-  if (source.type === "tap") {
-    return enqueueTapRef(source, config, home, true, kindHint);
-  }
-
-  // Git URL or path: find or create the tap. This is always a
-  // whole-tap install — the user pointed at a folder (or repo) and
-  // said "install this". Future additions should follow.
-  const attrib = attributeRef(source, config, recursive ? "recursive" : undefined);
-  const requestedRef = sourceRequestedRef(source);
-  const expansion = withAcquiredTap(attrib.tap, requestedRef, home, (acquired) =>
-    expandSkillsAsItems(
-      acquired.rootDir,
-      attrib.tap,
-      "",
-      acquired.resolvedSha,
-      requestedRef,
-      acquired.pinned,
-      true,
-      true,
-      home,
-    ),
-  );
-  return { items: expansion.items, config: attrib.config, skipped: expansion.skipped };
-}
-
-function sameInstallSetSource(existing: ResolvedSkill, incoming: PendingItem): boolean {
-  // Path-kind taps have no resolved SHA; same tap + same relative path
-  // is the source identity that lets duplicate pending refs collapse.
-  return (
-    existing.tap.name === incoming.tap.name && existing.tapRelativePath === incoming.tapRelativePath
-  );
-}
-
-function sourceLabel(tapName: string, tapRelativePath: string, resolvedSha: string | null): string {
-  if (tapRelativePath.length > 0) return `${tapName}/${tapRelativePath}`;
-  return resolvedSha === null
-    ? `${tapName} (root, local)`
-    : `${tapName} (root @ ${resolvedSha.slice(0, 8)})`;
 }

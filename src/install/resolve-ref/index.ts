@@ -14,26 +14,21 @@
  * Callers in an interactive path should inspect the error's
  * `candidates` detail and present a prompt; the CLI install command
  * does that before calling this module.
+ *
+ * This file owns dispatch and bare-name resolution. Qualified forms
+ * live in `./qualified.ts` and the shared index access in
+ * `./tap-index-lookup.ts`.
  */
 
 import { CrewError } from "../../core/errors.ts";
-import type { Config, TapConfig, TapSource } from "../../core/types.ts";
+import type { Config, TapSource } from "../../core/types.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 import { enumerateCandidates } from "../attribute-bare-name.ts";
-import { indexTap, type TapIndex } from "../tap-index.ts";
 import { ambiguityError, flagFor } from "./errors.ts";
+import { resolveThreeSegment, resolveTwoSegment } from "./qualified.ts";
+import type { KindHint, NonTapNameCandidate, TapRoots } from "./types.ts";
 
-/** Force-one-kind hint from a `--tap` / `--bundle` / `--skill` flag. */
-export type SpecificKindHint = "tap" | "namespace" | "skill";
-export type KindHint = SpecificKindHint | "non-tap" | null;
-/**
- * Already-materialized root directories, keyed by tap name. A
- * ref-carrying reference exports its commit first and passes the result
- * here, so resolution reads the requested commit rather than the shared
- * clone's checked-out revision (§9 step 3).
- */
-export type TapRoots = Readonly<Record<string, string | undefined>>;
-export type NonTapNameCandidate = Exclude<NameCandidate, { readonly kind: "tap" }>;
+export type { KindHint, NonTapNameCandidate, SpecificKindHint, TapRoots } from "./types.ts";
 
 /**
  * Resolve a `TapSource` to the single candidate it refers to. See the
@@ -72,80 +67,6 @@ export function resolveTapRef(
 
   // Bare name.
   return resolveBare(source.name, config, home, kindHint, roots);
-}
-
-function resolveThreeSegment(
-  source: TapSource,
-  config: Config,
-  home: string,
-  roots: TapRoots,
-): NonTapNameCandidate {
-  const tap = config.taps.find((t) => t.name === source.tap);
-  if (!tap) {
-    throw new CrewError(
-      "invalid_ref",
-      `\`${source.tap}\` was not found in your list of taps.`,
-      { tap: source.tap },
-      "View your configured taps with `crew tap list`.",
-    );
-  }
-  const index = indexTap(tap, home, roots[tap.name]);
-  const locs = index.skills.get(source.name) ?? [];
-  const match = locs.find((l) => l.namespace === source.namespace);
-  if (!match) {
-    throw new CrewError(
-      "invalid_ref",
-      `\`${source.tap}/${source.namespace}/${source.name}\` doesn't exist — no skill \`${source.name}\` found in namespace \`${source.namespace}\` of tap \`${source.tap}\``,
-      { tap: source.tap, namespace: source.namespace, name: source.name },
-    );
-  }
-  return { kind: "skill", tap, location: match };
-}
-
-function resolveTwoSegment(
-  source: TapSource,
-  config: Config,
-  home: string,
-  roots: TapRoots,
-): NonTapNameCandidate {
-  const first = source.tap!;
-  const second = source.name;
-  const tap = config.taps.find((t) => t.name === first);
-  const asTapSkill = tap ? lookupInTap(tap, home, second, roots) : null;
-
-  // Collect namespace candidates: `<first>` is a namespace in some tap
-  // that holds a skill named `<second>`.
-  const nsCandidates: NonTapNameCandidate[] = [];
-  for (const t of config.taps) {
-    if (t === tap) continue;
-    const idx = safeIndex(t, home, roots);
-    if (!idx) continue;
-    const nsMembers = idx.namespaces.get(first);
-    if (!nsMembers) continue;
-    const loc = nsMembers.find((m) => m.name === second);
-    if (loc) nsCandidates.push({ kind: "skill", tap: t, location: loc });
-  }
-
-  if (asTapSkill && nsCandidates.length === 0) return asTapSkill;
-  if (!asTapSkill && nsCandidates.length === 1) return nsCandidates[0]!;
-  if (asTapSkill && nsCandidates.length >= 1) {
-    // Tap-first wins when both interpretations exist. The user can
-    // force the namespaced form with a 3-segment ref.
-    return asTapSkill;
-  }
-  if (nsCandidates.length > 1) {
-    throw ambiguityError(
-      second,
-      nsCandidates,
-      `\`${first}/${second}\` is a namespaced skill in multiple taps`,
-    );
-  }
-  throw new CrewError(
-    "invalid_ref",
-    `\`${first}/${second}\` does not match any configured tap or namespace.\nNo tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
-    { first, second },
-    `Run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
-  );
 }
 
 function resolveBare(
@@ -195,29 +116,4 @@ function resolveBare(
   }
   if (all.length === 1) return all[0]!;
   throw ambiguityError(name, all);
-}
-
-function lookupInTap(
-  tap: TapConfig,
-  home: string,
-  name: string,
-  roots: TapRoots,
-): NonTapNameCandidate | null {
-  const idx = safeIndex(tap, home, roots);
-  if (!idx) return null;
-  const locs = idx.skills.get(name);
-  if (!locs || locs.length === 0) return null;
-  // Prefer unnamespaced. If the same name lives in multiple
-  // namespaces, a 2-segment ref is ambiguous within the tap; we pick
-  // deterministically and rely on 3-segment for true disambiguation.
-  const unnamespaced = locs.find((l) => l.namespace === null);
-  return { kind: "skill", tap, location: unnamespaced ?? locs[0]! };
-}
-
-function safeIndex(tap: TapConfig, home: string, roots: TapRoots): TapIndex | null {
-  try {
-    return indexTap(tap, home, roots[tap.name]);
-  } catch {
-    return null;
-  }
 }

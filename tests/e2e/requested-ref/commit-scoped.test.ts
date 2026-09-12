@@ -132,6 +132,20 @@ describe("C-INST-05f sibling dependencies read the parent's commit", () => {
     const installed = readFileSync(join(adapterRoot(), "sibling", "SKILL.md"), "utf8");
     expect(installed).toContain("SIBLING V1");
     expect(installed).not.toContain("SIBLING HEAD");
+
+    // Bytes alone would still pass if state described them wrongly, so
+    // pin the recorded provenance too. The sibling inherits the parent's
+    // pinned ref, not just its commit: it was read from that commit, so
+    // a later `crew update` must re-resolve the same tag rather than
+    // drifting to HEAD (§9 step 3, §11.1).
+    const state = readState(home);
+    const parent = state.installations.find((e) => e.name === "parent");
+    const sibling = state.installations.find((e) => e.name === "sibling");
+    const v1Sha = runGit(["rev-parse", "v1^{commit}"], { cwd: repo }).stdout.trim();
+    expect(parent?.resolved_sha).toBe(v1Sha);
+    expect(sibling?.resolved_sha).toBe(v1Sha);
+    expect(sibling?.ref).toBe("v1");
+    expect(sibling?.pinned).toBe(true);
   });
 });
 
@@ -148,10 +162,16 @@ describe("C-INST-05g the exported tree cannot escape via symlink", () => {
 
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["install", `file://${repo}@v1//evil`], { home, streams: c.streams });
+    const code = runCli(["install", "--json", `file://${repo}@v1//evil`], {
+      home,
+      streams: c.streams,
+    });
 
-    expect(code).not.toBe(0);
-    expect(c.stderr()).toContain("symlink");
+    // The specified outcome, not merely "some failure": §13 gives this
+    // a stable name and exit code, and asserting the pair is what stops
+    // a future refactor turning containment into an unrelated error.
+    expect(code).toBe(4);
+    expect(JSON.parse(c.stdout()).error.name).toBe("invalid_skill");
     expect(existsSync(join(adapterRoot(), "outside"))).toBe(false);
   });
 });
