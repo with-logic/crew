@@ -14,15 +14,21 @@ import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
-type Mut = {
+/**
+ * The three adapter members a test may point at a temp root: where the
+ * user- and project-scope installs land, and whether crew considers the
+ * adapter present at all. Named for what it permits rather than for the
+ * mutation itself.
+ */
+type RedirectableAdapter = {
   userPath: AgentAdapter["userPath"];
   projectPath: AgentAdapter["projectPath"];
   detect: AgentAdapter["detect"];
 };
 // Direct assignment (no double cast) so a change to the adapter contract
 // is a type error here rather than being erased by `as unknown as`.
-const adapters: Mut[] = [claudeCodeAdapter, codexAdapter];
-let originals: Mut[];
+const adapters: RedirectableAdapter[] = [claudeCodeAdapter, codexAdapter];
+let originals: RedirectableAdapter[];
 
 beforeEach(() => {
   originals = adapters.map((a) => ({
