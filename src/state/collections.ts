@@ -16,9 +16,9 @@
  *
  * A bare word that is both a tap and a namespace elsewhere, or a namespace
  * present in several taps, throws `ambiguous_reference` listing each
- * qualified form. `crew uninstall` and `crew update` both consume this;
- * the `command` argument only picks the verb shown in that error's
- * copy-pasteable suggestions.
+ * qualified form. `crew uninstall` is the only caller today; the `command`
+ * argument exists so `crew update` can reuse this with its own verb in that
+ * error's copy-pasteable suggestions once its collection selectors land.
  *
  * Callers that target a single scope (`crew uninstall`, §7.4 "Scope")
  * pass a pre-narrowed `state` so tap and namespace membership — and the
@@ -30,16 +30,24 @@ import { CrewError } from "../core/errors.ts";
 import type { Config, StateEntry, StateFile } from "../core/types.ts";
 import { namespaceForEntry, resolveStateSubject, type StateSubject } from "./subjects.ts";
 
-export type CollectionKind = "skill" | "tap" | "namespace";
+/**
+ * What a collection selector expanded to. Deliberately excludes `skill`:
+ * a skill selector is not a collection, so `collection: { kind: "skill" }`
+ * must not be representable in command output.
+ */
+export type CollectionKind = "tap" | "namespace";
+
+/** What a resolver argument turned out to name. */
+export type SubjectKind = "skill" | CollectionKind;
 
 export interface CollectionSubject extends StateSubject {
-  readonly kind: CollectionKind;
+  readonly kind: SubjectKind;
 }
 
 /**
  * Resolve one argument to an installed skill, a tap, or a namespace.
  *
- * `skillState` is what skill-kind resolution sees; `collectionState`
+ * `state` is what skill-kind resolution sees; `collectionState`
  * (defaulting to it) is what tap/namespace membership sees. `crew
  * uninstall` passes the full state for the former so a cross-scope skill
  * keeps its "it's installed over here" remedy, and a scope-narrowed state

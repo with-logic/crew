@@ -101,6 +101,9 @@ export function findOrphan(
       e.required_by.length === 0 &&
       e.scope === scope &&
       roots.has(e.project_root ?? null) &&
+      // Skipping already-attempted entries is what bounds the prune
+      // sweep: an orphan whose removal aborts keeps its state entry, so
+      // termination cannot depend on the entry disappearing.
       !attempted.has(entryKey(e)),
   );
 }
