@@ -145,7 +145,7 @@ export function resolveInstallSet(
     }
   }
 
-  return { skills: topoSort(byName), requiredBy, config, skipped };
+  return { skills: topoSort(byName, requiredBy), requiredBy, config, skipped };
 }
 
 /** Resolve and enqueue the items produced by a single root reference. */

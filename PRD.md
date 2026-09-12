@@ -745,6 +745,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    A location that produces zero valid skills through the applicable case aborts with `no_skills_found`.
    - Multi-skill expansions are how the user gets every skill in a tap installed at once. Each child becomes an independent state entry attributed to the same tap (`source.tap`); upstream additions to that tap are picked up automatically by `crew update` (§10.1.1).
 6. **Resolve dependencies.** For each skill in the install set, read `metadata.crew.dependencies` and add each to the install set. Continue recursively until no new dependencies appear. Cycles are allowed and terminate naturally (a skill already in the set is not re-added).
+   - **Install order:** the install set is ordered topologically — every dependency is installed before the skills that depend on it. Ordering uses the *resolved* name of each dependency (the `name` its `SKILL.md` declares), not the tail of the reference that selected it: a dependency referenced as `./dep-directory` but declaring `name: dep` is still ordered before its dependent. When a cycle makes a strict ordering impossible, any order that respects the acyclic part is valid; the resulting installs are identical either way.
    - **Bare-name resolution precedence:** (1) a sibling directory at the same source and ref (for sources where "sibling" is meaningful — git sources with a parent directory and path sources in a parent directory); (2) the tap the parent skill was installed from, if any; (3) search across all configured taps. An unqualified name matching multiple taps aborts with `ambiguous_dependency` naming the candidates.
    - **Conflict detection:** if two skills in the install set have the same `name` but come from different tap-relative source paths, or resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
 7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
@@ -756,8 +757,8 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - **failed** — the skill failed validation, OR every agent install failed, OR the skill was otherwise prevented from landing anywhere.
 
    **Exit code.** `crew install` computes its exit code from the set of attempted skills:
-   - `0` — every attempted skill succeeded (or no work was needed because everything was already installed).
-   - `1` — at least one skill succeeded AND at least one skill failed (partial success).
+   - `0` — every attempted skill succeeded, or no work was needed because everything named was already installed (§5.4). "Nothing to do" is success, not a distinct exit code.
+   - `1` — at least one skill succeeded AND at least one skill failed (partial success). This is the rule for mixed outcomes across several root-listed skills: in a run where at least one root succeeded, any root with zero successful agents makes the run exit 1. When *no* root succeeded, the rows below apply instead — a validation failure among them exits 4, not 1.
    - `4` — zero skills succeeded AND at least one skill failed validation. The error name is `invalid_skill` (§13).
    - `1` — zero skills succeeded AND no validation failures occurred (purely operational failures — agent errors, source unreachable, etc.).
 
@@ -780,7 +781,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
       graph. `required_by` is symmetric to `dependencies` at one hop.
 11. **Print summary.** Human-readable: one line per skill reporting which agents it succeeded, was skipped, or failed in. `--json` mode emits the structured equivalent (§15).
 
-Exit code: 0 if every skill succeeded in at least one agent; 1 if any skill failed in every agent; 2 if nothing was attempted (empty install set after expansion when the user explicitly asked for something). Other exit codes per §15.
+The exit code is defined by step 9 above. Every other exit code an install can produce (invalid reference, unreachable source, locked state, …) is per §15.
 
 ### 9.1 `crew info`
 
@@ -1321,6 +1322,8 @@ Algorithm:
 4. Initialize a SHA-256 accumulator. For each tuple in sorted order, feed it: `relative_path` as UTF-8 bytes, then `0x00`, then the lowercase hex of the file SHA, then `0x0A`.
 5. The final digest in lowercase hex, prefixed with `sha256:`, is the content hash.
 
+**Empty directory:** with no tuples the accumulator sees no input, so the hash is `sha256:` followed by the SHA-256 of the empty byte string (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`).
+
 **Explicitly excluded:** file mode bits, mtime/ctime/atime, ownership, xattrs, empty directories. A `chmod +x` on a script file changes no hash. A file rename changes the hash (the path is part of the input).
 
 **Symlinks inside the directory:** hashed as `sha256(link_target_bytes)` with the link's path recorded. The target is not followed.
@@ -1400,9 +1403,9 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
 
 | Code | Meaning |
 |---|---|
-| 0 | Success, or partial success where every requested skill succeeded in at least one agent. |
+| 0 | Success, or partial success where every attempted skill — every root named on the command line plus every dependency pulled in with it — succeeded in at least one agent. |
 | 1 | General failure; used when `crew update` has any skill hard-fail. |
-| 2 | Nothing was attempted (e.g. install command with only already-installed skills, or empty directory expansion where user asked for a specific thing). |
+| 2 | Reserved. Not emitted by any command today. (Earlier drafts assigned it to "nothing was attempted"; those cases are exit 0 when everything was already installed — §5.4, §9 step 9 — and exit 4 `no_skills_found` when a source expands to nothing.) |
 | 4 | User error: invalid arguments, invalid skill, unresolvable references, no agents available, config invalid. |
 | 5 | Network / source failure: could not reach git, ref does not exist, release feed unreachable. |
 | 6 | Safety-check abort: untracked directory, customized skill, bad marker. |
@@ -1738,6 +1741,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-19 | §9 | `state.json` may contain multiple project-scope entries for the same skill name, each with a different `project_root` — they're independent installs, not duplicates. |
 | C-INST-20 | §9 step 9 | A validation failure on any skill is recorded as a failed skill; the run continues through the remaining skills. It does not abort the command. |
 | C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation). |
+| C-INST-21a | §9 step 9 | Two directly-named roots where one succeeds in ≥1 agent and the other fails in every selected agent: the run exits 1 and both roots appear in the output. |
 | C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
@@ -1759,7 +1763,7 @@ Implementations and test suites refer to criteria by ID.
 
 | ID | Reference | Assertion |
 |---|---|---|
-| C-DEP-01 | §9 step 6 | A skill with `dependencies` has each dependency installed before itself. |
+| C-DEP-01 | §9 step 6 | A skill with `dependencies` has each dependency installed before itself, including when the dependency's reference tail differs from the `name` its `SKILL.md` declares. |
 | C-DEP-02 | §9 step 6 | A bare-name dependency resolves first to a sibling at the same source and ref when present. |
 | C-DEP-03 | §9 step 6 | A bare-name dependency whose parent came from a tap falls back to that tap before searching other taps. |
 | C-DEP-04 | §9 step 6 | A bare-name dependency unambiguously present in only one configured tap resolves to that tap. |
@@ -2121,15 +2125,13 @@ crew update
 
 A conformance test suite, packaged separately from this specification, is the authoritative executable form of these criteria. Until published, each criterion above is sufficient to drive ad-hoc tests by any implementation. The suite when it exists will live at a URL added to this section; it will provide fixtures, a runner, and machine-readable pass/fail output keyed by criterion ID.
 
-### 18.6 Known ambiguities flagged during drafting
+### 18.6 Ambiguities resolved during drafting
 
-Writing out the criteria surfaced a few small holes in the spec. Resolving them:
+Writing out the criteria surfaced a few holes in the earlier text. Each has since been folded into the main spec, which is normative; this list is kept as a changelog so readers of older drafts can find where the answer now lives.
 
-1. **Exit code for `crew install` with a mix of successes and failures.** §9 says "exit 0 if every skill succeeded in at least one agent; 1 if any skill failed in every agent." This leaves ambiguous the case where some root-listed skills succeeded in ≥1 agent and others failed in every agent. Resolution: exit 1 if any root-listed skill has zero successful agents; exit 0 otherwise. Criteria C-INST-* should be read accordingly.
-2. **Content hash of the empty directory.** Sensible per §12.1: with no tuples, the accumulator sees no input and the hash is `sha256:` followed by the SHA-256 of the empty byte string (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`). Criterion C-HASH-01 fixes this.
-3. **Order of dependencies in install.** §9 step 6 says dependencies are resolved, but not installed order. Resolution: dependencies are installed before dependents (topological order). Cycles are permitted by C-DEP-08 — when breaking a cycle, pick any valid order; the outcome is the same.
-
-These resolutions are normative and should be folded into the main spec in the next revision.
+1. **Exit code for `crew install` with mixed outcomes** (some roots succeeded in ≥1 agent, others failed everywhere) → exit 1. Now stated in §9 step 9's exit-code table. Exit code 2, which older drafts reserved for "nothing was attempted", is not emitted (§15).
+2. **Content hash of the empty directory** → `sha256:` + SHA-256 of the empty byte string. Now stated in §12.1; criterion C-HASH-01.
+3. **Install order of dependencies** → topological, dependencies before dependents; cycles may be broken in any valid order. Now stated in §9 step 6; criteria C-DEP-01 and C-DEP-08.
 
 ## 19. FAQ
 

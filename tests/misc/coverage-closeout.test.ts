@@ -300,11 +300,9 @@ describe("install/flow — marker source equality across kinds", () => {
 });
 
 describe("install/resolve — dependency edge cases", () => {
-  test("extractDepName on unrecognizable ref returns null (resolve.ts:183-184)", () => {
-    // A dependency that uses an unusual ref form: git URL with no
-    // subpath. Parent installs a root, and the dep ref lacks a `//` so
-    // `extractDepName` returns null — install should still succeed via
-    // list[0].
+  test("git-source dependency with a subpath resolves and installs", () => {
+    // A dependency that uses a git URL ref form. The resolved skill name
+    // comes from the dep's own SKILL.md, not from the reference tail.
     const home = makeCrewHome();
     const depRepo = makeTempDir();
     makeGitRepo(depRepo);
