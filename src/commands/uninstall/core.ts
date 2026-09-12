@@ -25,6 +25,13 @@ export interface UninstallRecord {
   pruned?: boolean;
   /** True if the state entry still survives after this call (partial --agent removal). */
   partial?: boolean;
+  /**
+   * Agents an `--agent` filter leaves the skill installed in. §7.4
+   * makes "would be retained" an output obligation distinct from
+   * "would be removed", so the names — not just the fact of a partial
+   * removal — have to reach the renderer and `--json`.
+   */
+  remainingAgents?: string[];
 }
 
 /**
@@ -66,7 +73,7 @@ export function removeOne(
   // Per-entry processing: each (skill, scope) pair potentially touches
   // a different subset of agents.
   let nextState = state;
-  let anySurvives = false;
+  const retained = new Set<string>();
   for (const entry of entries) {
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
@@ -75,12 +82,17 @@ export function removeOne(
     const remainingAgents = entry.agents.filter((t) => !agentsToRemove.includes(t));
     if (remainingAgents.length > 0) {
       nextState = reduceEntryAgents(nextState, name, entry.scope, remainingAgents);
-      anySurvives = true;
+      // Entries at different scopes can retain different agents; the
+      // record reports the union, deduplicated.
+      for (const a of remainingAgents) retained.add(a);
     } else {
       nextState = dropScopedEntryAndUpdateRequiredBy(nextState, name, entry.scope);
     }
   }
-  if (anySurvives) rec.partial = true;
+  if (retained.size > 0) {
+    rec.partial = true;
+    rec.remainingAgents = [...retained].sort();
+  }
   return { updatedState: nextState, rec };
 }
 
