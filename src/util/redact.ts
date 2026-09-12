@@ -22,6 +22,13 @@
  *    CR, which would let crafted input move the cursor, recolor output,
  *    or forge additional `crew: …` lines. `sanitizeLine` escapes every
  *    C0/C1 control character to a visible `\xNN` form.
+ *
+ * The same two hazards reach the user through error output, not just
+ * verbose progress, so this module serves both. A failed clone quotes
+ * git's own stderr — which repeats the remote URL — and carries a
+ * structured `details` payload; `redactText` and `redactDetails` cover
+ * those channels. Every user-visible string should pass through one of
+ * the `safe*` / `redact*` helpers before it reaches a stream.
  */
 
 /** Query parameters whose values are secrets rather than identifiers. */
@@ -39,6 +46,10 @@ const REDACTED = "***";
 /**
  * Escape C0/C1 control characters so nothing user-controlled can move
  * the cursor, inject ANSI sequences, or forge a second output line.
+ *
+ * Newlines are escaped like any other control character. A message that
+ * genuinely needs multiple lines declares that structure itself — see
+ * `sanitizeBlock`, which is the only way to keep a line break.
  */
 export function sanitizeLine(text: string): string {
   let out = "";
@@ -91,6 +102,26 @@ function redactStandardUrl(token: string): string {
   return url.toString();
 }
 
+/**
+ * Escape a multi-line message, keeping only the line breaks the caller
+ * composed as layout and escaping every other control character —
+ * including a newline embedded in an interpolated value, which would
+ * otherwise open its own terminal line and forge a second message.
+ *
+ * The distinction is positional, not textual: a caller that wants
+ * layout joins trusted literals with "\n" and the split below sees
+ * them, while an untrusted newline arrives *inside* one of those
+ * segments and is escaped by `sanitizeLine`. That only holds because
+ * interpolated values reach here already escaped; this is the second
+ * layer, not the first.
+ */
+export function sanitizeBlock(message: string): string {
+  return message
+    .split("\n")
+    .map((line) => sanitizeLine(line))
+    .join("\n");
+}
+
 /** Render one URL for a progress line: credentials redacted, controls escaped. */
 export function safeUrl(token: string): string {
   return sanitizeLine(redactUrl(token));
@@ -104,4 +135,39 @@ export function safeArgs(args: readonly string[]): string {
 /** Render a filesystem path (or any plain value) for a progress line. */
 export function safePath(path: string): string {
   return sanitizeLine(path);
+}
+
+/**
+ * Redact every credential-bearing URL found anywhere inside free text.
+ *
+ * `redactUrl` only handles a string that is *entirely* one URL. Git's
+ * stderr is not: it embeds the remote inside prose
+ * (`fatal: unable to access 'https://host/r.git?token=s/': …`), and we
+ * pass that through verbatim in `source_unreachable` messages. Scanning
+ * for URL-shaped substrings is what stops the secret escaping that way.
+ */
+export function redactText(text: string): string {
+  // Match an http(s)/ssh/git URL up to the first character that can't be
+  // part of one. Trailing punctuation (quote, comma, period) is excluded
+  // so we don't swallow the prose around it.
+  return text.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s'"<>`]+/gi, (m) => {
+    // Git often quotes the URL and appends a slash; redact the URL body
+    // and leave whatever punctuation followed it in place.
+    const trailing = m.match(/[.,;:)\]]+$/)?.[0] ?? "";
+    const body = trailing.length > 0 ? m.slice(0, -trailing.length) : m;
+    return redactUrl(body) + trailing;
+  });
+}
+
+/**
+ * Redact credential-bearing values in a `CrewError`'s structured
+ * `details`. The JSON error payload is a stable machine contract
+ * (§13), so keys are preserved — only their values are masked.
+ */
+export function redactDetails(details: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(details)) {
+    out[key] = typeof value === "string" ? redactText(value) : value;
+  }
+  return out;
 }

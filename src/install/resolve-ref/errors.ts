@@ -29,8 +29,12 @@ export function ambiguityError(
   }
   lines.push("");
   const detail = candidates.map((c) => formatCandidate(c, name));
-  return new CrewError("ambiguous_reference", lines.join("\n"), {
-    name,
-    candidates: detail,
-  });
+  // Composed from trusted literals, so the line breaks are layout.
+  return new CrewError(
+    "ambiguous_reference",
+    lines.join("\n"),
+    { name, candidates: detail },
+    undefined,
+    true,
+  );
 }

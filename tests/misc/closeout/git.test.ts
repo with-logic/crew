@@ -161,7 +161,7 @@ describe("git classifyRef", () => {
   });
 });
 
-describe("git/classifyRef — abbreviated SHA (repo.ts:91-92)", () => {
+describe("git/classifyRef — abbreviated SHA (repo/refs.ts)", () => {
   test("abbreviated hex SHA classifies as sha", () => {
     const { classifyRef } =
       require("../../../src/git/repo/refs.ts") as typeof import("../../../src/git/repo/refs.ts");
