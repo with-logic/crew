@@ -40,6 +40,13 @@ export interface RemovalMeta {
    * a partial `--agent` removal — `--prune` keys off exactly that.
    */
   fullyRemovedRoots: (string | null)[];
+  /**
+   * True when a safety check aborted at least one agent. The entry keeps
+   * its state ownership in that case (§7.4 step 5): the bytes are still
+   * on disk, so the location's dependencies are still required and the
+   * prune sweep must not treat this as a removal.
+   */
+  aborted: boolean;
 }
 
 /**
@@ -64,7 +71,7 @@ export function removeOne(
     failures: [],
     ...(pruned ? { pruned: true } : {}),
   };
-  const meta: RemovalMeta = { fullyRemovedRoots: [] };
+  const meta: RemovalMeta = { fullyRemovedRoots: [], aborted: false };
   if (entries.length === 0) {
     if (!(ctx.flags.force || pruned)) {
       throw new CrewError(
@@ -83,11 +90,21 @@ export function removeOne(
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
       : entry.agents;
+    const failedBefore = rec.failures.length;
     removeFromAgents(entry, agentsToRemove, name, ctx, rec);
-    const remainingAgents = entry.agents.filter((t) => !agentsToRemove.includes(t));
+    // Agents whose removal aborted on a safety check keep their bytes on
+    // disk, so they keep their state ownership too (§7.4 step 5).
+    const abortedAgents = rec.failures.slice(failedBefore).map((f) => f.agent);
+    if (abortedAgents.length > 0) meta.aborted = true;
+    const remainingAgents = entry.agents.filter(
+      (t) => !agentsToRemove.includes(t) || abortedAgents.includes(t),
+    );
     if (remainingAgents.length > 0) {
       nextState = reduceEntryAgents(nextState, entry, remainingAgents);
-      anySurvives = true;
+      // A partial `--agent` removal leaves a live install; an aborted
+      // one leaves protected bytes. Either way the entry survives, so
+      // `partial` only marks the former (see `rec.failures` for the latter).
+      if (abortedAgents.length === 0) anySurvives = true;
     } else {
       // Only a FULL removal frees this location's dependencies (§7.4
       // step 5); a surviving partial `--agent` removal still needs them.

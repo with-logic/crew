@@ -93,6 +93,26 @@ export function installWithDep(
   return runCli(args, { home, cwd, streams: quiet() });
 }
 
+/**
+ * Install a three-deep chain `parent -> middle -> leaf` at user scope:
+ * `parent` explicit, the other two pulled in as dependencies. Lets a
+ * test protect the MIDDLE node and assert the leaf survives. Returns the
+ * exit code for the caller to assert on.
+ */
+export function installChain(
+  home: string,
+  parent: string,
+  middle: string,
+  leaf: string,
+  cwd: string,
+): number {
+  const src = makeTempDir("crew-src-");
+  makeSkill(src, leaf, skillFrontmatter({ name: leaf }));
+  makeSkill(src, middle, skillFrontmatter({ name: middle, dependencies: [leaf] }));
+  makeSkill(src, parent, skillFrontmatter({ name: parent, dependencies: [middle] }));
+  return runCli(["install", join(src, parent)], { home, cwd, streams: quiet() });
+}
+
 /** Sorted `scope` / `project:<root>` labels for every entry named `name`. */
 export function locationsOf(home: string, name: string): string[] {
   return readState(home)

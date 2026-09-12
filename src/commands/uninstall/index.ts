@@ -34,7 +34,7 @@ import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
 import { narrowSubjectToScope } from "./scope.ts";
-import { findOrphan } from "./state.ts";
+import { entryKey, findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
   if (ctx.positional.length === 0) {
@@ -104,9 +104,15 @@ function validateAgentFilter(agents: readonly string[]): readonly string[] | nul
 /**
  * Recursively remove any skill that is now an autoremovable orphan:
  * `explicit: false` AND empty `required_by`, restricted to the scope and
- * project roots this run fully removed from (§7.4 step 5). Runs until a
- * full pass finds no new orphans. Prune never respects `--agent`
- * filters — when we auto-remove a dep, we remove it fully.
+ * project roots this run fully removed from (§7.4 step 5). Prune never
+ * respects `--agent` filters — when we auto-remove a dep, we remove it
+ * fully.
+ *
+ * TERMINATION: every candidate is recorded in `attempted` BEFORE it is
+ * removed, and `findOrphan` skips those keys. The loop therefore runs at
+ * most once per entry in state and cannot depend on the entry vanishing —
+ * which matters because an orphan whose removal aborts on a safety check
+ * deliberately keeps its state entry.
  */
 function pruneOrphans(
   state: StateFile,
@@ -115,13 +121,15 @@ function pruneOrphans(
   roots: ReadonlySet<string | null>,
 ): StateFile {
   let current = state;
-  let orphan = findOrphan(current, ctx.flags.scope, roots);
+  const attempted = new Set<string>();
+  let orphan = findOrphan(current, ctx.flags.scope, roots, attempted);
   while (orphan) {
+    attempted.add(entryKey(orphan));
     const subject = { raw: orphan.name, name: orphan.name, entries: [orphan] };
     const { updatedState, rec } = removeOne(current, subject, ctx, true, null);
     records.push(rec);
     current = updatedState;
-    orphan = findOrphan(current, ctx.flags.scope, roots);
+    orphan = findOrphan(current, ctx.flags.scope, roots, attempted);
   }
   return current;
 }
