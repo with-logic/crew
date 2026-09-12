@@ -3,13 +3,15 @@
  * underlies the full `yargs` library, re-exported as `yargs/yargs`).
  *
  * We use yargs just as a parser, not as a full CLI engine — see
- * `./tables.ts` for the shared configuration and the flag tables.
+ * `./tables.ts` for the shared configuration and the flag tables, and
+ * `./conventional-flags.ts` for the §5.5 `--help`/`--version` rewrite.
  * `.strictOptions()` here makes unknown flags a parse failure we map to
  * `usage_error` (exit 4 per §13).
  */
 
 import type { CommandFlags } from "../../commands/types.ts";
 import { CrewError } from "../../core/errors.ts";
+import { rewriteConventionalFlags } from "./conventional-flags.ts";
 import {
   ARRAY_GLOBALS,
   BOOLEAN_GLOBALS,
@@ -27,66 +29,6 @@ export interface ParsedArgs {
   readonly subcommand: string | null;
   readonly positional: string[];
   readonly flags: CommandFlags;
-}
-
-/**
- * A yargs instance configured as a pure parser. Shared so the conventional
- * flag rewrite reads `--json` exactly as the real parse later will.
- */
-function baseParser() {
-  return yargsFactory().exitProcess(false).help(false).version(false).parserConfiguration({
-    "parse-numbers": false,
-    "camel-case-expansion": false,
-    "dot-notation": false,
-    "boolean-negation": false,
-    "duplicate-arguments-array": true,
-  });
-}
-
-/**
- * The effective `--json` value for a rewritten argv, asked of the real
- * parser rather than pattern-matched.
- *
- * `--json`, `--json=true`, and `--json=false` are all valid spellings and
- * the last occurrence wins, so scanning for a bare `--json` token would
- * disagree with `crew help --json=…` on exactly the forms it can't see.
- */
-function effectiveJson(argv: readonly string[]): boolean {
-  const parsed = baseParser()
-    .boolean(["json"])
-    .parseSync([...argv]);
-  return Boolean(parsed["json"]);
-}
-
-/**
- * §5.5 conventional flags, applied as an argv rewrite before the command
- * is dispatched:
- *
- *   - `--help` / `-h` anywhere → `help <command>`, where `<command>` is
- *     the first non-flag token (skipping only a LEADING `help`, so
- *     `crew help help --help` still reaches the `help` page). Every other
- *     flag is dropped; `--json` is re-emitted at its effective value.
- *   - `--version` / `-v` / `-V` as the FIRST token → `version`. After a
- *     command name they stay unknown flags, so `-v` remains free for a
- *     future `--verbose` short form.
- *
- * `--help` wins over `--version` whenever both appear (§5.5): help is the
- * broader request, and it makes `crew --version --help` order-independent.
- */
-function rewriteConventionalFlags(argv: readonly string[]): readonly string[] {
-  const wantsHelp = argv.some((a) => a === "--help" || a === "-h");
-  const first = argv[0];
-  const wantsVersion = first === "--version" || first === "-v" || first === "-V";
-  if (!(wantsHelp || wantsVersion)) return argv;
-
-  const json = effectiveJson(argv) ? ["--json"] : [];
-  // §5.5 precedence: `--help` beats a first-token version flag.
-  if (wantsHelp) {
-    const rest = argv[0] === "help" ? argv.slice(1) : argv;
-    const command = rest.find((a) => !a.startsWith("-"));
-    return command === undefined ? ["help", ...json] : ["help", command, ...json];
-  }
-  return ["version", ...json];
 }
 
 /** Parse raw argv (already stripped of `node` and script name). */

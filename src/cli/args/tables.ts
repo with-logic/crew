@@ -2,8 +2,9 @@
  * Flag tables and the shared yargs parser configuration (§5.2, §5.3).
  *
  * One place declares which flags exist and which take values, so the
- * parse in `./index.ts` and anything else that has to tell a flag value
- * from a positional can never disagree.
+ * conventional-flag rewrite in `./conventional-flags.ts` and the real
+ * parse in `./index.ts` can never disagree about what is a flag value
+ * and what is a positional.
  */
 
 import yargsFactory from "yargs/yargs";
@@ -15,7 +16,7 @@ export const BOOLEAN_GLOBALS = ["dry-run", "json", "quiet", "verbose", "yes", "f
 /** Global string flags (single-value). */
 export const STRING_GLOBALS = ["scope"] as const;
 /** Subcommand-specific boolean flags. */
-export const BOOLEAN_SUB: Readonly<Record<string, readonly string[]>> = {
+export const BOOLEAN_SUB: Record<string, readonly string[]> = {
   doctor: ["verify", "repair"],
   install: ["tap", "bundle", "skill", "recursive"],
   tap: ["recursive"],
@@ -23,7 +24,7 @@ export const BOOLEAN_SUB: Readonly<Record<string, readonly string[]>> = {
   "self-update": ["check"],
 };
 /** Subcommand-specific string flags. */
-export const STRING_SUB: Readonly<Record<string, readonly string[]>> = {
+export const STRING_SUB: Record<string, readonly string[]> = {
   autoupdate: ["interval"],
   // `--from-git <url>` is an explicit git source (§5.3); only install takes it.
   install: ["from-git"],
@@ -33,7 +34,7 @@ export const STRING_SUB: Readonly<Record<string, readonly string[]>> = {
 /** Flags that should always be collected into a list. */
 export const ARRAY_GLOBALS = ["agent"] as const;
 /** The subset of flags that is part of the public `CommandFlags` surface. */
-export const BUILT_IN_FLAGS: ReadonlySet<string> = new Set<string>([
+export const BUILT_IN_FLAGS = new Set<string>([
   ...BOOLEAN_GLOBALS,
   ...STRING_GLOBALS,
   ...ARRAY_GLOBALS,
@@ -58,6 +59,21 @@ export function baseParser() {
 }
 
 /**
+ * Configure `p` with the flag tables that apply to `command` (the global
+ * tables plus that command's own), so the parser knows which tokens are
+ * flag values and which are positionals.
+ *
+ * `help` is declared boolean so `--help` never swallows the word after it.
+ */
+export function withFlagTables(p: ReturnType<typeof baseParser>, command: string | undefined) {
+  return p
+    .boolean([...BOOLEAN_GLOBALS, "help", ...subFlags(BOOLEAN_SUB, command)])
+    .string([...STRING_GLOBALS, ...subFlags(STRING_SUB, command)])
+    .array([...ARRAY_GLOBALS])
+    .nargs(Object.fromEntries(ARRAY_GLOBALS.map((n) => [n, 1])));
+}
+
+/**
  * The per-subcommand flags `command` owns, resolved through its alias.
  *
  * A bare alias shares its canonical command's flag tables (`crew rm
@@ -68,8 +84,9 @@ export function baseParser() {
  */
 export function subFlags(
   table: Readonly<Record<string, readonly string[]>>,
-  command: string,
+  command: string | undefined,
 ): readonly string[] {
+  if (command === undefined) return [];
   const key = aliasFlagKey(command);
   if (key === null) return [];
   return lookup(table, key) ?? [];
