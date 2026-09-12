@@ -39,7 +39,7 @@ const GROUP_ORDER = ["Agents", "State", "Autoupdate", "Config", "Storage", "Othe
 
 export function renderDoctor(
   findings: readonly Finding[],
-  opts: { repair: boolean; verify: boolean; dryRun: boolean },
+  opts: { repair: boolean; verify: boolean; dryRun: boolean; applied: boolean },
   style: Styler,
 ): string[] {
   if (findings.length === 0) {
@@ -51,7 +51,7 @@ export function renderDoctor(
     ];
   }
 
-  if (opts.repair && !opts.dryRun) {
+  if (opts.applied) {
     const addressed = repairableCount(findings);
     const remaining = findings.length - addressed;
     return [
@@ -110,6 +110,10 @@ export function renderDoctor(
     );
   } else if (isRepairable(findings)) {
     lines.push(style.dim("Run `crew doctor --repair` to fix what's fixable."));
+  } else if (errors > 0) {
+    // Nothing here is repairable, but an error is not a heads-up —
+    // `config_invalid` and friends need the user to act.
+    lines.push(style.dim("These need your attention — `--repair` can't fix them."));
   } else {
     lines.push(style.dim("These are heads-ups, not errors — crew keeps working."));
   }
@@ -153,14 +157,15 @@ function clusterByCode(findings: readonly Finding[]): Map<string, Finding[]> {
  *   - `missing_project_root` — `checks.ts` documents that removing a
  *     vanished project's install isn't doctor's job, so it is a
  *     permanent heads-up rather than pending work.
+ *   - `autoupdate_not_loaded`, `autoupdate_unexpectedly_loaded` — no
+ *     scheduler reconciliation exists here, so claiming them would
+ *     promise a fix that never runs. They join this list in the same
+ *     change that implements `repairAutoupdateDrift`.
  */
 const REPAIRABLE_CODES: Record<string, string> = {
   state_entry_without_marker: "repairState",
   marker_without_state: "repairState",
   orphan_store_entry: "repairState",
-  // Reconciled by `repairAutoupdateDrift` (§11.2 check 7).
-  autoupdate_not_loaded: "repairAutoupdateDrift",
-  autoupdate_unexpectedly_loaded: "repairAutoupdateDrift",
 };
 
 /** True when `code` is one `crew doctor --repair` can actually fix. */
