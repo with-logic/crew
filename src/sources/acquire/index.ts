@@ -21,7 +21,8 @@ import { join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { crewHome, tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { ensureClone, resolveRef } from "../../git/repo.ts";
+import { resolveRef } from "../../git/refs.ts";
+import { ensureClone } from "../../git/repo.ts";
 import { isDirectory } from "../../util/fs.ts";
 
 /** Output of acquisition. */

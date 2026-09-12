@@ -19,7 +19,8 @@ import { readConfig } from "../../src/config/load.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import type { TapConfig } from "../../src/core/types.ts";
 import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";
-import { ensureRepo, resolveRef } from "../../src/git/repo.ts";
+import { resolveRef } from "../../src/git/refs.ts";
+import { ensureRepo } from "../../src/git/repo.ts";
 import { parseRef } from "../../src/refs/parse.ts";
 import { makeStyler } from "../../src/util/term.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -722,10 +723,10 @@ describe("doctor repair — adds missing adapter to existing entry (doctor.ts:17
   });
 });
 
-describe("git/classifyRef — abbreviated SHA (repo.ts:91-92)", () => {
+describe("git/classifyRef — abbreviated SHA (refs.ts)", () => {
   test("abbreviated hex SHA classifies as sha", () => {
     const { classifyRef } =
-      require("../../src/git/repo.ts") as typeof import("../../src/git/repo.ts");
+      require("../../src/git/refs.ts") as typeof import("../../src/git/refs.ts");
     const repo = makeTempDir();
     makeGitRepo(repo);
     commitAll(repo, "init");

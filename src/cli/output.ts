@@ -14,7 +14,7 @@
 
 import type { CommandOutput } from "../commands/types.ts";
 import type { CrewError, CrewErrorName } from "../core/errors.ts";
-import { sanitizeLine } from "../util/redact.ts";
+import { redactDetails, redactText, sanitizeLine } from "../util/redact.ts";
 import type { Styler } from "../util/term.ts";
 
 /** Writable stream shape used by `writeOutput` — lets tests pass buffers. */
@@ -62,13 +62,16 @@ export function writeError(
   style: Styler,
 ): void {
   if (json) {
+    // `details` is a stable machine contract (§13), so keys are kept —
+    // but a value can be a credential-bearing URL, and the JSON payload
+    // is exactly what gets pasted into a CI log or an issue.
     streams.stdout(
       `${JSON.stringify(
         {
           error: {
             name: err.code,
-            message: err.message,
-            details: err.details ?? {},
+            message: redactText(err.message),
+            details: redactDetails(err.details ?? {}),
           },
         },
         null,
@@ -87,11 +90,13 @@ export function writeError(
 }
 
 function writeMessageBlock(message: string, streams: OutputStreams): void {
-  // Messages interpolate user-controlled values (paths, refs, and
-  // git's own stderr), so every line is escaped before it reaches a
-  // terminal — otherwise crafted input could reposition the cursor or
-  // forge output. Newlines are the block's own structure, so they are
-  // split on first and never escaped (see `util/redact.ts`).
+  // Every newline reaching here is layout: callers compose multi-line
+  // messages by joining trusted literals (see `ambiguityError`), while
+  // untrusted values are escaped at the point of interpolation, where
+  // the distinction is still known — `CrewError` runs `sanitizeLine`
+  // over each interpolated value as the message is built. Splitting
+  // here is therefore safe, and `sanitizeLine` per line is a second
+  // layer for any caller that forgets.
   for (const line of message.split("\n")) {
     const safe = sanitizeLine(line);
     streams.stderr(safe.length === 0 ? "\n" : `  ${safe}\n`);

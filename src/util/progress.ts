@@ -17,6 +17,8 @@
  * the caller's sink on the way out.
  */
 
+import { sanitizeLine } from "./redact.ts";
+
 export type ProgressSink = (line: string) => void;
 
 let sink: ProgressSink | null = null;
@@ -31,7 +33,17 @@ export function setProgressSink(next: ProgressSink | null): ProgressSink | null 
   return previous;
 }
 
-/** Emit one progress line to the active sink, if any. */
+/**
+ * Emit one progress line to the active sink, if any.
+ *
+ * The line is sanitized here rather than at each call site. Callers
+ * already redact URLs (`safeUrl` / `safeArgs`), but a progress line
+ * also interpolates values that carry no credential and so get no
+ * special handling — a configured tap name is any non-empty string
+ * (§6.1), and a crafted one could inject ESC or CR to forge a second
+ * `crew: …` line. Escaping at the boundary covers every present and
+ * future caller.
+ */
 export function progress(line: string): void {
-  if (sink) sink(line);
+  if (sink) sink(sanitizeLine(line));
 }
