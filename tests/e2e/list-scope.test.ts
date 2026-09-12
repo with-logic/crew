@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { runCli } from "../../src/cli/main.ts";
-import type { StateEntry } from "../../src/core/types.ts";
+import type { Scope, StateEntry } from "../../src/core/types.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -64,7 +64,7 @@ function listJson(home: string, ...extra: string[]) {
   // Derived from the canonical entry type so this shape can't drift from
   // what `crew list --json` actually emits.
   return JSON.parse(cap.stdout()) as {
-    scope: string | null;
+    scope: Scope | null;
     installations: StateEntry[];
   };
 }

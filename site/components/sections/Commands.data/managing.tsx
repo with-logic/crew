@@ -49,7 +49,7 @@ export const MANAGING: CommandGroup = {
       description: [
         "List installed skills, grouped by scope, with sources and resolved SHAs. ",
         <code key="crew-list-scope">--scope</code>,
-        " narrows the listing to just your system-wide or just your project-scoped installs.",
+        " narrows the listing to just your user-scoped or just your project-scoped installs.",
       ],
     },
     {

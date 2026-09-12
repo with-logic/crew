@@ -11,7 +11,7 @@ export const listHelp: CommandHelp = {
     { flag: "--json", description: "Machine-readable output, handy for scripts." },
     {
       flag: "--scope {user,project}",
-      description: "Only show system-wide or project-scoped installs (default: both).",
+      description: "Only show user-scoped or project-scoped installs (default: both).",
     },
   ],
   examples: [
