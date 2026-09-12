@@ -84,4 +84,77 @@ describe("C-STATE-11b doctor --repair unloads a scheduler the config disabled", 
     expect(calls.some((a) => a[0] === "bootout")).toBe(true);
     expect(existsSync(plist)).toBe(false);
   });
+
+  test("systemd: disables the timer and removes the unit files", () => {
+    setAutoupdatePlatform("linux");
+    const home = makeCrewHome();
+    setEnabled(home, false);
+    const timer = paths(home).autoupdateSystemdTimer;
+    mkdirSync(dirname(timer), { recursive: true });
+    writeFileSync(timer, "[Timer]\n");
+    const calls: string[][] = [];
+    let active = true;
+    setSystemctlRunner((args) => {
+      calls.push([...args]);
+      if (args[0] === "is-active") return { ok: active, stderr: "" };
+      if (args[0] === "disable") {
+        active = false;
+        return { ok: true, stderr: "" };
+      }
+      return { ok: true, stderr: "" };
+    });
+    const c = captureStreams();
+    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    expect(code).toBe(0);
+    expect(JSON.parse(c.stdout()).repairs).toEqual([
+      { level: "ok", code: "autoupdate_unloaded", message: "unloaded the background updater" },
+    ]);
+    expect(calls.some((a) => a[0] === "disable")).toBe(true);
+    expect(existsSync(timer)).toBe(false);
+  });
+});
+
+/**
+ * A backend can exit 0 without the scheduler actually changing state.
+ * Trusting the return value would let doctor report a repair it did
+ * not make, so the repair re-asks the scheduler in BOTH directions.
+ */
+describe("C-STATE-11d a repair whose effect did not take is a failure", () => {
+  test("launchd: unload reports success while the job stays loaded", () => {
+    setAutoupdatePlatform("darwin");
+    const home = makeCrewHome();
+    setEnabled(home, false);
+    const plist = paths(home).autoupdatePlist;
+    mkdirSync(dirname(plist), { recursive: true });
+    writeFileSync(plist, "<plist/>");
+    // Every command claims success, but `list` keeps reporting the job
+    // as loaded — the shape a backend takes when the unload silently
+    // fails to stick.
+    setLaunchctlRunner(() => true);
+    const c = captureStreams();
+    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    expect(code).toBe(1);
+    const repairs = JSON.parse(c.stdout()).repairs;
+    expect(repairs).toHaveLength(1);
+    expect(repairs[0].code).toBe("autoupdate_repair_failed");
+    expect(repairs[0].message).toContain("still reports it as loaded");
+  });
+
+  test("systemd: disable reports success while the timer stays active", () => {
+    setAutoupdatePlatform("linux");
+    const home = makeCrewHome();
+    setEnabled(home, false);
+    const timer = paths(home).autoupdateSystemdTimer;
+    mkdirSync(dirname(timer), { recursive: true });
+    writeFileSync(timer, "[Timer]\n");
+    // Every command succeeds, but `is-active` keeps saying it is up.
+    setSystemctlRunner(() => ({ ok: true, stderr: "" }));
+    const c = captureStreams();
+    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    expect(code).toBe(1);
+    const repairs = JSON.parse(c.stdout()).repairs;
+    expect(repairs).toHaveLength(1);
+    expect(repairs[0].code).toBe("autoupdate_repair_failed");
+    expect(repairs[0].message).toContain("still reports it as loaded");
+  });
 });
