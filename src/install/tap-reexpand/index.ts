@@ -22,12 +22,12 @@
  * install callback is never invoked.
  */
 
-import type { CrewError } from "../core/errors.ts";
-import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
-import { acquireTap } from "../sources/acquire/index.ts";
-import { isDirectory } from "../util/fs.ts";
-import { collectAdditions } from "./tap-additions.ts";
-import { currentTapChildren, groupChildrenByName } from "./tap-children.ts";
+import type { CrewError } from "../../core/errors.ts";
+import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
+import { isDirectory } from "../../util/fs.ts";
+import { groupChildrenByName } from "../tap-children.ts";
+import { collectAdditions } from "./additions.ts";
+import { type AcquiredTapScan, makeTapScanCache } from "./scan-cache.ts";
 
 /** One re-expansion outcome row. */
 export interface TapReexpandRow {
@@ -71,6 +71,9 @@ export function reexpandTaps(
   const sourceGone = new Set<string>();
   const rows: TapReexpandRow[] = [];
   let hardFailure = false;
+  // One tap backs several (scope, project_root) groups; acquire, walk
+  // and validate it once per run rather than once per group.
+  const cache = makeTapScanCache();
 
   // Group state entries by (tap-name, scope, project_root). Entries
   // sharing all three are managed together: same tap clone, same
@@ -111,9 +114,9 @@ export function reexpandTaps(
     const projectRoot = first.project_root ?? null;
     if (first.scope === "project" && projectRoot && !isDirectory(projectRoot)) continue;
 
-    let acquired: { rootDir: string; resolvedSha: string | null };
+    let acquired: AcquiredTapScan;
     try {
-      acquired = acquireTap(tap, home);
+      acquired = cache.acquire(tap, home);
     } catch (err) {
       const ce = err as CrewError;
       for (const m of members) {
@@ -128,7 +131,7 @@ export function reexpandTaps(
       continue;
     }
 
-    const children = currentTapChildren(tap, home, acquired.rootDir);
+    const children = cache.children(tap, home, acquired.rootDir);
     const childrenByName = groupChildrenByName(children);
     const conflictedNames = new Set<string>();
     for (const [name, locs] of childrenByName) {
@@ -174,6 +177,7 @@ export function reexpandTaps(
       projectRoot,
       dryRun,
       installOne,
+      cache,
     });
     added.push(...additions.added);
     rows.push(...additions.rows);
