@@ -151,6 +151,16 @@ Accepted on any command where they apply:
 - `--yes` — answer "yes" to any confirmation prompt.
 - `--force` — override safety checks as defined in §7 and §10. Never overrides spec validation failures or two-skills-same-name conflicts.
 
+**Flag uniqueness.** A flag marked *(repeatable)* above may be given more
+than once and accumulates its values; `--agent` is the only such flag.
+Every other flag — global, install-time, or command-specific, and
+whether it takes a value or is a presence-only boolean — is a
+`usage_error` (§13) if given more than once. The message names the
+offending flag. This rule exists because the alternative is silent: a
+repeated value flag would otherwise have one of the user's values
+discarded, and a repeated boolean collapse to a single `true`, so an
+invocation the user believed was meaningful would be quietly reinterpreted.
+
 ### 5.3 Install-time flags
 
 - `--from-git <url>[@<ref>]` — explicit git source, equivalent to passing the URL as the ref but disambiguates when the argument might look like a tap name.
@@ -1878,7 +1888,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-05 | §16.2 | The default tap named `core` is present on first run. |
 | C-TAP-06 | §16.2 | `crew tap remove core` is refused without `--force`. |
 | C-TAP-07 | §16.6 | `crew search <skill>` matches case-insensitively against `name` and `description` across every tap. |
-| C-TAP-08 | §16.6 | `crew search --json` emits a structured array of matches. Each hit includes `installed: boolean`, `same_name_installed: boolean`, and `namespace: string \| null` fields. |
+| C-TAP-08 | §16.6 | `crew search --json` emits a structured object `{ tap, hits, known_hits, warnings }`. `tap` is the `--tap <name>` filter's tap name, or `null` when the flag was absent. Each hit in `hits` includes `installed: boolean`, `same_name_installed: boolean`, and `namespace: string \| null` fields. |
 | C-TAP-08b | §16.6 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
 | C-TAP-08c | §16.6 | A same-name skill from a different tap/path is not marked installed in `crew search`; JSON reports `installed: false` and `same_name_installed: true`. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
@@ -1978,6 +1988,8 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-06 | §5.2 | `--quiet` suppresses non-error stdout. Error output still reaches stderr. |
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
+| C-CLI-08b | §5.2 | A non-repeatable flag given more than once is a `usage_error` (exit 4) naming the flag, whether it takes a value (`--tap a --tap b`, `--scope user --scope project`) or is a presence-only boolean. `--agent`, the only repeatable flag, accumulates instead. |
+| C-CLI-08c | §5.2, §13 | A parse-stage failure honors the requested output mode: with `--json`, the error is the structured `{ error: { name, message, details } }` payload on stdout, not human text on stderr. |
 | C-CLI-09 | §5.5 | Bare `crew` is equivalent to `crew help` — same output, exit 0 (no "usage error"). |
 | C-CLI-10 | §5.5 | `crew help <unknown>` falls back to the overview and exits 0. |
 | C-CLI-11 | §5.5 | The overview contains a one-sentence description of crew, a getting-started section with at least three example invocations, and a command list covering every command from §5.1. |

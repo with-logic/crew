@@ -27,6 +27,28 @@ export interface ParsedArgs {
   readonly flags: CommandFlags;
 }
 
+/**
+ * Whether argv asks for `--json`, read straight off the raw tokens.
+ *
+ * A parse-stage failure has no `ParsedArgs` to consult, but the user's
+ * requested output mode still has to be honored (§5.2, C-CLI-08c) — a
+ * script piping stdout must get the structured error, not human text on
+ * stderr. So this deliberately does not go through yargs: it must answer
+ * even for the argv that made yargs throw.
+ *
+ * Last occurrence wins, matching yargs, so `--json --json=false` is false.
+ * A bare `--json` as the final token is true.
+ */
+export function wantsJsonOutput(argv: readonly string[]): boolean {
+  let json = false;
+  for (const token of argv) {
+    if (token === "--") break;
+    if (token === "--json") json = true;
+    else if (token.startsWith("--json=")) json = token.slice("--json=".length) !== "false";
+  }
+  return json;
+}
+
 /** Global boolean flags. */
 const BOOLEAN_GLOBALS = ["dry-run", "json", "quiet", "verbose", "yes", "force"] as const;
 /** Global string flags (single-value except `target`, which is repeatable). */
@@ -140,7 +162,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 }
 
 /**
- * Reject a scalar flag passed more than once.
+ * Reject a non-repeatable flag passed more than once (§5.2).
  *
  * `duplicate-arguments-array` makes yargs hand back an array for a
  * repeated flag. Only `--agent` is repeatable; for every other flag an
