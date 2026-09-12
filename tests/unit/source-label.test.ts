@@ -11,10 +11,10 @@ import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 import {
   isAutoTapSource,
-  repoRef,
+  repoLabel,
   sourceLabel,
   tapIndex,
-} from "../../src/commands/source-label.ts";
+} from "../../src/commands/source-label/index.ts";
 import type { Config, StateEntry, TapConfig } from "../../src/core/types.ts";
 import { parseRef } from "../../src/refs/parse.ts";
 
@@ -129,7 +129,24 @@ describe("sourceLabel", () => {
     const t = taps(tap({ name: "t", url: "https://user:tok3n@github.com/acme/skills.git" }));
     const label = sourceLabel(entry("t", ""), t);
     expect(label).not.toContain("tok3n");
-    expect(label).toBe("https://user:***@github.com/acme/skills.git");
+    expect(label).not.toContain("user");
+    expect(label).toBe("https://***@github.com/acme/skills.git");
+  });
+
+  test("C-LIST-10 a username-only token is masked", () => {
+    // A personal access token is normally the username half with no
+    // password at all, so masking only passwords would publish it.
+    const t = taps(tap({ name: "t", url: "https://ghp_sEcReT@github.com/acme/skills.git" }));
+    const label = sourceLabel(entry("t", ""), t);
+    expect(label).not.toContain("ghp_sEcReT");
+    expect(label).toBe("https://***@github.com/acme/skills.git");
+  });
+
+  test("C-LIST-10 an ssh:// userinfo is masked too", () => {
+    const t = taps(tap({ name: "t", url: "ssh://tok3n@git.example.com/acme/skills.git" }));
+    const label = sourceLabel(entry("t", ""), t);
+    expect(label).not.toContain("tok3n");
+    expect(label).toBe("ssh://***@git.example.com/acme/skills.git");
   });
 
   test("C-LIST-10 a query string or fragment is dropped", () => {
@@ -144,7 +161,7 @@ describe("sourceLabel", () => {
   test("C-LIST-10 an ssh username is kept — it addresses the remote", () => {
     // `git@` is the protocol's fixed account, not a secret, and dropping
     // it would leave a label that does not clone.
-    expect(repoRef("git@github.com:acme/skills.git")).toBe("git@github.com:acme/skills.git");
+    expect(repoLabel("git@github.com:acme/skills.git")).toBe("git@github.com:acme/skills.git");
   });
 
   test("C-LIST-10 control characters in a subpath are escaped", () => {
@@ -153,6 +170,17 @@ describe("sourceLabel", () => {
     expect(label).not.toContain("");
     expect(label).not.toContain("\r");
     expect(label).toBe("@acme/skills//skills/\\x1b[2K\\x0dforged");
+  });
+
+  test("C-LIST-10 C1 control characters are escaped", () => {
+    // U+009B is the 8-bit control sequence introducer: a terminal in
+    // 8-bit mode reads it exactly as `ESC [`, so escaping C0 alone
+    // still leaves a way to move the cursor.
+    const csi = String.fromCodePoint(0x9b);
+    const t = taps(tap({ name: "t", url: "https://github.com/acme/skills.git" }));
+    const label = sourceLabel(entry("t", `skills/${csi}31mforged`), t);
+    expect(label).not.toContain(csi);
+    expect(label).toBe("@acme/skills//skills/\\x9b31mforged");
   });
 
   test("isAutoTapSource is true only for a configured unregistered tap", () => {

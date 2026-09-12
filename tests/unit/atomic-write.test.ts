@@ -46,6 +46,37 @@ describe("atomic writeText", () => {
     expect(readdirSync(dir)).toEqual(["state.json"]);
   });
 
+  test("an existing file's permissions survive a write", () => {
+    // Rename replaces the inode, so the temp file's mode becomes the
+    // published file's. Without carrying the old mode across, a config
+    // the user restricted to `0600` silently widens to whatever the
+    // umask allows — and that file can hold credential-bearing clone
+    // URLs.
+    const dir = makeTempDir("crew-atomic-");
+    const target = join(dir, "config.yaml");
+    writeFileSync(target, "old: 1\n", { mode: 0o600 });
+
+    writeText(target, "new: 2\n");
+
+    expect(statSync(target).mode & 0o777).toBe(0o600);
+    expect(readFileSync(target, "utf8")).toBe("new: 2\n");
+  });
+
+  test("a file crew creates is owner-only", () => {
+    const dir = makeTempDir("crew-atomic-");
+    const target = join(dir, "state.json");
+    writeText(target, "{}\n");
+    expect(statSync(target).mode & 0o777).toBe(0o600);
+  });
+
+  test("a deliberately wider mode is not narrowed", () => {
+    const dir = makeTempDir("crew-atomic-");
+    const target = join(dir, "notes.txt");
+    writeFileSync(target, "a\n", { mode: 0o644 });
+    writeText(target, "b\n");
+    expect(statSync(target).mode & 0o777).toBe(0o644);
+  });
+
   test("a truncated config is exactly what the atomic write prevents", () => {
     const home = makeTempDir("crew-atomic-home-");
     writeConfig(readConfig(home), home);

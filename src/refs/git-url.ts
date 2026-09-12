@@ -16,7 +16,7 @@ import { CrewError } from "../core/errors.ts";
 import type { GitSource } from "../core/types.ts";
 
 /** Shorthand host prefixes known to crew (§8.2). */
-const SHORTHAND_HOSTS: Record<string, string> = {
+export const SHORTHAND_HOSTS: Record<string, string> = {
   gh: "github.com",
   gl: "gitlab.com",
   bb: "bitbucket.org",
