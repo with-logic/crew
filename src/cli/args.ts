@@ -102,7 +102,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
   const positional = ((parsed["_"] as unknown[]) ?? []).map(String);
 
-  rejectRepeatedScalars(parsed);
+  rejectRepeatedScalars(parsed, rest);
 
   const scope = stringOrUndefined(parsed["scope"]) ?? "user";
   if (scope !== "user" && scope !== "project")
@@ -139,25 +139,42 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 }
 
 /**
- * Reject a scalar flag passed more than once.
+ * Reject a non-repeatable flag passed more than once.
  *
- * `duplicate-arguments-array` makes yargs hand back an array for a
- * repeated flag. Only `--agent` is repeatable; for every other flag an
- * array value would be silently dropped downstream (`extras` keeps only
- * strings and booleans) or fall back to its default, so the user's
- * explicit choice would vanish without a word. Fail loudly instead.
+ * Two detections are needed because yargs represents the two flag
+ * kinds differently. `duplicate-arguments-array` hands back an ARRAY
+ * for a repeated value flag, which `extras` would then silently drop.
+ * A repeated BOOLEAN, by contrast, collapses to plain `true` and leaves
+ * no trace in the parsed result at all, so the only witness is raw
+ * argv. Either way the user stated something twice and §5.2 says only
+ * `--agent` may repeat, so fail loudly rather than quietly picking one.
  */
-function rejectRepeatedScalars(parsed: Record<string, unknown>): void {
+function rejectRepeatedScalars(parsed: Record<string, unknown>, argv: readonly string[]): void {
   const repeatable = new Set<string>(ARRAY_GLOBALS);
   for (const [key, value] of Object.entries(parsed)) {
     if (key === "_" || key === "$0" || repeatable.has(key)) continue;
     if (!Array.isArray(value)) continue;
-    throw new CrewError(
-      "usage_error",
-      `\`--${key}\` was given more than once — it takes a single value`,
-      { flag: key },
-    );
+    throw repeatedFlagError(key);
   }
+  const seen = new Set<string>();
+  for (const token of argv) {
+    // Only long `--flag` forms; `--` ends flag parsing, and a bare `-`
+    // or a value like `--scope=user`'s tail is not a flag occurrence.
+    if (token === "--") break;
+    if (!token.startsWith("--") || token.length === 2) continue;
+    const name = token.slice(2).split("=")[0]!;
+    if (repeatable.has(name)) continue;
+    if (seen.has(name)) throw repeatedFlagError(name);
+    seen.add(name);
+  }
+}
+
+function repeatedFlagError(flag: string): CrewError {
+  return new CrewError(
+    "usage_error",
+    `\`--${flag}\` was given more than once — it takes a single value`,
+    { flag },
+  );
 }
 
 function stringOrUndefined(v: unknown): string | undefined {
