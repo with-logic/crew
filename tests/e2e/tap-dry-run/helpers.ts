@@ -1,10 +1,12 @@
 /**
  * Shared fixtures for the `crew tap … --dry-run` suites (§16.3, C-TAP-16b).
  *
- * Each suite asserts the preview ran the same validation as the real
- * command and that nothing on disk changed, so these helpers exist to
- * snapshot the things a regression would disturb: config bytes, clone
- * directories, and installed-skill markers.
+ * Each suite asserts the preview ran the same config-level validation as
+ * the real command — everything decidable without the network — and that
+ * nothing on disk changed, so these helpers exist to snapshot the things
+ * a regression would disturb: config bytes, clone directories, and
+ * installed-skill markers. A preview never clones, so it cannot reject
+ * an unreachable remote the way a real run does.
  */
 
 import { existsSync, readFileSync } from "node:fs";

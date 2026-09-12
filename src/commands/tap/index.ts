@@ -24,7 +24,12 @@ import { showCommandHelp } from "../help/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { tapAdd } from "./add.ts";
 import { planRefresh, refreshTaps, type TapRefreshRow } from "./refresh.ts";
-import { renderTapList, renderTapRemove, renderTapUpdate, type TapListRow } from "./render.ts";
+import {
+  renderTapList,
+  renderTapRemove,
+  renderTapUpdate,
+  type TapListRow,
+} from "./render/index.ts";
 import { displayTarget } from "./target.ts";
 
 export function tapCommand(ctx: CommandContext): CommandOutput {
