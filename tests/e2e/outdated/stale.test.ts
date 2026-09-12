@@ -1,6 +1,6 @@
 /**
  * `crew outdated` when a collection can't be reached (§10.1.1,
- * C-UPD-18f).
+ * C-UPD-18h).
  *
  * Two degrees of failure, both driven by local `file://` origins that
  * are made to disappear — never the network:
@@ -26,7 +26,7 @@ import { breakTapOrigin, installedFromRepo, moveUpstream, useClaudeCodeRoot } fr
 
 useClaudeCodeRoot();
 
-describe("C-UPD-18f crew outdated with an unreachable collection", () => {
+describe("C-UPD-18h crew outdated with an unreachable collection", () => {
   test("does not claim up to date when a tap couldn't be refreshed", () => {
     const { home } = installedFromRepo();
     // Clone retained but origin dead: refresh fails while every locally

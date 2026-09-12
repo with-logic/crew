@@ -1,6 +1,6 @@
 /**
  * `crew outdated` is `crew update --dry-run` with a trimmed rendering
- * (§10.1.1, C-UPD-18d).
+ * (§10.1.1, C-UPD-18f).
  *
  * Install from a local git tap, move upstream (edit + add a sibling),
  * then prove `outdated` lists both pending changes, writes nothing,
@@ -27,7 +27,7 @@ import {
 
 useClaudeCodeRoot();
 
-describe("C-UPD-18d crew outdated", () => {
+describe("C-UPD-18f crew outdated", () => {
   test("lists pending updates and additions, writes nothing, matches update --dry-run --json", () => {
     const { home, repo } = installedFromRepo();
     const before = snapshot(home);
@@ -95,7 +95,7 @@ describe("C-UPD-18d crew outdated", () => {
     expect(after[gammaTap]).toBe(before[gammaTap]);
   });
 
-  test("C-UPD-18e leaves state.json absent on a fresh home and never locks", () => {
+  test("C-UPD-18g leaves state.json absent on a fresh home and never locks", () => {
     const home = makeCrewHome();
     rmSync(paths(home).stateFile, { force: true });
     rmSync(`${paths(home).stateFile}.lock`, { recursive: true, force: true });
