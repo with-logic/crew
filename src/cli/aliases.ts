@@ -15,6 +15,8 @@
  * `aliasFlagKey` encodes that distinction for the parser.
  */
 
+import { lookup } from "../util/registry.ts";
+
 /** Every canonical command crew dispatches. Aliases must name one of these. */
 export type CanonicalCommand =
   | "install"
@@ -66,7 +68,28 @@ export function aliasFlagKey(command: string): string | null {
   return alias[0];
 }
 
-/** The alias entry for a user-typed word, or undefined when it isn't an alias. */
+/**
+ * The alias entry for a user-typed word, or undefined when it isn't an
+ * alias.
+ *
+ * `Object.hasOwn` guards the lookup: the command word comes straight
+ * from argv, and a plain object resolves inherited members, so
+ * `crew __proto__` / `crew constructor` would otherwise retrieve a
+ * prototype value and be treated as a real alias.
+ */
 export function aliasFor(command: string): CommandAlias | undefined {
-  return (COMMAND_ALIASES as Record<string, CommandAlias>)[command];
+  return lookup(COMMAND_ALIASES as Record<string, CommandAlias>, command);
+}
+
+/**
+ * The canonical command a user-typed word runs, or the word itself when
+ * it isn't an alias.
+ *
+ * Cross-cutting post-command handling at the CLI boundary (§10.2's
+ * scheduled-update status line, §10.4's update notice) must key off
+ * this rather than the raw word, or an alias silently opts out of
+ * behavior its canonical command has.
+ */
+export function canonicalCommand(command: string): string {
+  return aliasFor(command)?.[0] ?? command;
 }

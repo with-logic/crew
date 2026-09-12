@@ -9,13 +9,24 @@
 
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../src/cli/main.ts";
-import { COMMANDS } from "../../src/commands/help/content/index.ts";
+import { COMMANDS, GROUPS } from "../../src/commands/help/content/index.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 
 // Derived from the help registry so a new command or alias cannot be
 // added without also getting a help page — the hand-maintained list
 // this replaces had silently omitted `self-update`.
 const EVERY_COMMAND = Object.keys(COMMANDS);
+
+describe("help groups", () => {
+  test("C-CLI-11 every command appears in exactly one overview group", () => {
+    const grouped: string[] = GROUPS.flatMap((g) => [...g.commands]);
+    // Exactly once: a duplicate prints the command twice in the
+    // overview, an omission hides it entirely. Types catch neither,
+    // since both are well-typed `VisibleCommand` values.
+    expect([...grouped].sort()).toEqual([...EVERY_COMMAND].sort());
+    expect(new Set(grouped).size).toBe(grouped.length);
+  });
+});
 
 describe("help overview", () => {
   test("C-CLI-02 + C-CLI-09 + C-CLI-11 bare `crew` shows overview with getting-started and command groups", () => {

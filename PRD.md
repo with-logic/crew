@@ -1964,7 +1964,7 @@ Implementations and test suites refer to criteria by ID.
 | ID | Reference | Assertion |
 |---|---|---|
 | C-CLI-01 | §5.1 | Every command listed in §5.1 is present and reachable. |
-| C-CLI-01b | §5.1 | `crew remove`, `crew rm`, `crew ls`, and `crew upgrade` behave identically to `crew uninstall`, `crew list`, and `crew update` respectively, including accepting the canonical command's flags (e.g. `crew rm --prune <name>`). |
+| C-CLI-01b | §5.1 | Each alias behaves identically to its canonical command, including accepting that command's flags (e.g. `crew rm --prune <name>`): `crew remove` and `crew rm` → `crew uninstall`; `crew ls` → `crew list`; `crew upgrade` → `crew update`. |
 | C-CLI-02 | §5.5 | `crew help` (and `crew` with no arguments) prints the overview on stdout and exits 0. |
 | C-CLI-03 | §5.5 | `crew help <command>` prints per-command help on stdout and exits 0. |
 | C-CLI-04 | §5.1 | `crew version` prints a version string and exits 0. |

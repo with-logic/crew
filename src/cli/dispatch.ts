@@ -20,11 +20,18 @@ import type { CommandContext, CommandOutput } from "../commands/types.ts";
 import { uninstallCommand } from "../commands/uninstall/index.ts";
 import { updateCommand } from "../commands/update/index.ts";
 import { CrewError } from "../core/errors.ts";
-import { aliasFor } from "./aliases.ts";
+import { lookup } from "../util/registry.ts";
+import { aliasFor, type CanonicalCommand } from "./aliases.ts";
 
 export type CommandHandler = (ctx: CommandContext) => CommandOutput;
 
-export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
+/**
+ * Every canonical command's handler. Typed as `Record<CanonicalCommand,
+ * …>` so adding a command to `CanonicalCommand` without a handler — or
+ * a handler for a word that isn't canonical — is a compile error rather
+ * than a runtime "not a crew command".
+ */
+export const COMMAND_HANDLERS: Record<CanonicalCommand, CommandHandler> = {
   install: installCommand,
   uninstall: uninstallCommand,
   update: updateCommand,
@@ -50,7 +57,7 @@ export function dispatch(command: string, ctx: CommandContext): CommandOutput {
     positionalPrefix.length === 0
       ? ctx
       : { ...ctx, positional: [...positionalPrefix, ...ctx.positional] };
-  const handler = COMMAND_HANDLERS[canonical];
+  const handler = lookup(COMMAND_HANDLERS, canonical);
   if (!handler) {
     throw new CrewError(
       "usage_error",
