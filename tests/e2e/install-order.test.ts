@@ -78,6 +78,26 @@ describe("install order", () => {
     });
     expect([...resolved.skills.map((s) => s.name)].sort()).toEqual(["a", "b"]);
   });
+
+  test("C-DEP-08 acyclic edges around a cycle stay ordered", () => {
+    const home = makeCrewHome();
+    const container = makeTempDir();
+    // `a` and `b` form a cycle; `c` depends on `a` from outside it. Breaking
+    // the cycle must not cost `c` its own dependency edge — both members have
+    // to precede `c`, not merely appear somewhere in the set.
+    writeSkill(container, "a", "a", ["b"]);
+    writeSkill(container, "b", "b", ["a"]);
+    writeSkill(container, "c", "c", ["a"]);
+
+    const resolved = resolveInstallSet([join(container, "c")], defaultConfig(), {
+      cwd: container,
+      home,
+    });
+    const order = resolved.skills.map((s) => s.name);
+    expect([...order].sort()).toEqual(["a", "b", "c"]);
+    expect(order.indexOf("a")).toBeLessThan(order.indexOf("c"));
+    expect(order.indexOf("b")).toBeLessThan(order.indexOf("c"));
+  });
 });
 
 describe("install mixed outcomes", () => {
