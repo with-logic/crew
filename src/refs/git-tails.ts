@@ -6,10 +6,11 @@
  * is the ref, slashes and all.
  *
  * Extracted from `git-url.ts` to keep that file under the 200-line cap.
- * NOTE for whoever merges this with PR #125 (`feat/ref-after-subpath`): that
- * branch extracts the same two helpers into a file of this name and teaches
- * them to accept a trailing `@<ref>` after the subpath. Take #125's versions
- * and re-apply the userinfo/`hostEnd` handling below on top.
+ *
+ * `hostEnd` exists because two legitimate `@` uses are not ref delimiters:
+ * HTTPS userinfo (`https://user:token@host/…`, which crew preserves so a
+ * private repo still clones) and scp-style SSH (`git@host:owner/repo`). Ref
+ * detection therefore starts after the authority, never at the first `@`.
  */
 
 /** Split `head//sub` into head and subpath. Empty subpath if no `//`. */

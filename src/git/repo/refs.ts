@@ -9,6 +9,7 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
+import { displayText } from "../../refs/display-url.ts";
 import { type GitProcessError, runGit } from "../exec.ts";
 
 /**
@@ -88,7 +89,7 @@ export function checkoutSha(repoPath: string, sha: string): void {
     const ge = err as GitProcessError;
     throw new CrewError(
       "ref_not_found",
-      `couldn't check out ${sha.slice(0, 8)} — ${ge.result.stderr.trim()}`,
+      `couldn't check out ${sha.slice(0, 8)} — ${displayText(ge.result.stderr.trim())}`,
       { sha },
     );
   }
