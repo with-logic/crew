@@ -51,17 +51,20 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   if (config) findings.push(...checkAutoupdateDrift(config));
 
   // `--repair --dry-run` reports what a repair would address and
-  // applies nothing.
+  // applies nothing. Repair also rebuilds `config.yaml` taps from
+  // markers, so an unparseable config makes it unsafe: report the
+  // `config_invalid` finding instead of failing with a bare error.
   const dryRun = repair && ctx.flags.dryRun;
-  if (repair && !dryRun) repairState(markers, home);
+  const applied = repair && !dryRun && config !== null;
+  if (applied) repairState(markers, home);
 
-  const human = renderDoctor(findings, { repair, verify, dryRun }, ctx.style);
+  const human = renderDoctor(findings, { repair, verify, dryRun, applied }, ctx.style);
   // A `--repair` run resolves the repairable drift classes, so those
   // findings stop counting against the exit code. Anything repair
   // can't fix (§11.2) still does — otherwise a repair would report
   // success while a real problem remains. Without `--repair` (or on a
-  // dry run, which fixes nothing), every error counts.
-  const applied = repair && !dryRun;
+  // dry run, or when an unparseable config skipped the repair), every
+  // error counts.
   const blocking = findings.filter(
     (f) => f.level === "error" && !(applied && isRepairableCode(f.code)),
   );

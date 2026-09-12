@@ -2,63 +2,21 @@
  * `crew doctor --repair --dry-run` (§11.2, C-STATE-12). The preview
  * must name only findings a repair can actually fix, and must leave
  * state, config, and the store byte-identical.
+ *
+ * The real-repair counterparts live in `./doctor-repair.test.ts`.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
-import { resetLaunchctlRunner, setLaunchctlRunner } from "../../../src/autoupdate/launchd.ts";
-import {
-  resetAutoupdatePlatform,
-  setAutoupdatePlatform,
-} from "../../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../../src/cli/main.ts";
-import { paths } from "../../../src/core/paths.ts";
 import { readState, writeState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { readOrNull } from "./helpers.ts";
+import { pinDoctorEnv, projectEntry, snapshot, unpinDoctorEnv } from "./helpers.ts";
 
-/** State, config, and the full store listing — the C-STATE-12 promise. */
-function snapshot(home: string): Record<string, string | null> {
-  const out: Record<string, string | null> = {
-    state: readOrNull(paths(home).stateFile),
-    config: readOrNull(paths(home).configFile),
-  };
-  const store = join(home, "store");
-  if (existsSync(store)) {
-    for (const entry of new Bun.Glob("**/*").scanSync({ cwd: store, onlyFiles: true })) {
-      out[`store/${entry}`] = readFileSync(join(store, entry), "utf8");
-    }
-  }
-  return out;
-}
-
-let restoreAdapter: (() => void) | null = null;
-
-beforeEach(() => {
-  // Doctor asks the platform scheduler whether autoupdate is loaded;
-  // pin it to "not loaded" so the dev machine's real launchd state
-  // can't leak an extra finding into these assertions.
-  setAutoupdatePlatform("darwin");
-  setLaunchctlRunner(() => false);
-  const root = makeTempDir("crew-cc-");
-  const original = { u: claudeCodeAdapter.userPath, d: claudeCodeAdapter.detect };
-  (claudeCodeAdapter as { userPath: () => string }).userPath = () => root;
-  (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
-  restoreAdapter = () => {
-    (claudeCodeAdapter as { userPath: () => string }).userPath = original.u;
-    (claudeCodeAdapter as { detect: () => boolean }).detect = original.d;
-  };
-});
-
-afterEach(() => {
-  resetAutoupdatePlatform();
-  resetLaunchctlRunner();
-  if (restoreAdapter) restoreAdapter();
-  restoreAdapter = null;
-});
+beforeEach(pinDoctorEnv);
+afterEach(unpinDoctorEnv);
 
 describe("C-STATE-12 doctor --repair --dry-run", () => {
   test("lists what a repair would address and changes nothing", () => {
@@ -111,72 +69,12 @@ describe("C-STATE-12 doctor --repair --dry-run", () => {
     // besides the marker drift the root's absence implies. §11.2 leaves
     // a vanished project to the user, so repair can never fix it.
     rmSync(project, { recursive: true, force: true });
-    writeState(
-      {
-        schema_version: 1,
-        installations: [
-          {
-            name: "demo",
-            source: { tap: "core", path: "demo" },
-            ref: null,
-            resolved_sha: null,
-            content_hash: "sha256:0",
-            scope: "project",
-            installed_at: "2026-01-01T00:00:00Z",
-            agents: [],
-            pinned: false,
-            explicit: true,
-            project_root: project,
-            required_by: [],
-          },
-        ],
-      },
-      home,
-    );
+    writeState({ schema_version: 1, installations: [projectEntry(project)] }, home);
 
     const c = captureStreams();
     runCli(["doctor", "--repair", "--dry-run"], { home, streams: c.streams });
     expect(c.stdout()).toContain("a project folder is missing");
     expect(c.stdout()).toContain("would address 0 findings");
-  });
-
-  test("C-STATE-12a a real repair reports only what it addressed and leaves the rest", () => {
-    const home = makeCrewHome();
-    const project = makeTempDir("crew-proj-");
-    rmSync(project, { recursive: true, force: true });
-    writeState(
-      {
-        schema_version: 1,
-        installations: [
-          {
-            name: "demo",
-            source: { tap: "core", path: "demo" },
-            ref: null,
-            resolved_sha: null,
-            content_hash: "sha256:0",
-            scope: "project",
-            installed_at: "2026-01-01T00:00:00Z",
-            agents: [],
-            pinned: false,
-            explicit: true,
-            project_root: project,
-            required_by: [],
-          },
-        ],
-      },
-      home,
-    );
-    mkdirSync(join(home, "store", "ghost@00000000"), { recursive: true });
-    writeFileSync(join(home, "store", "ghost@00000000", "f"), "abc");
-
-    const c = captureStreams();
-    const code = runCli(["doctor", "--repair"], { home, streams: c.streams });
-    expect(code).toBe(0);
-    // The orphan store entry is gone; the missing project root isn't,
-    // and the summary says so instead of claiming both were addressed.
-    expect(existsSync(join(home, "store", "ghost@00000000"))).toBe(false);
-    expect(c.stdout()).toContain("1 finding addressed");
-    expect(c.stdout()).toContain("1 finding left for you");
   });
 
   test("--json carries dry_run and the findings", () => {

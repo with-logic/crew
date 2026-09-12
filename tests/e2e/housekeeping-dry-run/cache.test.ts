@@ -8,7 +8,9 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { paths } from "../../../src/core/paths.ts";
+import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 
 describe("C-STATE-13 cache clean --dry-run", () => {
   test("reports what would be freed and deletes nothing", () => {
@@ -40,6 +42,32 @@ describe("C-STATE-13 cache clean --dry-run", () => {
       dry_run: true,
     });
     expect(existsSync(join(home, "store", "ghost@00000000", "f"))).toBe(true);
+  });
+
+  test("a referenced store entry is excluded from the preview", () => {
+    const home = makeCrewHome();
+    const src = makeTempDir();
+    makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
+    runCli(["install", join(src, "demo")], { home, streams: captureStreams().streams });
+    // The live entry `install` just staged, plus an orphan alongside it.
+    // A path source has no resolved SHA, so its store entry is keyed by
+    // the first 8 chars of the content hash (`shortShaFor`).
+    const live = readState(home).installations[0]!;
+    const liveDir = `${live.name}@${live.content_hash.slice("sha256:".length, "sha256:".length + 8)}`;
+    const orphan = join(home, "store", "ghost@00000000");
+    mkdirSync(orphan, { recursive: true });
+    writeFileSync(join(orphan, "f"), "abc");
+
+    const c = captureStreams();
+    runCli(["cache", "clean", "--dry-run", "--json"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout());
+
+    // Only the orphan is offered up, and its 3 bytes are the only ones
+    // counted — a referenced entry is never proposed for deletion.
+    expect(parsed.removed_store).toEqual(["ghost@00000000"]);
+    expect(parsed.removed_store).not.toContain(liveDir);
+    expect(parsed.freed_bytes).toBe(3);
+    expect(existsSync(join(home, "store", liveDir))).toBe(true);
   });
 
   test("fresh home says nothing to clean and writes no state file", () => {

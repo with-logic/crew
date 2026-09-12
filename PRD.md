@@ -1334,11 +1334,14 @@ off.
 - Orphaned state entries (no corresponding marker and agent missing): remove from state.
 - Orphaned markers (marker present, no state entry): re-add to state.
 - Orphan store entries: delete them.
-- Autoupdate drift (config says enabled but the platform scheduler is not loaded, or vice versa): reconcile to the config's value.
 
 `--repair` never overwrites user-customized skills or touches anything outside `~/.crew/` and the agent skill directories it already manages.
 
-Findings outside that list are **not repairable** and MUST NOT be counted as addressed by any `--repair` run or preview. `customized`, `agent_missing`, and `config_invalid` need a human decision; `missing_project_root` is a heads-up whose remedy (per check 8) is the user's own `crew uninstall`, not a repair. A `--repair` run reports how many findings it addressed and, when any remain, says so rather than implying everything was fixed. An unrepairable **error**-level finding keeps the exit code non-zero after `--repair`, so a repair never reports success while a real problem stands.
+Findings outside that list are **not repairable** and MUST NOT be counted as addressed by any `--repair` run or preview. `customized`, `agent_missing`, and `config_invalid` need a human decision; `missing_project_root` is a heads-up whose remedy (per check 8) is the user's own `crew uninstall`, not a repair. Autoupdate drift (check 7) is likewise reported but not reconciled: a `--repair` run leaves the platform scheduler alone, so the finding survives and is not counted as addressed.
+
+A `--repair` run MUST NOT delete a state entry solely because its `project_root` is missing. Check 8 defines a vanished project root as the user's to resolve, so the entry is preserved for them to act on; deleting it would discard the only record of the install.
+
+When `config.yaml` cannot be parsed, `--repair` reports the `config_invalid` finding and applies no repair, rather than failing with a bare error. Repair reconstructs taps in `config.yaml` from markers, which is unsafe against a file it could not read. A `--repair` run reports how many findings it addressed and, when any remain, says so rather than implying everything was fixed. An unrepairable **error**-level finding keeps the exit code non-zero after `--repair`, so a repair never reports success while a real problem stands.
 
 `--repair --dry-run` runs the same checks, reports the findings a repair would address, and applies nothing. Because nothing was fixed, the exit code follows the plain `crew doctor` rule (non-zero if any error-level finding remains); `--json` output carries `dry_run: true`.
 

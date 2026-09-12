@@ -11,17 +11,22 @@ import { crewHome, paths } from "../core/paths.ts";
 import type { StateFile } from "../core/types.ts";
 import { isDirectory, listDir, rmrf } from "../util/fs.ts";
 
-/** Compute the set of store entries still in use. */
+/**
+ * Compute the set of store entries still in use.
+ *
+ * `shortShaFor` keys a git source by its resolved SHA and a path
+ * source by the first 8 chars of the directory's content hash — which
+ * state records in `content_hash`. Reconstructing both here keeps a
+ * live path-source entry out of the orphan list.
+ */
 export function referencedStoreEntries(state: StateFile): Set<string> {
   const names = new Set<string>();
   for (const inst of state.installations) {
-    if (inst.resolved_sha === null) {
-      // Path sources: match whatever short-sha suffix they hashed to.
-      // We don't know the hash from here without reading the store; store
-      // entries for path sources are therefore kept unconditionally.
-    } else {
-      names.add(`${inst.name}@${inst.resolved_sha.slice(0, 8)}`);
-    }
+    const short =
+      inst.resolved_sha === null
+        ? inst.content_hash.slice("sha256:".length, "sha256:".length + 8)
+        : inst.resolved_sha.slice(0, 8);
+    names.add(`${inst.name}@${short}`);
   }
   return names;
 }
