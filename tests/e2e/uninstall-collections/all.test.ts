@@ -49,6 +49,30 @@ describe("--all", () => {
     expect(installed(home)).toEqual([]);
   });
 
+  test("C-UNINST-24 --all confirms before locking and re-reads state after", () => {
+    const home = makeCrewHome();
+    expect(addTap(home, buildTap("crew-all-live-", { ".": ["alpha", "beta"] }), "acme")).toBe(0);
+    expect(install(home, ["acme"])).toBe(0);
+
+    // Installing from inside the prompt proves two things at once: the
+    // state lock is not held while we wait for a human (the install
+    // would deadlock on it), and the removal acts on state as it is
+    // after the answer, not the snapshot the count was taken from.
+    let installedDuringPrompt = false;
+    const prompt = (): ConfirmOutcome => {
+      if (!installedDuringPrompt) {
+        installedDuringPrompt = true;
+        expect(install(home, [buildTap("crew-all-late-", { ".": ["gamma"] })])).toBe(0);
+      }
+      return "yes";
+    };
+
+    expect(runCli(["uninstall", "--all"], { home, streams: quiet(), prompt })).toBe(0);
+    expect(installedDuringPrompt).toBe(true);
+    // `gamma` arrived after the count and must still be swept.
+    expect(installed(home)).toEqual([]);
+  });
+
   test("C-UNINST-24 --all removes nothing when the user declines", () => {
     const home = makeCrewHome();
     expect(addTap(home, buildTap("crew-all3-", { ".": ["alpha", "beta"] }), "acme")).toBe(0);
