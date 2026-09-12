@@ -7,10 +7,10 @@
 
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
-import { columns, plural, shortenHome } from "../../util/format.ts";
+import { columns, plural } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
-import { formatRowParts, symbolFor } from "./rows.ts";
+import { formatRowParts, groupByTap, nameCell } from "./rows.ts";
 
 export interface RenderUpdateInput {
   readonly rows: readonly UpdateRow[];
@@ -56,15 +56,10 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   if (input.rows.length > 0) {
     const rowCells: string[][] = input.rows.map((r) => {
       const parts = formatRowParts(r, style);
-      const sym = symbolFor(r, style);
       const tailCells: string[] = [];
       if (parts.detail) tailCells.push(parts.detail);
       if (parts.required) tailCells.push(parts.required);
-      const nameCell =
-        r.scope === "project" && r.project_root
-          ? `  ${sym} ${style.bold(r.name)} ${style.dim(`(in ${shortenHome(r.project_root)})`)}`
-          : `  ${sym} ${style.bold(r.name)}`;
-      return [nameCell, parts.status, tailCells.join(" ")];
+      return [nameCell(r, style), parts.status, tailCells.join(" ")];
     });
     for (const line of columns(rowCells, 2)) lines.push(line);
   }
@@ -99,15 +94,6 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   lines.push(style.dim(formatTotals(totals, dryRun)));
 
   return lines;
-}
-
-function groupByTap(rows: readonly TapReexpandRow[]): Map<string, string[]> {
-  const out = new Map<string, string[]>();
-  for (const r of rows) {
-    if (!out.has(r.tap)) out.set(r.tap, []);
-    out.get(r.tap)!.push(r.name);
-  }
-  return out;
 }
 
 interface Totals {

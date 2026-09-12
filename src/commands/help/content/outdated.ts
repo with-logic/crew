@@ -35,8 +35,7 @@ export const outdatedHelp: CommandHelp = {
     },
   ],
   notes: [
-    "Nothing is installed or written — not even state. Run `crew update` when you're ready to apply.",
-    "Like `crew update`, this refreshes your tap clones so the answer reflects upstream. It never touches installed skills.",
+    "This refreshes your tap clones, the same as `crew update` — that is how it learns what moved upstream. Nothing else changes: no installed skill, no marker, no stored copy, and no state file. Run `crew update` when you're ready to apply.",
   ],
   seeAlso: ["update", "list", "autoupdate"],
 };
