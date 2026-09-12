@@ -178,4 +178,3 @@ function clusterByCode(findings: readonly Finding[]): Map<string, Finding[]> {
   }
   return out;
 }
-
