@@ -545,7 +545,10 @@ The output is tagged as a dry run and reports three things separately:
 - the skills and agents that **would be removed**, including any
   orphans a `--prune` pass would then remove;
 - the agents that **would be retained**, where an `--agent` filter
-  leaves the skill installed elsewhere;
+  leaves the skill installed elsewhere — each named, not merely
+  counted, so the user can see where the skill still lives; `--json`
+  reports them in `remainingAgents`. A real run reports the same
+  agents the same way, so a preview can never disagree with it;
 - any safety check that **would abort**, with the same error as a real
   run.
 
@@ -1927,6 +1930,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-18 | §7.4 | `crew uninstall <tap>/<skill>` accepts a tap-qualified selector for an installed skill and removes the matching state entry. |
 | C-UNINST-19 | §7.4 | `crew uninstall --dry-run <selector>` reports what would be removed (including `--prune` orphans) but leaves every install directory, marker, and `state.json` untouched; `--json` output carries `dry_run: true`. |
 | C-UNINST-19a | §7.4 | `crew uninstall --dry-run` against a `CREW_HOME` with no `state.json` does not create it (the state lock is not taken). |
+| C-UNINST-19b | §7.4 | When `--agent` leaves a skill installed elsewhere, both the preview and the real run name the retained agents — human output lists each, and `--json` carries them in `remainingAgents`. |
 | C-SHARE-01 | §7.2, §7.3 | When `codex` and `gemini-cli` are both active, `crew install <name>` writes bytes to `~/.agents/skills/<name>/` exactly once, and the per-agent summary reports both adapter names as installed. |
 | C-SHARE-02 | §7.5 | The `agents` field in `.crew.json` is non-empty, alphabetically sorted, and lists every agent currently owning the install. |
 | C-SHARE-03 | §7.3 | Installing into a path already owned by agent X with agent Y active (and not X) results in a marker whose `agents` contains both X and Y, preserving X's ownership. |

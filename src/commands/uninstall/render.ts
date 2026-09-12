@@ -4,6 +4,10 @@
  * One block per skill the user asked to remove, each with a ✓-per-target
  * section, then a separate "Pruned dependencies" section listing any
  * orphans pulled along by `--prune`. Dim totals line at the bottom.
+ *
+ * Per §7.4 a block reports three things separately: the agents that
+ * would be removed, the agents an `--agent` filter retains (named, not
+ * merely counted), and any safety check that would abort.
  */
 
 import { plural } from "../../util/format.ts";
@@ -36,7 +40,7 @@ export function renderUninstall(
     lines.push(style.bold(header));
     for (const r of direct) {
       lines.push("");
-      lines.push(...renderRecord(r, style));
+      lines.push(...renderRecord(r, dryRun, style));
     }
   }
 
@@ -48,7 +52,7 @@ export function renderUninstall(
     lines.push(style.bold(`${verb} ${plural(pruned.length, "dependency", "dependencies")}`));
     for (const r of pruned) {
       lines.push("");
-      lines.push(...renderRecord(r, style));
+      lines.push(...renderRecord(r, dryRun, style));
     }
   }
 
@@ -61,7 +65,7 @@ export function renderUninstall(
   return lines;
 }
 
-function renderRecord(r: UninstallRecord, style: Styler): string[] {
+function renderRecord(r: UninstallRecord, dryRun: boolean, style: Styler): string[] {
   const lines: string[] = [];
   const tag = r.partial ? style.dim("(kept elsewhere)") : "";
   const header = [style.bold(r.name), tag].filter((s) => s.length > 0).join(" ");
@@ -71,6 +75,13 @@ function renderRecord(r: UninstallRecord, style: Styler): string[] {
   }
   for (const agent of r.absentFrom) {
     lines.push(`    ${style.symbol("muted")} ${agent} ${style.dim("(wasn't there)")}`);
+  }
+  // §7.4 makes retained agents their own output obligation: naming
+  // them tells the user where the skill still lives, which the
+  // "(kept elsewhere)" tag alone never did.
+  for (const agent of r.remainingAgents ?? []) {
+    const verb = dryRun ? "would keep" : "kept";
+    lines.push(`    ${style.symbol("muted")} ${agent} ${style.dim(`(${verb})`)}`);
   }
   for (const fail of r.failures) {
     const remedy = FAIL_REMEDIES[fail.error.code] ?? fail.error.code.replace(/_/g, " ");
