@@ -16,6 +16,11 @@ export const tapHelp: CommandHelp = {
       description:
         "With `tap add`, enable bounded recursive fallback when standard layouts find no skills.",
     },
+    {
+      flag: "--dry-run",
+      description:
+        "With `tap add`, `tap remove`, or `tap update`, show what would happen without cloning, fetching, or changing config.",
+    },
     { flag: "--json", description: "Machine-readable output for `tap list`." },
   ],
   examples: [
