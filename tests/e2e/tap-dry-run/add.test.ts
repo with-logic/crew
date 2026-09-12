@@ -1,8 +1,13 @@
 /**
  * `crew tap add --dry-run` (§16.3, C-TAP-16b). Every case asserts the
- * preview ran the same validation as the real command and that nothing
- * on disk changed: no clone created, config.yaml untouched, and any
- * installed-skill marker left byte-identical.
+ * preview ran the same *config-level* validation as the real command —
+ * name shape, same-name collision, path-target existence — and that
+ * nothing on disk changed: no clone created, config.yaml untouched, and
+ * any installed-skill marker left byte-identical.
+ *
+ * A preview deliberately stops short of the clone, so it cannot detect
+ * an unreachable or non-existent remote the way a real add does. That
+ * is the one validation the two do not share.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";

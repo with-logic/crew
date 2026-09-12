@@ -1,16 +1,15 @@
 /**
- * Human-friendly output for `crew tap {add,list,remove,update}` (§16.3).
+ * Human-friendly output for `crew tap {list,remove,update}` (§16.3).
+ * `crew tap add` renders from `./add.ts`.
  *
  * Every mutating subcommand takes a `dryRun` flag: the same shape is
  * rendered with "would …" verbs and a dim "(dry run)" tag, and the
  * JSON payload carries `dry_run: true`.
  */
 
-import { columns, plural, timeAgo } from "../../util/format.ts";
-import type { Styler } from "../../util/term.ts";
-import type { CommandOutput } from "../types.ts";
-import type { TapRefreshRow } from "./refresh.ts";
-import { displayTarget, payloadOf, type TapAddTarget } from "./target.ts";
+import { columns, plural, timeAgo } from "../../../util/format.ts";
+import type { Styler } from "../../../util/term.ts";
+import type { TapRefreshRow } from "../refresh.ts";
 
 /** Row shape produced by the list command's data-gathering pass. */
 export interface TapListRow {
@@ -20,60 +19,6 @@ export interface TapListRow {
   readonly discovery: "standard" | "recursive";
   readonly target: string;
   readonly last_fetched: string | null;
-}
-
-/** What `crew tap add` decided to do (or would do, under `--dry-run`). */
-export type TapAddOutcome = "added" | "no-op" | "promoted" | "updated";
-
-export function renderTapAdd(
-  outcome: TapAddOutcome,
-  name: string,
-  target: TapAddTarget,
-  dryRun: boolean,
-  style: Styler,
-): CommandOutput {
-  const targetStr = displayTarget(target);
-  const tag = dryRun ? style.dim(" (dry run)") : "";
-  const payload = { name, ...payloadOf(target), ...(dryRun ? { dry_run: true } : {}) };
-  if (outcome === "no-op") {
-    return {
-      exitCode: 0,
-      human: [
-        `${style.symbol("muted")} Tap ${style.bold(name)} is already set up${tag}`,
-        style.dim(`  pointed at ${targetStr}`),
-      ],
-      json: { ...payload, already: true },
-    };
-  }
-  if (outcome === "promoted") {
-    const verb = dryRun ? "Would promote" : "Promoted";
-    return {
-      exitCode: 0,
-      human: [
-        `${style.symbol("ok")} ${verb} ${style.bold(name)} to a saved tap${tag}`,
-        style.dim(`  ${dryRun ? "would track" : "now tracking"} ${targetStr}`),
-      ],
-      json: { ...payload, promoted: true },
-    };
-  }
-  if (outcome === "updated") {
-    const verb = dryRun ? "Would update" : "Updated";
-    return {
-      exitCode: 0,
-      human: [
-        `${style.symbol("ok")} ${verb} tap ${style.bold(name)}${tag}`,
-        style.dim(`  recursive discovery ${dryRun ? "would be " : ""}enabled for ${targetStr}`),
-      ],
-      json: { ...payload, updated: true, discovery: "recursive" },
-    };
-  }
-  const human = [
-    `${style.symbol("ok")} ${dryRun ? "Would add" : "Added"} tap ${style.bold(name)}${tag}`,
-    style.dim(`  from ${targetStr}`),
-  ];
-  if (!dryRun)
-    human.push(style.dim("  try `crew search <query>` or `crew install <name>` to use it"));
-  return { exitCode: 0, human, json: payload };
 }
 
 export function renderTapList(rows: readonly TapListRow[], style: Styler): string[] {
@@ -135,9 +80,11 @@ export function renderTapUpdate(
     return [style.dim("No taps to update.")];
   }
   const lines: string[] = [];
-  // Counts both outcomes for a tap with an upstream: actually refreshed on a
-  // real run, `pending` on a preview.
-  const fetchable = rows.filter((r) => r.kind === "refreshed" || r.kind === "pending").length;
+  // Counted by outcome. `succeeded` spans the two ways a tap with an
+  // upstream comes out well — actually refreshed on a real run,
+  // `pending` on a preview — and deliberately excludes `failed`, which
+  // is also fetchable but didn't succeed.
+  const succeeded = rows.filter((r) => r.kind === "refreshed" || r.kind === "pending").length;
   const skipped = rows.filter((r) => r.kind === "skipped").length;
   const failed = rows.filter((r) => r.kind === "failed").length;
 
@@ -155,13 +102,14 @@ export function renderTapUpdate(
   for (const line of columns(cells, 2)) lines.push(line);
 
   lines.push("");
-  lines.push(style.dim(formatTapTotals(fetchable, skipped, failed, dryRun)));
+  lines.push(style.dim(formatTapTotals(succeeded, skipped, failed, dryRun)));
   return lines;
 }
 
 function statusSymbol(r: TapRefreshRow, style: Styler): string {
   if (r.kind === "refreshed" || r.kind === "pending") return style.symbol("ok");
   if (r.kind === "skipped") return style.symbol("muted");
+  r satisfies Extract<TapRefreshRow, { kind: "failed" }>;
   return style.symbol("fail");
 }
 
@@ -169,23 +117,27 @@ function statusWord(r: TapRefreshRow, style: Styler): string {
   if (r.kind === "refreshed") return style.green("refreshed");
   if (r.kind === "pending") return style.green("would fetch");
   if (r.kind === "skipped") return style.dim("skipped");
+  // Only `failed` remains; `satisfies` turns a newly added row kind into
+  // a compile error rather than silently rendering as a failure.
+  r satisfies Extract<TapRefreshRow, { kind: "failed" }>;
   return style.red("failed");
 }
 
 function detailFor(r: TapRefreshRow, style: Styler): string {
   if (r.kind === "refreshed" || r.kind === "pending") return style.dim(r.url);
-  if (r.kind === "skipped") return style.dim(r.reason ?? "local folder, nothing to fetch");
-  return style.red(r.error?.code ?? "unknown");
+  if (r.kind === "skipped") return style.dim(r.reason);
+  r satisfies Extract<TapRefreshRow, { kind: "failed" }>;
+  return style.red(r.error.code);
 }
 
 function formatTapTotals(
-  fetchable: number,
+  succeeded: number,
   skipped: number,
   failed: number,
   dryRun: boolean,
 ): string {
   const parts: string[] = [];
-  if (fetchable > 0) parts.push(`${fetchable} ${dryRun ? "would be fetched" : "refreshed"}`);
+  if (succeeded > 0) parts.push(`${succeeded} ${dryRun ? "would be fetched" : "refreshed"}`);
   if (skipped > 0) parts.push(`${skipped} skipped`);
   if (failed > 0) parts.push(plural(failed, "failure"));
   return parts.length === 0 ? "nothing changed" : parts.join(" · ");

@@ -5,9 +5,11 @@
  * backs an auto tap — see `./promote.ts`), *updated* (same registered
  * target upgraded to recursive discovery).
  *
- * Planning (`planAdd`) is pure — it reads config and decides the
- * outcome or throws the usage errors — so `--dry-run` can report the
- * outcome without cloning or writing anything (§16.3).
+ * `planAdd` is a read-only planner: it decides the outcome from config,
+ * throws the usage errors, and stats a path target to confirm it is a
+ * directory. It writes nothing and never touches the network, so
+ * `--dry-run` reports the outcome without cloning or writing (§16.3).
+ * The clone is the one validation a preview cannot perform.
  */
 
 import { readConfig, writeConfig } from "../../config/load.ts";
@@ -23,7 +25,7 @@ import { withStateLock } from "../../state/lock.ts";
 import { exists, isDirectory, rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promoteExistingTap } from "./promote.ts";
-import { renderTapAdd, type TapAddOutcome } from "./render.ts";
+import { renderTapAdd, type TapAddOutcome } from "./render/add.ts";
 import { displayTarget, parseTapAddTarget, sameTap, type TapAddTarget } from "./target.ts";
 
 /**
@@ -35,6 +37,23 @@ type TapAddPlan =
   | { readonly outcome: "no-op" }
   | { readonly outcome: "updated"; readonly sameTarget: TapConfig }
   | { readonly outcome: "promoted"; readonly sameTarget: TapConfig };
+
+/**
+ * The resolved arguments of one `tap add` invocation. Named because
+ * `name`, `rawArg`, and `explicitName` are all strings: positionally
+ * they are interchangeable to the compiler, and swapping two would
+ * typecheck while silently misreporting the tap being added.
+ */
+interface TapAddInput {
+  /** The tap name to use: `explicitName` when given, else derived. */
+  readonly name: string;
+  /** The source exactly as the user typed it, for error messages. */
+  readonly rawArg: string;
+  /** The name argument, when the user supplied one. */
+  readonly explicitName: string | undefined;
+  readonly target: TapAddTarget;
+  readonly recursive: boolean;
+}
 
 export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOutput {
   if (args.length < 1)
@@ -54,9 +73,10 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
       { name },
     );
   }
+  const input: TapAddInput = { name, rawArg, explicitName, target, recursive };
   if (ctx.flags.dryRun) {
     // Read-only preview: no lock, no clone, no config write (§16.3).
-    const plan = planAdd(readConfig(ctx.home), name, rawArg, explicitName, target, recursive);
+    const plan = planAdd(readConfig(ctx.home), input);
     return renderTapAdd(plan.outcome, name, target, true, ctx.style);
   }
   // Wrap in an object so TS doesn't narrow the literal type via the
@@ -65,22 +85,19 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   const out: { value: TapAddOutcome } = { value: "added" };
   withStateLock(() => {
     const config = readConfig(ctx.home);
-    const plan = planAdd(config, name, rawArg, explicitName, target, recursive);
-    applyAdd(ctx, config, plan, name, explicitName, target, recursive);
+    const plan = planAdd(config, input);
+    applyAdd(ctx, config, plan, input);
     out.value = plan.outcome;
   }, ctx.home);
   return renderTapAdd(out.value, name, target, false, ctx.style);
 }
 
-/** Decide the outcome from config alone; throws the same-name usage error. */
-function planAdd(
-  config: Config,
-  name: string,
-  rawArg: string,
-  explicitName: string | undefined,
-  target: TapAddTarget,
-  recursive: boolean,
-): TapAddPlan {
+/**
+ * Decide the outcome from config; throws the usage errors. Reads the
+ * filesystem only to confirm a path target is a directory.
+ */
+function planAdd(config: Config, input: TapAddInput): TapAddPlan {
+  const { name, rawArg, explicitName, target, recursive } = input;
   const sameTarget = config.taps.find((t) => sameTap(t, target));
   if (sameTarget) {
     if (sameTarget.registered && (explicitName === undefined || explicitName === sameTarget.name)) {
@@ -106,16 +123,13 @@ function planAdd(
   return { outcome: "added" };
 }
 
-/** The write-under-lock flow for a planned outcome. */
-function applyAdd(
-  ctx: CommandContext,
-  config: Config,
-  plan: TapAddPlan,
-  name: string,
-  explicitName: string | undefined,
-  target: TapAddTarget,
-  recursive: boolean,
-): void {
+/**
+ * The write-under-lock flow for a planned outcome. Every variant is
+ * handled by name, so a new outcome is a compile error at the
+ * `satisfies` below rather than silently inheriting clone-and-write.
+ */
+function applyAdd(ctx: CommandContext, config: Config, plan: TapAddPlan, input: TapAddInput): void {
+  const { name, explicitName, target, recursive } = input;
   if (plan.outcome === "no-op") return;
   if (plan.outcome === "updated") {
     const existing = plan.sameTarget;
@@ -147,6 +161,11 @@ function applyAdd(
     );
     return;
   }
+  // `added` is the only remaining variant. `satisfies` makes a newly
+  // added `TapAddPlan` outcome a compile error here rather than letting
+  // it inherit the clone-and-write path, without costing an unreachable
+  // branch under the 100% coverage gate.
+  plan satisfies Extract<TapAddPlan, { outcome: "added" }>;
   if (target.kind === "git") cloneNewTap(name, target.url, ctx.home);
   writeConfig({ ...config, taps: [...config.taps, newTapOf(name, target, recursive)] }, ctx.home);
 }
