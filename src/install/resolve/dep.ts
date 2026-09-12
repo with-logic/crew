@@ -13,7 +13,75 @@ import { attributeRef } from "../tap-attribution.ts";
 import { enqueueTapRef, type PendingItem } from "./enqueue.ts";
 import { expandSkillsAsItems, sourceRequestedRef } from "./expand-items.ts";
 
-/** Resolve and enqueue items for a dependency reference. */
+/**
+ * Resolve and enqueue items for every dependency of one parent.
+ *
+ * Batched deliberately. A pinned parent's siblings must be read at the
+ * parent's commit (§9 step 3), which means exporting that commit; doing
+ * it per dependency re-exports the same tree once for each edge. One
+ * export serves them all, and the export's lifetime still ends with
+ * this call, so nothing outlives the scratch directory.
+ */
+export function enqueueDeps(
+  depRefs: readonly string[],
+  parent: PendingItem,
+  config: Config,
+  cwd: string,
+  home: string,
+): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
+  const items: PendingItem[] = [];
+  const skipped: SkippedSkill[] = [];
+  let current = config;
+
+  // Bare-name deps are the ones that read from the parent's own tree,
+  // so they share a single export; everything else resolves on its own.
+  const bare: string[] = [];
+  const others: string[] = [];
+  for (const depRef of depRefs) {
+    const source = parseRef(depRef, cwd);
+    if (source.type === "tap" && source.tap === null) bare.push(depRef);
+    else others.push(depRef);
+  }
+
+  const unresolved: string[] = [];
+  if (bare.length > 0) {
+    // `findSiblingDep` can register an auto tap, so each hit carries the
+    // config to carry forward; threading it through the loop is what
+    // keeps a batched walk equivalent to resolving one at a time.
+    const found = withParentSkillDir(parent, home, (parentDir) => {
+      const hits: PendingItem[] = [];
+      for (const depRef of bare) {
+        const name = (parseRef(depRef, cwd) as { name: string }).name;
+        const sibling = findSiblingDep(
+          { tap: parent.tap, tapRelativePath: parent.tapRelativePath, parentDir },
+          name,
+          home,
+          current,
+        );
+        // A miss falls through to the cross-tap search below, which
+        // does not need the parent's tree.
+        if (sibling) {
+          const produced = siblingItems(sibling, parent, home);
+          hits.push(...produced.items);
+          current = produced.config;
+        } else unresolved.push(depRef);
+      }
+      return hits;
+    });
+    items.push(...found);
+  }
+
+  for (const depRef of [...unresolved, ...others]) {
+    const enqueued = enqueueDep(depRef, parent, current, cwd, home);
+    current = enqueued.config;
+    items.push(...enqueued.items);
+    skipped.push(...enqueued.skipped);
+  }
+
+  return { items, config: current, skipped };
+}
+
+/** Resolve and enqueue items for a single dependency reference. */
 export function enqueueDep(
   depRef: string,
   parent: PendingItem,
@@ -28,7 +96,7 @@ export function enqueueDep(
     // A pinned parent's siblings must be read at the parent's commit,
     // not HEAD — otherwise their bytes get recorded under the parent's
     // SHA while actually coming from somewhere else (§9 step 3).
-    const found = withParentRoot(parent, home, (parentDir) => {
+    const found = withParentSkillDir(parent, home, (parentDir) => {
       const sibling = findSiblingDep(
         { tap: parent.tap, tapRelativePath: parent.tapRelativePath, parentDir },
         source.name,
@@ -75,7 +143,7 @@ export function enqueueDep(
  * parent directory the export has to widen to the enclosing directory;
  * exporting the subpath alone would contain no siblings at all.
  */
-function withParentRoot<T>(
+function withParentSkillDir<T>(
   parent: PendingItem,
   home: string,
   fn: (parentDir: string | undefined) => T,

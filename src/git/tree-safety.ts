@@ -1,6 +1,9 @@
 /**
- * Symlink containment for exported commit trees (CLAUDE.md design
- * decision #9; §9 step 3).
+ * Symlink containment for exported commit trees (§9 step 3).
+ *
+ * Invariant: everything crew reads for a skill comes from inside the
+ * requested commit. A reference names a commit and a subpath, and no
+ * part of resolving that subpath may leave the exported tree.
  *
  * A repository can commit a symlink anywhere, including at the very
  * path a reference names as its subpath. `git checkout` faithfully

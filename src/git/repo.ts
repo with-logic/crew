@@ -104,7 +104,11 @@ export function fetchRefs(dest: string): void {
     // `--force` so a tag that moved upstream moves here too; plain
     // `--tags` refuses to update a tag that already exists locally,
     // which would hide the "tag moved" case §10.1 step 3b describes.
-    runGit(["fetch", "--tags", "--force", "--prune", "origin"], { cwd: dest });
+    // `--prune-tags` so a tag DELETED upstream stops resolving here:
+    // `--prune` alone only prunes remote-tracking branches, leaving a
+    // vanished tag locally resolvable and letting `crew update` report
+    // an entry up to date against a ref that no longer exists.
+    runGit(["fetch", "--tags", "--force", "--prune", "--prune-tags", "origin"], { cwd: dest });
   } catch (err) {
     const ge = err as GitProcessError;
     throw new CrewError(
