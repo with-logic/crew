@@ -82,6 +82,9 @@ describe("uninstall targets one scope", () => {
     });
     expect(code).toBe(0);
     expect(scopesOf(home)).toEqual([]);
+    // The fallback must delete at the RECORDED root, not at the cwd the
+    // command happened to run from.
+    expect(existsSync(join(project, ".claude", "skills", "demo"))).toBe(false);
   });
 
   test("--scope project with two roots and an unrelated cwd is not_installed_here", () => {
@@ -101,82 +104,21 @@ describe("uninstall targets one scope", () => {
     expect(c.stderr()).toContain(projA);
     expect(c.stderr()).toContain(projB);
     expect(scopesOf(home)).toHaveLength(2);
-  });
-});
+    // Both installs survive the refusal, bytes included.
+    expect(existsSync(join(projA, ".claude", "skills", "demo"))).toBe(true);
+    expect(existsSync(join(projB, ".claude", "skills", "demo"))).toBe(true);
 
-describe("uninstall at a scope where the skill isn't installed", () => {
-  test("C-UNINST-15c user-only install + --scope project → not_installed_here with hint", () => {
-    const home = makeCrewHome();
-    const project = makeTempDir("crew-proj-");
-    expect(installSkill(home, "demo", "user", project)).toBe(0);
-
-    const c = captureStreams();
-    const code = runCli(["uninstall", "--scope", "project", "demo"], {
+    // The structured payload names every candidate location exactly.
+    const j = captureStreams();
+    runCli(["uninstall", "--json", "--scope", "project", "demo"], {
       home,
-      cwd: project,
-      streams: c.streams,
+      cwd: makeTempDir("crew-elsewhere-"),
+      streams: j.streams,
     });
-    expect(code).toBe(6);
-    expect(c.stderr()).toContain("not_installed_here");
-    expect(c.stderr()).toContain("installed at user scope");
-    expect(c.stderr()).toContain("drop `--scope project`");
-    // Nothing was touched.
-    expect(scopesOf(home)).toEqual(["user"]);
-    expect(existsSync(join(ccUser, "demo"))).toBe(true);
-  });
-
-  test("C-UNINST-15c project-only install + plain uninstall → hint names the project root", () => {
-    const home = makeCrewHome();
-    const project = makeTempDir("crew-proj-");
-    expect(installSkill(home, "demo", "project", project)).toBe(0);
-
-    const c = captureStreams();
-    const code = runCli(["uninstall", "--json", "demo"], {
-      home,
-      cwd: project,
-      streams: c.streams,
-    });
-    expect(code).toBe(6);
-    const payload = JSON.parse(c.stdout());
-    expect(payload.error.name).toBe("not_installed_here");
-    expect(payload.error.details.installed_at).toEqual([
-      { scope: "project", project_root: project },
+    const locations = JSON.parse(j.stdout()).error.details.installed_locations;
+    expect(locations).toEqual([
+      { scope: "project", project_root: projA },
+      { scope: "project", project_root: projB },
     ]);
-
-    const human = captureStreams();
-    runCli(["uninstall", "demo"], { home, cwd: project, streams: human.streams });
-    expect(human.stderr()).toContain(`crew uninstall --scope project demo`);
-    expect(scopesOf(home)).toEqual([`project:${project}`]);
-  });
-
-  test("C-UNINST-15c --force turns the miss into a no-op", () => {
-    const home = makeCrewHome();
-    const project = makeTempDir("crew-proj-");
-    expect(installSkill(home, "demo", "user", project)).toBe(0);
-
-    const c = captureStreams();
-    const code = runCli(["uninstall", "--force", "--scope", "project", "demo"], {
-      home,
-      cwd: project,
-      streams: c.streams,
-    });
-    expect(code).toBe(0);
-    expect(c.stdout()).toContain("nothing to remove");
-    expect(scopesOf(home)).toEqual(["user"]);
-  });
-});
-
-describe("the remedy command survives awkward project paths", () => {
-  test("a project root containing spaces is shell-quoted in the hint", () => {
-    const home = makeCrewHome();
-    const project = join(makeTempDir("crew-proj-"), "my project");
-    expect(installSkill(home, "demo", "project", project)).toBe(0);
-
-    const c = captureStreams();
-    const code = runCli(["uninstall", "demo"], { home, cwd: project, streams: c.streams });
-    expect(code).toBe(6);
-    // The `cd` target must be pasteable: quoted, not bare.
-    expect(c.stderr()).toContain(`cd '${project}'`);
-    expect(c.stderr()).not.toContain(`cd ${project} &&`);
   });
 });

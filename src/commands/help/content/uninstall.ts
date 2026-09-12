@@ -13,7 +13,7 @@ export const uninstallHelp: CommandHelp = {
     {
       flag: "--scope {user,project}",
       description:
-        "Remove the system-wide copy (default) or just the copy installed in the current project. The other scope is never touched.",
+        "Remove the system-wide copy (default) or just the copy installed in the current project. The other scope is never touched. If a skill is installed in exactly one project and you're somewhere else, `--scope project` still finds it; with several, run the command from the project you mean.",
     },
     {
       flag: "--agent <name>",

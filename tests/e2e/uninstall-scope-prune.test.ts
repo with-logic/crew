@@ -85,6 +85,28 @@ describe("--prune stays within the targeted scope", () => {
     expect(barInB?.required_by).toEqual(["foo"]);
   });
 
+  test("the lone-project fallback prunes in the recorded root, not the cwd", () => {
+    const home = makeCrewHome();
+    const project = makeTempDir("crew-proj-");
+    const elsewhere = makeTempDir("crew-elsewhere-");
+    // A project install reachable from any cwd via the lone-project
+    // fallback, plus an unrelated user-scope orphan that must survive.
+    expect(installWithDep(home, "foo", "bar", "project", project)).toBe(0);
+    expect(installWithDep(home, "baz", "qux", "user", elsewhere)).toBe(0);
+    expect(runCli(["uninstall", "baz"], { home, cwd: elsewhere, streams: quiet() })).toBe(0);
+
+    const code = runCli(["uninstall", "--prune", "--scope", "project", "foo"], {
+      home,
+      cwd: elsewhere,
+      streams: quiet(),
+    });
+
+    expect(code).toBe(0);
+    // The project's dep was swept at its RECORDED root; the user-scope
+    // orphan at the cwd we ran from is untouched.
+    expect(inventory(home)).toEqual(["qux@user"]);
+  });
+
   test("a second prune in the untouched root still finds nothing to sweep", () => {
     const home = makeCrewHome();
     const projA = makeTempDir("crew-projA-");

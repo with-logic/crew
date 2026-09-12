@@ -518,20 +518,37 @@ For each `(dest, agents_in_group)`:
 
 4. Remove the just-removed agent names from the entry's `agents`
    array. If the array is now empty, remove the entry entirely, AND
-   for every other entry whose `required_by` listed this skill, remove
-   the name from that list. If the array still has agents, the entry
-   survives with a reduced agent list and its `required_by` is left
-   alone (the skill isn't truly gone — it's still installed elsewhere).
+   for every other entry **at the same install location** whose
+   `required_by` listed this skill, remove the name from that list.
+   "Same install location" means the same `(scope, project_root)` — the
+   identity §11.1 assigns an entry. Dependency edges are per-location, so
+   removing `foo` in one project MUST NOT scrub `foo` from a `required_by`
+   in another project or at user scope, where `foo` is still installed.
+   If the array still has agents, the entry survives with a reduced agent
+   list and its `required_by` is left alone (the skill isn't truly gone —
+   it's still installed elsewhere).
+   An agent whose removal aborts on a safety check (`untracked_directory`,
+   `customized`, `inconsistent_marker`) keeps its bytes on disk and
+   therefore keeps its entry in `state.json`: state must not claim a skill
+   is gone while the install site still holds it.
 5. **If `--prune` was passed AND the entry was fully removed in step 4**,
-   walk the remaining state entries at the same scope. Any entry with
-   `explicit: false` AND an empty `required_by` is an orphan;
-   recursively uninstall it (steps 1–4), which may produce further
-   orphans. Continue until a full pass finds none. Orphans that abort
-   on a safety check (`customized`, `untracked_directory`) are skipped
-   and reported, not forced; the user can rerun with `--force --prune`
-   to override. A partial `--agent` removal that leaves the entry
-   alive does NOT trigger pruning — the skill is still installed, so
-   its dependencies are still required.
+   walk the remaining state entries **at the same install location** —
+   the same `(scope, project_root)` the removal freed, not the scope at
+   large. Any entry with `explicit: false` AND an empty `required_by` is
+   an orphan; recursively uninstall it (steps 1–4), which may produce
+   further orphans. Continue until a full pass finds none. Orphans that
+   abort on a safety check (`customized`, `untracked_directory`) are
+   skipped and reported, not forced; the user can rerun with
+   `--force --prune` to override. A skipped orphan keeps its state entry
+   per step 4, so an implementation MUST NOT rely on the entry
+   disappearing to terminate this walk: track the entries already
+   attempted in this run and never revisit one.
+   Pruning is a consequence of a CONFIRMED physical removal. A removal
+   that aborted on a safety check frees nothing, so it seeds no sweep —
+   its location's dependencies are still required by the bytes that
+   remain on disk. Likewise a partial `--agent` removal that leaves the
+   entry alive does NOT trigger pruning, and a run that removed nothing
+   at all (a forced miss) prunes nothing.
 
 Without `--prune`, transitive dependencies are never auto-removed — a
 skill pulled in only as a dependency stays on disk until the user
@@ -1270,9 +1287,12 @@ another install. A skill first installed as a dependency and later
 named directly is promoted to `explicit: true` on that later install.
 
 **`required_by`** (array of strings). Names of other installed skills
-at the same scope whose `dependencies` include this skill. Maintained
-by crew on every install and uninstall. A skill with `explicit: false`
-and empty `required_by` is an autoremovable orphan —
+**at the same install location** — the same `(scope, project_root)` —
+whose `dependencies` include this skill. Maintained by crew on every
+install and uninstall. Because edges are per-location, the same skill
+installed in two projects has two independent `required_by` lists, and
+an uninstall in one project never rewrites the other's. A skill with
+`explicit: false` and empty `required_by` is an autoremovable orphan —
 `crew uninstall --prune` removes it.
 
 **`tracks_tap`** (boolean, optional; absent means false). True when
@@ -1853,14 +1873,16 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-03 | §7.4 | Uninstall does not touch sibling skill directories in the same agent. |
 | C-UNINST-04 | §7.4 | `crew uninstall` on a skill that is not installed produces `not_installed_here`, exit 6, without `--force`. |
 | C-UNINST-05 | §7.4 | `crew uninstall <selector>` without `--prune` does NOT remove that skill's transitive dependencies, even if they are no longer required by anything else. |
-| C-UNINST-06 | §7.4 | `crew uninstall <selector> --prune` removes the selected skill, then recursively removes any remaining skill with `explicit: false` and an empty `required_by` at the same scope. |
+| C-UNINST-06 | §7.4 | `crew uninstall <selector> --prune` removes the selected skill, then recursively removes any remaining skill with `explicit: false` and an empty `required_by` at the same install location (`(scope, project_root)`). |
 | C-UNINST-07 | §7.4 | `--prune` never removes a skill with `explicit: true`, even if no other skill depends on it. |
-| C-UNINST-08 | §11.1 | After `crew uninstall`, every remaining state entry's `required_by` no longer names the uninstalled skill. |
+| C-UNINST-08 | §11.1 | After `crew uninstall`, every remaining state entry **at the removed entry's install location** has a `required_by` that no longer names the uninstalled skill. Entries at other locations (another `project_root`, or user scope) are left untouched, because the skill is still installed there. |
 | C-UNINST-09 | §11.1 | A skill first installed as a dependency (`explicit: false`) and then later installed directly (`crew install <name>`) has `explicit: true` after the second install. |
 | C-UNINST-10 | §7.4 | `crew uninstall --agent <name> <skill>` removes the skill only from the named agent(s); other agents keep their installs. |
 | C-UNINST-11 | §7.4 | After a partial `--agent` uninstall, the state entry survives with a reduced `agents` list; `required_by` on other entries is unchanged. |
-| C-UNINST-12 | §7.4 | When `--agent` removal empties the `agents` list, the entry is removed entirely and `required_by` on other entries is scrubbed — as with a full uninstall. |
+| C-UNINST-12 | §7.4 | When `--agent` removal empties the `agents` list, the entry is removed entirely and `required_by` on other entries at the same install location is scrubbed — as with a full uninstall. |
 | C-UNINST-13 | §7.4 | `--prune` does not cascade through a partial (`--agent`) uninstall that leaves the entry alive. Pruning only triggers when the entry was fully removed. |
+| C-UNINST-13a | §7.4 | A removal that aborts on a safety check keeps its `state.json` entry and its `required_by` edges: state never reports a skill gone while its bytes remain at the install site. |
+| C-UNINST-13b | §7.4 | `--prune` seeds its sweep only from confirmed physical removals. A run whose only removal aborted prunes nothing, so a protected skill's dependencies survive. |
 | C-UNINST-14 | §7.4 | `--agent <name>` naming an agent the skill isn't installed in is a silent per-agent no-op; it never causes `not_installed_here` on its own. |
 | C-UNINST-15 | §11.1 | `crew uninstall --scope project <name>` removes the install at the targeted entry's recorded `project_root`, NOT the user's current working directory. When the skill has exactly one project-scope entry, the command finds and removes the correct files from any cwd; when it has several, the cwd selects which one (C-UNINST-15b) and an unrelated cwd is `not_installed_here` (C-UNINST-15c). |
 | C-UNINST-15a | §7.4 | `crew uninstall <name>` without `--scope` removes only the user-scope entry; a project-scope entry with the same name is untouched. |
@@ -1917,7 +1939,7 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-06 | §11.2 | `crew doctor --repair` reconstructs `state.json` from markers if `state.json` is deleted. |
 | C-STATE-07 | §11.2 | `crew doctor --verify` recomputes content hashes and reports mismatches. |
 | C-STATE-08 | §11.2 | `crew doctor --repair` never modifies files outside `~/.crew/` and the managed skill directories. |
-| C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same scope. |
+| C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same install location (`(scope, project_root)`). |
 | C-STATE-11 | §11.2 | `crew doctor` reports `missing_project_root` for any project-scope entry whose `project_root` directory no longer exists. |
 
 #### C-AUTO: Autoupdate (§10.2)

@@ -34,7 +34,9 @@ export function narrowSubjectToScope(
     {
       name: subject.raw,
       scope,
-      installed_at: subject.entries.map((e) => ({
+      // NOT `installed_at`: that key is an ISO timestamp everywhere else
+      // in the state and marker contracts (§11.1, §7.5).
+      installed_locations: subject.entries.map((e) => ({
         scope: e.scope,
         project_root: e.project_root ?? null,
       })),
