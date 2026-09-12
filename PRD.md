@@ -1403,7 +1403,7 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
 
 | Code | Meaning |
 |---|---|
-| 0 | Success, or partial success where every requested skill succeeded in at least one agent. |
+| 0 | Success, or partial success where every attempted skill — every root named on the command line plus every dependency pulled in with it — succeeded in at least one agent. |
 | 1 | General failure; used when `crew update` has any skill hard-fail. |
 | 2 | Reserved. Not emitted by any command today. (Earlier drafts assigned it to "nothing was attempted"; those cases are exit 0 when everything was already installed — §5.4, §9 step 9 — and exit 4 `no_skills_found` when a source expands to nothing.) |
 | 4 | User error: invalid arguments, invalid skill, unresolvable references, no agents available, config invalid. |
