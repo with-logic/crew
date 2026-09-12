@@ -22,7 +22,7 @@ import { acquireTap } from "../../sources/acquire/index.ts";
 import { expandSkills } from "../../sources/expand.ts";
 import { readState } from "../../state/load.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
-import { isAutoTapSource, sourceLabel, tapIndex } from "../source-label.ts";
+import { isAutoTapSource, sourceLabel, tapIndex } from "../source-label/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import type { InstalledInfo, SkillInfo } from "./render.ts";
 import { renderInstalled, renderSkills } from "./render.ts";

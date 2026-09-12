@@ -187,9 +187,14 @@ tap. A path-kind auto tap shows the directory. Derived auto-tap names remain
 remove` would take — but they are not the source label. The label is a
 display concern only: `--json` continues to report `source.tap` and
 `source.path` unchanged. An entry whose tap is no longer in `config.yaml`
-falls back to `<tap>/<path>`. Labels are display strings: credentials,
-query strings, fragments, and control characters are removed before
-rendering (§13).
+falls back to `<tap>/<path>`. A label is a display string, not a clone
+URL: for a URL carrying a scheme, the whole userinfo component is
+replaced with `***` (a token is commonly the username with no password,
+so masking only the password would not be enough); query strings and
+fragments are dropped; and control characters — C0, DEL, and C1, since a
+terminal in 8-bit mode reads C1 as an escape sequence — are rendered as
+`\xNN` escapes. An SCP-style remote (`git@host:owner/repo`) keeps its
+user, which names the protocol account rather than a secret (§13).
 
 ### 5.2 Global flags
 
@@ -2062,8 +2067,8 @@ Implementations and test suites refer to criteria by ID.
 | C-LIST-06 | §5.1 | `--agent`, `--tap`, and `--scope` compose; when the combination matches nothing and an agent or tap filter was given, `crew list` says no skills match those filters. |
 | C-LIST-07 | §5.1, §5.2 | A repeated single-value flag (e.g. `crew list --tap a --tap b`) is a `usage_error` per §5.2's flag-uniqueness rule; it never silently drops the filter. `crew skills` accepts every flag `crew list` accepts. |
 | C-LIST-08 | §5.1 | `crew list` shows a registered tap's configured name in the source column, and renders an auto tap as a reference (`@owner/repo//<location>`, host shorthand, or the directory for a path tap) rather than the derived tap name. `--json` reports `source.tap` and `source.path` unchanged. |
-| C-LIST-09 | §5.1 | A source label rendered for an auto git tap parses as a reference resolving to that tap's exact URL and the skill's location inside the repo. An entry whose tap is absent from `config.yaml` falls back to `<tap>/<path>`. |
-| C-LIST-10 | §5.1 | A source label never discloses URL credentials or emits control characters: userinfo, query strings, and fragments are removed, and control characters are escaped. |
+| C-LIST-09 | §5.1 | A source label rendered for an auto git tap parses as a reference resolving to that tap's exact URL and the skill's location inside the repo, for any URL carrying no credentials. Where a scheme URL carries userinfo, C-LIST-10's masking takes precedence and the label identifies the remote without remaining usable for cloning. An entry whose tap is absent from `config.yaml` falls back to `<tap>/<path>`. |
+| C-LIST-10 | §5.1 | A source label never discloses URL credentials or emits control characters: a scheme URL's entire userinfo is masked to `***` (including a username-only token), query strings and fragments are dropped, and C0, DEL, and C1 control characters are escaped as `\xNN`. An SCP-style remote keeps its protocol user. |
 | C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same install location (`(scope, project_root)`). |
 | C-STATE-11 | §11.2 | `crew doctor` reports `missing_project_root` for any project-scope entry whose `project_root` directory no longer exists. |
 | C-STATE-12 | §11.2 | `crew doctor --repair --dry-run` reports the findings a repair would address and changes nothing: state, config, and the store are byte-identical afterward. |

@@ -18,14 +18,14 @@
  * info` for more detail.
  *
  * The source column is a human label, not the raw tap name — see
- * `../source-label.ts` for why an auto tap renders as a reference.
+ * `../source-label/index.ts` for why an auto tap renders as a reference.
  */
 
 import { ALL_AGENTS } from "../../agents/registry.ts";
 import type { Config, Scope, StateEntry } from "../../core/types.ts";
 import { columns, shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
-import { sourceLabel, type TapsByName, tapIndex } from "../source-label.ts";
+import { sourceLabel, type TapsByName, tapIndex } from "../source-label/index.ts";
 
 export function renderEmpty(scope: Scope | null, rowFiltered: boolean, style: Styler): string[] {
   if (rowFiltered) return [style.dim("No skills match those filters.")];

@@ -20,7 +20,7 @@ export interface InstalledInfo {
   /** Every state entry for this skill (user + per-project installs). */
   readonly entries: readonly StateEntry[];
   readonly description: string | null;
-  /** Human source label for `primary` (see `../source-label.ts`). */
+  /** Human source label for `primary` (see `../source-label/index.ts`). */
   readonly sourceLabel: string;
   /**
    * Tap name to show beside the label, set only when the label hides a

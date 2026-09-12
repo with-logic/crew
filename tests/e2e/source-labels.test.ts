@@ -1,7 +1,7 @@
 /**
  * `crew list` / `crew info` source labels (§5.1 "Source labels", §9.1).
  *
- * C-LIST-07 and C-INFO-02: a one-off install from a git URL creates an
+ * C-LIST-08 and C-INFO-02: a one-off install from a git URL creates an
  * auto tap whose name crew derived, and neither command should echo that
  * derived name back as the source.
  */
@@ -11,6 +11,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { runCli } from "../../src/cli/main.ts";
+import { readState } from "../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -41,7 +42,7 @@ function makeSubpathRepo(): { url: string; path: string } {
 }
 
 describe("source labels", () => {
-  test("C-LIST-07 list shows the repo reference, not the derived auto-tap name", () => {
+  test("C-LIST-08 list shows the repo reference, not the derived auto-tap name", () => {
     const home = makeCrewHome();
     const { url } = makeSubpathRepo();
     expect(
@@ -61,7 +62,7 @@ describe("source labels", () => {
     expect(out).not.toContain("  demo  demo  ");
   });
 
-  test("C-LIST-07 --json keeps the raw tap and path unchanged", () => {
+  test("C-LIST-08 --json keeps the raw tap and path unchanged", () => {
     const home = makeCrewHome();
     const { url } = makeSubpathRepo();
     runCli(["install", `${url}//skills/demo`, "--agent", "claude-code"], {
@@ -76,11 +77,24 @@ describe("source labels", () => {
     };
 
     expect(payload.installations).toHaveLength(1);
-    expect(payload.installations[0]!.source.tap).not.toBe(`${url}//skills/demo`);
-    expect(typeof payload.installations[0]!.source.path).toBe("string");
+    // Compare against what state actually stores, so this fails if the
+    // label ever leaks into the machine-readable payload — asserting
+    // only "not the URL" would pass on any wrong value.
+    const stored = readState(home).installations[0]!;
+    expect(payload.installations[0]!.source).toEqual({
+      tap: stored.source.tap,
+      path: stored.source.path,
+    });
+    // The install named `<url>//skills/demo`, so the subpath belongs to the
+    // auto tap and the entry's own path is empty. Pinning both keeps the
+    // comparison above from passing vacuously. The tap name is derived from
+    // a randomized temp directory, so match its shape rather than a literal.
+    expect(stored.source.tap).toMatch(/-demo$/);
+    expect(stored.source.tap).not.toContain("://");
+    expect(stored.source.path).toBe("");
   });
 
-  test("C-LIST-07 a registered tap still shows its configured name", () => {
+  test("C-LIST-08 a registered tap still shows its configured name", () => {
     const home = makeCrewHome();
     const { url } = makeSubpathRepo();
     expect(runCli(["tap", "add", `${url}//skills`, "acme"], { home, streams: quiet() })).toBe(0);
