@@ -751,7 +751,13 @@ path        := "./..." | "../..." | "/..." | "~..."
 git-source  := git-url [ "@" git-ref ] [ "//" subpath ]
 git-url     := "https://..." | "git@...:..." | shorthand-host ":" owner "/" repo
              | "@" owner "/" repo
+             | bare-authority "/" owner "/" repo        (scheme-less, §8.2)
 shorthand-host := "gh" | "gl" | "bb"
+bare-authority := dns-label 1*("." dns-label) [ ":" 1*DIGIT ]
+               (at least one "." is required, so a bare-authority can never
+                collide with a tap-name; userinfo, query, and fragment are
+                NOT permitted — see the note below)
+dns-label   := [a-z0-9] [ [a-z0-9-]* [a-z0-9] ]         (case-insensitive)
 tap-source  := [ tap-name "/" ] [ namespace-name "/" ] skill-name [ "@" tap-ref ]
              | tap-name [ "@" tap-ref ]                   (whole-tap install)
 tap-name    := [a-z0-9][a-z0-9-]*
@@ -763,6 +769,17 @@ git-ref     := any non-empty string not containing ":" or whitespace; may contai
 tap-ref     := any non-empty string not containing "/" or whitespace
 subpath     := any POSIX relative path not starting with "/"
 ```
+
+`bare-authority` is deliberately narrow, and an implementation MUST NOT widen
+it to "everything before the first `/`". The scheme-less form is resolved by
+prepending `https://`, so any authority syntax a URL parser would reinterpret
+must be rejected before that happens. In particular userinfo is forbidden:
+`github.com@evil.example/o/r` would otherwise parse as host `evil.example`
+with `github.com` demoted to a username, so a reference a human reads as
+GitHub would clone from somewhere else. Query and fragment delimiters and
+non-numeric ports are rejected for the same reason. An argument whose first
+segment is not a `bare-authority` is not a git source at all; it falls through
+to tap-source parsing and fails as `invalid_ref` (C-REF-32a).
 
 Tap-source identifiers are matched case-insensitively and canonicalized to
 lowercase before lookup. For example, `crew install Core/Python-Testing`

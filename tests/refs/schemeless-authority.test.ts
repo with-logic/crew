@@ -75,11 +75,16 @@ describe("scheme-less authority (§8.2)", () => {
   });
 
   test("C-REF-32a an explicit URL is still a git source", () => {
-    // Precedence puts explicit URLs ahead of the scheme-less rule (§8.5),
-    // so this guard cannot affect them. Whether userinfo survives
-    // canonicalization is PR #113's concern (its review found it is
-    // currently stripped); asserting the URL verbatim here would encode
-    // that defect, so this only pins the routing.
-    expect(parseRef("https://user:pw@github.com/acme/skills").type).toBe("git");
+    // The authority guard rejects userinfo in SCHEME-LESS refs, because
+    // prepending `https://` would let `github.com@evil.example/o/r` clone
+    // from the trailing host. An explicit URL is a different case: §8.5
+    // matches it earlier, the user wrote the scheme themselves, and
+    // credentials there are legitimate — §8.2 requires them to survive so
+    // private repos still clone. This pins that the guard stops at the
+    // scheme-less form and leaves authenticated URLs intact.
+    expect(parseRef("https://user:pw@github.com/acme/skills")).toMatchObject({
+      type: "git",
+      url: "https://user:pw@github.com/acme/skills",
+    });
   });
 });
