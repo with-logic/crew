@@ -165,4 +165,21 @@ describe("crew search --tap", () => {
       }),
     ).toBe(0);
   });
+
+  // A repeated BOOLEAN leaves no trace in the parsed result — yargs collapses
+  // it to plain `true` — so only raw argv can witness it. Without this the
+  // guard would cover value flags and silently wave booleans through.
+  test("C-CLI-08b a repeated presence-only boolean is rejected", () => {
+    const home = makeCrewHome();
+    const quiet = captureStreams();
+    expect(runCli(["list", "--quiet", "--quiet"], { home, streams: quiet.streams })).toBe(4);
+    expect(quiet.stderr()).toContain("`--quiet` was given more than once");
+
+    // `--json --json=false` is the sharp case: the second token flips the
+    // value, so a script asking for JSON would have quietly received human
+    // text on stdout instead of a structured payload.
+    const json = captureStreams();
+    expect(runCli(["list", "--json", "--json=false"], { home, streams: json.streams })).toBe(4);
+    expect(json.stderr()).toContain("`--json` was given more than once");
+  });
 });

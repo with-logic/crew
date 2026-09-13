@@ -111,4 +111,21 @@ describe("flag uniqueness (§5.2)", () => {
     expect(c.stdout()).toBe("");
     expect(c.stderr()).toContain("was given more than once");
   });
+
+  // yargs accepts a space-separated boolean value, so `--json false` really
+  // does mean "no JSON". Reading it as a bare `--json` would hand a parse
+  // error to stdout as a structured payload the user never asked for.
+  test("C-CLI-08c --json false on a parse failure keeps human output", () => {
+    const home = makeCrewHome();
+    const c = captureStreams();
+
+    const code = runCli(["search", "--json", "false", "--tap", "a", "--tap", "b"], {
+      home,
+      streams: c.streams,
+    });
+
+    expect(code).toBe(4);
+    expect(c.stdout()).toBe("");
+    expect(c.stderr()).toContain("was given more than once");
+  });
 });
