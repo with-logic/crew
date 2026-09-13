@@ -18,6 +18,12 @@
  *   JSON error shape is a stable machine contract (§13), so keys survive and
  *   only values are redacted.
  *
+ * `displayText` and `displayDetails` are applied at the CLI error boundary in
+ * `cli/output.ts`, which every error passes through, so a construction site
+ * that forgets cannot leak. Sites that compose a URL into a message still call
+ * `displayUrl` themselves, because the redacted form reads better there than a
+ * blanket scrub of the finished sentence.
+ *
  * Control characters are escaped on every path: a crafted URL or tap name must
  * not be able to move the cursor, inject ANSI sequences, or forge an extra
  * output line.

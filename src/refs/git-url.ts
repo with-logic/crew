@@ -15,6 +15,7 @@
 import { CrewError } from "../core/errors.ts";
 import type { GitSource } from "../core/types.ts";
 import { normalizeBrowserUrl, stripUrlQueryAndFragment } from "./browser-url.ts";
+import { displayUrl } from "./display-url.ts";
 import { splitGitRef, splitSubpath } from "./git-tails.ts";
 import { normalizeSubpath } from "./subpath.ts";
 
@@ -75,7 +76,11 @@ export function parseGit(ref: string): GitSource {
   const browser = normalizeBrowserUrl(baseUrl);
   const canonical = canonicalizeUrl(browser.url);
   if (canonical === null) {
-    throw new CrewError("invalid_ref", `\`${ref}\` isn't a valid git reference`, { ref });
+    // A well-formed but wrong-shaped URL (`https://user:token@host/owner` with
+    // no repo) still carries real credentials, so the echoed reference is
+    // rendered safe in both the message and the structured details.
+    const shown = displayUrl(ref);
+    throw new CrewError("invalid_ref", `\`${shown}\` isn't a valid git reference`, { ref: shown });
   }
   return {
     type: "git",
