@@ -27,8 +27,8 @@ const CARDS: readonly {
     desc: (
       <>
         Any reachable git URL. No tap setup required. <code>@owner/repo</code> is GitHub shorthand;
-        full <code>https://</code> and <code>git@</code> URLs work for anywhere else. Append{" "}
-        <code>@ref</code> to pin, <code>{"//subpath"}</code> to scope.
+        full <code>https://</code> and <code>git@</code> URLs work for anywhere else. Append a tag
+        or SHA to pin, a branch to follow it, <code>{"//subpath"}</code> to scope.
       </>
     ),
     examples: [

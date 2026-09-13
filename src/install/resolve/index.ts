@@ -19,7 +19,7 @@ import type { Config, ResolvedSkill } from "../../core/types.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
 import { topoSort } from "../topo.ts";
-import { enqueueDeps } from "./dep.ts";
+import { enqueueDeps } from "./dep/index.ts";
 import type { PendingItem } from "./enqueue.ts";
 import { enqueueRoot, sameInstallSetSource, sourceLabel } from "./root.ts";
 

@@ -23,6 +23,9 @@ export function installNewTapChild(
     readonly agents: readonly string[];
     readonly resolvedSha: string | null;
     readonly projectRoot: string | null;
+    /** The ref the group tracks, and whether it is immutable (§11.1). */
+    readonly ref: string | null;
+    readonly pinned: boolean;
   },
   force: boolean,
   home: string,
@@ -54,7 +57,7 @@ export function installNewTapChild(
         skillName: args.skillName,
         tap: args.tap,
         tapRelativePath: args.tapRelativePath,
-        ref: null,
+        ref: args.ref,
         resolvedSha: args.resolvedSha,
         contentHash: staged.contentHash,
         force,
@@ -68,13 +71,17 @@ export function installNewTapChild(
   return {
     name: args.skillName,
     source: { tap: args.tap.name, path: args.tapRelativePath },
-    ref: null,
+    // A child discovered while re-expanding a ref-tracking group came
+    // from that ref's commit, so it records the same ref — writing
+    // `null` would claim a default-branch read of bytes that never came
+    // from the default branch (§10.1.1, §11.1).
+    ref: args.ref,
     resolved_sha: args.resolvedSha,
     content_hash: staged.contentHash,
     scope: args.scope,
     installed_at: nowIso(),
     agents: successfulTargets,
-    pinned: false,
+    pinned: args.pinned,
     explicit: true,
     // Tap re-expansion only fires for whole-tap groups, so a child
     // added this way is also whole-tap-tracked — future siblings

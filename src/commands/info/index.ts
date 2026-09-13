@@ -6,6 +6,9 @@
  *   - Installed bare name → gather from state + local install site.
  *   - Anything else → resolve through tap-attribution (no auto-tap
  *     side effects), walk the source, and render.
+ *
+ * This file owns the command shape and the installed-entry path; source
+ * preview (including `@<ref>` handling) lives in `./preview.ts`.
  */
 
 import { join } from "node:path";
@@ -13,17 +16,15 @@ import { baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import type { Config, LoadedSkill, StateEntry, TapConfig, TapSource } from "../../core/types.ts";
-import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
+import type { StateEntry } from "../../core/types.ts";
 import { attributeRef } from "../../install/tap-attribution.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { hasSkillMd, loadSkill } from "../../skill/load.ts";
-import { withAcquiredTap } from "../../sources/acquire/index.ts";
-import { expandSkills } from "../../sources/expand.ts";
 import { readState } from "../../state/load.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
-import type { InstalledInfo, SkillInfo } from "./render.ts";
+import { skillsAtRef, tapCandidate } from "./preview.ts";
+import type { InstalledInfo } from "./render.ts";
 import { renderInstalled, renderSkills } from "./render.ts";
 
 export function infoCommand(ctx: CommandContext): CommandOutput {
@@ -84,68 +85,6 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   };
 }
 
-/**
- * Resolve a tap-source reference and preview it.
- *
- * A qualified reference carrying a ref (`<tap>/<skill>@v1`) names its
- * tap up front, so the commit is exported BEFORE resolution — otherwise
- * a skill deleted at HEAD is unfindable even though it exists at the
- * requested commit (§9 step 3). A bare name could live in any tap, so it
- * resolves against the clone and re-expands at the ref afterwards.
- */
-function tapCandidate(
-  source: TapSource,
-  config: Config,
-  ref: string | null,
-  home: string,
-): { tap: TapConfig; skills: SkillInfo[] } {
-  const named =
-    ref !== null && source.tap !== null
-      ? config.taps.find((t) => t.name === source.tap)
-      : undefined;
-  if (named) {
-    return withAcquiredTap(named, ref, home, (acq) => {
-      const candidate = resolveTapRef(source, config, home, "non-tap", {
-        [named.name]: acq.rootDir,
-      });
-      const wanted = new Set(
-        (candidate.kind === "skill" ? [candidate.location] : candidate.members).map((l) => l.name),
-      );
-      const all = buildSkillInfos(acq.rootDir, candidate.tap);
-      return { tap: candidate.tap, skills: all.filter((sk) => wanted.has(sk.name)) };
-    });
-  }
-  return candidateSkills(resolveTapRef(source, config, home, "non-tap"), ref, home);
-}
-
-/** Expand a tap's skills, reading at `ref` when one was requested. */
-function skillsAtRef(tap: TapConfig, ref: string | null, home: string): SkillInfo[] {
-  return withAcquiredTap(tap, ref, home, (acq) => buildSkillInfos(acq.rootDir, tap));
-}
-
-function candidateSkills(
-  candidate: NonTapNameCandidate,
-  ref: string | null,
-  home: string,
-): {
-  tap: TapConfig;
-  skills: SkillInfo[];
-} {
-  // With a ref, the candidate's indexed paths point into the live clone;
-  // re-expand the whole tap at the requested commit and narrow by name.
-  if (ref !== null) {
-    const wanted = new Set(
-      (candidate.kind === "skill" ? [candidate.location] : candidate.members).map((l) => l.name),
-    );
-    const all = skillsAtRef(candidate.tap, ref, home);
-    return { tap: candidate.tap, skills: all.filter((s) => wanted.has(s.name)) };
-  }
-  if (candidate.kind === "skill") {
-    return { tap: candidate.tap, skills: buildSkillInfosFromDirs([candidate.location]) };
-  }
-  return { tap: candidate.tap, skills: buildSkillInfosFromDirs(candidate.members) };
-}
-
 function buildInstalledInfo(entries: readonly StateEntry[], fallbackCwd: string): InstalledInfo {
   const primary = entries.find((e) => e.scope === "user") ?? entries[0]!;
   const description = loadDescriptionFromAny(entries, fallbackCwd);
@@ -173,24 +112,4 @@ function loadDescriptionFromAny(
     }
   }
   return null;
-}
-
-function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
-  const { valid } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
-  return valid.map(skillInfoOf);
-}
-
-function buildSkillInfosFromDirs(dirs: readonly { readonly path: string }[]): SkillInfo[] {
-  return dirs.map((dir) => skillInfoOf(loadSkill(dir.path)));
-}
-
-function skillInfoOf(s: LoadedSkill): SkillInfo {
-  return {
-    name: s.frontmatter.name,
-    description: s.frontmatter.description,
-    license: s.frontmatter.license ?? null,
-    compatibility: s.frontmatter.compatibility ?? null,
-    homepage: s.frontmatter.metadata?.crew?.homepage ?? null,
-    dependencies: s.frontmatter.metadata?.crew?.dependencies ?? [],
-  };
 }

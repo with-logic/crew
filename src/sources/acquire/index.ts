@@ -25,7 +25,7 @@
  * tap to acquire.
  */
 
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { crewHome, tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
@@ -106,6 +106,45 @@ export function withAcquiredTap<T>(
   const pinned = kind === "sha" || kind === "tag";
   return withExportedTree(clonePath, sha, tap.subpath, home, (rootDir) =>
     fn({ rootDir, resolvedSha: sha, pinned }),
+  );
+}
+
+/**
+ * Acquire only ONE skill's subtree of a tap at `ref`.
+ *
+ * `crew update` reads exactly `<tap root>/<entry source path>` per entry.
+ * For a whole-repo tap (`subpath` empty) the general `withAcquiredTap`
+ * would export the entire repository for each such entry — N full
+ * exports for N skills sharing a tap and ref. Narrowing the export to
+ * the skill's own path makes that cost proportional to what is read
+ * (§10.1).
+ *
+ * `fn` receives the skill directory itself, not the tap root.
+ */
+export function withAcquiredSkillDir<T>(
+  tap: TapConfig,
+  ref: string | null,
+  skillPath: string,
+  home: string,
+  fn: (acquired: AcquiredTap, skillDir: string) => T,
+): T {
+  if (ref === null || tap.kind === "path") {
+    const acquired = acquireTap(tap, home);
+    return fn(acquired, join(acquired.rootDir, skillPath));
+  }
+  const clonePath = tapPath(tap.name, home);
+  ensureClone(tap.url, clonePath);
+  const sha = resolveRefFetchingIfNeeded(clonePath, ref);
+  const kind = classifyRef(clonePath, ref);
+  const pinned = kind === "sha" || kind === "tag";
+  const exportPath =
+    skillPath.length === 0
+      ? tap.subpath
+      : tap.subpath.length > 0
+        ? posix.join(tap.subpath, skillPath)
+        : skillPath;
+  return withExportedTree(clonePath, sha, exportPath, home, (skillDir) =>
+    fn({ rootDir: skillDir, resolvedSha: sha, pinned }, skillDir),
   );
 }
 
