@@ -759,10 +759,15 @@ git-url     := "https://..." | "git@...:..." | shorthand-host ":" owner "/" repo
              | "@" owner "/" repo
              | bare-authority "/" owner "/" repo        (scheme-less, §8.2)
 shorthand-host := "gh" | "gl" | "bb"
-bare-authority := dns-label 1*("." dns-label) [ ":" 1*DIGIT ]
+bare-authority := dns-label 1*("." dns-label) [ ":" port ]
                (at least one "." is required, so a bare-authority can never
                 collide with a tap-name; userinfo, query, and fragment are
                 NOT permitted — see the note below)
+port        := 1*DIGIT, numeric value 1-65535
+               (a digit run outside that range is not a port: the value is
+                not a bare-authority and falls through to tap parsing, so
+                it reports `invalid_ref` rather than surfacing whatever
+                URL parsing throws for an unrepresentable port)
 dns-label   := [a-z0-9] [ [a-z0-9-]* [a-z0-9] ]         (case-insensitive)
 tap-source  := [ tap-name "/" ] [ namespace-name "/" ] skill-name [ "@" tap-ref ]
              | tap-name [ "@" tap-ref ]                   (whole-tap install)
@@ -827,7 +832,7 @@ When the argument could match multiple forms, crew applies these rules in order:
 1. If the argument starts with `./`, `../`, `/`, or `~` → path.
 2. If the argument matches `https://`, `http://`, `git@`, or `<shorthand>:` → git source.
 3. If the argument starts with `@` followed by `<owner>/<repo>` → git source (GitHub shorthand).
-4. If the first `/`-separated segment contains a `.` and the argument has at least three segments → git source (scheme-less host; `https://` is prepended).
+4. If the first `/`-separated segment is a `bare-authority` (§8.4) and the argument has at least three segments → git source (scheme-less host; `https://` is prepended). A `bare-authority` is dot-separated DNS labels with an optional port in 1–65535: no userinfo, no query, no fragment, no non-numeric or out-of-range port. Anything else falls through to rule 5. The restriction is load-bearing rather than cosmetic — `https://` is prepended before parsing, so a permitted `@` would make `github.com@evil.example/o/r` resolve to host `evil.example` with `github.com` demoted to userinfo, and a reference that reads as GitHub would clone from elsewhere.
 5. If the argument contains `//` → git source (subpath syntax is git-only).
 6. Otherwise → tap source.
 
@@ -1880,6 +1885,8 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-31 | §8.2, §8.5 | `github.com/o/r`, `www.github.com/o/r`, `gitlab.com/o/r`, `git.example.com:8443/o/r`, and `github.com/o/r/tree/main/path` are parsed as git sources exactly as their `https://`-prefixed forms would be. |
 | C-REF-32 | §8.2, §8.5 | `core/python-testing` remains a tap source; `a.b` and `a.b/c` are not scheme-less hosts and produce `invalid_ref`. |
 | C-REF-32a | §8.2 | A scheme-less argument whose first segment is not a bare `<host>[:<port>]` is not a git source: `github.com@evil.example/o/r`, `github.com:443@evil.example/o/r`, and `github.com:abc/o/r` all produce `invalid_ref` (exit 4) and MUST NOT clone from the trailing host or surface a native URL-parsing error. |
+| C-REF-32b | §8.2 | A scheme-less argument whose port is outside 1–65535 (`github.com:99999/o/r`, `github.com:0/o/r`) produces `invalid_ref` (exit 4), not a native URL-parsing error. A port inside the range still parses as a git source. |
+| C-REF-32c | §8.2 / §13 | A malformed scheme-less argument carrying a credential in a query (`github.com?token=<secret>/o/r`) is echoed back redacted in both the human message and the JSON `details`. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -2082,6 +2089,9 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-24 | §9 / §16.2.1 | `crew install <tap-source>` that cannot resolve from configured taps surfaces exact known-tap registry matches in the `invalid_ref` error, including canonical `crew tap add` and follow-up install commands, without cloning, fetching, mutating config, or installing from the known tap. JSON errors include `known_tap_suggestions`. |
 | C-TAP-24b | §8.5 / §9 / §16.2.1 | `crew install <owner>/<repo>` and `crew info <owner>/<repo>` where `<owner>` is neither a configured tap nor a namespace produce `invalid_ref` whose human output suggests `@<owner>/<repo>`; when the known-tap registry has a tap at `https://github.com/<owner>/<repo>`, the install error also carries that tap's `crew tap add` command and JSON `known_tap_suggestions` includes it. |
 | C-TAP-24c | §16.3 | `crew tap add <owner>/<repo>` is a `usage_error` whose remedy suggests `crew tap add @<owner>/<repo>`. |
+| C-TAP-24e | §13 | Every command crew prints for the user to run quotes each interpolated reference as one literal shell argument, on both the human and `--json` surface. A reference carrying shell syntax in its `@<ref>` tail — `pdf@$(id)` — MUST be rendered `crew install 'anthropic/pdf@$(id)'`, never bare. A reference needing no quoting is left unquoted. |
+| C-TAP-24f | §16.3 | `crew tap add <owner>/<repo>@<ref>` keeps the ref in the suggested correction: `crew tap add @<owner>/<repo>@<ref>`. |
+| C-TAP-24g | §16.2.1 | When an argument matches both a skill inside a known tap and the GitHub repository that tap lives at, both suggestions are offered; neither interpretation suppresses the other. |
 | C-TAP-24d | §8.5 / §9 | `crew install <owner>/<repo>@<ref>` and `crew info <owner>/<repo>@<ref>` preserve `@<ref>` in every suggested command and in the echoed reference. |
 
 #### C-STATE: State and markers (§11)

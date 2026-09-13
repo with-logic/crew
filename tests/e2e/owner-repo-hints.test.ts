@@ -150,4 +150,43 @@ describe("owner/repo hints", () => {
       "crew install anthropic@v1",
     ]);
   });
+
+  test("C-TAP-24f tap add owner/repo@ref keeps the ref in the correction", () => {
+    const home = bareHome();
+    const c = captureStreams();
+    const code = runCli(["tap", "add", "anthropics/skills@v1"], { home, streams: c.streams });
+
+    expect(code).toBe(4);
+    // The ref does not change what the user meant, so the suggested
+    // command keeps the revision they asked for.
+    expect(c.stderr()).toContain("crew tap add @anthropics/skills@v1");
+  });
+
+  test("C-TAP-24g a repo match is offered alongside a same-named skill", () => {
+    // `anthropic/pdf` names a skill in the tap; the tap also lives at
+    // the GitHub repo `anthropic/pdf` in this fixture. Both readings
+    // are plausible, so both must be offered.
+    const home = makeCrewHome();
+    setKnownTapsForTest([
+      {
+        name: "anthropic",
+        url: "https://github.com/anthropic/pdf.git",
+        subpath: "skills",
+        description: "Anthropic's skills.",
+        trust: "official",
+        skills: [{ name: "pdf", namespace: null, description: "PDF work.", path: "pdf" }],
+      },
+    ]);
+    const setup = captureStreams();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: setup.streams });
+
+    const c = captureStreams();
+    runCli(["install", "--json", "anthropic/pdf"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout()) as {
+      error: { details: { known_tap_suggestions: { install: string }[] } };
+    };
+    const commands = parsed.error.details.known_tap_suggestions.map((s) => s.install);
+    expect(commands).toContain("crew install anthropic/pdf");
+    expect(commands).toContain("crew install anthropic");
+  });
 });

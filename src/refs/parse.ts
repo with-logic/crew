@@ -25,16 +25,11 @@ import type { Source } from "../core/types.ts";
 import {
   looksLikeAtShorthand,
   looksLikeExplicitGit,
+  looksLikeSchemelessHost,
   looksLikeShorthand,
   parseGit,
 } from "./git-url.ts";
-import {
-  looksLikePath,
-  looksLikeSchemelessHost,
-  NAME_PATTERN,
-  parsePath,
-  parseTap,
-} from "./parsers.ts";
+import { looksLikePath, NAME_PATTERN, parsePath, parseTap } from "./parsers.ts";
 
 /** Parse a skill reference per §8. `cwd` is used to resolve relative paths. */
 export function parseRef(raw: string, cwd: string = process.cwd()): Source {

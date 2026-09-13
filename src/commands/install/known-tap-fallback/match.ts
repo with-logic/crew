@@ -55,7 +55,11 @@ function twoSegmentMatches(
       out.push(skillSuggestion(tap, skill, ref));
     }
   }
-  if (out.length === 0 && matchesGitHubRepo(tap, sourceTap, name)) {
+  // Both readings can be true at once: `acme/skills` may name a skill
+  // inside tap `acme` AND be the GitHub repo the tap itself lives at.
+  // Suppressing the repo reading whenever a skill matched hid the
+  // whole-tap option from users who meant it, so both are offered.
+  if (matchesGitHubRepo(tap, sourceTap, name)) {
     // §8.4 allows `tap-name @ tap-ref` for a whole-tap install, so the
     // user's `@ref` survives into the suggested command.
     out.push({
