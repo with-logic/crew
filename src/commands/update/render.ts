@@ -12,12 +12,21 @@ import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
 import { formatRowParts, symbolFor } from "./rows.ts";
 
+/** A tap or namespace the user selected, with how many entries it expanded to. */
+export interface CollectionSummary {
+  readonly kind: "tap" | "namespace";
+  readonly name: string;
+  readonly count: number;
+}
+
 export interface RenderUpdateInput {
   readonly rows: readonly UpdateRow[];
   readonly tapReexpandRows: readonly TapReexpandRow[];
   readonly tapRows: readonly TapRefreshRow[];
   /** §10.1.1: preview mode — rows say "would update" / "would add". */
   readonly dryRun?: boolean;
+  /** §10.1: collection selectors, rendered as a header above the rows. */
+  readonly collections?: readonly CollectionSummary[];
 }
 
 export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] {
@@ -37,15 +46,28 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   }
   if (lines.length > 0) lines.push("");
 
+  // Collection selectors: one line each so the user sees what a tap or
+  // namespace name expanded to (including "nothing installed").
+  for (const c of input.collections ?? []) {
+    lines.push(
+      c.count === 0
+        ? `${style.symbol("muted")} ${style.dim(`No skills installed from ${c.kind} ${c.name} — refreshed it anyway.`)}`
+        : `${style.bold(`Updating ${c.kind} ${c.name}`)} ${style.dim(`(${plural(c.count, "skill")})`)}`,
+    );
+  }
+
   // Header summarising what was checked.
   const checkedCount = input.rows.length;
   const dryRun = input.dryRun === true;
   const addedKind = dryRun ? "would_add" : "added";
   const addedRows = input.tapReexpandRows.filter((r) => r.kind === addedKind);
   if (checkedCount === 0 && addedRows.length === 0) {
-    lines.push(style.dim("Nothing to update — Homecrew isn't tracking any skills yet."));
+    if ((input.collections ?? []).length === 0) {
+      lines.push(style.dim("Nothing to update — Homecrew isn't tracking any skills yet."));
+    }
     return lines;
   }
+  if ((input.collections ?? []).length > 0) lines.push("");
   const header = `${plural(checkedCount, "skill")}${dryRun ? " (dry run)" : ""}`;
   lines.push(style.bold(`Checked ${header}`));
   lines.push("");

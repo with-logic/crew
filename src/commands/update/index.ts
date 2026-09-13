@@ -1,17 +1,20 @@
 /**
- * `crew update [<name>...]` (§10.1).
+ * `crew update [<selector>...]` (§10.1).
  *
- * For each installed skill (or the named subset + its transitive
- * dependency closure), re-resolve the ref to a SHA. If the SHA hasn't
- * moved, report up-to-date. If it has and the ref is not pinned (or
- * `--force`), re-stage into the store and re-run the install algorithm
- * against every currently-installed (target, scope) pair.
+ * A selector is an installed skill, a tap, or a namespace — see
+ * `state/collections.ts`. For each entry the selectors resolve to (plus
+ * its transitive dependency closure), re-resolve the ref to a SHA. If
+ * the SHA hasn't moved, report up-to-date. If it has and the ref is not
+ * pinned (or `--force`), re-stage into the store and re-run the install
+ * algorithm against every currently-installed (target, scope) pair.
  *
  * Tap re-expansion (§10.1.1) runs first: for every distinct tap that
- * backs any state entry (filtered by `names` if given), re-walk the
- * tap and install newly-added skills, mark removed skills as
+ * backs any state entry (filtered by the selectors if given), re-walk
+ * the tap and install newly-added skills, mark removed skills as
  * `source_gone`. This is how `crew install @org/skills` + autoupdate
- * pulls in new team skills.
+ * pulls in new team skills. A namespace selector bounds the additions
+ * to that namespace — the group spans the whole tap, but the user
+ * asked about one part of it.
  *
  * Dependency closure (§10.1 step 2): `crew update <name>...` expands
  * the update set to include every entry transitively required by a
@@ -20,6 +23,10 @@
  * old dep behind would be a correctness bug. Entries pulled in this
  * way are marked `transitively_required_by: [<top-level name>...]`
  * in the rows so humans and scripts can tell them apart.
+ *
+ * Collection selectors (§10.1): a positional may also be a tap name or a
+ * namespace (`state/collections.ts`); it contributes every installed
+ * entry it expands to, and re-expansion treats those members as named.
  *
  * Fetch scope (§16.4): `crew update` with no args refreshes every
  * configured tap. `crew update <name>...` refreshes only the taps
@@ -78,10 +85,16 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
 
   if (!dryRun) garbageCollectStore(plan.state, home);
 
-  const { rows, tapReexpandRows, tapRows } = plan;
+  const { rows, tapReexpandRows, tapRows, collections, selectors } = plan;
   return {
     exitCode: plan.hardFailure ? 1 : 0,
-    human: renderUpdate({ rows, tapReexpandRows, tapRows, dryRun }, ctx.style),
-    json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows, dry_run: dryRun },
+    human: renderUpdate({ rows, tapReexpandRows, tapRows, dryRun, collections }, ctx.style),
+    json: {
+      rows,
+      tap_reexpand_rows: tapReexpandRows,
+      tap_rows: tapRows,
+      dry_run: dryRun,
+      selectors,
+    },
   };
 }
