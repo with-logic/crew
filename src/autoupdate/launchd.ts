@@ -11,7 +11,7 @@ import { CrewError } from "../core/errors.ts";
 import { crewHome, paths } from "../core/paths.ts";
 import { ensureDir, exists, rmrf, writeText } from "../util/fs.ts";
 import { BUNDLE_IDENTIFIER, writeAttributionBundle } from "./bundle.ts";
-import type { EnableInput } from "./types.ts";
+import type { EnableInput, SchedulerProbe } from "./types.ts";
 
 /**
  * Plist body per §10.2, plus an `AssociatedBundleIdentifiers` key so
@@ -70,50 +70,130 @@ export function enableAutoupdate(input: EnableInput): void {
     p.autoupdatePlist,
     plistXml(input.crewBinaryPath, input.intervalSeconds, p.autoupdateLog, home),
   );
-  if (!runLaunchctl(["bootstrap", `gui/${process.getuid?.() ?? 0}`, p.autoupdatePlist])) {
-    if (!runLaunchctl(["load", p.autoupdatePlist])) {
-      throw new CrewError(
-        "autoupdate_failure",
-        "launchctl refused to load the autoupdate agent — check `log show --predicate 'subsystem == \"com.apple.xpc.launchd\"' --last 5m` for details",
-      );
+  const bootstrapped = runLaunchctl([
+    "bootstrap",
+    `gui/${process.getuid?.() ?? 0}`,
+    p.autoupdatePlist,
+  ]);
+  if (!bootstrapped.ok) {
+    const loaded = runLaunchctl(["load", p.autoupdatePlist]);
+    if (!loaded.ok) {
+      throw new CrewError("autoupdate_failure", loadFailureMessage(bootstrapped, loaded));
     }
   }
 }
 
-/** Unload the plist and delete it. */
+/**
+ * The launchctl diagnostics, when we have any, else the generic hint.
+ *
+ * Every distinct message is reported, not just the first. `enable`
+ * tries `bootstrap` and falls back to `load`; the fallback's failure is
+ * usually the actionable one, so returning only the first would hide
+ * the reason the operation actually gave up. Duplicates are collapsed
+ * because both commands often fail identically.
+ */
+function launchctlDetail(...results: readonly LaunchctlResult[]): string {
+  const seen: string[] = [];
+  for (const r of results) {
+    if (r.stderr.length > 0 && !seen.includes(r.stderr)) seen.push(r.stderr);
+  }
+  if (seen.length > 0) return seen.join("; ");
+  return "check `log show --predicate 'subsystem == \"com.apple.xpc.launchd\"' --last 5m` for details";
+}
+
+function loadFailureMessage(...results: readonly LaunchctlResult[]): string {
+  return `launchctl refused to load the autoupdate agent — ${launchctlDetail(...results)}`;
+}
+
+/**
+ * Unload the agent and delete its plist. The unload is attempted even
+ * when the plist is already gone: launchd can still hold a loaded job
+ * whose file was removed out from under it, and returning early there
+ * would report a successful disable while the updater kept running.
+ */
 export function disableAutoupdate(home: string = crewHome()): void {
   const p = paths(home);
-  if (exists(p.autoupdatePlist)) {
-    runLaunchctl(["bootout", `gui/${process.getuid?.() ?? 0}/sh.crew.autoupdate`]);
-    runLaunchctl(["unload", p.autoupdatePlist]);
-    rmrf(p.autoupdatePlist);
+  const booted = runLaunchctl(["bootout", `gui/${process.getuid?.() ?? 0}/sh.crew.autoupdate`]);
+  const plistExists = exists(p.autoupdatePlist);
+  const unloaded: LaunchctlResult = plistExists
+    ? runLaunchctl(["unload", p.autoupdatePlist])
+    : { ok: false, stderr: "" };
+  if (plistExists) rmrf(p.autoupdatePlist);
+  // Either command succeeding means the job is gone. Both failing while
+  // the agent is still loaded is a real failure, not a no-op.
+  if (!(booted.ok || unloaded.ok) && isAutoupdateLoaded()) {
+    throw new CrewError(
+      "autoupdate_failure",
+      `launchctl refused to unload the autoupdate agent — ${launchctlDetail(booted, unloaded)}`,
+    );
   }
 }
 
 /** Is the agent currently loaded? */
 export function isAutoupdateLoaded(): boolean {
-  return runLaunchctl(["list", "sh.crew.autoupdate"]);
+  return probeAutoupdate().state === "loaded";
+}
+
+/**
+ * Ask launchd whether the agent is loaded, distinguishing "no" from
+ * "couldn't ask" (§11.2). `launchctl list <label>` exits non-zero with
+ * no diagnostic when the job simply isn't registered — that is a real
+ * answer. Any stderr means the query itself failed (launchctl
+ * unreachable, no user session, spawn error), which answers nothing.
+ */
+export function probeAutoupdate(): SchedulerProbe {
+  const r = runLaunchctl(["list", "sh.crew.autoupdate"]);
+  if (r.ok) return { state: "loaded", detail: "" };
+  if (r.stderr.length > 0) return { state: "indeterminate", detail: r.stderr };
+  return { state: "not-loaded", detail: "" };
 }
 
 /**
  * Test seam for `launchctl`. Replace with a stub in tests; the default
- * invokes the real binary on macOS. On any platform where `launchctl`
- * isn't available (e.g. Linux CI runners), `Bun.spawnSync` throws
- * `ENOENT` — we catch and return `false`, which is the right answer
- * ("agent is not loaded") for a platform that can't load it in the
- * first place.
+ * invokes the real binary on macOS. Where `launchctl` isn't available,
+ * `Bun.spawnSync` throws `ENOENT` and the runner reports failure with
+ * that message as stderr. Note what that means for `probeAutoupdate`:
+ * a missing binary is "couldn't ask", not "the agent is not loaded" —
+ * the platform selector already answers `not-loaded` for platforms
+ * without a scheduler, so this path only fires when launchd *should*
+ * be reachable and isn't.
+ *
+ * The runner returns stderr as well as the status so a failed repair
+ * can name the platform error (§11.2). A stub may return a bare
+ * boolean; `runLaunchctl` normalizes both shapes — a bare `false`
+ * carries no diagnostic and so reads as a definitive "not loaded".
  */
-export type LaunchctlRunner = (args: string[]) => boolean;
-function defaultRunner(args: string[]): boolean {
+export interface LaunchctlResult {
+  readonly ok: boolean;
+  readonly stderr: string;
+}
+export type LaunchctlRunner = (args: string[]) => boolean | LaunchctlResult;
+
+/** launchctl's diagnostics are short; cap them so an error stays readable. */
+const MAX_STDERR = 500;
+
+function defaultRunner(args: string[]): LaunchctlResult {
   try {
     const proc = Bun.spawnSync({
       cmd: ["launchctl", ...args],
       stdout: "pipe",
       stderr: "pipe",
     });
-    return (proc.exitCode ?? -1) === 0;
-  } catch {
-    return false;
+    return {
+      ok: (proc.exitCode ?? -1) === 0,
+      stderr: (proc.stderr?.toString() ?? "").trim().slice(0, MAX_STDERR),
+    };
+  } catch (err) {
+    // `Bun.spawnSync` throws when the process boundary itself fails —
+    // `launchctl` missing, no user session. Keeping the text matters:
+    // it is the only diagnostic a failed repair can show, and an empty
+    // stderr here would also read as a definitive "not loaded" to
+    // `probeAutoupdate`, which is exactly the ambiguity it exists to
+    // avoid. Matches the systemd runner's behaviour.
+    return {
+      ok: false,
+      stderr: (err instanceof Error ? err.message : String(err)).slice(0, MAX_STDERR),
+    };
   }
 }
 let launchctlRunner: LaunchctlRunner = defaultRunner;
@@ -128,6 +208,12 @@ export function resetLaunchctlRunner(): void {
   launchctlRunner = defaultRunner;
 }
 
-function runLaunchctl(args: string[]): boolean {
-  return launchctlRunner(args);
+/**
+ * Normalize the seam's two accepted shapes into a result. A stub that
+ * returns a bare boolean carries no diagnostic, which is why the
+ * platform-error tests drive the systemd seam.
+ */
+function runLaunchctl(args: string[]): LaunchctlResult {
+  const r = launchctlRunner(args);
+  return typeof r === "boolean" ? { ok: r, stderr: "" } : r;
 }
