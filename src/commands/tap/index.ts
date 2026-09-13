@@ -18,6 +18,7 @@ import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
+import { withTapLocks } from "../../sources/tap-lock.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { rmrf } from "../../util/fs.ts";
 import { showCommandHelp } from "../help/index.ts";
@@ -100,13 +101,20 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
 /**
  * `crew tap update [<name>]` — fetch + fast-forward one or every git tap.
  * Path taps are silently skipped (no upstream to fetch).
+ *
+ * Holds each selected tap's clone lock while fetching: fast-forwarding a
+ * working tree concurrently with an install that has already resolved a
+ * SHA from it would let that install stage a different commit's bytes
+ * than the one it records (§10.1 step 1, §14).
  */
 function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput {
   rejectRecursiveFlag(ctx);
   const config = readConfig(ctx.home);
   const selected: readonly TapConfig[] =
     args.length === 0 ? config.taps : tapsMatching(config.taps, args);
-  const rows: TapRefreshRow[] = refreshTaps(selected, ctx.home);
+  const rows: TapRefreshRow[] = withTapLocks(selected, ctx.home, () =>
+    refreshTaps(selected, ctx.home),
+  );
   const anyFailed = rows.some((r) => r.kind === "failed");
   return {
     exitCode: anyFailed ? 1 : 0,

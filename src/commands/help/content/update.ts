@@ -11,6 +11,11 @@ export const updateHelp: CommandHelp = {
   ],
   flags: [
     {
+      flag: "--dry-run",
+      description:
+        "Preview what would change — pending updates and new tap skills. Collections are still refreshed so the preview is current, but nothing you have installed is touched.",
+    },
+    {
       flag: "--force",
       description: "Update even pinned skills and overwrite any local edits you've made.",
     },
@@ -18,6 +23,11 @@ export const updateHelp: CommandHelp = {
   ],
   examples: [
     { command: "crew update", description: "The usual: pull in every available improvement." },
+    {
+      command: "crew update --dry-run",
+      description:
+        "See what's outdated (and what new skills your taps have added) without touching anything you have installed.",
+    },
     {
       command: "crew update python-testing",
       description: "Just update this one skill (and anything it depends on).",
