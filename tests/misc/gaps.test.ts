@@ -20,7 +20,7 @@ import { uninstallSkillFromAgents } from "../../src/agents/uninstall.ts";
 import { resetLaunchctlRunner, setLaunchctlRunner } from "../../src/autoupdate/launchd.ts";
 import { resetAutoupdatePlatform, setAutoupdatePlatform } from "../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../src/cli/main.ts";
-import { parseDuration } from "../../src/commands/autoupdate.ts";
+import { parseDuration } from "../../src/commands/autoupdate/duration.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import {
   crewHome as crewHomeDefault,

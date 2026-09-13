@@ -10,6 +10,7 @@
 import { plural } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { Finding } from "./checks.ts";
+import { isRepairable, isRepairableCode, repairableCount } from "./repairable.ts";
 
 const CODE_LABELS: Record<string, string> = {
   state_entry_without_marker: "crew's records show an install that isn't on disk",
@@ -39,7 +40,7 @@ const GROUP_ORDER = ["Agents", "State", "Autoupdate", "Config", "Storage", "Othe
 
 export function renderDoctor(
   findings: readonly Finding[],
-  opts: { repair: boolean; verify: boolean },
+  opts: { repair: boolean; verify: boolean; dryRun: boolean; applied: boolean },
   style: Styler,
 ): string[] {
   if (findings.length === 0) {
@@ -51,10 +52,15 @@ export function renderDoctor(
     ];
   }
 
-  if (opts.repair) {
+  if (opts.applied) {
+    const addressed = repairableCount(findings);
+    const remaining = findings.length - addressed;
     return [
       `${style.symbol("ok")} ${style.bold("Repaired what was fixable.")}`,
-      style.dim(`  ${plural(findings.length, "finding")} addressed`),
+      style.dim(`  ${plural(addressed, "finding")} addressed`),
+      ...(remaining > 0
+        ? [style.dim(`  ${plural(remaining, "finding")} left for you — rerun \`crew doctor\``)]
+        : []),
     ];
   }
 
@@ -79,7 +85,13 @@ export function renderDoctor(
       const sym = cluster[0]!.level === "error" ? style.symbol("fail") : style.symbol("warn");
       const label = CODE_LABELS[code] ?? code.replace(/_/g, " ");
       const qty = cluster.length > 1 ? style.dim(` (${cluster.length})`) : "";
-      lines.push(`    ${sym} ${label}${qty}`);
+      // On a repair preview, say per cluster whether this is one of
+      // the findings the run would address. The trailing count alone
+      // tells the user how many, never which.
+      const fixable = opts.dryRun
+        ? style.dim(isRepairableCode(code) ? "  — would be repaired" : "  — needs you")
+        : "";
+      lines.push(`    ${sym} ${label}${qty}${fixable}`);
       // Show the first few messages; for larger clusters summarise.
       const shown = cluster.slice(0, 3);
       for (const f of shown) {
@@ -96,8 +108,19 @@ export function renderDoctor(
   if (lines[lines.length - 1] === "") lines.pop();
 
   lines.push("");
-  if (isRepairable(findings)) {
+  if (opts.dryRun) {
+    const fixable = repairableCount(findings);
+    lines.push(
+      style.dim(
+        `Dry run: \`crew doctor --repair\` would address ${plural(fixable, "finding")}. Nothing was changed.`,
+      ),
+    );
+  } else if (isRepairable(findings)) {
     lines.push(style.dim("Run `crew doctor --repair` to fix what's fixable."));
+  } else if (errors > 0) {
+    // Nothing here is repairable, but an error is not a heads-up —
+    // `config_invalid` and friends need the user to act.
+    lines.push(style.dim("These need your attention — `--repair` can't fix them."));
   } else {
     lines.push(style.dim("These are heads-ups, not errors — crew keeps working."));
   }
@@ -128,12 +151,4 @@ function clusterByCode(findings: readonly Finding[]): Map<string, Finding[]> {
     out.get(f.code)!.push(f);
   }
   return out;
-}
-
-function isRepairable(findings: readonly Finding[]): boolean {
-  // Most codes are mechanical drift that `--repair` reconciles. The
-  // exceptions are ones that need user attention: customizations,
-  // undetected agents, and an unparseable config.
-  const notRepairable = new Set(["customized", "agent_missing", "config_invalid"]);
-  return findings.some((f) => !notRepairable.has(f.code));
 }

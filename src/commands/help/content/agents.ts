@@ -7,7 +7,13 @@ export const agentsHelp: CommandHelp = {
     "See which agent coders Homecrew has found on your machine, and tell it to include or skip any of them.",
     "Homecrew auto-detects every agent that supports the Agent Skills spec (Claude Code, Codex, Cursor, Gemini CLI, and many more). If one is missing and you want Homecrew to install into it anyway, `enable` it. If you want Homecrew to stay out of one, `disable` it.",
   ],
-  flags: [{ flag: "--json", description: "Machine-readable output." }],
+  flags: [
+    {
+      flag: "--dry-run",
+      description: "With `enable`/`disable`, report the change without writing config.",
+    },
+    { flag: "--json", description: "Machine-readable output." },
+  ],
   examples: [
     { command: "crew agents", description: "See what Homecrew found — and didn't find." },
     {
