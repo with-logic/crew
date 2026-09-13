@@ -78,8 +78,13 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   return {
     exitCode,
     human,
-    // §11.2: `repairs` describes what a repair did, so it appears only
-    // on a `--repair` response.
-    json: applied ? { findings, repairs, dry_run: dryRun } : { findings, dry_run: dryRun },
+    // §11.2: `repairs` describes what a repair did, so it appears on
+    // every `--repair` response — including one where an unparseable
+    // config meant nothing could be applied. Omitting it there would
+    // make "the repair ran and fixed nothing" indistinguishable from
+    // "this wasn't a repair run" for anything parsing the JSON. A dry
+    // run applies nothing by definition, so it still omits the field.
+    json:
+      repair && !dryRun ? { findings, repairs, dry_run: dryRun } : { findings, dry_run: dryRun },
   };
 }

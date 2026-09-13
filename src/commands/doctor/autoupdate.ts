@@ -13,12 +13,19 @@
  * have thrown. A load can exit 0 without the job appearing, and an
  * unload can report success while the job is still registered; either
  * would otherwise let doctor claim it fixed drift that is still there.
+ *
+ * The confirming probe is tri-state. A probe that could not run —
+ * launchctl unreachable, no systemd user bus — reports nothing about
+ * the job, so it is treated as a failed repair rather than as a
+ * confirmed "not loaded". Reading an unanswerable probe as an answer is
+ * how a disable reports success without ever verifying its own
+ * postcondition.
  */
 
 import {
   disableAutoupdate,
   enableAutoupdate,
-  isAutoupdateLoaded,
+  probeAutoupdate,
 } from "../../autoupdate/scheduler.ts";
 import type { Config } from "../../core/types.ts";
 import type { Finding } from "./checks.ts";
@@ -31,14 +38,26 @@ export type AutoupdateRepairCode =
 
 /**
  * The stable per-repair contract (§11.2). Narrower than `Finding` on
- * purpose: only these three codes can occur, and a repair either
- * worked or didn't — there is no "warn" outcome to be ambiguous about.
+ * purpose: only these three codes can occur, and a repair either worked
+ * or didn't — there is no "warn" outcome to be ambiguous about.
+ *
+ * A discriminated union rather than two independent fields, so a
+ * success carrying `autoupdate_repair_failed` (or a failure claiming
+ * `autoupdate_loaded`) cannot be constructed at all. The pairing is the
+ * external contract; letting the type permit a mismatch would make the
+ * JSON output lie in a way no test necessarily catches.
  */
-export interface AutoupdateRepair {
-  readonly level: "ok" | "error";
-  readonly code: AutoupdateRepairCode;
-  readonly message: string;
-}
+export type AutoupdateRepair =
+  | {
+      readonly level: "ok";
+      readonly code: Exclude<AutoupdateRepairCode, "autoupdate_repair_failed">;
+      readonly message: string;
+    }
+  | {
+      readonly level: "error";
+      readonly code: "autoupdate_repair_failed";
+      readonly message: string;
+    };
 
 /** One entry per drift finding: what was reconciled, or why it couldn't be. */
 export function repairAutoupdateDrift(
@@ -93,7 +112,14 @@ function attempt(
     // but a non-Error throw would otherwise become `undefined` here.
     return failure(err instanceof Error ? err.message : String(err));
   }
-  if (isAutoupdateLoaded() !== wantLoaded) {
+  const probe = probeAutoupdate();
+  // A probe that could not run tells us nothing about the job, so the
+  // postcondition is unverified and the repair has not succeeded. Only
+  // an actual answer from the scheduler can confirm it.
+  if (probe.state === "indeterminate") {
+    return failure(`couldn't confirm the scheduler's state afterwards — ${probe.detail}`);
+  }
+  if ((probe.state === "loaded") !== wantLoaded) {
     return failure(
       wantLoaded
         ? "the platform scheduler still reports it as not loaded"

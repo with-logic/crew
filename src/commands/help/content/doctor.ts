@@ -23,7 +23,11 @@ export const doctorHelp: CommandHelp = {
       flag: "--dry-run",
       description: "With `--repair`, list what a repair would fix without changing anything.",
     },
-    { flag: "--json", description: "Machine-readable list of findings." },
+    {
+      flag: "--json",
+      description:
+        "Machine-readable findings. A `--repair` run also reports what each repair did, or why it couldn't.",
+    },
   ],
   examples: [
     { command: "crew doctor", description: "Quick health check." },

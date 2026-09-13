@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setLaunchctlRunner } from "../../../src/autoupdate/launchd.ts";
 import { setAutoupdatePlatform } from "../../../src/autoupdate/scheduler.ts";
@@ -99,6 +99,87 @@ describe("C-STATE-11d a load that silently did not take effect is a failure", ()
   });
 });
 
+describe("C-STATE-11f an unverifiable repair is not a success", () => {
+  test("launchd: the confirming probe fails, so the unload is not claimed as done", () => {
+    setAutoupdatePlatform("darwin");
+    const home = makeCrewHome();
+    setEnabled(home, false);
+    // Detection must see the job as loaded (that is the drift), and the
+    // unload must succeed. Only the probe that would CONFIRM the unload
+    // fails — it answers nothing about the job, so reporting
+    // `autoupdate_unloaded` would claim a postcondition never checked.
+    // A bare `ok: false` would be a real "not loaded"; the stderr is
+    // what makes it indeterminate.
+    // The probe runs during detection AND again to confirm the unload.
+    // Only the confirming one fails, so this keys off the unload having
+    // happened rather than a call count, which would silently drift if
+    // detection changed how often it asks.
+    let unloaded = false;
+    setLaunchctlRunner((args) => {
+      if (args[0] !== "list") {
+        unloaded = true;
+        return { ok: true, stderr: "" };
+      }
+      return unloaded
+        ? { ok: false, stderr: "launchctl: Could not connect to the service" }
+        : { ok: true, stderr: "" }; // detection: the job is loaded
+    });
+    const c = captureStreams();
+    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    expect(code).toBe(1);
+    const repairs = JSON.parse(c.stdout()).repairs;
+    expect(repairs).toHaveLength(1);
+    expect(repairs[0].code).toBe("autoupdate_repair_failed");
+    expect(repairs[0].message).toContain("couldn't confirm the scheduler's state");
+    expect(repairs[0].message).toContain("Could not connect to the service");
+  });
+
+  test("systemd: same, with the platform's own diagnostic", () => {
+    setAutoupdatePlatform("linux");
+    const home = makeCrewHome();
+    setEnabled(home, false);
+    let disabled = false;
+    setSystemctlRunner((args) => {
+      if (args[0] !== "is-active") {
+        disabled = true;
+        return { ok: true, stderr: "" };
+      }
+      return disabled
+        ? { ok: false, stderr: "Failed to connect to bus: No such file or directory" }
+        : { ok: true, stderr: "" }; // detection: the timer is active
+    });
+    const c = captureStreams();
+    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    expect(code).toBe(1);
+    const repairs = JSON.parse(c.stdout()).repairs;
+    expect(repairs[0].code).toBe("autoupdate_repair_failed");
+    expect(repairs[0].message).toContain("Failed to connect to bus");
+  });
+});
+
+describe("C-STATE-11c launchctl diagnostics reach the repair result", () => {
+  test("both fallback commands' distinct errors are reported, not just the first", () => {
+    setAutoupdatePlatform("darwin");
+    const home = makeCrewHome();
+    setEnabled(home, true);
+    // `enable` tries bootstrap then falls back to load. The fallback's
+    // failure is the actionable one, so reporting only the first would
+    // hide why the operation actually gave up.
+    setLaunchctlRunner((args) => {
+      if (args[0] === "list") return { ok: false, stderr: "" };
+      if (args[0] === "bootstrap")
+        return { ok: false, stderr: "Bootstrap failed: 5: Input/output error" };
+      return { ok: false, stderr: "Load failed: 37: Operation already in progress" };
+    });
+    const c = captureStreams();
+    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    expect(code).toBe(1);
+    const repairs = JSON.parse(c.stdout()).repairs;
+    expect(repairs[0].message).toContain("Bootstrap failed");
+    expect(repairs[0].message).toContain("Operation already in progress");
+  });
+});
+
 describe("C-STATE-11e repairs is a --repair-only field", () => {
   test("no drift means an empty repairs array on --repair", () => {
     setAutoupdatePlatform("darwin");
@@ -118,6 +199,35 @@ describe("C-STATE-11e repairs is a --repair-only field", () => {
     const parsed = JSON.parse(c.stdout());
     expect(parsed).toEqual({ findings: [], dry_run: false });
     expect("repairs" in parsed).toBe(false);
+  });
+
+  test("a dry run applies nothing, so it omits the field too", () => {
+    setAutoupdatePlatform("darwin");
+    const home = makeCrewHome();
+    setEnabled(home, true);
+    setLaunchctlRunner(() => false);
+    const c = captureStreams();
+    runCli(["doctor", "--repair", "--dry-run", "--json"], { home, streams: c.streams });
+    const parsed = JSON.parse(c.stdout());
+    expect(parsed.dry_run).toBe(true);
+    expect("repairs" in parsed).toBe(false);
+  });
+
+  test("an unparseable config still reports repairs, empty", () => {
+    setAutoupdatePlatform("darwin");
+    const home = makeCrewHome();
+    setLaunchctlRunner(() => false);
+    // Repair is skipped because rebuilding taps from markers against a
+    // config we couldn't read would discard the user's file. The field
+    // must still appear: "the repair ran and fixed nothing" has to be
+    // distinguishable from "this wasn't a repair run".
+    writeFileSync(paths(home).configFile, "taps: [oops\n");
+    const c = captureStreams();
+    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    expect(code).toBe(1);
+    const parsed = JSON.parse(c.stdout());
+    expect(parsed.repairs).toEqual([]);
+    expect(parsed.findings.some((f: { code: string }) => f.code === "config_invalid")).toBe(true);
   });
 });
 
