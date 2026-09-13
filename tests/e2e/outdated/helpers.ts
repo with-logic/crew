@@ -8,11 +8,12 @@
 
 import { afterEach, beforeEach } from "bun:test";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { paths } from "../../../src/core/paths.ts";
 import { runGit } from "../../../src/git/exec.ts";
+import { walk } from "../../../src/util/fs.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import {
   commitAll,
@@ -42,18 +43,33 @@ export function useClaudeCodeRoot(): void {
   });
 }
 
-/** Everything a dry run must leave untouched: state, store, installed bytes, markers. */
+/**
+ * Every byte a dry run must leave untouched: `state.json`, the whole
+ * store tree, and the whole installed tree — every file, not just
+ * `SKILL.md` and the marker. A skill's resource files and the store's
+ * contents are as much "installed state" as its frontmatter, so a
+ * preview that rewrote a resource or restaged a store entry has to
+ * fail this. Name-only store comparison would miss a restage that
+ * reused the same `<name>@<short-sha>` directory.
+ *
+ * Tap clones are deliberately excluded: a dry run DOES fetch and check
+ * them out (§10.1.1), which is how it learns what moved.
+ */
 export function snapshot(home: string): Record<string, string> {
   const out: Record<string, string> = {};
   out["state"] = readFileSync(paths(home).stateFile, "utf8");
-  out["store"] = existsSync(paths(home).storeDir)
-    ? readdirSync(paths(home).storeDir).sort().join(",")
-    : "";
-  for (const skill of readdirSync(ccRoot.path)) {
-    out[`skill:${skill}`] = readFileSync(join(ccRoot.path, skill, "SKILL.md"), "utf8");
-    out[`marker:${skill}`] = readFileSync(join(ccRoot.path, skill, ".crew.json"), "utf8");
-  }
+  snapshotTree(out, paths(home).storeDir, "store");
+  snapshotTree(out, ccRoot.path, "installed");
   return out;
+}
+
+/** Record every file under `root` by content, keyed by relative path. */
+function snapshotTree(out: Record<string, string>, root: string, label: string): void {
+  if (!existsSync(root)) return;
+  for (const entry of walk(root)) {
+    if (!entry.isFile) continue;
+    out[`${label}:${relative(root, entry.absPath)}`] = readFileSync(entry.absPath, "utf8");
+  }
 }
 
 /** Fresh home with the default tap removed and one skill installed from a local git repo. */

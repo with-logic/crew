@@ -26,7 +26,7 @@ export const updateHelp: CommandHelp = {
     {
       command: "crew update --dry-run",
       description:
-        "See what's outdated (and what new skills your taps have added) without changing any skill you have installed.",
+        "See what's outdated (and what new skills have been added to a tap you installed whole) without changing any skill you have installed.",
     },
     {
       command: "crew update python-testing",
