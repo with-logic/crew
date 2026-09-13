@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig } from "../../../src/config/load.ts";
 import { paths, tapPath } from "../../../src/core/paths.ts";
+import { setReleaseFetcher } from "../../../src/self-update/github.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { ccRoot, coRoot, installFooWithDepBar, useRedirectedAdapters } from "./helpers.ts";
@@ -74,6 +75,33 @@ describe("crew uninstall --dry-run integrity", () => {
     expect(existsSync(stateFile)).toBe(false);
     expect(existsSync(`${stateFile}.lock`)).toBe(false);
     expect(existsSync(home)).toBe(false);
+  });
+
+  test("C-UNINST-19a a dry run on a TTY does not write the version-check cache", () => {
+    // The other write-free tests use captured streams, which are never a
+    // TTY, so the §10.4 update notice suppresses itself and its stale
+    // branch — the one that fetches and writes `version-check.json` — is
+    // never reached. Only a TTY invocation exercises it.
+    const home = makeCrewHome();
+    let fetches = 0;
+    const previous = setReleaseFetcher(() => {
+      fetches++;
+      return { tag: "v99.0.0", assets: {} };
+    });
+    try {
+      const code = runCli(["uninstall", "--dry-run", "--force", "ghost"], {
+        home,
+        streams: captureStreams().streams,
+        stderrIsTty: true,
+      });
+
+      expect(code).toBe(0);
+      // No fetch attempted and no cache written: a preview reads only.
+      expect(fetches).toBe(0);
+      expect(existsSync(paths(home).versionCheckFile)).toBe(false);
+    } finally {
+      setReleaseFetcher(previous);
+    }
   });
 
   test("C-UNINST-19 a dry run never garbage-collects the backing auto tap", () => {

@@ -78,8 +78,13 @@ function renderRecord(r: UninstallRecord, dryRun: boolean, style: Styler): strin
   }
   // §7.4 makes retained agents their own output obligation: naming
   // them tells the user where the skill still lives, which the
-  // "(kept elsewhere)" tag alone never did.
+  // "(kept elsewhere)" tag alone never did. An agent whose removal
+  // aborted is retained too, but its failure line below already says
+  // so with the reason attached — listing it twice would only add
+  // noise, so it is reported there rather than here.
+  const failed = new Set(r.failures.map((f) => f.agent));
   for (const agent of r.remainingAgents ?? []) {
+    if (failed.has(agent)) continue;
     const verb = dryRun ? "would keep" : "kept";
     lines.push(`    ${style.symbol("muted")} ${agent} ${style.dim(`(${verb})`)}`);
   }
