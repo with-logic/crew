@@ -83,16 +83,21 @@ function renderHuman(
   return `${style.symbol("ok")} ${style.bold(headline)} ${style.dim(`(${parts.join(" · ")})`)}`;
 }
 
+/**
+ * Total size of the regular files under `dir`.
+ *
+ * `statSync` is deliberately unguarded. `walk` classifies entries with
+ * `lstat` and excludes symlinks from `isFile`, so every path reaching
+ * here was a regular file a moment ago; a stat failure means a real
+ * permission or I/O problem, and swallowing it would silently
+ * understate the bytes a clean reclaimed. Letting it bubble surfaces
+ * it as a `usage_error` at the CLI boundary rather than as a wrong
+ * number the user has no way to question.
+ */
 function dirSize(dir: string): number {
   let total = 0;
   for (const entry of walk(dir)) {
-    if (entry.isFile) {
-      try {
-        total += statSync(entry.absPath).size;
-      } catch {
-        // File disappeared between walk and stat; skip.
-      }
-    }
+    if (entry.isFile) total += statSync(entry.absPath).size;
   }
   return total;
 }

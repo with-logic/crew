@@ -10,6 +10,7 @@
 import { plural } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { Finding } from "./checks.ts";
+import { isRepairable, isRepairableCode, repairableCount } from "./repairable.ts";
 
 const CODE_LABELS: Record<string, string> = {
   state_entry_without_marker: "crew's records show an install that isn't on disk",
@@ -84,7 +85,13 @@ export function renderDoctor(
       const sym = cluster[0]!.level === "error" ? style.symbol("fail") : style.symbol("warn");
       const label = CODE_LABELS[code] ?? code.replace(/_/g, " ");
       const qty = cluster.length > 1 ? style.dim(` (${cluster.length})`) : "";
-      lines.push(`    ${sym} ${label}${qty}`);
+      // On a repair preview, say per cluster whether this is one of
+      // the findings the run would address. The trailing count alone
+      // tells the user how many, never which.
+      const fixable = opts.dryRun
+        ? style.dim(isRepairableCode(code) ? "  — would be repaired" : "  — needs you")
+        : "";
+      lines.push(`    ${sym} ${label}${qty}${fixable}`);
       // Show the first few messages; for larger clusters summarise.
       const shown = cluster.slice(0, 3);
       for (const f of shown) {
@@ -144,43 +151,4 @@ function clusterByCode(findings: readonly Finding[]): Map<string, Finding[]> {
     out.get(f.code)!.push(f);
   }
   return out;
-}
-
-/**
- * Codes `--repair` actually fixes, each mapped to the mechanism that
- * fixes it. This is an allowlist on purpose: a new finding code is
- * NOT repairable until someone adds the repair and lists it here, so
- * the preview can never promise a fix that doesn't exist.
- *
- * Deliberately absent:
- *   - `customized`, `agent_missing`, `config_invalid` — need a human.
- *   - `missing_project_root` — `checks.ts` documents that removing a
- *     vanished project's install isn't doctor's job, so it is a
- *     permanent heads-up rather than pending work.
- *   - `autoupdate_not_loaded`, `autoupdate_unexpectedly_loaded` — no
- *     scheduler reconciliation exists here, so claiming them would
- *     promise a fix that never runs. They join this list in the same
- *     change that implements `repairAutoupdateDrift`.
- */
-const REPAIRABLE_CODES: Record<string, string> = {
-  state_entry_without_marker: "repairState",
-  marker_without_state: "repairState",
-  orphan_store_entry: "repairState",
-};
-
-/** True when `code` is one `crew doctor --repair` can actually fix. */
-export function isRepairableCode(code: string): boolean {
-  return code in REPAIRABLE_CODES;
-}
-
-function isRepairable(findings: readonly Finding[]): boolean {
-  return repairableCount(findings) > 0;
-}
-
-function repairableCount(findings: readonly Finding[]): number {
-  let n = 0;
-  for (const f of findings) {
-    if (isRepairableCode(f.code)) n++;
-  }
-  return n;
 }

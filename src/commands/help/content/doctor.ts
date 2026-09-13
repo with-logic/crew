@@ -17,7 +17,7 @@ export const doctorHelp: CommandHelp = {
     {
       flag: "--repair",
       description:
-        "Actually fix what's fixable: rebuild bookkeeping, tidy up leftover files, reconcile scheduled updates.",
+        "Actually fix what's fixable: rebuild bookkeeping and tidy up leftover files. Scheduled updates aren't reconciled — if those have drifted, run `crew autoupdate disable` then `crew autoupdate enable`.",
     },
     {
       flag: "--dry-run",

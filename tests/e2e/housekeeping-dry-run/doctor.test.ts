@@ -77,6 +77,38 @@ describe("C-STATE-12 doctor --repair --dry-run", () => {
     expect(c.stdout()).toContain("would address 0 findings");
   });
 
+  test("C-STATE-12a the preview marks which findings a repair would address", () => {
+    const home = makeCrewHome();
+    const project = makeTempDir("crew-proj-");
+    rmSync(project, { recursive: true, force: true });
+    writeState({ schema_version: 1, installations: [projectEntry(project)] }, home);
+    // One repairable finding and one that needs the user, so the
+    // preview has to distinguish them rather than print a bare count.
+    mkdirSync(join(home, "store", "ghost@00000000"), { recursive: true });
+
+    const c = captureStreams();
+    runCli(["doctor", "--repair", "--dry-run"], { home, streams: c.streams });
+
+    const out = c.stdout();
+    const repairLine = out.split("\n").find((l) => l.includes("a cached skill is no longer"));
+    const manualLine = out.split("\n").find((l) => l.includes("a project folder is missing"));
+    expect(repairLine).toContain("would be repaired");
+    expect(manualLine).toContain("needs you");
+  });
+
+  test("a plain check does not mark findings as repairable", () => {
+    const home = makeCrewHome();
+    mkdirSync(join(home, "store", "ghost@00000000"), { recursive: true });
+
+    const c = captureStreams();
+    runCli(["doctor"], { home, streams: c.streams });
+
+    // The marking answers "what would --repair do"; without --repair
+    // the question wasn't asked.
+    expect(c.stdout()).not.toContain("would be repaired");
+    expect(c.stdout()).not.toContain("needs you");
+  });
+
   test("--json carries dry_run and the findings", () => {
     const home = makeCrewHome();
     mkdirSync(join(home, "store", "ghost@00000000"), { recursive: true });

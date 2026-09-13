@@ -48,8 +48,9 @@ describe("C-AGENT-09 agents enable/disable --dry-run", () => {
     const home = makeCrewHome();
     const c = captureStreams();
     runCli(["agents", "enable", "codex", "--dry-run"], { home, streams: c.streams });
-    // A preview must not take the mutating state lock, which would
-    // create `state.json` as a side effect (the bug fixed in #107/#109).
+    // A preview must not take the mutating state lock: acquiring it
+    // creates `state.json` on a fresh home, so a read-only command
+    // would leave state behind that it never meant to write.
     expect(existsSync(paths(home).stateFile)).toBe(false);
   });
 

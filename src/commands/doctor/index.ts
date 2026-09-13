@@ -21,8 +21,9 @@ import {
   type Finding,
 } from "./checks.ts";
 import { buildMarkerIndex } from "./markers.ts";
-import { isRepairableCode, renderDoctor } from "./render.ts";
+import { renderDoctor } from "./render.ts";
 import { repairState } from "./repair.ts";
+import { isRepairableCode } from "./repairable.ts";
 
 export function doctorCommand(ctx: CommandContext): CommandOutput {
   const verify = Boolean(ctx.flags.extras["verify"]);
@@ -46,7 +47,7 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   findings.push(...checkStateMarkerDrift(stateEntries, markers));
   if (verify) findings.push(...checkContentHashDrift(markers));
   if (config) findings.push(...checkAgentDetection(stateEntries, config));
-  findings.push(...checkOrphanStoreEntries(stateEntries, home));
+  findings.push(...checkOrphanStoreEntries(state, home));
   findings.push(...checkProjectRoots(stateEntries));
   if (config) findings.push(...checkAutoupdateDrift(config));
 

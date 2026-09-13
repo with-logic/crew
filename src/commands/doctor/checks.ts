@@ -7,13 +7,12 @@
  * them and optionally runs `./repair.ts` afterward.
  */
 
-import { existsSync } from "node:fs";
 import { ALL_AGENTS } from "../../agents/registry.ts";
 import { isAutoupdateLoaded } from "../../autoupdate/scheduler.ts";
-import { paths } from "../../core/paths.ts";
-import type { Config, StateEntry } from "../../core/types.ts";
+import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import { hashDirectory } from "../../hash/content.ts";
-import { isDirectory, listDir } from "../../util/fs.ts";
+import { orphanStoreEntries } from "../../maintenance/gc.ts";
+import { isDirectory } from "../../util/fs.ts";
 import type { MarkerEntry } from "./markers.ts";
 
 export interface Finding {
@@ -108,25 +107,24 @@ export function checkAgentDetection(
   return findings;
 }
 
-/** Check 5: orphan store entries. */
-export function checkOrphanStoreEntries(
-  stateEntries: readonly StateEntry[],
-  home: string,
-): Finding[] {
+/**
+ * Check 5: orphan store entries.
+ *
+ * Detection delegates to `orphanStoreEntries`, the same predicate the
+ * collector uses. They must not drift: a path-source entry has no
+ * `resolved_sha` and is keyed by its short content hash instead, so a
+ * detector that keys only on SHAs reports every such entry as orphaned
+ * and then claims a repair addressed one the collector deliberately
+ * kept. Sharing the predicate makes that disagreement impossible.
+ */
+export function checkOrphanStoreEntries(state: StateFile, home: string): Finding[] {
   const findings: Finding[] = [];
-  const storeDir = paths(home).storeDir;
-  if (!isDirectory(storeDir)) return findings;
-  const referenced = new Set<string>();
-  for (const e of stateEntries)
-    if (e.resolved_sha) referenced.add(`${e.name}@${e.resolved_sha.slice(0, 8)}`);
-  for (const name of listDir(storeDir)) {
-    if (!referenced.has(name)) {
-      findings.push({
-        level: "warn",
-        code: "orphan_store_entry",
-        message: `unreferenced store entry ${name}`,
-      });
-    }
+  for (const name of orphanStoreEntries(state, home)) {
+    findings.push({
+      level: "warn",
+      code: "orphan_store_entry",
+      message: `unreferenced store entry ${name}`,
+    });
   }
   return findings;
 }
@@ -141,7 +139,10 @@ export function checkProjectRoots(stateEntries: readonly StateEntry[]): Finding[
   const findings: Finding[] = [];
   for (const entry of stateEntries) {
     if (entry.scope !== "project" || !entry.project_root) continue;
-    if (!existsSync(entry.project_root)) {
+    // A path replaced by a regular file is as unusable as a missing
+    // one — nothing can be read beneath it — and repair applies the
+    // same test, so the two must not disagree.
+    if (!isDirectory(entry.project_root)) {
       findings.push({
         level: "warn",
         code: "missing_project_root",
