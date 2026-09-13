@@ -19,6 +19,7 @@
 import { CrewError } from "../../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile } from "../../core/types.ts";
 import { type CollectionKind, resolveCollectionSubjects } from "../../state/collections.ts";
+import { entryKey } from "../../state/identity.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 import { plural, shortenHome } from "../../util/format.ts";
 import type { CommandContext } from "../types.ts";
@@ -132,11 +133,6 @@ function dedupe(targets: readonly UninstallTarget[]): readonly UninstallTarget[]
     out.push({ ...target, subject: { ...target.subject, entries: remaining } });
   }
   return out;
-}
-
-/** Identity of one installed entry: (name, scope, project root) per §11.1. */
-function entryKey(e: StateEntry): string {
-  return JSON.stringify([e.name, e.scope, e.project_root ?? ""]);
 }
 
 /** One subject per distinct skill name, preserving state order. */

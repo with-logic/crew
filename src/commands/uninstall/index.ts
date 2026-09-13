@@ -37,7 +37,6 @@ import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
-import { narrowSubjectToScope } from "./scope.ts";
 import { allowsEmpty, allTargets, confirmAll, countAllTargets, selectedTargets } from "./select.ts";
 import { findOrphan } from "./state.ts";
 
