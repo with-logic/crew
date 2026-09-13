@@ -7,8 +7,9 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readConfig } from "../../../src/config/load.ts";
-import { paths, tapPath } from "../../../src/core/paths.ts";
+import { paths } from "../../../src/core/paths.ts";
 import { readState } from "../../../src/state/load.ts";
+import { cloneDirForTap } from "../../helpers/fixtures.ts";
 import {
   agentRoot,
   buildTapRepo,
@@ -27,6 +28,9 @@ describe("C-TAP-16d tap remove --uninstall", () => {
     const home = makeCrewHome();
     expect(tapWithInstall(home, buildTapRepo())).toBe(0);
     expect(existsSync(join(agentRoot(), "alpha"))).toBe(true);
+    // Resolve the shared clone before removal — afterwards the tap row is
+    // gone and the path can no longer be looked up from config.
+    const clone = cloneDirForTap("mytap", home)!;
 
     const r = run(home, ["tap", "remove", "--uninstall", "mytap"]);
 
@@ -36,7 +40,7 @@ describe("C-TAP-16d tap remove --uninstall", () => {
     expect(existsSync(join(agentRoot(), "alpha"))).toBe(false);
     expect(readState(home).installations).toHaveLength(0);
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(false);
-    expect(existsSync(tapPath("mytap", home))).toBe(false);
+    expect(existsSync(clone)).toBe(false);
   });
 
   test("a safety abort keeps the tap so the user can retry", () => {
@@ -105,7 +109,7 @@ describe("C-TAP-16d tap remove --uninstall", () => {
     expect(existsSync(join(agentRoot(), "alpha", ".crew.json"))).toBe(true);
     expect(readState(home).installations).toHaveLength(1);
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(true);
-    expect(existsSync(tapPath("mytap", home))).toBe(true);
+    expect(existsSync(cloneDirForTap("mytap", home)!)).toBe(true);
   });
 
   test("--dry-run output reads as a preview, not as work already done", () => {
@@ -173,7 +177,7 @@ describe("C-TAP-16d tap remove --uninstall", () => {
     const config = readConfig(home);
     expect(config.taps.some((t) => t.name === "mytap")).toBe(false);
     expect(config.taps.some((t) => t.name === "othertap")).toBe(true);
-    expect(existsSync(tapPath("othertap", home))).toBe(true);
+    expect(existsSync(cloneDirForTap("othertap", home)!)).toBe(true);
   });
 
   test("C-TAP-16d a partial abort drops only the location that came off", () => {
