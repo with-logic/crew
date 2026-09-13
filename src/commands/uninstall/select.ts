@@ -8,19 +8,23 @@
  *   - `--all` → every installed entry at the targeted scope, one target
  *     per skill name.
  *
- * Two invariants matter here. Collection membership is decided against a
- * state already narrowed to the target scope (§7.4 "Scope"), so a tap or
- * namespace never counts entries the command could not remove. And the
- * final target list is deduplicated by installed-entry identity, because
- * overlapping selectors (`crew uninstall acme alpha`) would otherwise
- * remove a skill once and then fail trying to remove it again.
+ * Two invariants matter here. A collection selector consults two states:
+ * *which* collection a bare name means is decided among entries this
+ * command could remove, so a namespace colliding only with an
+ * out-of-scope install is unambiguous; *what* that collection contains is
+ * then re-read from full state and narrowed, so §7.4's lone-project
+ * fallback applies per selected collection rather than across every
+ * install on the machine. And the final target list is deduplicated by
+ * installed-entry identity, because overlapping selectors (`crew
+ * uninstall acme alpha`) would otherwise remove a skill once and then
+ * fail trying to remove it again.
  */
 
 import { CrewError } from "../../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile } from "../../core/types.ts";
 import { type CollectionKind, resolveCollectionSubjects } from "../../state/collections.ts";
 import { entryKey } from "../../state/identity.ts";
-import type { StateSubject } from "../../state/subjects.ts";
+import { namespaceForEntry, type StateSubject } from "../../state/subjects.ts";
 import { plural, shortenHome } from "../../util/format.ts";
 import type { CommandContext } from "../types.ts";
 import { entriesAtScope, narrowSubjectToScope } from "./scope.ts";
@@ -55,8 +59,18 @@ export function selectedTargets(
   state: StateFile,
   config: Config,
 ): readonly UninstallTarget[] {
-  // §7.4 "Scope": collection membership only ever considers entries this
-  // command could remove, so ambiguity is decided on the same basis.
+  // Two different questions, so two different states.
+  //
+  // WHICH collection a bare name means is decided against entries this
+  // command could remove (§7.4 "Scope"): a namespace that collides only
+  // with an out-of-scope install is not ambiguous.
+  //
+  // WHAT that collection contains is then taken from full state, because
+  // §7.4's lone-project fallback asks whether the *selected collection*
+  // has exactly one project install — not whether the machine does.
+  // Deciding membership on scoped state let an unrelated project install
+  // of a different tap silence the removal: it exited 0 having removed
+  // nothing, which reads as success.
   const scoped: StateFile = {
     schema_version: state.schema_version,
     installations: entriesAtScope(state.installations, ctx.flags.scope, ctx.cwd),
@@ -72,8 +86,11 @@ export function selectedTargets(
       });
       continue;
     }
-    const collection = { kind: subject.kind, name: subject.name };
-    const groups = groupByName(subject.entries);
+    const collection: { readonly kind: CollectionKind; readonly name: string } = {
+      kind: subject.kind,
+      name: subject.name,
+    };
+    const groups = groupByName(entriesForCollection(collection, state, ctx));
     for (const group of groups) targets.push({ kind: "collection", subject: group, collection });
     if (groups.length === 0) {
       targets.push({ kind: "collection", subject: { ...subject, entries: [] }, collection });
@@ -133,6 +150,25 @@ function dedupe(targets: readonly UninstallTarget[]): readonly UninstallTarget[]
     out.push({ ...target, subject: { ...target.subject, entries: remaining } });
   }
   return out;
+}
+
+/**
+ * The entries a resolved collection should remove, scoped to the target.
+ *
+ * The collection was identified against scoped state (so ambiguity is
+ * decided among removable entries), but its membership is re-taken from
+ * full state so `entriesAtScope` can apply §7.4's lone-project fallback
+ * to this collection alone.
+ */
+function entriesForCollection(
+  subject: { readonly kind: CollectionKind; readonly name: string },
+  state: StateFile,
+  ctx: CommandContext,
+): readonly StateEntry[] {
+  const all = state.installations.filter((e) =>
+    subject.kind === "tap" ? e.source.tap === subject.name : namespaceForEntry(e) === subject.name,
+  );
+  return entriesAtScope(all, ctx.flags.scope, ctx.cwd);
 }
 
 /** One subject per distinct skill name, preserving state order. */

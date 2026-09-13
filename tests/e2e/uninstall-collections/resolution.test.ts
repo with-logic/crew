@@ -73,6 +73,21 @@ describe("collection selector resolution", () => {
     expect(installed(home)).toEqual(["beta"]);
   });
 
+  test("C-UNINST-21 an installed skill name wins over a same-named namespace", () => {
+    const home = makeCrewHome();
+    // Tap `acme` has a `marketing` namespace; a second tap ships a
+    // top-level skill that is also called `marketing`. Skill-first
+    // resolution (§7.4) must pick the skill, not the namespace.
+    expect(addTap(home, buildTap("crew-nsa-", { marketing: ["guides"] }), "acme")).toBe(0);
+    expect(addTap(home, buildTap("crew-nsb-", { ".": ["marketing"] }), "other")).toBe(0);
+    expect(install(home, ["acme"])).toBe(0);
+    expect(install(home, ["other"])).toBe(0);
+    expect(installed(home)).toEqual(["guides", "marketing"]);
+
+    expect(runCli(["uninstall", "marketing"], { home, streams: quiet() })).toBe(0);
+    expect(installed(home)).toEqual(["guides"]);
+  });
+
   test("C-UNINST-22 a name that is both a tap and a namespace is ambiguous", () => {
     const home = makeCrewHome();
     // Tap named `marketing`; a different tap has a `marketing` namespace.
