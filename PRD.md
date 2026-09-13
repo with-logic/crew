@@ -83,7 +83,7 @@ metadata:
 
 **`metadata.crew.dependencies`** (list of strings, optional). Other skills to install before this one. Each entry is a skill reference in any of the forms `crew install` accepts (§8). Bare names (`general-python-style`) resolve in the precedence order defined in §9.
 
-**Versions are git commit SHAs.** Homecrew does not define a version field. Every installed skill is identified by the SHA of the commit it was resolved from. Tags and branches resolve to SHAs at install time. Users pin with `@<sha>`, `@<tag>`, or `@<branch>`.
+**Versions are git commit SHAs.** Homecrew does not define a version field. Every installed skill is identified by the SHA of the commit it was resolved from. Tags and branches resolve to SHAs at install time. Users pin with `@<sha>` or `@<tag>`; `@<branch>` selects a branch to follow, and `crew update` advances it as that branch moves (§11.1).
 
 **Multi-skill directories.** A directory containing more than one skill has no special designation. When `crew install` is pointed at a source, Homecrew looks for a `SKILL.md` at the root. If present, one skill is installed. If not, Homecrew walks the standard tap layouts (§9 step 5). Trusted non-standard repositories can opt into bounded recursive fallback discovery. A skill's install name always comes from the `name` field in its `SKILL.md`; the source directory name is only a filesystem location and need not match.
 
@@ -628,6 +628,12 @@ A ref and a subpath may combine. Ref appears before the subpath.
 
 The resolved location inside the repo is either the repo root or the subpath. Behavior at the resolved location matches §9 step 5 (single skill if `SKILL.md` present, walk one level otherwise).
 
+When a ref is given, the skill's **content is read at that commit** — not
+at the repo's default branch. The bytes installed, the content hash, and
+the `resolved_sha` recorded in state and markers all come from the
+commit the ref resolves to (§9 step 3). A ref that does not exist in the
+repo is `ref_not_found` (§13).
+
 Git sources are ad-hoc. They are never promoted to taps and do not appear in `crew search` results.
 
 ### 8.3 Tap source
@@ -722,7 +728,19 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Path reference (`./foo`, `/abs/foo`): if any configured tap already points at the same path, use it; otherwise create a path-kind auto tap and use it.
    In all cases, the resolved `state.installations[i].source` is `{ tap: <tap-name>, path: <skill-relative-path-inside-tap> }`. The URL/path of the tap itself lives in `config.yaml`.
    - If a tap-source reference cannot be resolved from configured taps, Homecrew consults the known-tap registry (§16.2.1) before returning `invalid_ref`. Exact known-tap matches are suggestions only: Homecrew MUST NOT clone, fetch, add a tap to config, or install anything from a known tap until the user explicitly runs the suggested `crew tap add <source-ref> <name>` command (or a future interactive flow confirms that same action). The error MUST include the tap-add command and the follow-up `crew install <tap>/<skill>` or `crew install <tap>` command.
-3. **Resolve refs to SHAs.** For git sources and tap sources, the ref (tag, branch, or `HEAD`) is resolved to a full commit SHA. This SHA is what's recorded in state and markers, even if the user specified a tag or branch.
+3. **Resolve refs to SHAs.** For git sources and tap sources, the ref (tag, branch, or `HEAD`) is resolved to a full commit SHA. This SHA is what's recorded in state and markers, even if the user specified a tag or branch. If the ref is not present in the local clone, crew fetches once and re-resolves; a ref that is still unknown is `ref_not_found` (§13, exit 5).
+
+   Every subsequent step — validation (step 4), expansion (step 5), and staging (step 8) — reads the source **as of the resolved SHA**, so an `@<tag|branch|sha>` reference installs that commit's bytes. Implementations MUST NOT let a requested ref fall back to whatever revision the local clone happens to have checked out. Because a tap's clone is shared by `crew search`, tap re-expansion, and other installs, an implementation that materializes the commit MUST do so without leaving the shared clone on a different revision — including when a missing ref prompts a fetch, which MUST NOT move the shared checkout.
+
+   **Resolution reads the same commit.** Deciding *which* skill or namespace a reference names is itself a read of the source, so it too happens as of the resolved SHA. A skill present at `@<ref>` but deleted at the default branch MUST still resolve, install, and preview.
+
+   **A fetch reflects upstream deletions.** Refreshing a clone MUST bring local tags into line with upstream, deletions included. A tag removed upstream MUST stop resolving locally, so an entry pinned to it reports `ref_not_found` rather than appearing up to date against a ref the source no longer has.
+
+   **Failing to materialize is not the same as finding nothing.** When the commit resolves and its tree is readable but the reference's subpath is absent at that commit, the result is `no_skills_found` — a reference the user can correct. When the source cannot be materialized at all (an unreadable object, an unreadable repository, a scratch location that cannot be written), the result is `source_unreachable`: nothing was read, so nothing can be concluded about what the source contains.
+
+   **Dependencies inherit their parent's commit.** A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records the same ref and pinning. Recording the parent's SHA over content read from another revision would make state describe a provenance the bytes do not have.
+
+   **The materialized tree is a boundary.** The resolved location MUST be reached without traversing a symlink. A repository can commit a symlink at the very path a reference names; following it would read content from outside the requested commit — potentially from anywhere on the host filesystem.
 4. **Validate each candidate skill** against the Agent Skills specification:
    - `SKILL.md` exists at the expected location.
    - Frontmatter parses as YAML.
@@ -822,8 +840,8 @@ or a tap-qualified installed skill reference (`<tap>/<skill>` or
    (per the upstream-deletion rule above) and left in place.
 3. For each skill:
    a. Skip if the skill is pinned to an exact SHA, unless `--force`.
-   b. If pinned to a tag, re-resolve the tag: if the tag moved and `--force` is given, proceed; otherwise skip.
-   c. Otherwise (tap source, branch, or default branch), re-resolve the ref to a SHA.
+   b. If pinned to a tag, re-resolve the tag: if the tag moved and `--force` is given, proceed with the tag's new commit — the content installed is that commit's, not the default branch's; otherwise skip.
+   c. Otherwise (tap source, branch, or default branch), re-resolve the ref to a SHA. The entry's own recorded `ref` is what gets re-resolved: an entry installed from `@<branch>` follows that branch, not the tap's default branch. An entry with no ref follows the tap's default branch as before.
    d. If the new SHA equals the installed `resolved_sha`, the skill is up-to-date; record as such and continue.
    e. Otherwise, stage the new commit into the store and run the install algorithm (§7.3) for every (agent, scope) pair this skill is recorded against. Pre-flight safety checks apply as always: a customized install is skipped (not overwritten) unless `--force`.
 4. Garbage-collect the store: any `store/<name>@<short-sha>/` entry no longer referenced by any `state.json` entry or marker is deleted.
@@ -859,11 +877,26 @@ are flagged `tracks_tap: true` and new siblings appear on the next
 **not** pulled in — the user asked for one thing, not the whole tap.
 
 On every `crew update` run, for each group of state entries sharing
-(tap, scope, project_root) where **at least one member** has
+(tap, scope, project_root, `ref`) where **at least one member** has
 `tracks_tap: true`, crew:
 
-1. Expands the tap's resolved root using the tap's configured discovery
-   mode (§9 step 5) and builds the current child set. If the current
+1. Expands the tap **at the group's `ref`** using the tap's configured
+   discovery mode (§9 step 5) and builds the current child set. The
+   group's own `ref` is what gets materialized, exactly as in §9 step 3:
+   a whole-tap install at `@<tag|branch|sha>` MUST be re-expanded
+   against that revision, not the tap's default branch. Otherwise
+   re-expansion would discover children that do not exist at the
+   revision the group tracks.
+
+   `ref` is part of the grouping key for the same reason: two groups of
+   the same tap at different refs see different child sets and MUST be
+   re-expanded independently.
+
+   A child added by this step inherits the group's `ref` and its
+   `pinned` value (§11.1) — it was read from that revision, so recording
+   it as an unpinned no-ref install would misattribute its bytes.
+
+   If the current
    child set contains the same declared `name` at more than one
    tap-relative source path, re-expansion records
    `conflicting_dependencies` for that name, leaves existing state
@@ -1720,6 +1753,13 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-03 | §9, §7.3 | After install, `SKILL.md` and every other file in the source appear under `{base}/<name>/`, preserving relative paths. |
 | C-INST-04 | §7.5 | A `.crew.json` marker is written into the installed skill directory with the fields listed in §7.5. |
 | C-INST-05 | §9 | `crew install gh:owner/repo//sub/path` installs only the skill at that subpath. |
+| C-INST-05b | §8.2, §9 step 3 | `crew install <url>@<tag>` installs the bytes as of the tag's commit, not the default branch's, and records that commit as `resolved_sha`. The same holds for `@<sha>` and for a tap-source `<tap>/<skill>@<tag>`. |
+| C-INST-05c | §9 step 3 | A reference whose `@<ref>` does not exist in the repo fails with `ref_not_found`, exit 5. |
+| C-INST-05d | §9 step 3 | Installing at a ref leaves the tap's shared clone on its previous revision and leaves no scratch directories behind. |
+| C-INST-05e | §9 step 3 | Reference resolution reads the requested commit: `crew install <tap>/<skill>@<ref>` and `crew info <tap>/<skill>@<ref>` succeed for a skill present at that commit even when it has been deleted at the default branch. |
+| C-INST-05f | §9 step 3, §9 step 6 | A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records that ref. |
+| C-INST-05g | §9 step 3 | A reference whose resolved location is reached through a symlink is rejected; content outside the requested commit is never read or installed. |
+| C-INST-05h | §9 step 3, §13 | A subpath absent at an otherwise-readable commit is `no_skills_found`; a commit that cannot be materialized at all (unreadable object or repository, unwritable scratch location) is `source_unreachable`. |
 | C-INST-06 | §9 | `crew install gh:owner/repo` pointed at a repo with a root `SKILL.md` installs one skill. |
 | C-INST-07 | §9 step 5 | `crew install gh:owner/repo` pointed at a repo with no root `SKILL.md` but skill subdirectories installs every valid child one level deep. |
 | C-INST-08 | §9 step 5 | Nested skills more than one level deep are NOT installed by directory expansion. |
@@ -1803,6 +1843,9 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-02 | §10.1 | A skill whose `resolved_sha` equals the newly resolved SHA is reported as up-to-date and NOT re-copied. |
 | C-UPD-03 | §10.1 | A skill pinned to an exact SHA is skipped by `crew update` without `--force`. |
 | C-UPD-04 | §10.1 | A skill pinned to a tag: if the tag has not moved, reports up-to-date; if moved, skipped without `--force`. |
+| C-UPD-04b | §10.1 step 3b | `crew update --force` on a skill pinned to a tag that moved installs the tag's new commit's content. |
+| C-UPD-04c | §10.1 step 3c | A skill installed from `@<branch>` is updated from that branch, not from the tap's default branch. |
+| C-UPD-04d | §9 step 3, §10.1 | A skill pinned to a tag deleted upstream fails with `ref_not_found` (exit 1 for the run) rather than reporting up-to-date, and its installed bytes and state entry are preserved. |
 | C-UPD-05 | §10.1 | `crew update <skill>` restricts processing to the named skill(s). |
 | C-UPD-06 | §10.1 | A network failure on one skill does NOT stop processing of others. |
 | C-UPD-07 | §10.1 | A customized install on one skill does NOT stop processing of others. |
@@ -1815,6 +1858,8 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-14 | §16.5 | `crew install <git-url>` against a source with no matching configured tap creates an auto tap (`registered: false`) in `config.yaml`. Every resulting state entry's `source.tap` names that tap. |
 | C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). |
 | C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
+| C-UPD-16b | §10.1.1 | A whole-tap install at an explicit `@<ref>` is re-expanded against that ref: a child added to the tap's default branch but absent at the ref is NOT installed, and a child present at the ref is installed carrying that ref and the group's `pinned` value. |
+| C-UPD-16c | §10.1, §13 | A `crew update` run in which any skill failed for a reason outside the soft set (`source_gone` / `no_skills_found` / `invalid_ref`) exits 1. A failure crew cannot classify MUST NOT be reported as a `failed` row on a run that exits 0. |
 | C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`, its clone deleted. Registered taps are NOT garbage-collected by uninstall. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` on a tap with pending additions lists those additions without installing anything. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
@@ -1897,6 +1942,7 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-02 | §11.1 | Every installed skill has exactly one entry per (skill, scope) pair. |
 | C-STATE-03 | §7.5 | Every crew-installed skill directory contains a `.crew.json` marker with matching `name` and `resolved_sha`. |
 | C-STATE-04 | §11.1 | `pinned: true` in state iff the ref was a SHA or a tag at install time. |
+| C-STATE-04b | §9 step 3, §11.1 | `resolved_sha` equals the commit the requested ref resolves to, and the entry's `content_hash` is the hash of that commit's bytes. |
 | C-STATE-05 | §11.2 | `crew doctor` detects state-vs-marker drift and reports every inconsistency. |
 | C-STATE-06 | §11.2 | `crew doctor --repair` reconstructs `state.json` from markers if `state.json` is deleted. |
 | C-STATE-07 | §11.2 | `crew doctor --verify` recomputes content hashes and reports mismatches. |
