@@ -21,7 +21,7 @@ import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { computeAgentSet } from "./agent-set.ts";
-import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules.ts";
+import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules/index.ts";
 import { type InstallSummary, performInstall } from "./perform/index.ts";
 import { promoteExplicit } from "./promote-explicit.ts";
 import { applyReattributions, rewriteReattributedMarkers } from "./reattribute.ts";
@@ -136,7 +136,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       cwd,
       duplicateOptions,
     );
-    const { toInstall, promoteToExplicit, reattributions } = analysis;
+    const { toInstall, promoteToExplicit, reattributions, keepSource } = analysis;
     alreadyInstalled = analysis.alreadyInstalled;
     rewriteDiscoveryUpgradeMarkers(config, configWithAutoTaps, freshState.installations, cwd);
     // §5.4: entries that reached the same source through a narrower
@@ -149,6 +149,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       dryRun: false,
       requiredBy,
       allResolved: resolvedAll,
+      keepSource,
     });
     const promoted = promoteExplicit(
       result.newState,

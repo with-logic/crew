@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { baseFor } from "../../../agents/adapter.ts";
 import { agentByName } from "../../../agents/registry.ts";
 import type { ResolvedSkill } from "../../../core/types.ts";
-import type { AlreadyInstalled } from "../../../install/duplicate-rules.ts";
+import type { AlreadyInstalled } from "../../../install/duplicate-rules/index.ts";
 import type { InstallRecord } from "../../../install/perform/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { firstSentences, plural, shortenHome, wrap } from "../../../util/format.ts";

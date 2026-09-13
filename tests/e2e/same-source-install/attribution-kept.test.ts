@@ -8,19 +8,30 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { codexAdapter } from "../../../src/agents/codex.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig } from "../../../src/config/load.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
 import { type AdapterRedirect, buildRepo, install, redirectClaudeCode } from "./helpers.ts";
 
 let cc: AdapterRedirect;
+let codexOriginal: { u: () => string; d: () => boolean };
 
 beforeEach(() => {
   cc = redirectClaudeCode();
+  // One test adds a second agent, which is the non-forced route into
+  // `performInstall` for an already-installed skill.
+  codexOriginal = { u: codexAdapter.userPath, d: codexAdapter.detect };
+  const coRoot = makeTempDir("crew-codex-");
+  (codexAdapter as { userPath: () => string }).userPath = () => coRoot;
+  (codexAdapter as { detect: () => boolean }).detect = () => true;
 });
 afterEach(() => {
   cc.restore();
+  (codexAdapter as { userPath: () => string }).userPath = codexOriginal.u;
+  (codexAdapter as { detect: () => boolean }).detect = codexOriginal.d;
 });
 
 describe("C-INST-13c attribution the move must not take", () => {
@@ -62,5 +73,53 @@ describe("C-INST-13c attribution the move must not take", () => {
     expect(entry.source.tap).toBe(broadTap);
     expect(entry.tracks_tap).toBe(true);
     expect(readConfig(home).taps.some((t) => t.name === broadTap)).toBe(true);
+  });
+
+  test("C-INST-13h --force does not narrow the subscription either", () => {
+    const home = makeCrewHome();
+    const repo = buildRepo(["docx", "pdf"]);
+
+    expect(install(home, `file://${repo}`).code).toBe(0);
+    const broadTap = readState(home).installations.find((e) => e.name === "docx")!.source.tap;
+
+    // `--force` re-installs rather than reporting "already installed",
+    // so the skill reaches `performInstall`. The write path must honor
+    // the same refusal the classification made: §13 lists what `--force`
+    // overrides, and narrowing a whole-tap subscription is not on it.
+    const cap = captureStreams();
+    expect(
+      runCli(["install", `file://${repo}//skills/docx`, "--force", "--agent", "claude-code"], {
+        home,
+        streams: cap.streams,
+      }),
+    ).toBe(0);
+
+    const entry = readState(home).installations.find((e) => e.name === "docx")!;
+    expect(entry.source.tap).toBe(broadTap);
+    expect(entry.source.path).toBe("skills/docx");
+    expect(entry.tracks_tap).toBe(true);
+    expect(readConfig(home).taps.some((t) => t.name === broadTap)).toBe(true);
+  });
+
+  test("C-INST-13h adding an agent through a narrow tap keeps the broad source", () => {
+    const home = makeCrewHome();
+    const repo = buildRepo(["docx", "pdf"]);
+
+    expect(install(home, `file://${repo}`).code).toBe(0);
+    const broadTap = readState(home).installations.find((e) => e.name === "docx")!.source.tap;
+
+    // A newly active adapter also routes the skill through
+    // `performInstall` without `--force`, so it is the second way the
+    // narrow tap could overwrite the broad attribution.
+    const cap = captureStreams();
+    const rc = runCli(
+      ["install", `file://${repo}//skills/docx`, "--agent", "claude-code", "--agent", "codex"],
+      { home, streams: cap.streams },
+    );
+    expect(rc).toBe(0);
+
+    const entry = readState(home).installations.find((e) => e.name === "docx")!;
+    expect(entry.source.tap).toBe(broadTap);
+    expect(entry.tracks_tap).toBe(true);
   });
 });

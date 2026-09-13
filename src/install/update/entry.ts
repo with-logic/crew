@@ -6,7 +6,7 @@
  *   - report `skipped` if the entry is pinned and not forced;
  *   - re-stage and re-install if the SHA moved.
  *
- * Tap re-expansion (additions / source_gone) lives in `tap-reexpand.ts`;
+ * Tap re-expansion (additions / source_gone) lives in `tap-reexpand/index.ts`;
  * this module handles only the per-existing-entry update.
  */
 

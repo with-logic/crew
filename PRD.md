@@ -174,7 +174,7 @@ Only flags documented as repeatable (`--agent`) may appear more than once. Passi
 
 - If the source and resolved SHA match, report the skill as already installed and exit 0. In human mode, implementations SHOULD surface the installed ref and/or short SHA so the user sees which version is on their machine (e.g. `foo: already installed (v1.2.0 @ a1b2c3d4)`). The literal wording is implementation choice; the JSON payload is specified in §15.
 - If the source matches but the ref differs, treat as an update (§10).
-- If the source differs, fail with a name-conflict error (§13) unless `--force` is given, in which case the previous install is removed first.
+- If the source differs, fail with a name-conflict error (§13). `--force` does **not** override this (§13, C-INST-14): uninstall the skill first, then install it from the new source.
 
 **What "the source" means.** Two installs share a source when they name
 the same **canonical location**: the same repository (or the same local

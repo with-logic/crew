@@ -10,25 +10,25 @@
  */
 
 import { join } from "node:path";
-import { listInstalledForAgent } from "../agents/list.ts";
+import { baseFor } from "../agents/adapter.ts";
 import { ALL_AGENTS } from "../agents/registry.ts";
-import type { Marker, StateFile, TapConfig } from "../core/types.ts";
-import { writeJson } from "../util/json.ts";
-import type { Reattribution } from "./duplicate-rules.ts";
+import type { Marker, Scope, StateFile, TapConfig } from "../core/types.ts";
+import { tryReadJson, writeJson } from "../util/json.ts";
+import type { Reattribution } from "./duplicate-rules/index.ts";
 
 /**
  * Key one move by the install location it targets. Bulk re-attribution
  * runs under the state lock, so both callers index once rather than
  * scanning the move list per entry and per marker.
  */
-function moveKey(name: string, scope: string, projectRoot: string | null): string {
+function moveKey(name: string, scope: Scope, projectRoot: string | null): string {
   return JSON.stringify([name, scope, projectRoot ?? ""]);
 }
 
 /** Marker key: a move only claims markers still naming its old tap. */
 function markerMoveKey(
   name: string,
-  scope: string,
+  scope: Scope,
   projectRoot: string | null,
   fromTap: string,
 ): string {
@@ -57,7 +57,19 @@ export function applyReattributions(
     installations: state.installations.map((entry) => {
       const move = moves.get(moveKey(entry.name, entry.scope, entry.project_root ?? null));
       if (!move) return entry;
-      return { ...entry, source: { tap: move.toTap, path: move.toPath } };
+      // The subscription moves with the attribution. A re-attributed
+      // entry never reaches `performInstall`, so this is the only place
+      // a whole-tap install can record `tracks_tap` for it — without
+      // this, asking for the whole repo after installing one child
+      // would leave the entry subscribed to nothing and `crew update`
+      // would skip siblings added upstream (§10.1.1). One-way, like
+      // `explicit`: a narrower install never clears it.
+      const tracksTap = move.tracksTap || (entry.tracks_tap ?? false);
+      return {
+        ...entry,
+        source: { tap: move.toTap, path: move.toPath },
+        ...(tracksTap ? { tracks_tap: true } : {}),
+      };
     }),
   };
 }
@@ -84,25 +96,31 @@ export function rewriteReattributedMarkers(
   for (const r of reattributions) {
     movesByMarker.set(markerMoveKey(r.name, r.scope, r.projectRoot, r.fromTap), r);
   }
-  const hasUserMove = reattributions.some((r) => r.scope === "user");
-  // Only visit the roots a move actually names. Scanning every root
-  // remembered in state would walk unrelated projects under the lock,
-  // and a project-scope move must not touch a sibling project's marker
-  // for the same skill (they are distinct installs).
-  const projectRoots = new Set<string>();
+  // Go straight to the directories the moves name. Listing every
+  // adapter's whole marker tree and filtering afterwards would walk
+  // unrelated skills (and unrelated projects) under the state lock; a
+  // move knows its own skill name, scope and project root, and the
+  // install path is a pure function of those plus the adapter.
   for (const r of reattributions) {
-    if (r.scope === "project" && r.projectRoot) projectRoots.add(r.projectRoot);
-  }
-  for (const adapter of ALL_AGENTS) {
-    if (hasUserMove) {
-      for (const rec of listInstalledForAgent(adapter, "user", cwd)) {
-        maybeRewrite(rec.installDir, rec.marker, movesByMarker, tapsByName, "user", null);
-      }
-    }
-    for (const root of projectRoots) {
-      for (const rec of listInstalledForAgent(adapter, "project", root)) {
-        maybeRewrite(rec.installDir, rec.marker, movesByMarker, tapsByName, "project", root);
-      }
+    const root = r.scope === "user" ? cwd : r.projectRoot;
+    // A project-scope move with no recorded root has nothing to rewrite:
+    // the marker's location is exactly what we'd be guessing at.
+    if (root === null) continue;
+    for (const adapter of ALL_AGENTS) {
+      const base = baseFor(adapter, r.scope, root);
+      if (base === "") continue;
+      const installDir = join(base, r.name);
+      const marker = tryReadJson<Marker>(join(installDir, ".crew.json"));
+      // No marker, or one this adapter doesn't own: not ours to rewrite.
+      if (!marker?.agents?.includes(adapter.name)) continue;
+      maybeRewrite(
+        installDir,
+        marker,
+        movesByMarker,
+        tapsByName,
+        r.scope,
+        r.scope === "project" ? root : null,
+      );
     }
   }
 }
