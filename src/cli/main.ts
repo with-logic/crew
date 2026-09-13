@@ -12,7 +12,7 @@ import { crewHome } from "../core/paths.ts";
 import { maybeEmitUpdateNotice } from "../self-update/notice.ts";
 import { colorEnabled, makeStyler, type Styler, terminalWidth } from "../util/term.ts";
 import { nowIso } from "../util/time.ts";
-import { parseArgs } from "./args.ts";
+import { parseArgs } from "./args/index.ts";
 import { dispatch } from "./dispatch.ts";
 import { defaultStreams, type OutputStreams, writeError, writeSuccess } from "./output.ts";
 import {
