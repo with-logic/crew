@@ -14,7 +14,7 @@
  * every directory between the source root and it.
  */
 
-import { lstatSync } from "node:fs";
+import { lstatSync, type Stats } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { toPosix } from "./fs.ts";
@@ -52,9 +52,15 @@ export function assertNoSymlinkEscape(root: string, target: string, describe: st
   // way. Containment is already proven above, so this terminates at
   // `rootAbs`.
   while (current.length > rootAbs.length) {
-    // Callers check the resolved location exists first, so every segment
-    // between it and the root exists too — `lstatSync` cannot fail here.
-    if (lstatSync(current).isSymbolicLink()) {
+    // A segment that doesn't exist is not a containment violation:
+    // containment is about where a path points, and a missing path
+    // points nowhere. This is the normal shape of a skill deleted
+    // upstream, which §10.1 requires be reported as the soft
+    // `source_gone` outcome rather than a hard failure. A missing
+    // segment also cannot be a symlink, so skipping it removes nothing
+    // from the guarantee below.
+    const stat = lstatSafe(current);
+    if (stat?.isSymbolicLink()) {
       throw new CrewError(
         "invalid_ref",
         `${describe} resolves through a symlink, which would read content from outside the source`,
@@ -62,5 +68,22 @@ export function assertNoSymlinkEscape(root: string, target: string, describe: st
       );
     }
     current = dirname(current);
+  }
+}
+
+/**
+ * `lstatSync` that reports "absent" as `null` instead of throwing.
+ *
+ * Only a missing path is absorbed. A permission or I/O failure still
+ * throws, because that means we could not determine what the segment
+ * is — and a containment check that silently passes on an unreadable
+ * segment would be worse than no check.
+ */
+function lstatSafe(path: string): Stats | null {
+  try {
+    return lstatSync(path);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
   }
 }
