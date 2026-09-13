@@ -32,8 +32,12 @@ export const GROUPS: readonly CommandGroup[] = [
       },
       {
         name: "list",
-        signature: <>crew list</>,
-        description: "List installed skills, grouped by scope, with sources and resolved SHAs.",
+        signature: <>crew list [--scope {"{user,project}"}]</>,
+        description: [
+          "List installed skills, grouped by scope, with sources and resolved SHAs. ",
+          <code key="crew-list-scope">--scope</code>,
+          " narrows the listing to just your user-scoped or just your project-scoped installs.",
+        ],
       },
       {
         name: "skills",
