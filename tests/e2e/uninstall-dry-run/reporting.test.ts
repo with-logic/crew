@@ -10,6 +10,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
+import type { UninstallRecord } from "../../../src/commands/uninstall/core.ts";
 import type { Marker } from "../../../src/core/types.ts";
 import { readState } from "../../../src/state/load.ts";
 import { readJson } from "../../../src/util/json.ts";
@@ -18,13 +19,14 @@ import { ccRoot, installFooWithDepBar, shareOneDest, useRedirectedAdapters } fro
 
 useRedirectedAdapters();
 
+/**
+ * Derived from the production record so a schema change breaks this
+ * file at compile time instead of silently asserting a shape the
+ * command no longer emits.
+ */
 interface UninstallJson {
   readonly dry_run: boolean;
-  readonly records: readonly {
-    readonly name: string;
-    readonly removedFrom: readonly string[];
-    readonly remainingAgents?: readonly string[];
-  }[];
+  readonly records: readonly Pick<UninstallRecord, "name" | "removedFrom" | "remainingAgents">[];
 }
 
 describe("crew uninstall --dry-run reporting", () => {

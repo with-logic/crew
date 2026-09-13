@@ -16,23 +16,36 @@ import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
 import { dropScopedEntryAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
 
-export interface UninstallRecord {
+/** What a removal reports regardless of outcome. */
+interface UninstallRecordBase {
   name: string;
   removedFrom: string[];
   absentFrom: string[];
   failures: { agent: string; error: { code: string; message: string } }[];
   /** True if the removal was driven by `--prune`, not by a direct command-line arg. */
   pruned?: boolean;
-  /** True if the state entry still survives after this call (partial --agent removal). */
-  partial?: boolean;
-  /**
-   * Agents an `--agent` filter leaves the skill installed in. §7.4
-   * makes "would be retained" an output obligation distinct from
-   * "would be removed", so the names — not just the fact of a partial
-   * removal — have to reach the renderer and `--json`.
-   */
-  remainingAgents?: string[];
 }
+
+/**
+ * A record for a removal that left the skill installed somewhere: an
+ * `--agent` filter kept agents back, or a safety check aborted and the
+ * bytes remain.
+ *
+ * `partial` and `remainingAgents` are declared together rather than as
+ * two independent optionals. §7.4 makes "would be retained" an output
+ * obligation, so a record asserting a partial removal without naming
+ * who kept the skill would satisfy the type while breaking the
+ * contract. Both stay top-level: `remainingAgents` is the field name
+ * §7.4 and C-UNINST-19b pin for `--json`.
+ */
+export type UninstallRecord = UninstallRecordBase &
+  (
+    | { partial?: undefined; remainingAgents?: undefined }
+    | {
+        partial: true;
+        remainingAgents: string[];
+      }
+  );
 
 /**
  * Remove one named skill. If `agentFilter` is null, removes from every
@@ -78,8 +91,12 @@ export function removeOne(
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
       : entry.agents;
-    removeFromAgents(entry, agentsToRemove, name, ctx, rec);
-    const remainingAgents = entry.agents.filter((t) => !agentsToRemove.includes(t));
+    const detached = removeFromAgents(entry, agentsToRemove, name, ctx, rec);
+    // Retention follows the per-agent OUTCOME, not the request: an
+    // agent whose removal aborted on a safety check still has the
+    // skill's bytes on disk, so §7.4 obliges us to report it as
+    // retained even though the user asked for it to go.
+    const remainingAgents = entry.agents.filter((t) => !detached.has(t));
     if (remainingAgents.length > 0) {
       nextState = reduceEntryAgents(nextState, name, entry.scope, remainingAgents);
       // Entries at different scopes can retain different agents; the
@@ -90,8 +107,7 @@ export function removeOne(
     }
   }
   if (retained.size > 0) {
-    rec.partial = true;
-    rec.remainingAgents = [...retained].sort();
+    Object.assign(rec, { partial: true, remainingAgents: [...retained].sort() });
   }
   return { updatedState: nextState, rec };
 }
@@ -101,6 +117,9 @@ export function removeOne(
  * entry. Adapters are grouped by resolved install path (path sharing,
  * §7.2): one call per `dest`, detaching every adapter in the group at
  * once. The per-adapter outcome is derived from the group outcome.
+ *
+ * Returns the agents whose ownership actually came off — the caller
+ * needs the outcome, not the request, to decide what is retained.
  */
 function removeFromAgents(
   entry: StateEntry,
@@ -108,7 +127,7 @@ function removeFromAgents(
   name: string,
   ctx: CommandContext,
   rec: UninstallRecord,
-) {
+): ReadonlySet<string> {
   // For project-scope entries, the authoritative install location is
   // the entry's recorded `project_root` — NOT `ctx.cwd`.
   const entryCwd = cwdForEntry(entry, ctx.cwd);
@@ -128,6 +147,7 @@ function removeFromAgents(
     if (existing) existing.push(adapter);
     else groups.set(dest, [adapter]);
   }
+  const detached = new Set<string>();
   for (const group of groups.values()) {
     try {
       const outcome = uninstallSkillFromAgents({
@@ -146,6 +166,8 @@ function removeFromAgents(
         // the skill is no longer installed for that target.
         for (const a of group) rec.removedFrom.push(a.name);
       }
+      // Absent and removed alike leave no bytes owned by this agent.
+      for (const a of group) detached.add(a.name);
     } catch (err) {
       const ce = err as CrewError;
       for (const a of group) {
@@ -156,4 +178,5 @@ function removeFromAgents(
       }
     }
   }
+  return detached;
 }

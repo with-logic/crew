@@ -75,4 +75,30 @@ describe("crew uninstall --dry-run safety checks", () => {
     expect(readFileSync(markerFile).equals(markerBefore)).toBe(true);
     expect(readState(home).installations.some((e) => e.name === "foo")).toBe(true);
   });
+
+  test("C-UNINST-19b an agent whose removal aborts is still reported as retained", () => {
+    const home = makeCrewHome();
+    installFooWithDepBar(home);
+    // Codex is the only agent asked for, and its dest is untracked, so
+    // its removal aborts and its bytes stay. Retention follows the
+    // outcome, not the request: omitting it would tell the user the
+    // skill is gone from codex when it is not.
+    rmSync(join(coRoot, "foo", ".crew.json"));
+
+    const out = captureStreams();
+    const code = runCli(["uninstall", "--dry-run", "--json", "--agent", "codex", "foo"], {
+      home,
+      streams: out.streams,
+    });
+
+    expect(code).toBe(1);
+    const payload = JSON.parse(out.stdout()) as {
+      readonly records: readonly {
+        readonly failures: readonly { readonly agent: string }[];
+        readonly remainingAgents?: readonly string[];
+      }[];
+    };
+    expect(payload.records[0]?.failures.map((f) => f.agent)).toEqual(["codex"]);
+    expect([...(payload.records[0]?.remainingAgents ?? [])]).toEqual(["claude-code", "codex"]);
+  });
 });
