@@ -9,7 +9,7 @@ import { dirname } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { crewHome, paths } from "../core/paths.ts";
 import { atomicReplace, ensureDir, exists, rmrf, writeText } from "../util/fs.ts";
-import type { EnableInput } from "./types.ts";
+import type { EnableInput, SchedulerProbe } from "./types.ts";
 
 export interface SystemctlResult {
   readonly ok: boolean;
@@ -98,7 +98,21 @@ export function disableAutoupdate(home: string = crewHome()): void {
 
 /** Is the timer currently active? */
 export function isAutoupdateLoaded(): boolean {
-  return runSystemctl(["is-active", "--quiet", "sh.crew.autoupdate.timer"]).ok;
+  return probeAutoupdate().state === "loaded";
+}
+
+/**
+ * Ask systemd whether the timer is active, distinguishing "no" from
+ * "couldn't ask" (§11.2). `is-active --quiet` exits non-zero and prints
+ * nothing for an inactive or absent unit — a real answer. Any stderr
+ * means the query failed (no user bus, `systemctl` missing, spawn
+ * error), which answers nothing about the timer.
+ */
+export function probeAutoupdate(): SchedulerProbe {
+  const r = runSystemctl(["is-active", "--quiet", "sh.crew.autoupdate.timer"]);
+  if (r.ok) return { state: "loaded", detail: "" };
+  if (r.stderr.length > 0) return { state: "indeterminate", detail: r.stderr };
+  return { state: "not-loaded", detail: "" };
 }
 
 export type SystemctlRunner = (args: string[]) => SystemctlResult;

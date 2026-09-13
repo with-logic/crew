@@ -13,10 +13,20 @@
 import type { Finding } from "./checks.ts";
 
 /**
- * Codes `--repair` actually fixes, each mapped to the mechanism that
- * fixes it. This is an allowlist on purpose: a new finding code is
- * NOT repairable until someone adds the repair and lists it here, so
- * the preview can never promise a fix that doesn't exist.
+ * Codes `--repair` actually fixes. An allowlist on purpose: a new
+ * finding code is NOT repairable until someone adds the repair and
+ * lists it here, so the preview can never promise a fix that doesn't
+ * exist.
+ *
+ * A set rather than a code-to-mechanism map: nothing reads the
+ * mechanism, and the labels went stale as soon as the rebuild moved out
+ * of `repairState`. Which function does the work belongs next to the
+ * work, not in a lookup nobody queries.
+ *
+ * The first three are reconciled by the state rebuild; the two
+ * autoupdate codes by `repairAutoupdateDrift` (§11.2 check 7), listed
+ * here because this change implements that reconciliation — a branch
+ * without it must not claim them.
  *
  * Deliberately absent:
  *   - `customized`, `agent_missing`, `config_invalid` — need a human.
@@ -24,20 +34,17 @@ import type { Finding } from "./checks.ts";
  *     vanished project's install isn't doctor's job, so it is a
  *     permanent heads-up rather than pending work.
  */
-const REPAIRABLE_CODES: Record<string, string> = {
-  state_entry_without_marker: "repairState",
-  marker_without_state: "repairState",
-  orphan_store_entry: "repairState",
-  // Reconciled by `repairAutoupdateDrift` (§11.2 check 7). These two
-  // are listed here because this change implements that reconciliation;
-  // a branch without it must not claim them.
-  autoupdate_not_loaded: "repairAutoupdateDrift",
-  autoupdate_unexpectedly_loaded: "repairAutoupdateDrift",
-};
+const REPAIRABLE_CODES: ReadonlySet<string> = new Set([
+  "state_entry_without_marker",
+  "marker_without_state",
+  "orphan_store_entry",
+  "autoupdate_not_loaded",
+  "autoupdate_unexpectedly_loaded",
+]);
 
 /** True when `code` is one `crew doctor --repair` can actually fix. */
 export function isRepairableCode(code: string): boolean {
-  return code in REPAIRABLE_CODES;
+  return REPAIRABLE_CODES.has(code);
 }
 
 /** How many of `findings` a repair would address. */
