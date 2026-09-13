@@ -14,7 +14,7 @@ import { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
-import { dropScopedEntryAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
+import { dropInstallLocation, reduceEntryAgents } from "./state.ts";
 
 export interface UninstallRecord {
   name: string;
@@ -40,13 +40,6 @@ export interface RemovalMeta {
    * a partial `--agent` removal — `--prune` keys off exactly that.
    */
   fullyRemovedRoots: (string | null)[];
-  /**
-   * True when a safety check aborted at least one agent. The entry keeps
-   * its state ownership in that case (§7.4 step 5): the bytes are still
-   * on disk, so the location's dependencies are still required and the
-   * prune sweep must not treat this as a removal.
-   */
-  aborted: boolean;
 }
 
 /**
@@ -71,7 +64,7 @@ export function removeOne(
     failures: [],
     ...(pruned ? { pruned: true } : {}),
   };
-  const meta: RemovalMeta = { fullyRemovedRoots: [], aborted: false };
+  const meta: RemovalMeta = { fullyRemovedRoots: [] };
   if (entries.length === 0) {
     if (!(ctx.flags.force || pruned)) {
       throw new CrewError(
@@ -93,9 +86,10 @@ export function removeOne(
     const failedBefore = rec.failures.length;
     removeFromAgents(entry, agentsToRemove, name, ctx, rec);
     // Agents whose removal aborted on a safety check keep their bytes on
-    // disk, so they keep their state ownership too (§7.4 step 5).
+    // disk, so they keep their state ownership too (§7.4 step 5). That
+    // retention is what excludes an abort from `fullyRemovedRoots`
+    // below: the entry survives, so the full-removal branch never runs.
     const abortedAgents = rec.failures.slice(failedBefore).map((f) => f.agent);
-    if (abortedAgents.length > 0) meta.aborted = true;
     const remainingAgents = entry.agents.filter(
       (t) => !agentsToRemove.includes(t) || abortedAgents.includes(t),
     );
@@ -109,7 +103,7 @@ export function removeOne(
       // Only a FULL removal frees this location's dependencies (§7.4
       // step 5); a surviving partial `--agent` removal still needs them.
       meta.fullyRemovedRoots.push(entry.project_root ?? null);
-      nextState = dropScopedEntryAndUpdateRequiredBy(nextState, entry);
+      nextState = dropInstallLocation(nextState, entry);
     }
   }
   if (anySurvives) rec.partial = true;

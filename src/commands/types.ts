@@ -46,7 +46,18 @@ export interface CommandContext {
 /** Global flags as parsed by the CLI. */
 export interface CommandFlags {
   readonly scope: Scope;
-  /** True when the user passed `--scope` explicitly (vs. the `user` default). */
+  /**
+   * True when the user passed `--scope` explicitly, as distinct from
+   * `scope` falling back to its `user` default.
+   *
+   * `crew uninstall` cannot use this — it always targets exactly one
+   * scope, defaulting to `user` (§7.4). The distinction matters only
+   * where `--scope` is a FILTER rather than a target: `crew list` shows
+   * both scopes when the flag is absent and narrows when it is present,
+   * which no other signal can express, since `scope` alone reads as
+   * `user` in both cases. It is parsed here because flag parsing is
+   * central; `src/commands/list/index.ts` is the consumer.
+   */
   readonly scopeGiven: boolean;
   readonly agent: readonly string[];
   readonly dryRun: boolean;

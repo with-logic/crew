@@ -26,6 +26,7 @@ import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
 import type { Config, StateFile } from "../../core/types.ts";
+import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
@@ -34,7 +35,7 @@ import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
 import { narrowSubjectToScope } from "./scope.ts";
-import { entryKey, findOrphan } from "./state.ts";
+import { findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
   if (ctx.positional.length === 0) {

@@ -63,18 +63,26 @@ function describeScope(scope: Scope, cwd: string): string {
 }
 
 function remedyFor(subject: StateSubject, scope: Scope): string {
-  const lines = subject.entries.map((e) => {
+  const lines: string[] = [];
+  for (const e of subject.entries) {
     if (e.scope === "user") {
       const flag = scope === "user" ? "" : " — drop `--scope project`";
-      return `installed at user scope${flag}: crew uninstall ${subject.raw}`;
+      lines.push(`installed at user scope${flag}: crew uninstall ${subject.raw}`);
+      continue;
     }
+    // `readState` drops project entries without a root (§11.1), so this
+    // is defence in depth: a remedy is advertised as copyable, and
+    // `cd ''` would silently run the uninstall from the user's home.
+    // Skip the line rather than emit a command that does the wrong thing.
+    if (e.project_root === undefined) continue;
     // Two renderings of one path: `display` is for reading (`~/...`),
     // `target` is pasted into a shell and so must survive spaces and
     // metacharacters. Shortening and quoting are deliberately not mixed.
-    const raw = e.project_root ?? "";
-    const display = shortenHome(raw);
-    const target = shellQuote(raw);
-    return `installed at project scope in ${display}: cd ${target} && crew uninstall --scope project ${subject.raw}`;
-  });
+    const display = shortenHome(e.project_root);
+    const target = shellQuote(e.project_root);
+    lines.push(
+      `installed at project scope in ${display}: cd ${target} && crew uninstall --scope project ${subject.raw}`,
+    );
+  }
   return `${lines.join("\n")}\nOr add \`--force\` to treat this as a no-op.`;
 }

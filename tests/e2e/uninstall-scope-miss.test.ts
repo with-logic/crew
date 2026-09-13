@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -112,5 +112,54 @@ describe("the remedy command survives awkward project paths", () => {
     // The `cd` target must be pasteable: quoted, not bare.
     expect(c.stderr()).toContain(`cd '${project}'`);
     expect(c.stderr()).not.toContain(`cd ${project} &&`);
+  });
+
+  test("a project root containing a single quote stays pasteable", () => {
+    const home = makeCrewHome();
+    // The character that breaks naive single-quoting: the closing quote
+    // lands early and the rest of the path becomes shell syntax.
+    const project = join(makeTempDir("crew-proj-"), "it's mine");
+    expect(installSkill(home, "demo", "project", project)).toBe(0);
+
+    const c = captureStreams();
+    const code = runCli(["uninstall", "demo"], { home, cwd: project, streams: c.streams });
+    expect(code).toBe(6);
+    // POSIX escaping: close, escaped literal quote, reopen.
+    expect(c.stderr()).toContain(`cd '${project.replace(/'/g, `'\\''`)}'`);
+    // A naive quote would have emitted the raw path inside quotes.
+    expect(c.stderr()).not.toContain(`cd '${project}'`);
+  });
+
+  test("a project entry with no project_root never yields `cd ''`", () => {
+    const home = makeCrewHome();
+    // `state.json` is user-editable and may predate `project_root`.
+    // §11.1 requires it on a project entry; an entry without one cannot
+    // produce a runnable remedy, so `readState` drops it.
+    writeFileSync(
+      join(home, "state.json"),
+      JSON.stringify({
+        schema_version: 1,
+        installations: [
+          {
+            name: "demo",
+            source: { tap: "t", path: "" },
+            ref: null,
+            resolved_sha: null,
+            content_hash: "sha256:x",
+            scope: "project",
+            installed_at: "2026-01-01T00:00:00Z",
+            agents: ["claude-code"],
+            pinned: false,
+            explicit: true,
+            required_by: [],
+          },
+        ],
+      }),
+    );
+
+    const c = captureStreams();
+    const code = runCli(["uninstall", "demo"], { home, cwd: home, streams: c.streams });
+    expect(code).toBe(6);
+    expect(c.stderr()).not.toContain("cd ''");
   });
 });
