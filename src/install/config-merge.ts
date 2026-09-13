@@ -9,7 +9,7 @@
  * installing against it would record a state entry pointing at a tap
  * the user just removed.
  *
- * These helpers keep only the taps the resolver actually ADDED, and
+ * These helpers replay the resolver's changes onto fresh config, and
  * refuse to proceed when a tap the install depends on is gone.
  */
 
@@ -17,22 +17,54 @@ import { CrewError } from "../core/errors.ts";
 import type { Config, ResolvedSkill, TapConfig } from "../core/types.ts";
 
 /**
- * Fresh config plus the taps the resolver added to its stale snapshot.
+ * Fresh config with the resolver's changes replayed onto it.
  *
- * Taps removed since the snapshot stay removed — they are absent from
- * `fresh` and were never in `added`, so they cannot come back.
+ * The resolver does exactly two things to its stale snapshot: it APPENDS
+ * a new auto tap, or it UPGRADES an existing tap's `discovery` in place
+ * (`crew install --recursive` against an already-registered tap). It
+ * never removes one. Classifying each tap in `extended` by whether its
+ * name was in `before` and is in `fresh` covers every case:
+ *
+ *   - not in `before`, not in `fresh` → the resolver added it; keep it.
+ *   - not in `before`, in `fresh`     → another process added the same
+ *     name concurrently; keep fresh's row rather than clobbering it.
+ *   - in `before`, not in `fresh`     → concurrently REMOVED. The
+ *     resolver never deletes, so removal is the only explanation; it
+ *     stays removed.
+ *   - in `before`, in `fresh`         → may be a resolver modification.
+ *
+ * "Absent from `fresh`" is ambiguous on its own, which is why `before`
+ * is needed to tell a concurrent removal apart from a modification.
+ *
+ * A modification is applied as the resolver's DELTA (only the fields it
+ * actually changed) rather than by overwriting fresh's row, so a
+ * concurrent edit to an unrelated field survives.
  */
 export function mergeAutoTaps(fresh: Config, before: Config, extended: Config): Config {
-  const known = new Set<string>();
-  for (const t of before.taps) known.add(t.name);
-  for (const t of fresh.taps) known.add(t.name);
+  const beforeByName = new Map(before.taps.map((t) => [t.name, t]));
+  const freshByName = new Map(fresh.taps.map((t) => [t.name, t]));
   const added: TapConfig[] = [];
+  // Names whose `discovery` the resolver upgraded on a tap that still exists.
+  const upgraded = new Set<string>();
   for (const t of extended.taps) {
-    if (known.has(t.name)) continue;
-    added.push(t);
+    const original = beforeByName.get(t.name);
+    if (!original) {
+      // New to the resolver. If fresh already has the name, a concurrent
+      // writer got there first and its row wins.
+      if (!freshByName.has(t.name)) added.push(t);
+      continue;
+    }
+    // Present in `before`: only a concurrent removal can drop it from
+    // `fresh`, and a removed tap must stay removed.
+    if (!freshByName.has(t.name)) continue;
+    if (t.discovery === "recursive" && original.discovery !== "recursive") upgraded.add(t.name);
   }
-  if (added.length === 0) return fresh;
-  return { ...fresh, taps: [...fresh.taps, ...added] };
+  if (added.length === 0 && upgraded.size === 0) return fresh;
+  const taps: TapConfig[] = [];
+  for (const t of fresh.taps) {
+    taps.push(upgraded.has(t.name) ? { ...t, discovery: "recursive" } : t);
+  }
+  return { ...fresh, taps: [...taps, ...added] };
 }
 
 /**
