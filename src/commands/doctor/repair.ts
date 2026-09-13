@@ -12,21 +12,27 @@
  * and each skill's install directory.
  */
 
-import { existsSync } from "node:fs";
 import { readConfig, writeConfig } from "../../config/load.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { garbageCollectStore } from "../../maintenance/gc.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
+import { isDirectory } from "../../util/fs.ts";
 import type { MarkerEntry } from "./markers.ts";
 
 /**
  * True when the entry is project-scope and its recorded root is gone,
  * so no marker could have been read for it (§11.2 check 8).
+ *
+ * A root replaced by a regular file counts as gone: nothing can be
+ * read beneath it, so treating it as usable would drop the entry's
+ * state on the assumption a marker exists there.
  */
 function isUnreadableProjectEntry(entry: StateEntry): boolean {
   return (
-    entry.scope === "project" && entry.project_root !== undefined && !existsSync(entry.project_root)
+    entry.scope === "project" &&
+    entry.project_root !== undefined &&
+    !isDirectory(entry.project_root)
   );
 }
 

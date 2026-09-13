@@ -102,10 +102,7 @@ describe("C-STATE-12a doctor --repair reports only real repairs", () => {
     const project = makeTempDir("crew-proj-");
     rmSync(project, { recursive: true, force: true });
     const installed = readState(home).installations;
-    writeState(
-      { schema_version: 1, installations: [...installed, projectEntry(project)] },
-      home,
-    );
+    writeState({ schema_version: 1, installations: [...installed, projectEntry(project)] }, home);
 
     runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
 
