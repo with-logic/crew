@@ -529,7 +529,9 @@ describe("crew search output", () => {
       streams: captureStreams().streams,
     });
     runCli(["install", "oldtap/shared"], { home, streams: captureStreams().streams });
-    runCli(["tap", "remove", "oldtap"], { home, streams: captureStreams().streams });
+    // `--force` is what drops a tap while keeping its skills installed
+    // (§16.3) — exactly the state this criterion is about.
+    runCli(["tap", "remove", "--force", "oldtap"], { home, streams: captureStreams().streams });
     runCli(["tap", "add", `file://${newRepo}`, "newtap"], {
       home,
       streams: captureStreams().streams,

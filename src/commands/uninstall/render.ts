@@ -16,7 +16,11 @@ const FAIL_REMEDIES: Record<string, string> = {
   not_installed_here: "wasn't installed here (pass --force to ignore)",
 };
 
-export function renderUninstall(records: readonly UninstallRecord[], style: Styler): string[] {
+export function renderUninstall(
+  records: readonly UninstallRecord[],
+  dryRun: boolean,
+  style: Styler,
+): string[] {
   const direct = records.filter((r) => !r.pruned);
   const pruned = records.filter((r) => r.pruned);
 
@@ -24,36 +28,40 @@ export function renderUninstall(records: readonly UninstallRecord[], style: Styl
 
   if (direct.length > 0) {
     const subjects = direct.map((r) => r.name);
+    const verb = dryRun ? "Would uninstall" : "Uninstalling";
     const header =
       subjects.length === 1
-        ? `Uninstalling ${subjects[0]}`
-        : `Uninstalling ${plural(subjects.length, "skill")}`;
+        ? `${verb} ${subjects[0]}`
+        : `${verb} ${plural(subjects.length, "skill")}`;
     lines.push(style.bold(header));
     for (const r of direct) {
       lines.push("");
-      lines.push(...renderRecord(r, style));
+      lines.push(...renderRecord(r, dryRun, style));
     }
   }
 
   if (pruned.length > 0) {
     if (lines.length > 0) lines.push("");
-    lines.push(style.bold(`Pruned ${plural(pruned.length, "dependency", "dependencies")}`));
+    const prunedHeader = dryRun
+      ? `Would prune ${plural(pruned.length, "dependency", "dependencies")}`
+      : `Pruned ${plural(pruned.length, "dependency", "dependencies")}`;
+    lines.push(style.bold(prunedHeader));
     for (const r of pruned) {
       lines.push("");
-      lines.push(...renderRecord(r, style));
+      lines.push(...renderRecord(r, dryRun, style));
     }
   }
 
   const totals = tally(records);
   if (totals.removals > 0 || totals.failures > 0) {
     lines.push("");
-    lines.push(style.dim(formatTotals(totals)));
+    lines.push(style.dim(formatTotals(totals, dryRun)));
   }
 
   return lines;
 }
 
-function renderRecord(r: UninstallRecord, style: Styler): string[] {
+function renderRecord(r: UninstallRecord, dryRun: boolean, style: Styler): string[] {
   const lines: string[] = [];
   const tag = r.partial ? style.dim("(kept elsewhere)") : "";
   const header = [style.bold(r.name), tag].filter((s) => s.length > 0).join(" ");
@@ -69,7 +77,7 @@ function renderRecord(r: UninstallRecord, style: Styler): string[] {
     lines.push(`    ${style.symbol("fail")} ${fail.agent}  ${style.red(remedy)}`);
   }
   if (r.removedFrom.length === 0 && r.absentFrom.length === 0 && r.failures.length === 0) {
-    lines.push(`    ${style.dim("nothing to remove")}`);
+    lines.push(`    ${style.dim(dryRun ? "nothing would be removed" : "nothing to remove")}`);
   }
   return lines;
 }
@@ -90,13 +98,18 @@ function tally(records: readonly UninstallRecord[]): Totals {
   return t;
 }
 
-function formatTotals(totals: Totals): string {
+function formatTotals(totals: Totals, dryRun: boolean): string {
   const parts: string[] = [];
   if (totals.removals > 0) {
-    parts.push(`removed from ${plural(totals.removals, "agent")}`);
+    parts.push(
+      dryRun
+        ? `would remove from ${plural(totals.removals, "agent")}`
+        : `removed from ${plural(totals.removals, "agent")}`,
+    );
   }
   if (totals.pruned > 0) {
-    parts.push(`pruned ${plural(totals.pruned, "dependency", "dependencies")}`);
+    const noun = plural(totals.pruned, "dependency", "dependencies");
+    parts.push(dryRun ? `would prune ${noun}` : `pruned ${noun}`);
   }
   if (totals.failures > 0) {
     parts.push(plural(totals.failures, "failure"));

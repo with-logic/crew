@@ -74,8 +74,14 @@ export const GROUPS: readonly CommandGroup[] = [
       },
       {
         name: "tap-remove",
-        signature: <>crew tap remove &lt;name&gt;</>,
-        description: "Delete a local tap clone and drop it from config.",
+        signature: <>crew tap remove [--uninstall] [--force] &lt;name&gt;</>,
+        description: [
+          "Delete a local tap clone and drop it from config. If skills are still installed from the tap, the command stops and asks which you meant: ",
+          <code key="crew-tap-remove-uninstall">--uninstall</code>,
+          " removes those skills too, while ",
+          <code key="crew-tap-remove-force">--force</code>,
+          " drops the tap and keeps them installed.",
+        ],
       },
       {
         name: "tap-list",
@@ -90,8 +96,16 @@ export const GROUPS: readonly CommandGroup[] = [
       },
       {
         name: "untap",
-        signature: <>crew untap &lt;name&gt;</>,
-        description: ["Alias for ", <code key="crew-untap-tap-remove">crew tap remove</code>, "."],
+        signature: <>crew untap [--uninstall] [--force] &lt;name&gt;</>,
+        description: [
+          "Alias for ",
+          <code key="crew-untap-tap-remove">crew tap remove</code>,
+          ". Refuses to remove a tap that still has skills installed from it; ",
+          <code key="crew-untap-uninstall">--uninstall</code>,
+          " removes those skills first, and ",
+          <code key="crew-untap-force">--force</code>,
+          " drops the tap but keeps them installed.",
+        ],
       },
       {
         name: "tap-update",

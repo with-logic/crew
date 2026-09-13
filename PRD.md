@@ -137,6 +137,13 @@ stored skill name (`pdf`) or a tap-qualified selector (`<tap>/<skill>` or
 User-facing help may describe these values as skill names rather than
 selectors; the distinction is spec terminology, not product language.
 
+**Alias flags.** An alias accepts exactly the flags its resolved command
+accepts, so `crew untap --uninstall <name>` is `crew tap remove
+--uninstall <name>`. Where an alias resolves to a specific subcommand,
+that subcommand's flags are the ones accepted: `crew untap` is `crew tap
+remove`, which ignores `--recursive`, so `crew untap --recursive` is a
+`usage_error` even though `crew tap add --recursive` is valid.
+
 ### 5.2 Global flags
 
 Accepted on any command where they apply:
@@ -848,6 +855,18 @@ tap's clone URL 404s, or a git repo is gone. Those produce
 not." The distinction matters because a transient network failure
 should not be confused with a deliberate upstream deletion.
 
+**A deconfigured tap does not break update either.** If an installed
+skill's `source.tap` names a tap that is no longer in `config.yaml` —
+the user ran `crew tap remove --force`, or edited the config by hand —
+crew records a per-skill `tap_missing` outcome and leaves the local
+install, its marker, and its state entry untouched. Like `source_gone`
+this is soft: exit code stays 0 for a run whose only abnormalities are
+`tap_missing`, so one deconfigured tap never blocks updating everything
+else. The remedy is to re-add the tap (`crew tap add <url>`) or to
+rebuild it from markers with `crew doctor --repair`; the human output
+says so. `tap_missing` is distinct from `source_unreachable`: nothing
+was unreachable, crew simply has no source configured to check.
+
 ### 10.1.1 Tap re-expansion
 
 Homecrew picks up new skills added to a tap automatically — but only for
@@ -1333,6 +1352,8 @@ The 40-char hex commit SHA the skill was resolved from. Short SHA is the first 8
 
 Every error below has a stable machine-readable name (for `--json` output) and a human-readable message. Implementations may phrase the human messages however they like but must use these identifiers in `--json`.
 
+Two entries in this table — `source_gone` and `tap_missing` — are **soft outcomes**, not failures. They carry exit 0, they never abort a run, and an implementation does not raise them the way it raises the rest: they surface as a per-skill outcome on `crew update` (§10.1) while the local install, marker, and state entry are all preserved. They are listed here so a `--json` consumer has one stable name and one declared exit code per observable outcome, whether or not the implementation models it as a thrown error internally.
+
 | Name | Exit | When |
 |---|---|---|
 | `invalid_ref` | 4 | The skill reference failed to parse (§8.4). |
@@ -1341,6 +1362,7 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `source_unreachable` | 5 | Network or git failure acquiring a source. |
 | `ref_not_found` | 5 | Ref doesn't exist in the repo. |
 | `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
+| `tap_missing` | 0 | On update, the installed skill's tap is no longer in `config.yaml` (e.g. after `crew tap remove --force`). Soft outcome; local install is preserved. Never causes a non-zero exit. |
 | `ambiguous_reference` | 4 | A reference has more than one valid resolution across taps, skills, and namespaces, and the user is non-interactive or the prompt was aborted. |
 | `ambiguous_dependency` | 4 | A dependency's bare name is ambiguous across taps. |
 | `conflicting_dependencies` | 4 | Two skills in one install set have the same name but different source paths or resolved SHAs; also emitted by `crew update` when tap re-expansion finds multiple current children declaring the same `name`. |
@@ -1534,6 +1556,11 @@ since the registry was built, the normal tap-add or install error applies.
 - `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Bare `crew tap` (no positional at all) prints the command's help page (same as `crew help tap`) with exit 0. Any other input — an unknown subcommand, or a word that doesn't parse as a source — is a `usage_error` whose message names the offending input and points at `crew help tap`. Other commands that take subcommands (`crew cache`, `crew autoupdate`) behave the same way; `crew agents` lists agents when bare and errors on an unknown subcommand.
 - Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`). The subpath, URL, or path is entirely internal — it never appears in skill references.
 - `crew tap remove <name>` deletes the local clone and removes the tap from config. Auto taps are also removed automatically when their last associated state entry is uninstalled (see §16.5). With `--dry-run`, the same lookup and default-tap guard run, but nothing is written or deleted; the command reports what would be removed and `--json` carries `dry_run: true`.
+  - **Attached-skill guard.** If any `state.json` entry, at any scope, is attributed to the tap (`state.source.tap == <name>`), the bare command is a `usage_error` (exit 4). Removing the tap would leave those entries pointing at a tap that no longer exists. The error lists each attached skill with its scope and names the two ways forward: `crew tap remove --uninstall <name>` (remove the skills, then the tap) and `crew tap remove --force <name>` (drop the tap and keep the skills installed). A tap with no attached entries removes without a prompt, as before.
+  - `--uninstall` uninstalls every attached entry, at every scope, through the uninstall algorithm of §7.4, and then removes the tap. Only entries attributed to this tap are removed: a skill of the same name installed from a different tap, or the same skill in a different project root, keeps its install and its state entry. Human output renders the per-skill removal blocks followed by the tap-removed line; `--json` emits `{ name, uninstalled: [<uninstall records>], dry_run }`. Combined with `--dry-run`, both the skill removals and the tap removal are previewed and nothing is written. A per-agent safety abort (`customized`, `untracked_directory`) is reported per skill and leaves the tap in place, exit 1 — the user can retry with `--force`. An aborted agent keeps its ownership in `state.json`, matching the bytes it still owns, so the attached-skill guard continues to see the install rather than letting a later forced retry orphan it.
+  - `--force` removes the tap and keeps the attached skills installed. They keep working at their installed version; the command warns and names them. Their state entries survive with a `source.tap` that no longer resolves, and `crew update` reports each as `tap_missing` (§10.1) rather than failing. `crew doctor --repair` reconstructs the tap from markers, which is the way back.
+  - `--uninstall` and `--force` together: `--uninstall` wins, because nothing is left to keep.
+  - The default-tap guard (§16.2) composes with this one and is evaluated first: `crew tap remove core` still needs `--force` regardless of attached skills.
 - `crew tap list` prints each tap's name, kind (`registered` / `auto`), discovery mode when non-standard, source (URL`//subpath` or path), and last-fetched timestamp (for git-kind taps only). `--json` emits the structured shape.
 - `crew tap update [<name>...]` fetches upstream for every git-kind tap (or only the named ones) and fast-forwards each tap's working tree. Path-kind taps are skipped silently. Per-tap failures are reported per-row and do not abort the run; exit code is 1 if any tap failed, 0 otherwise. It does **not** touch installed skills — contrast with `crew update`, which refreshes taps and updates installed skills. With `--dry-run`, no fetch happens: each git-kind tap that would be fetched is reported with a `pending` row, path-kind taps are still reported as skipped, and `--json` carries `dry_run: true`.
 
@@ -1812,6 +1839,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-10 | §10.1 | `crew update` exits 1 when any skill had a hard failure (network, fetch, validation). |
 | C-UPD-11 | §10.1 | When an installed skill's upstream source resolves but the skill's directory or tap entry no longer exists, `crew update` reports `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
 | C-UPD-12 | §10.1 | An update run whose only abnormalities are `source_gone` exits 0. |
+| C-UPD-12b | §10.1 | When an installed skill's tap is no longer in `config.yaml`, `crew update` reports `tap_missing` for that skill, leaves the local install, marker, and state entry untouched, and exits 0 when that is the run's only abnormality. Other skills in the same run still update. |
 | C-UPD-13 | §10.1 | `crew update` never deletes a agent's installed skill directory, its marker, or its state entry as a consequence of upstream changes. Removal is only ever performed by `crew uninstall`. |
 | C-UPD-14 | §16.5 | `crew install <git-url>` against a source with no matching configured tap creates an auto tap (`registered: false`) in `config.yaml`. Every resulting state entry's `source.tap` names that tap. |
 | C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). |
@@ -1880,6 +1908,12 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-15 | §16.3 | `crew tap add` is transactional: if the clone fails, the tap is NOT recorded in `config.yaml` and does NOT appear in `crew tap list`. Any partially-materialized clone directory is removed. |
 | C-TAP-16 | §16.3 | `crew tap update` fetches + fast-forwards every configured tap. `crew tap update <name>...` restricts to the named taps. Unknown names produce `usage_error`. It does not touch installed skills. |
 | C-TAP-16b | §16.3 | `crew tap add --dry-run`, `crew tap remove --dry-run`, and `crew tap update --dry-run` report the outcome that would apply and exit 0 without cloning, fetching, deleting a clone, writing `config.yaml`, or rewriting markers. The same `usage_error`s as the real command still fire. JSON output carries `dry_run: true`. |
+| C-TAP-16c | §16.3 | `crew tap remove <name>` where any state entry has `source.tap == <name>` is a `usage_error` (exit 4) that names each attached skill with its scope and offers both `--uninstall` and `--force`. The tap stays in `config.yaml` and its clone is not deleted. |
+| C-TAP-16d | §16.3 | `crew tap remove --uninstall <name>` uninstalls every attached entry at every scope, then removes the tap and its clone. Only entries attributed to `<name>` are touched; a same-named skill installed from another tap, or the same skill in another project root, is left installed. With `--dry-run` nothing is removed: the installs, markers, `state.json`, and `config.yaml` are all unchanged. |
+| C-TAP-16d1 | §16.3, §7.4 | When a per-agent safety check aborts a `--uninstall` removal, the skill's state entry is retained alongside its bytes, so the attached-skill guard still sees it and a later `--force --uninstall` cannot remove the tap while leaving the install unattributed. |
+| C-TAP-16d2 | §5.1, §16.3 | `crew untap --uninstall <name>` behaves identically to `crew tap remove --uninstall <name>`. An alias accepts exactly the flags its resolved subcommand accepts, so `crew untap --recursive` remains a `usage_error`. |
+| C-TAP-16e | §16.3 | `crew tap remove --force <name>` with attached skills removes the tap, keeps every attached install and state entry, and warns naming those skills. |
+| C-TAP-16f | §16.2, §16.3 | The default-tap guard is evaluated before the attached-skill guard: `crew tap remove core` with attached skills is refused without `--force`, and `crew tap remove --uninstall --force core` removes both the skills and the tap. |
 | C-TAP-17 | §16.6 | `crew search`, `crew info`, `crew list`, and `crew install` for bare-name or `<tap>/<skill>` references do not issue a `git fetch`. They read from local tap clones only. A missing clone is materialized on first read; an unreachable tap at that moment warns and is skipped. |
 | C-TAP-18 | §16.4 | `crew install <tap-name>` (where `<tap-name>` matches a configured tap, registered or auto) installs every skill the tap currently exposes. Each resulting state entry has `source.tap = <tap-name>` and `explicit = true`. |
 | C-TAP-19 | §16.4 | When `<positional>` matches both a tap name and a skill name in exactly one other tap, `crew install <positional>` prompts with `[Y/n]` (tap wins on enter). `--yes` skips the prompt and installs the tap. In a non-TTY environment, the command aborts with `usage_error` instructing the user to pass `--yes` or qualify the skill as `<other-tap>/<name>`. |

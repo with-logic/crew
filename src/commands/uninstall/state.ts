@@ -2,43 +2,137 @@
  * State mutations for `crew uninstall` (§7.4).
  *
  * - `reduceEntryAgents` — partial removal: entry stays but loses some agents.
- * - `dropScopedEntryAndUpdateRequiredBy` — full removal at one (name, scope);
- *    also scrubs the removed name from every surviving `required_by`.
+ * - `dropScopedEntryAndUpdateRequiredBy` — full removal of one entry
+ *    (name, scope, project root); also scrubs the removed name from
+ *    every surviving `required_by` at the same location.
  * - `findOrphan` — identifies a skill that `--prune` should autoremove.
  */
 
 import type { StateEntry, StateFile } from "../../core/types.ts";
 
-/** Replace the (name, scope) entry's `agents` array with `remaining`. */
+/** True when `e` is the same installed entry as `target` (name, scope, project root). */
+function sameEntry(e: StateEntry, target: StateEntry): boolean {
+  return e.name === target.name && sameLocation(e, target);
+}
+
+/**
+ * True when both entries live at the same install location — same scope
+ * and, for project scope, the same `project_root`. §11.1 keys an entry by
+ * (skill, scope, project_root), so a removal at one location must never
+ * mutate another's row or its dependency edges.
+ */
+function sameLocation(e: StateEntry, target: StateEntry): boolean {
+  return e.scope === target.scope && (e.project_root ?? null) === (target.project_root ?? null);
+}
+
+/** Location-qualified key for one entry, per §11.1's (skill, scope, root) triple. */
+export function entryKey(e: StateEntry): string {
+  return JSON.stringify([e.name, e.scope, e.project_root ?? ""]);
+}
+
+/** Key for just the install LOCATION — the (scope, root) half of §11.1's triple. */
+function locationKey(e: StateEntry): string {
+  return JSON.stringify([e.scope, e.project_root ?? ""]);
+}
+
+/**
+ * Drop many entries in ONE traversal, scrubbing each removed name from
+ * the `required_by` of survivors at the same location.
+ *
+ * `dropScopedEntryAndUpdateRequiredBy` walks every installation per
+ * call, so removing K skills from a tap costs K full passes over N
+ * entries. Callers that already know the whole removal set — the
+ * `tap remove --uninstall` path — use this instead.
+ */
+export function dropEntriesAndUpdateRequiredBy(
+  state: StateFile,
+  targets: readonly StateEntry[],
+): StateFile {
+  if (targets.length === 0) return state;
+  const dropped = new Set<string>();
+  // Removed names indexed BY LOCATION, so each surviving entry costs one
+  // map lookup instead of a scan over every target: N+K, not N*K.
+  const removedAtLocation = new Map<string, Set<string>>();
+  for (const t of targets) {
+    dropped.add(entryKey(t));
+    const key = locationKey(t);
+    const names = removedAtLocation.get(key);
+    if (names) names.add(t.name);
+    else removedAtLocation.set(key, new Set([t.name]));
+  }
+  const installations: StateEntry[] = [];
+  for (const e of state.installations) {
+    if (dropped.has(entryKey(e))) continue;
+    // Only names removed at THIS entry's location may be scrubbed from
+    // its edges; a same-named skill elsewhere keeps its own.
+    const names = removedAtLocation.get(locationKey(e));
+    if (!names) {
+      installations.push(e);
+      continue;
+    }
+    // A `for` loop rather than `.filter(cb)`: the callback would only be
+    // constructed-and-invoked on the subset of survivors that share a
+    // location with a removal, leaving an uncovered function object.
+    const kept: string[] = [];
+    for (const n of e.required_by) {
+      if (!names.has(n)) kept.push(n);
+    }
+    installations.push(kept.length === e.required_by.length ? e : { ...e, required_by: kept });
+  }
+  return { schema_version: 1, installations };
+}
+
+/** Replace `target`'s `agents` array with `remaining`. */
 export function reduceEntryAgents(
   state: StateFile,
-  name: string,
-  scope: StateEntry["scope"],
+  target: StateEntry,
   remaining: readonly string[],
 ): StateFile {
   return {
     schema_version: 1,
     installations: state.installations.map((e) =>
-      e.name === name && e.scope === scope ? { ...e, agents: [...remaining] } : e,
+      sameEntry(e, target) ? { ...e, agents: [...remaining] } : e,
     ),
   };
 }
 
-/** Drop the (name, scope) entry and scrub `name` from every surviving `required_by`. */
+/**
+ * Drop `target` and scrub its name from the `required_by` of surviving
+ * entries at the SAME location only. A `foo -> bar` edge in project A
+ * must survive uninstalling `foo` in project B, where A's `foo` is still
+ * installed; scrubbing globally would orphan A's `bar` and let a later
+ * `--prune` delete a dependency A still requires.
+ */
 export function dropScopedEntryAndUpdateRequiredBy(
   state: StateFile,
-  name: string,
-  scope: StateEntry["scope"],
+  target: StateEntry,
 ): StateFile {
-  return {
-    schema_version: 1,
-    installations: state.installations
-      .filter((e) => !(e.name === name && e.scope === scope))
-      .map((e) => ({ ...e, required_by: e.required_by.filter((n) => n !== name) })),
-  };
+  const installations: StateEntry[] = [];
+  for (const e of state.installations) {
+    if (sameEntry(e, target)) continue;
+    if (sameLocation(e, target)) {
+      installations.push({ ...e, required_by: e.required_by.filter((n) => n !== target.name) });
+    } else {
+      installations.push(e);
+    }
+  }
+  return { schema_version: 1, installations };
 }
 
-/** An autoremovable orphan: `explicit: false` AND empty `required_by`. */
-export function findOrphan(state: StateFile): StateEntry | undefined {
-  return state.installations.find((e) => !e.explicit && e.required_by.length === 0);
+/**
+ * An autoremovable orphan: `explicit: false` AND empty `required_by`,
+ * skipping any entry the caller has already attempted this run.
+ *
+ * The `attempted` set is what bounds the prune sweep. A removal that
+ * aborts on a safety check RETAINS the entry's ownership, so the entry
+ * stays in state still looking like an orphan; without the set, the
+ * caller's loop would be handed the same entry forever.
+ */
+export function findOrphan(
+  state: StateFile,
+  attempted: ReadonlySet<string>,
+): StateEntry | undefined {
+  return state.installations.find(
+    (e) => !e.explicit && e.required_by.length === 0 && !attempted.has(entryKey(e)),
+  );
 }

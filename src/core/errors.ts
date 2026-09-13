@@ -13,6 +13,7 @@ export type CrewErrorName =
   | "no_skills_found"
   | "source_unreachable"
   | "source_gone"
+  | "tap_missing"
   | "ref_not_found"
   | "ambiguous_reference"
   | "ambiguous_dependency"
@@ -37,10 +38,13 @@ export const EXIT_CODES: Record<CrewErrorName, number> = {
   invalid_skill: 4,
   no_skills_found: 4,
   source_unreachable: 5,
-  // `source_gone` is a soft outcome (§10.1) — the source resolved but the
-  // skill no longer exists upstream. Carries exit 0; `crew update`
+  // `source_gone` and `tap_missing` are soft outcomes (§10.1), not
+  // failures: nothing is thrown with these codes. They are declared here
+  // so §13's table has one machine name and exit code per outcome a
+  // `--json` consumer can observe. Both carry exit 0 — `crew update`
   // preserves the local install and never escalates.
   source_gone: 0,
+  tap_missing: 0,
   ref_not_found: 5,
   ambiguous_reference: 4,
   ambiguous_dependency: 4,

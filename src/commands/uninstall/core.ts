@@ -27,6 +27,17 @@ export interface UninstallRecord {
   partial?: boolean;
 }
 
+/** Per-entry result of one `removeOne` call, keyed by §11.1's (name, scope, root). */
+export interface EntryOutcome {
+  readonly entry: StateEntry;
+  /**
+   * True when every agent asked to give up this entry did so, leaving no
+   * ownership behind. Only these entries may be dropped from state — an
+   * entry with retained ownership still has bytes on disk.
+   */
+  readonly fullyRemoved: boolean;
+}
+
 /**
  * Remove one named skill. If `agentFilter` is null, removes from every
  * agent the skill is on (full uninstall). If non-null, removes only
@@ -39,7 +50,7 @@ export function removeOne(
   ctx: CommandContext,
   pruned: boolean,
   agentFilter: readonly string[] | null,
-): { updatedState: StateFile; rec: UninstallRecord } {
+): { updatedState: StateFile; rec: UninstallRecord; outcomes: readonly EntryOutcome[] } {
   const name = typeof subject === "string" ? subject : subject.name;
   const entries =
     typeof subject === "string"
@@ -61,27 +72,38 @@ export function removeOne(
         { name: errorName },
       );
     }
-    return { updatedState: state, rec };
+    return { updatedState: state, rec, outcomes: [] };
   }
-  // Per-entry processing: each (skill, scope) pair potentially touches
-  // a different subset of agents.
+  // Per-entry processing: each (skill, scope, project_root) entry
+  // potentially touches a different subset of agents.
   let nextState = state;
   let anySurvives = false;
+  const outcomes: EntryOutcome[] = [];
   for (const entry of entries) {
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
       : entry.agents;
+    const before = rec.failures.length;
     removeFromAgents(entry, agentsToRemove, name, ctx, rec);
-    const remainingAgents = entry.agents.filter((t) => !agentsToRemove.includes(t));
+    // An agent that aborted on a safety check still owns its bytes, so
+    // its ownership must stay in state. Dropping the entry anyway would
+    // hide the install from every later attachment check — a retry would
+    // then delete the tap and orphan it.
+    const failedAgents = rec.failures.slice(before).map((f) => f.agent);
+    const remainingAgents = entry.agents.filter(
+      (t) => !agentsToRemove.includes(t) || failedAgents.includes(t),
+    );
     if (remainingAgents.length > 0) {
-      nextState = reduceEntryAgents(nextState, name, entry.scope, remainingAgents);
+      nextState = reduceEntryAgents(nextState, entry, remainingAgents);
       anySurvives = true;
+      outcomes.push({ entry, fullyRemoved: false });
     } else {
-      nextState = dropScopedEntryAndUpdateRequiredBy(nextState, name, entry.scope);
+      nextState = dropScopedEntryAndUpdateRequiredBy(nextState, entry);
+      outcomes.push({ entry, fullyRemoved: true });
     }
   }
   if (anySurvives) rec.partial = true;
-  return { updatedState: nextState, rec };
+  return { updatedState: nextState, rec, outcomes };
 }
 
 /**
@@ -102,14 +124,25 @@ function removeFromAgents(
   const entryCwd = cwdForEntry(entry, ctx.cwd);
   const groups = new Map<string, AgentAdapter[]>();
   for (const targetName of agentsToRemove) {
-    // An unknown target name in state shouldn't happen in normal use
-    // but may if state was written by a future crew; skip it
-    // silently rather than aborting the whole uninstall. Similarly,
-    // adapters that don't support the entry's scope (empty base)
-    // wouldn't be in state.agents to begin with, so we don't need
-    // a runtime branch for them.
+    // A target name in state with no adapter in this build — state
+    // written by a future crew, or an adapter since removed. We cannot
+    // reach its install directory, so its bytes stay on disk. Record a
+    // failure so the entry keeps that ownership: dropping it would hide
+    // a real install from every later attachment check, letting
+    // `tap remove --uninstall` delete the tap and orphan it.
+    // Adapters that don't support the entry's scope (empty base) never
+    // appear in `state.agents`, so they need no branch here.
     const adapter = agentByName(targetName);
-    if (!adapter) continue;
+    if (!adapter) {
+      rec.failures.push({
+        agent: targetName,
+        error: {
+          code: "unknown_agent",
+          message: `no adapter named \`${targetName}\` in this build — its install was left in place`,
+        },
+      });
+      continue;
+    }
     const base = baseFor(adapter, entry.scope, entryCwd);
     const dest = `${base}/${name}`;
     const existing = groups.get(dest);
@@ -124,6 +157,7 @@ function removeFromAgents(
         cwd: entryCwd,
         skillName: name,
         force: ctx.flags.force,
+        dryRun: ctx.flags.dryRun,
       });
       if (outcome.kind === "absent") {
         for (const a of group) rec.absentFrom.push(a.name);
