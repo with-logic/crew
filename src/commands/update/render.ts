@@ -4,7 +4,7 @@
  * Renders tap warnings, aligned per-skill rows, tap additions, and totals.
  */
 
-import type { TapReexpandRow } from "../../install/tap-reexpand.ts";
+import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
 import { columns, plural, shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";

@@ -9,11 +9,11 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
 import { runGit } from "../../src/git/exec.ts";
-import { exportTreeAt } from "../../src/git/export.ts";
+import { exportTreeAt, withExportedTree } from "../../src/git/export.ts";
 import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
 /** A one-commit repo with a single `demo/` skill. */
@@ -53,6 +53,25 @@ describe("exportTreeAt failure classification", () => {
     let caught: unknown;
     try {
       exportTreeAt(repo, absent, "demo", dest);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(CrewError);
+    expect((caught as CrewError).code).toBe("source_unreachable");
+  });
+
+  test("C-INST-05h an uncreatable scratch directory is source_unreachable", () => {
+    // Nothing was materialized, so the failure says so rather than
+    // escaping untranslated and surfacing as `usage_error` (§13).
+    const { repo, sha } = repoWithDemo();
+    const home = makeTempDir("crew-exporthome-");
+    // `cache` as a FILE makes `cache/git` uncreatable.
+    writeFileSync(join(home, "cache"), "not a dir\n");
+
+    let caught: unknown;
+    try {
+      withExportedTree(repo, sha, "demo", home, () => null);
     } catch (err) {
       caught = err;
     }

@@ -877,11 +877,26 @@ are flagged `tracks_tap: true` and new siblings appear on the next
 **not** pulled in — the user asked for one thing, not the whole tap.
 
 On every `crew update` run, for each group of state entries sharing
-(tap, scope, project_root) where **at least one member** has
+(tap, scope, project_root, `ref`) where **at least one member** has
 `tracks_tap: true`, crew:
 
-1. Expands the tap's resolved root using the tap's configured discovery
-   mode (§9 step 5) and builds the current child set. If the current
+1. Expands the tap **at the group's `ref`** using the tap's configured
+   discovery mode (§9 step 5) and builds the current child set. The
+   group's own `ref` is what gets materialized, exactly as in §9 step 3:
+   a whole-tap install at `@<tag|branch|sha>` MUST be re-expanded
+   against that revision, not the tap's default branch. Otherwise
+   re-expansion would discover children that do not exist at the
+   revision the group tracks.
+
+   `ref` is part of the grouping key for the same reason: two groups of
+   the same tap at different refs see different child sets and MUST be
+   re-expanded independently.
+
+   A child added by this step inherits the group's `ref` and its
+   `pinned` value (§11.1) — it was read from that revision, so recording
+   it as an unpinned no-ref install would misattribute its bytes.
+
+   If the current
    child set contains the same declared `name` at more than one
    tap-relative source path, re-expansion records
    `conflicting_dependencies` for that name, leaves existing state
@@ -1843,6 +1858,8 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-14 | §16.5 | `crew install <git-url>` against a source with no matching configured tap creates an auto tap (`registered: false`) in `config.yaml`. Every resulting state entry's `source.tap` names that tap. |
 | C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). |
 | C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
+| C-UPD-16b | §10.1.1 | A whole-tap install at an explicit `@<ref>` is re-expanded against that ref: a child added to the tap's default branch but absent at the ref is NOT installed, and a child present at the ref is installed carrying that ref and the group's `pinned` value. |
+| C-UPD-16c | §10.1, §13 | A `crew update` run in which any skill failed for a reason outside the soft set (`source_gone` / `no_skills_found` / `invalid_ref`) exits 1. A failure crew cannot classify MUST NOT be reported as a `failed` row on a run that exits 0. |
 | C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`, its clone deleted. Registered taps are NOT garbage-collected by uninstall. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` on a tap with pending additions lists those additions without installing anything. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |

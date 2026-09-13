@@ -8,6 +8,7 @@
 
 import { join } from "node:path";
 import type { Config, LoadedSkill, TapConfig } from "../../core/types.ts";
+import { withTapsAtRef } from "../../sources/acquire/at-ref.ts";
 import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { StoredSkill } from "../../sources/store.ts";
@@ -146,14 +147,21 @@ export function enqueueTapRef(
 }
 
 /**
- * Run `fn` with the requested commit already materialized, when the
- * reference both carries a ref and names a tap we can identify up front.
+ * Run `fn` with the requested commit already materialized (§9 step 3).
  *
  * A qualified ref (`<tap>/<skill>@v1`, `<tap>/<ns>/<skill>@v1`) names its
- * tap directly, so the export can precede resolution. A bare name with a
- * ref could live in any configured tap, so resolution has to come first;
- * `fn` then acquires per-candidate as before. Without a ref there is
- * nothing to export and the live clone is correct.
+ * tap directly, so one export precedes resolution and `fn` can reuse it
+ * for expansion too.
+ *
+ * A BARE name with a ref names no tap, so every configured tap is
+ * materialized at that ref before the name is matched: §9 step 3
+ * requires resolution to read the requested commit, and a skill present
+ * at `@v1` but deleted at the default branch is invisible to an index of
+ * the live clone. `fn` gets the roots but no single `acquired`, because
+ * which tap won isn't known until resolution returns; expansion then
+ * acquires that tap itself.
+ *
+ * Without a ref there is nothing to export and the live clone is correct.
  */
 function withResolutionRoot<T>(
   source: { tap: string | null; ref: string | null },
@@ -161,12 +169,16 @@ function withResolutionRoot<T>(
   home: string,
   fn: (roots: TapRoots, acquired: AcquiredTap | null) => T,
 ): T {
-  const named =
-    source.ref !== null && source.tap !== null
-      ? config.taps.find((t) => t.name === source.tap)
-      : undefined;
-  if (!named) return fn({}, null);
-  return withAcquiredTap(named, source.ref, home, (acquired) =>
-    fn({ [named.name]: acquired.rootDir }, acquired),
-  );
+  const ref = source.ref;
+  if (ref === null) return fn({}, null);
+
+  if (source.tap !== null) {
+    const named = config.taps.find((t) => t.name === source.tap);
+    if (!named) return fn({}, null);
+    return withAcquiredTap(named, ref, home, (acquired) =>
+      fn({ [named.name]: acquired.rootDir }, acquired),
+    );
+  }
+
+  return withTapsAtRef(config.taps, ref, home, (roots) => fn(roots, null));
 }

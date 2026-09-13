@@ -11,7 +11,12 @@ import { runGit } from "../../../src/git/exec.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { commitAll, makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { installedBody, twoCommitRepo, useRedirectedAdapter } from "./helpers.ts";
+import {
+  installedBody,
+  repoWithSkillDeletedAtHead,
+  twoCommitRepo,
+  useRedirectedAdapter,
+} from "./helpers.ts";
 
 useRedirectedAdapter();
 
@@ -104,6 +109,51 @@ describe("installing at an explicit ref", () => {
 
     const gitCache = paths(home).gitCacheDir;
     expect(existsSync(gitCache) ? readdirSync(gitCache) : []).toEqual([]);
+  });
+
+  test("C-INST-05e a qualified ref finds a skill deleted at HEAD", () => {
+    const home = makeCrewHome();
+    const { repo } = repoWithSkillDeletedAtHead();
+    runCli(["tap", "add", `file://${repo}`, "acme"], { home, streams: captureStreams().streams });
+
+    const cap = captureStreams();
+    const code = runCli(["install", "acme/gone@v2"], { home, streams: cap.streams });
+
+    expect(code).toBe(0);
+    const entry = readState(home).installations.find((e) => e.name === "gone")!;
+    expect(entry.ref).toBe("v2");
+    expect(entry.pinned).toBe(true);
+  });
+
+  test("C-INST-05e a BARE name at a ref finds a skill deleted at HEAD", () => {
+    // The bare name doesn't say which tap to look in, so resolution
+    // itself has to read the requested commit across the tap set —
+    // indexing the live clone would never see `gone` at all.
+    const home = makeCrewHome();
+    const { repo } = repoWithSkillDeletedAtHead();
+    runCli(["tap", "add", `file://${repo}`, "acme"], { home, streams: captureStreams().streams });
+
+    const cap = captureStreams();
+    const code = runCli(["install", "gone@v2"], { home, streams: cap.streams });
+
+    expect(code).toBe(0);
+    const entry = readState(home).installations.find((e) => e.name === "gone")!;
+    expect(entry.ref).toBe("v2");
+    expect(entry.source.tap).toBe("acme");
+  });
+
+  test("C-INST-05e a bare name absent at the ref is still invalid_ref", () => {
+    // `demo` exists, but not at a ref no tap can supply: resolution must
+    // report the miss rather than silently falling back to HEAD.
+    const home = makeCrewHome();
+    const { repo } = repoWithSkillDeletedAtHead();
+    runCli(["tap", "add", `file://${repo}`, "acme"], { home, streams: captureStreams().streams });
+
+    const cap = captureStreams();
+    const code = runCli(["install", "nosuchskill@v2"], { home, streams: cap.streams });
+
+    expect(code).toBe(4);
+    expect(cap.stderr()).toContain("nosuchskill");
   });
 
   test("C-STATE-04b content_hash is the ref's bytes, not HEAD's", () => {

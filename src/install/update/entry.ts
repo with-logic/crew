@@ -6,17 +6,16 @@
  *   - report `skipped` if the entry is pinned and not forced;
  *   - re-stage and re-install if the SHA moved.
  *
- * Tap re-expansion (additions / source_gone) lives in `tap-reexpand.ts`;
+ * Tap re-expansion (additions / source_gone) lives in `tap-reexpand/index.ts`;
  * this module handles only the per-existing-entry update.
  */
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { cwdForEntry } from "../../agents/adapter.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
-import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
+import { type AcquiredTap, withAcquiredSkillDir } from "../../sources/acquire/index.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { nowIso } from "../../util/time.ts";
@@ -63,14 +62,18 @@ export function updateOneEntry(
         bumpHardFailure: false,
       };
     }
-    const hard = ["source_unreachable", "ref_not_found", "invalid_skill"].includes(ce.code);
+    // Anything that isn't a recognised soft outcome is a hard failure.
+    // Listing the hard codes instead would exit 0 on any error this
+    // module has not enumerated — including a raw `node:fs` error that
+    // never reached a §13 code — reporting `failed` in the rows while
+    // the run claims success (§10.1, C-UPD-09).
     return {
       row: rowFor(entry, {
         kind: "failed",
         error: { code: ce.code ?? "usage_error", message: ce.message },
       }),
       updatedState: state,
-      bumpHardFailure: hard,
+      bumpHardFailure: true,
     };
   }
 }
@@ -128,8 +131,11 @@ function updateOne(
   if (peeked !== null && peeked === entry.resolved_sha && !(force && entry.pinned)) {
     return { kind: "up_to_date" };
   }
-  return withAcquiredTap(tap, entry.ref, home, (acquired) =>
-    applyUpdate(entry, acquired, tap, home, force, entryCwd),
+  // Only this entry's own subtree is read, so only it is exported —
+  // otherwise every entry sharing a whole-repo tap materializes the
+  // whole repository again (§10.1).
+  return withAcquiredSkillDir(tap, entry.ref, entry.source.path, home, (acquired, skillDir) =>
+    applyUpdate(entry, acquired, skillDir, tap, home, force, entryCwd),
   );
 }
 
@@ -137,6 +143,8 @@ function updateOne(
 function applyUpdate(
   entry: StateEntry,
   acquired: AcquiredTap,
+  // Tap re-expansion has already marked missing children `source_gone`.
+  skillDir: string,
   tap: TapConfig,
   home: string,
   force: boolean,
@@ -147,9 +155,6 @@ function applyUpdate(
   if (entry.pinned && !force && newSha !== null && newSha !== entry.resolved_sha) {
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
-
-  // Tap re-expansion has already marked missing children `source_gone`.
-  const skillDir = join(acquired.rootDir, entry.source.path);
 
   if (newSha === entry.resolved_sha) {
     if (newSha !== null) return { kind: "up_to_date" };

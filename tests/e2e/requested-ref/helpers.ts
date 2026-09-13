@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach } from "bun:test";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runGit } from "../../../src/git/exec.ts";
@@ -64,6 +64,21 @@ export function twoCommitRepo(): TwoCommitRepo {
   );
   const shaB = commitAll(repo, "two");
   return { repo, shaA, shaB };
+}
+
+/**
+ * Repo where `gone` exists at tag `v2` but is deleted at HEAD, alongside
+ * `demo` from `twoCommitRepo`. Exercises §9 step 3's rule that a skill
+ * present at a ref must still resolve after deletion on the default branch.
+ */
+export function repoWithSkillDeletedAtHead(): { repo: string } {
+  const { repo } = twoCommitRepo();
+  makeSkill(repo, "gone", skillFrontmatter({ name: "gone", description: "GONE ONE" }), "g\n");
+  commitAll(repo, "add gone");
+  tag(repo, "v2");
+  rmSync(join(repo, "gone"), { recursive: true });
+  commitAll(repo, "remove gone");
+  return { repo };
 }
 
 /** Lightweight, unsigned tag at the repo's current HEAD. */

@@ -110,15 +110,43 @@ export function withExportedTree<T>(
   home: string,
   fn: (rootDir: string) => T,
 ): T {
-  const cacheRoot = paths(home).gitCacheDir;
-  ensureDir(cacheRoot);
-  const dest = mkdtempSync(join(cacheRoot, `${sha.slice(0, 8)}-`));
+  const dest = makeScratchDir(paths(home).gitCacheDir, sha);
   try {
     exportTreeAt(clonePath, sha, subpath, dest);
     const rootDir = subpath.length > 0 ? join(dest, subpath) : dest;
     assertNoSymlinkEscape(dest, rootDir, subpath);
     return fn(rootDir);
   } finally {
+    // `rmrf` passes `force: true`, so a missing directory is not an
+    // error. A genuine removal failure must NOT be raised from here: it
+    // would replace `fn`'s own error (or its result) with a cleanup
+    // complaint, which is strictly less useful to the caller. The
+    // leftover directory is reclaimed by `crew cache clear` and by the
+    // store GC that already runs after install and update.
     rmrf(dest);
+  }
+}
+
+/**
+ * Create the scratch directory for one export.
+ *
+ * An unwritable cache root — a read-only `~/.crew`, a `cache` path that
+ * is a file, a full disk — surfaces here as a raw `node:fs` error. Left
+ * untranslated it escapes the §13 error set and the CLI top-level
+ * reports it as `usage_error` (exit 2), which tells the user their
+ * command was malformed when in fact crew could not materialize the
+ * source at all. That is exactly the `source_unreachable` case (§13).
+ */
+function makeScratchDir(cacheRoot: string, sha: string): string {
+  try {
+    ensureDir(cacheRoot);
+    return mkdtempSync(join(cacheRoot, `${sha.slice(0, 8)}-`));
+  } catch (err) {
+    throw new CrewError(
+      "source_unreachable",
+      `couldn't create a scratch directory for ${sha.slice(0, 8)} under \`${cacheRoot}\` — ${(err as Error).message}`,
+      { sha, cacheRoot },
+      "Check that `~/.crew/cache` is writable, or run `crew cache clear`.",
+    );
   }
 }
