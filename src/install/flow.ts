@@ -15,13 +15,16 @@
 
 import { writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
-import type { Config, ResolvedSkill, Scope, StateEntry, StateFile } from "../core/types.ts";
+import type { Config, ResolvedSkill, Scope, StateEntry } from "../core/types.ts";
+import { garbageCollectAutoTaps } from "../maintenance/auto-taps.ts";
 import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { computeAgentSet } from "./agent-set.ts";
-import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules.ts";
-import { type InstallSummary, performInstall } from "./perform.ts";
+import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules/index.ts";
+import { type InstallSummary, performInstall } from "./perform/index.ts";
+import { promoteExplicit } from "./promote-explicit.ts";
+import { applyReattributions, rewriteReattributedMarkers } from "./reattribute.ts";
 import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
 import type { KindHint } from "./resolve-ref/index.ts";
 import { rewriteTapMarkers } from "./rewrite-tap-markers.ts";
@@ -85,25 +88,40 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
   // adapter that didn't previously own the entry still has real work
   // to do (attach ownership), so the duplicate short-circuit must
   // consider the active target set.
+  const duplicateOptions = {
+    activeAgents: agents.map((a) => a.name),
+    force: options.force,
+    taps: configWithAutoTaps.taps,
+  };
   const currentState = readState(home);
-  const { toInstall, alreadyInstalled, promoteToExplicit } = applyDuplicateRules(
-    resolvedAll,
-    currentState,
-    options.scope,
-    cwd,
-    { activeAgents: agents.map((a) => a.name), force: options.force },
-  );
 
   if (options.dryRun) {
-    const summary = performInstall(toInstall, agents, options.scope, cwd, currentState, {
+    const preview = applyDuplicateRules(
+      resolvedAll,
+      currentState,
+      options.scope,
+      cwd,
+      duplicateOptions,
+    );
+    const summary = performInstall(preview.toInstall, agents, options.scope, cwd, currentState, {
       force: options.force,
       dryRun: true,
       requiredBy,
       allResolved: resolvedAll,
     });
-    return { summary, alreadyInstalled, resolved: resolvedAll, skipped };
+    return {
+      summary,
+      alreadyInstalled: preview.alreadyInstalled,
+      resolved: resolvedAll,
+      skipped,
+    };
   }
 
+  // Everything below decides what to write, so it must run against state
+  // read INSIDE the lock: an uninstall landing between an unlocked
+  // snapshot and lock acquisition would otherwise let us report a skill
+  // as "already installed" that is no longer there.
+  let alreadyInstalled: readonly AlreadyInstalled[] = [];
   const summary = withStateLock(() => {
     // Persist any auto-taps the resolver created BEFORE we start
     // writing state entries that reference them — otherwise a partial
@@ -111,12 +129,27 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     if (configWithAutoTaps !== config) writeConfig(configWithAutoTaps, home);
 
     const freshState = readState(home);
+    const analysis = applyDuplicateRules(
+      resolvedAll,
+      freshState,
+      options.scope,
+      cwd,
+      duplicateOptions,
+    );
+    const { toInstall, promoteToExplicit, reattributions, keepSource } = analysis;
+    alreadyInstalled = analysis.alreadyInstalled;
     rewriteDiscoveryUpgradeMarkers(config, configWithAutoTaps, freshState.installations, cwd);
-    const result = performInstall(toInstall, agents, options.scope, cwd, freshState, {
+    // §5.4: entries that reached the same source through a narrower
+    // auto tap move onto the incoming tap before the install runs, so
+    // `performInstall` sees the attribution it is about to write.
+    rewriteReattributedMarkers(reattributions, configWithAutoTaps.taps, cwd);
+    const reattributed = applyReattributions(freshState, reattributions);
+    const result = performInstall(toInstall, agents, options.scope, cwd, reattributed, {
       force: options.force,
       dryRun: false,
       requiredBy,
       allResolved: resolvedAll,
+      keepSource,
     });
     const promoted = promoteExplicit(
       result.newState,
@@ -125,6 +158,9 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       options.scope === "project" ? cwd : null,
     );
     writeState(promoted, home);
+    // An auto tap left with no entries after re-attribution is crew's
+    // own bookkeeping and goes away with its clone (§16.5).
+    if (reattributions.length > 0) garbageCollectAutoTaps(promoted, home);
     return { ...result, newState: promoted };
   }, home);
 
@@ -148,28 +184,6 @@ function rewriteDiscoveryUpgradeMarkers(
       cwd,
     );
   }
-}
-
-/**
- * Mark each named (name, scope) state entry as `explicit: true`.
- * Idempotent; any name not present at that scope is silently ignored.
- */
-function promoteExplicit(
-  state: StateFile,
-  names: readonly string[],
-  scope: Scope,
-  projectRoot: string | null,
-): StateFile {
-  if (names.length === 0) return state;
-  const set = new Set(names);
-  return {
-    schema_version: 1,
-    installations: state.installations.map((e) =>
-      e.scope === scope && set.has(e.name) && (e.project_root ?? null) === projectRoot
-        ? { ...e, explicit: true }
-        : e,
-    ),
-  };
 }
 
 // Keep `RequiredByMap` exported under this module's name for consumers.
