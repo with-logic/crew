@@ -12,7 +12,7 @@ import { crewHome } from "../core/paths.ts";
 import { maybeEmitUpdateNotice } from "../self-update/notice.ts";
 import { colorEnabled, makeStyler, type Styler, terminalWidth } from "../util/term.ts";
 import { nowIso } from "../util/time.ts";
-import { parseArgs } from "./args.ts";
+import { parseArgs, wantsJsonOutput } from "./args.ts";
 import { dispatch } from "./dispatch.ts";
 import { defaultStreams, type OutputStreams, writeError, writeSuccess } from "./output.ts";
 import {
@@ -77,9 +77,12 @@ function runCliWithHome(
   try {
     parsed = parseArgs(argv);
   } catch (err) {
-    // `parseArgs` only raises `CrewError`.
+    // `parseArgs` only raises `CrewError`. There is no `ParsedArgs` yet, so
+    // the requested output mode comes from raw argv — a `--json` caller gets
+    // the structured payload even when the failure is the parse itself
+    // (§5.2, C-CLI-08c).
     const ce = err as CrewError;
-    writeError(ce, false, streams, style);
+    writeError(ce, wantsJsonOutput(argv), streams, style);
     return ce.exitCode;
   }
 

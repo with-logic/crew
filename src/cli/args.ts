@@ -27,6 +27,41 @@ export interface ParsedArgs {
   readonly flags: CommandFlags;
 }
 
+/**
+ * Whether argv asks for `--json`, read straight off the raw tokens.
+ *
+ * A parse-stage failure has no `ParsedArgs` to consult, but the user's
+ * requested output mode still has to be honored (§5.2, C-CLI-08c) — a
+ * script piping stdout must get the structured error, not human text on
+ * stderr. So this deliberately does not go through yargs: it must answer
+ * even for the argv that made yargs throw.
+ *
+ * Last occurrence wins, matching yargs, so `--json --json=false` is false.
+ *
+ * The value forms follow yargs' own boolean coercion, verified against
+ * the parser rather than assumed: it accepts a SPACE-separated value
+ * (`--json false`), and treats any value other than a literal `true` as
+ * false — so `--json=FALSE`, `--json=0`, and `--json=no` are all false.
+ * Guessing differently here would hand a script human-readable text on
+ * an invocation the real parse would have treated as JSON, or vice versa.
+ */
+export function wantsJsonOutput(argv: readonly string[]): boolean {
+  let json = false;
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i]!;
+    if (token === "--") break;
+    if (token === "--json") {
+      // yargs consumes a following bare `true`/`false` as the value.
+      const next = argv[i + 1];
+      if (next === "true" || next === "false") {
+        json = next === "true";
+        i++;
+      } else json = true;
+    } else if (token.startsWith("--json=")) json = token.slice("--json=".length) === "true";
+  }
+  return json;
+}
+
 /** Global boolean flags. */
 const BOOLEAN_GLOBALS = ["dry-run", "json", "quiet", "verbose", "yes", "force"] as const;
 /** Global string flags (single-value except `target`, which is repeatable). */
@@ -42,6 +77,9 @@ const BOOLEAN_SUB: Record<string, readonly string[]> = {
 /** Subcommand-specific string flags. */
 const STRING_SUB: Record<string, readonly string[]> = {
   autoupdate: ["interval"],
+  // `--tap <name>` scopes a search to one configured tap (§16.6). Distinct
+  // from install's presence-only `--tap`; the tables are per-command.
+  search: ["tap"],
   // `--version <tag>` pins a specific release (e.g. `v0.4.0`).
   "self-update": ["version"],
 };
@@ -100,6 +138,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
   const positional = ((parsed["_"] as unknown[]) ?? []).map(String);
 
+  rejectRepeatedScalars(parsed, rest);
+
   const scope = stringOrUndefined(parsed["scope"]) ?? "user";
   if (scope !== "user" && scope !== "project")
     throw new CrewError(
@@ -132,6 +172,45 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   };
 
   return { command, subcommand: null, positional, flags };
+}
+
+/**
+ * Reject a non-repeatable flag passed more than once (§5.2, C-CLI-08b).
+ *
+ * Two detections are needed because yargs represents the two flag
+ * kinds differently. `duplicate-arguments-array` hands back an ARRAY
+ * for a repeated value flag, which `extras` would then silently drop.
+ * A repeated BOOLEAN, by contrast, collapses to plain `true` and leaves
+ * no trace in the parsed result at all, so the only witness is raw
+ * argv. Either way the user stated something twice and §5.2 says only
+ * `--agent` may repeat, so fail loudly rather than quietly picking one.
+ */
+function rejectRepeatedScalars(parsed: Record<string, unknown>, argv: readonly string[]): void {
+  const repeatable = new Set<string>(ARRAY_GLOBALS);
+  for (const [key, value] of Object.entries(parsed)) {
+    if (key === "_" || key === "$0" || repeatable.has(key)) continue;
+    if (!Array.isArray(value)) continue;
+    throw repeatedFlagError(key);
+  }
+  const seen = new Set<string>();
+  for (const token of argv) {
+    // Only long `--flag` forms; `--` ends flag parsing, and a bare `-`
+    // or a value like `--scope=user`'s tail is not a flag occurrence.
+    if (token === "--") break;
+    if (!token.startsWith("--") || token.length === 2) continue;
+    const name = token.slice(2).split("=")[0]!;
+    if (repeatable.has(name)) continue;
+    if (seen.has(name)) throw repeatedFlagError(name);
+    seen.add(name);
+  }
+}
+
+function repeatedFlagError(flag: string): CrewError {
+  return new CrewError(
+    "usage_error",
+    `\`--${flag}\` was given more than once — it takes a single value`,
+    { flag },
+  );
 }
 
 function stringOrUndefined(v: unknown): string | undefined {

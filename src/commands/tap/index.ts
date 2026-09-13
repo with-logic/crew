@@ -13,6 +13,7 @@
 
 import { statSync } from "node:fs";
 import { DEFAULT_TAP_NAME } from "../../config/defaults.ts";
+import { requireConfiguredTap } from "../../config/find-tap.ts";
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
@@ -74,15 +75,7 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
   let kind: "git" | "path" = "git";
   withStateLock(() => {
     const config = readConfig(ctx.home);
-    const tap = config.taps.find((t) => t.name === name);
-    if (!tap) {
-      throw new CrewError(
-        "usage_error",
-        `\`${name}\` was not found in your list of taps.`,
-        { name },
-        "This may have been a typo. View your configured taps with `crew tap list`.",
-      );
-    }
+    const tap = requireConfiguredTap(config.taps, name);
     if (name === DEFAULT_TAP_NAME && !ctx.flags.force)
       throw new CrewError(
         "usage_error",
@@ -119,16 +112,7 @@ function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput 
 function tapsMatching(all: readonly TapConfig[], names: readonly string[]): TapConfig[] {
   const out: TapConfig[] = [];
   for (const n of names) {
-    const tap = all.find((t) => t.name === n);
-    if (!tap) {
-      throw new CrewError(
-        "usage_error",
-        `\`${n}\` was not found in your list of taps.`,
-        { name: n },
-        "This may have been a typo. View your configured taps with `crew tap list`.",
-      );
-    }
-    out.push(tap);
+    out.push(requireConfiguredTap(all, n));
   }
   return out;
 }
