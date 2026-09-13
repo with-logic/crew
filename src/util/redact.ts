@@ -31,15 +31,21 @@
  * the `safe*` / `redact*` helpers before it reaches a stream.
  */
 
-/** Query parameters whose values are secrets rather than identifiers. */
-const SENSITIVE_PARAMS = new Set([
-  "token",
-  "access_token",
-  "private_token",
-  "api_key",
-  "apikey",
-  "password",
-]);
+/**
+ * Query parameters whose values are safe to print. Everything else is
+ * masked.
+ *
+ * This is deliberately an allow-list rather than a list of secret-sounding
+ * names. A blocklist fails open: the first provider to spell its parameter
+ * `client_secret`, `sig`, or `auth` leaks in full until someone notices and
+ * adds the name. Inverting makes the failure mode a needlessly masked
+ * identifier, which costs a little clarity in a diagnostic, instead of a
+ * published credential.
+ *
+ * Only git's own transport parameters belong here — values crew or git put
+ * in a URL itself, never something a user pasted.
+ */
+const DISPLAYABLE_PARAMS = new Set(["service", "ref", "version"]);
 
 const REDACTED = "***";
 
@@ -95,7 +101,7 @@ function redactStandardUrl(token: string): string {
     }
   }
   for (const key of url.searchParams.keys()) {
-    if (SENSITIVE_PARAMS.has(key.toLowerCase())) {
+    if (!DISPLAYABLE_PARAMS.has(key.toLowerCase())) {
       url.searchParams.set(key, REDACTED);
     }
   }

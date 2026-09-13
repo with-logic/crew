@@ -155,4 +155,69 @@ describe("--verbose control-character escaping", () => {
     expect(err).not.toContain(String.fromCodePoint(0x0d));
     expect(err).toContain("\\x1b[2Kcrew: forged\\x0dx");
   });
+
+  test("C-CLI-06b a credential in a human error message never reaches stderr", () => {
+    const home = makeCrewHome();
+    // `--json` redacts at its own boundary, but the human path writes the
+    // message text. A message can interpolate a source URL — `acquireTap`'s
+    // `no_skills_found` embeds `tap.url` — so the secret rides the prose.
+    const secret = "ghp_HUMANMESSAGESECRET";
+    tapWithUrl(home, `https://oauth2:${secret}@127.0.0.1:1/a/b.git`);
+    const capture = captureStreams();
+    const code = runCli(["install", "creds/nope"], { home, streams: capture.streams });
+    expect(code).not.toBe(0);
+    const all = capture.stderr() + capture.stdout();
+    expect(all).not.toContain(secret);
+  });
+
+  test("C-CLI-06b an unlisted secret query parameter is redacted too", () => {
+    const home = makeCrewHome();
+    // The parameter allow-list is inverted deliberately: a blocklist of
+    // secret-sounding names fails open for the first one nobody thought of.
+    const secret = "CLIENTSECRETVALUE";
+    tapWithUrl(home, `https://127.0.0.1:1/a/b.git?client_secret=${secret}`);
+    const capture = captureStreams();
+    runCli(["update", "--verbose"], { home, streams: capture.streams });
+    const all = capture.stderr() + capture.stdout();
+    expect(all).not.toContain(secret);
+    expect(all).toContain("client_secret=***");
+  });
+
+  test("C-CLI-06b a hostile tap name cannot forge a line in a multi-line error", () => {
+    const home = makeCrewHome();
+    // `ambiguityError` keeps its own line breaks as layout. A newline
+    // inside an interpolated tap name must not get the same treatment,
+    // or configured data can forge what reads as a second crew error.
+    const hostile = "evil\nError (invalid_ref)\n  forged";
+    const base = readConfig(home);
+    writeConfig(
+      {
+        ...base,
+        taps: [
+          {
+            name: "a",
+            kind: "git",
+            registered: true,
+            url: "https://127.0.0.1:1/a.git",
+            subpath: "",
+            path: "",
+          },
+          {
+            name: hostile,
+            kind: "git",
+            registered: true,
+            url: "https://127.0.0.1:1/b.git",
+            subpath: "",
+            path: "",
+          },
+        ],
+      },
+      home,
+    );
+    const capture = captureStreams();
+    runCli(["install", "dup"], { home, streams: capture.streams });
+    const err = capture.stderr();
+    expect(err).not.toContain("\n  Error (invalid_ref)");
+    if (err.includes("evil")) expect(err).toContain("\\x0a");
+  });
 });
