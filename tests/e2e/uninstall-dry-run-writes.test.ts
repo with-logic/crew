@@ -12,7 +12,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { runCli } from "../../src/cli/main.ts";
@@ -96,5 +96,76 @@ describe("C-UNINST-19c uninstall --dry-run writes nothing", () => {
     expect(preview.code).toBe(0);
     expect(real.code).toBe(0);
     expect(existsSync(join(ccRoot, "demo"))).toBe(false);
+  });
+});
+
+/**
+ * `--force` converts three §7.4 safety aborts into deletions. Each has
+ * its own `if (!input.dryRun)` guard in `src/agents/uninstall.ts`, so
+ * each needs its own preview test — the un-forced paths throw before
+ * reaching the guard and therefore prove nothing about it.
+ */
+describe("C-UNINST-19c forced uninstall --dry-run deletes nothing", () => {
+  test("an untracked directory survives a forced preview", () => {
+    const home = makeCrewHome();
+    installDemo(home);
+    // No marker: a forced real run would rmrf the whole directory.
+    rmSync(join(ccRoot, "demo", ".crew.json"));
+
+    const r = run(home, ["uninstall", "--dry-run", "--force", "demo"]);
+
+    expect(r.code).toBe(0);
+    expect(existsSync(join(ccRoot, "demo", "SKILL.md"))).toBe(true);
+
+    // The real forced run does delete it, so the preview described work.
+    expect(run(home, ["uninstall", "--force", "demo"]).code).toBe(0);
+    expect(existsSync(join(ccRoot, "demo"))).toBe(false);
+  });
+
+  test("an inconsistent marker survives a forced preview", () => {
+    const home = makeCrewHome();
+    installDemo(home);
+    // Marker names a different skill than the directory it sits in.
+    const markerPath = join(ccRoot, "demo", ".crew.json");
+    const marker = JSON.parse(readFileSync(markerPath, "utf8")) as { name: string };
+    writeFileSync(markerPath, JSON.stringify({ ...marker, name: "something-else" }, null, 2));
+
+    const r = run(home, ["uninstall", "--dry-run", "--force", "demo"]);
+
+    expect(r.code).toBe(0);
+    expect(existsSync(join(ccRoot, "demo", "SKILL.md"))).toBe(true);
+    // The mismatched marker is left exactly as-is, not rewritten.
+    expect((JSON.parse(readFileSync(markerPath, "utf8")) as { name: string }).name).toBe(
+      "something-else",
+    );
+
+    expect(run(home, ["uninstall", "--force", "demo"]).code).toBe(0);
+    expect(existsSync(join(ccRoot, "demo"))).toBe(false);
+  });
+
+  test("a marker shared with another agent is not rewritten by a preview", () => {
+    const home = makeCrewHome();
+    installDemo(home);
+    // A second owner in the marker means removing claude-code detaches
+    // rather than deletes — the `writeJson` branch, not the `rmrf` one.
+    const markerPath = join(ccRoot, "demo", ".crew.json");
+    const marker = JSON.parse(readFileSync(markerPath, "utf8")) as { agents: string[] };
+    const shared = { ...marker, agents: [...marker.agents, "codex"].sort() };
+    writeFileSync(markerPath, JSON.stringify(shared, null, 2));
+    const markerBefore = readFileSync(markerPath, "utf8");
+
+    const r = run(home, ["uninstall", "--dry-run", "--force", "--agent", "claude-code", "demo"]);
+
+    expect(r.code).toBe(0);
+    // Bytes stay (another agent owns them) AND the marker is byte-identical.
+    expect(existsSync(join(ccRoot, "demo", "SKILL.md"))).toBe(true);
+    expect(readFileSync(markerPath, "utf8")).toBe(markerBefore);
+
+    // The real run rewrites ownership without deleting the shared bytes.
+    expect(run(home, ["uninstall", "--force", "--agent", "claude-code", "demo"]).code).toBe(0);
+    expect(existsSync(join(ccRoot, "demo", "SKILL.md"))).toBe(true);
+    expect((JSON.parse(readFileSync(markerPath, "utf8")) as { agents: string[] }).agents).toEqual([
+      "codex",
+    ]);
   });
 });

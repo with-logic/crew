@@ -13,7 +13,9 @@ import {
   agentRoot,
   buildTapRepo,
   makeCrewHome,
+  makeTempDir,
   run,
+  runIn,
   tapWithInstall,
   useTempAgentRoot,
 } from "./helpers.ts";
@@ -141,20 +143,66 @@ describe("C-TAP-16d tap remove --uninstall", () => {
 
   test("removing one tap leaves a same-named skill from another tap alone", () => {
     const home = makeCrewHome();
-    // Two taps each exposing a skill called `alpha`. Only `mytap`'s copy
-    // may come off; §11.1 keys an entry by (name, scope, project root),
-    // so selecting by name alone would take both.
+    // Two taps each exposing a skill called `alpha`, installed at two
+    // distinct §11.1 locations: `mytap`'s at user scope, `othertap`'s in a
+    // project. Only `mytap`'s copy may come off; selecting by name alone
+    // would take both, since an entry is keyed by (name, scope, root).
     expect(tapWithInstall(home, buildTapRepo(), "mytap")).toBe(0);
     expect(run(home, ["tap", "add", `file://${buildTapRepo()}`, "othertap"]).code).toBe(0);
-    expect(readState(home).installations).toHaveLength(1);
+    const proj = makeTempDir("crew-proj-");
+    expect(
+      runIn(home, ["install", "othertap", "--agent", "claude-code", "--scope", "project"], proj)
+        .code,
+    ).toBe(0);
+    // Two real installs of the name `alpha`, one per tap.
+    expect(readState(home).installations).toHaveLength(2);
+    const otherDest = join(proj, ".claude", "skills", "alpha");
+    expect(existsSync(otherDest)).toBe(true);
 
-    const r = run(home, ["tap", "remove", "--uninstall", "mytap"]);
+    const r = runIn(home, ["tap", "remove", "--uninstall", "mytap"], proj);
 
     expect(r.code).toBe(0);
-    // `othertap` keeps its config row and its clone.
+    // `othertap`'s install, its state row, its config row, and its clone
+    // all survive; only `mytap`'s user-scope copy came off.
+    expect(existsSync(otherDest)).toBe(true);
+    expect(existsSync(join(agentRoot(), "alpha"))).toBe(false);
+    const survivors = readState(home).installations;
+    expect(survivors.map((e) => `${e.name}/${e.scope}/${e.source.tap}`)).toEqual([
+      "alpha/project/othertap",
+    ]);
     const config = readConfig(home);
     expect(config.taps.some((t) => t.name === "mytap")).toBe(false);
     expect(config.taps.some((t) => t.name === "othertap")).toBe(true);
     expect(existsSync(tapPath("othertap", home))).toBe(true);
+  });
+
+  test("C-TAP-16d a partial abort drops only the location that came off", () => {
+    const home = makeCrewHome();
+    // One skill NAME installed at two §11.1 locations from the same tap.
+    // Keying cleanliness on the name group would retain BOTH rows when
+    // one aborts, leaving state claiming a user-scope install whose bytes
+    // were already deleted — and blocking the tap forever.
+    expect(tapWithInstall(home, buildTapRepo("alpha"), "mytap")).toBe(0);
+    const proj = makeTempDir("crew-proj-");
+    expect(
+      runIn(home, ["install", "mytap", "--agent", "claude-code", "--scope", "project"], proj).code,
+    ).toBe(0);
+    expect(readState(home).installations).toHaveLength(2);
+
+    // Break ONLY the project copy so it aborts on `untracked_directory`.
+    const projDest = join(proj, ".claude", "skills", "alpha");
+    rmSync(join(projDest, ".crew.json"));
+
+    const r = runIn(home, ["tap", "remove", "--uninstall", "mytap"], proj);
+
+    expect(r.code).toBe(1);
+    // The user-scope copy is gone from disk, so its row must be gone too.
+    expect(existsSync(join(agentRoot(), "alpha"))).toBe(false);
+    // The aborted copy keeps both its bytes and its row.
+    expect(existsSync(projDest)).toBe(true);
+    const survivors = readState(home).installations;
+    expect(survivors.map((e) => `${e.name}/${e.scope}`)).toEqual(["alpha/project"]);
+    // The tap stays so the retry has something to act on.
+    expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(true);
   });
 });

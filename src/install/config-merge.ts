@@ -36,17 +36,31 @@ export function mergeAutoTaps(fresh: Config, before: Config, extended: Config): 
 }
 
 /**
- * Fail before writing state that would reference a tap no longer in
- * config. Concurrent removal is the only way to reach this, so the
+ * Identity of a tap's SOURCE, independent of the name pointing at it.
+ * A name is a mutable label: `tap remove` + `tap add` can rebind it to a
+ * different repo between resolution and the lock. State records skills
+ * by tap NAME, so the bytes we resolved must still belong to the source
+ * that name denotes, or the entry would attribute A's bytes to B.
+ */
+function sourceIdentity(tap: TapConfig): string {
+  return JSON.stringify([tap.kind, tap.url, tap.subpath, tap.path]);
+}
+
+/**
+ * Fail before writing state that would reference a tap that is no longer
+ * in config, or whose name now denotes a DIFFERENT source. Concurrent
+ * removal (or removal + re-add) is the only way to reach either, so the
  * message says to retry rather than blaming the reference.
  */
 export function assertTapsPresent(config: Config, skills: readonly ResolvedSkill[]): void {
-  const names = new Set(config.taps.map((t) => t.name));
+  const byName = new Map(config.taps.map((t) => [t.name, t]));
   for (const skill of skills) {
-    if (names.has(skill.tap.name)) continue;
+    const current = byName.get(skill.tap.name);
+    if (current && sourceIdentity(current) === sourceIdentity(skill.tap)) continue;
+    const verb = current ? "was replaced" : "was removed";
     throw new CrewError(
       "source_unreachable",
-      `tap \`${skill.tap.name}\` was removed while \`${skill.name}\` was being resolved — nothing was installed; run the command again`,
+      `tap \`${skill.tap.name}\` ${verb} while \`${skill.name}\` was being resolved — nothing was installed; run the command again`,
       { tap: skill.tap.name, skill: skill.name },
     );
   }

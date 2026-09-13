@@ -39,7 +39,7 @@ import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
-import { findOrphan } from "./state.ts";
+import { entryKey, findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
   if (ctx.positional.length === 0) {
@@ -136,12 +136,17 @@ function pruneOrphans(
   records: UninstallRecord[],
 ): StateFile {
   let current = state;
-  let orphan = findOrphan(current);
+  // Recorded BEFORE the removal, so an entry that aborts and keeps its
+  // ownership is still marked visited. Every entry is attempted at most
+  // once per sweep, which is what makes this loop terminate at all.
+  const attempted = new Set<string>();
+  let orphan = findOrphan(current, attempted);
   while (orphan) {
+    attempted.add(entryKey(orphan));
     const { updatedState, rec } = removeOne(current, orphan.name, ctx, true, null);
     records.push(rec);
     current = updatedState;
-    orphan = findOrphan(current);
+    orphan = findOrphan(current, attempted);
   }
   return current;
 }

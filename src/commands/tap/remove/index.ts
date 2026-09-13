@@ -120,11 +120,19 @@ function removeWithSkills(ctx: CommandContext, plan: RemovePlan, dryRun: boolean
   // over N entries costs K*N visits. Run the per-agent filesystem work
   // per skill (it must stay per-skill), collect the entries that came off
   // cleanly, and apply the state change in one keyed traversal.
+  //
+  // Cleanliness is per ENTRY, not per name: one skill name can be
+  // installed at several §11.1 locations (user + project, or two project
+  // roots). Keying the decision on the name group would retain a deleted
+  // install's row whenever a sibling location aborted, leaving state
+  // claiming bytes that are gone and blocking the tap forever.
   const cleanlyRemoved: StateEntry[] = [];
   for (const [name, entries] of byName) {
-    const { rec } = removeOne(state, { raw: name, name, entries }, ctx, false, null);
+    const { rec, outcomes } = removeOne(state, { raw: name, name, entries }, ctx, false, null);
     records.push(rec);
-    if (rec.failures.length === 0) cleanlyRemoved.push(...entries);
+    for (const o of outcomes) {
+      if (o.fullyRemoved) cleanlyRemoved.push(o.entry);
+    }
   }
   state = dropEntriesAndUpdateRequiredBy(state, cleanlyRemoved);
 
