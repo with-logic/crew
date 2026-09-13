@@ -87,4 +87,28 @@ describe("scheme-less authority (§8.2)", () => {
       url: "https://user:pw@github.com/acme/skills",
     });
   });
+
+  test("C-REF-32b an out-of-range port is invalid_ref, not a URL crash", () => {
+    // A digit run is not a port. Rejecting it in the authority guard
+    // keeps the value on the tap-parsing path, where it reports the
+    // stable `invalid_ref` instead of surfacing whatever `new URL`
+    // throws for an unrepresentable port.
+    for (const ref of ["github.com:99999/o/r", "github.com:65536/o/r", "github.com:0/o/r"]) {
+      let code: string | undefined;
+      try {
+        parseRef(ref);
+      } catch (err) {
+        code = (err as { code?: string }).code;
+      }
+      expect(code).toBe("invalid_ref");
+    }
+  });
+
+  test("C-REF-32c a valid port is still accepted", () => {
+    expect(parseRef("git.example.com:8443/acme/skills")).toMatchObject({
+      type: "git",
+      url: "https://git.example.com:8443/acme/skills",
+    });
+    expect(parseRef("git.example.com:65535/acme/skills")).toMatchObject({ type: "git" });
+  });
 });

@@ -15,6 +15,7 @@ import { knownTapSource } from "../../../known-taps/format.ts";
 import { getKnownTaps } from "../../../known-taps/registry.ts";
 import type { KnownTap, KnownTapTrust } from "../../../known-taps/types.ts";
 import { parseRef } from "../../../refs/parse.ts";
+import { shellQuote } from "../../../util/shell.ts";
 import { type KnownInstallSuggestion, knownMatchesForTap } from "./match.ts";
 
 interface KnownInstallSuggestionJson {
@@ -135,7 +136,7 @@ function renderKnownInstallError(
     lines.push(`    Add the tap:`);
     lines.push(`      ${tapAddCommand(suggestion.tap)}`);
     lines.push(`    Then install:`);
-    lines.push(`      crew install ${suggestion.installRef}`);
+    lines.push(`      ${installCommand(suggestion)}`);
   }
   return lines.join("\n");
 }
@@ -150,10 +151,22 @@ function suggestionJson(suggestion: KnownInstallSuggestion): KnownInstallSuggest
     namespace: suggestion.skill?.namespace ?? null,
     description: suggestion.skill?.description ?? suggestion.tap.description,
     tap_add: tapAddCommand(suggestion.tap),
-    install: `crew install ${suggestion.installRef}`,
+    install: installCommand(suggestion),
   };
 }
 
 function tapAddCommand(tap: KnownTap): string {
   return `crew tap add ${knownTapSource(tap)} ${tap.name}`;
+}
+
+/**
+ * The copy-pasteable install command for a suggestion.
+ *
+ * `installRef` can carry a user-supplied `@<ref>` tail, and §8.4 only
+ * forbids whitespace and `/` there — so `$(…)`, backticks, and `;` all
+ * reach here. This command is printed for the user to paste into a
+ * shell, so the reference is quoted as one literal argument.
+ */
+function installCommand(suggestion: KnownInstallSuggestion): string {
+  return `crew install ${shellQuote(suggestion.installRef)}`;
 }
