@@ -50,6 +50,21 @@ export function shortenHome(path: string, home: string = homedir()): string {
 }
 
 /**
+ * Quote a value for safe pasting into a POSIX shell. Bare words are
+ * returned as-is; anything else is single-quoted, with embedded single
+ * quotes closed-escaped-reopened (`'\''`).
+ *
+ * Use this for any path we render INTO a copy-pasteable command. Never
+ * combine it with `shortenHome` on the same string: `~` is expanded by
+ * the shell, so quoting it would defeat the shortening, and shortening a
+ * quoted path would corrupt the quotes.
+ */
+export function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_/@%+=:,.-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
  * Render an aligned two-column table of rows. Each row is a tuple of
  * strings; the first column is padded to the longest first-cell width
  * plus `gap` spaces. The second column is printed as-is (no wrapping

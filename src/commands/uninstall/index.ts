@@ -26,6 +26,7 @@ import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
 import type { Config, StateFile } from "../../core/types.ts";
+import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
@@ -33,6 +34,7 @@ import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
+import { narrowSubjectToScope } from "./scope.ts";
 import { findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
@@ -50,15 +52,26 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
 
   withStateLock(() => {
     let state = readState(ctx.home);
+    const removedRoots: (string | null)[] = [];
     for (const raw of ctx.positional) {
-      const subject = resolveStateSubject(state, raw);
-      const { updatedState, rec } = removeOne(state, subject, ctx, false, agentFilter);
+      // §7.4 "Scope": a selector only ever targets one scope.
+      const subject = narrowSubjectToScope(
+        resolveStateSubject(state, raw),
+        ctx.flags.scope,
+        ctx.cwd,
+        ctx.flags.force,
+      );
+      const { updatedState, rec, meta } = removeOne(state, subject, ctx, false, agentFilter);
       state = updatedState;
       records.push(rec);
+      removedRoots.push(...meta.fullyRemovedRoots);
       if (rec.failures.length > 0) exitCode = 1;
     }
-    if (prune) {
-      state = pruneOrphans(state, ctx, records);
+    // §7.4 step 5: pruning is a consequence of a full removal. A forced
+    // miss or a surviving partial `--agent` removal frees nothing, so
+    // there is nothing to sweep and no root to sweep it in.
+    if (prune && removedRoots.length > 0) {
+      state = pruneOrphans(state, ctx, records, new Set(removedRoots));
     }
     writeState(state, ctx.home);
     // Auto-tap GC: any auto tap with no remaining state entries is
@@ -91,22 +104,33 @@ function validateAgentFilter(agents: readonly string[]): readonly string[] | nul
 
 /**
  * Recursively remove any skill that is now an autoremovable orphan:
- * `explicit: false` AND empty `required_by`. Runs until a full pass
- * finds no new orphans. Prune never respects `--agent` filters —
- * when we auto-remove a dep, we remove it fully.
+ * `explicit: false` AND empty `required_by`, restricted to the scope and
+ * project roots this run fully removed from (§7.4 step 5). Prune never
+ * respects `--agent` filters — when we auto-remove a dep, we remove it
+ * fully.
+ *
+ * TERMINATION: every candidate is recorded in `attempted` BEFORE it is
+ * removed, and `findOrphan` skips those keys. The loop therefore runs at
+ * most once per entry in state and cannot depend on the entry vanishing —
+ * which matters because an orphan whose removal aborts on a safety check
+ * deliberately keeps its state entry.
  */
 function pruneOrphans(
   state: StateFile,
   ctx: CommandContext,
   records: UninstallRecord[],
+  roots: ReadonlySet<string | null>,
 ): StateFile {
   let current = state;
-  let orphan = findOrphan(current);
+  const attempted = new Set<string>();
+  let orphan = findOrphan(current, ctx.flags.scope, roots, attempted);
   while (orphan) {
-    const { updatedState, rec } = removeOne(current, orphan.name, ctx, true, null);
+    attempted.add(entryKey(orphan));
+    const subject = { raw: orphan.name, name: orphan.name, entries: [orphan] };
+    const { updatedState, rec } = removeOne(current, subject, ctx, true, null);
     records.push(rec);
     current = updatedState;
-    orphan = findOrphan(current);
+    orphan = findOrphan(current, ctx.flags.scope, roots, attempted);
   }
   return current;
 }

@@ -17,8 +17,9 @@ export const GROUPS: readonly CommandGroup[] = [
       },
       {
         name: "uninstall",
-        signature: <>crew uninstall &lt;name&gt;…</>,
-        description: "Remove installed skills from every agent. Bare and tap-qualified names work.",
+        signature: <>crew uninstall [--scope {"{user,project}"}] &lt;name&gt;…</>,
+        description:
+          "Remove installed skills from every agent. Bare and tap-qualified names work. One scope at a time: your system-wide install by default, or this project's with --scope project.",
       },
       {
         name: "update",
