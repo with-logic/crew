@@ -16,6 +16,7 @@ import { symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { paths } from "../../src/core/paths.ts";
+import { assertNoSymlinkEscape } from "../../src/util/symlink-containment.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
   commitAll,
@@ -85,5 +86,41 @@ describe("stored tap subpaths are contained", () => {
     expect(capture.stderr()).toContain("symlink");
     // The outside skill must not appear in results.
     expect(capture.stdout()).not.toContain("pwned  ");
+  });
+});
+
+describe("absence is not a containment violation", () => {
+  /**
+   * Containment answers *where* a path points, not *whether* it
+   * exists. A missing path points nowhere, and a missing segment
+   * cannot be a symlink, so absence must pass the check and be
+   * reported by the caller that cares — for a skill deleted upstream
+   * that is §10.1's soft `source_gone` outcome, not a hard failure.
+   *
+   * These assert the helper directly rather than through a command,
+   * because `crew search` converts indexing failures into warnings
+   * (§16.6), which would swallow the difference and let a regression
+   * pass unnoticed.
+   */
+  test("a missing but contained target is accepted", () => {
+    const root = makeTempDir("crew-root-");
+    expect(() => assertNoSymlinkEscape(root, join(root, "deleted"), "subject")).not.toThrow();
+  });
+
+  test("a missing target that escapes is still refused", () => {
+    const root = makeTempDir("crew-root-");
+    // Absence must not become a way around the lexical check.
+    expect(() => assertNoSymlinkEscape(root, join(root, "..", "gone"), "subject")).toThrow(
+      /outside the source/,
+    );
+  });
+
+  test("an unreadable segment still fails rather than passing silently", () => {
+    const root = makeTempDir("crew-root-");
+    // A file where a directory belongs: `lstat` on the child fails with
+    // ENOTDIR, not ENOENT. Only absence is absorbed — a segment we
+    // cannot inspect must never be treated as contained.
+    writeFileSync(join(root, "afile"), "x");
+    expect(() => assertNoSymlinkEscape(root, join(root, "afile", "child"), "subject")).toThrow();
   });
 });
