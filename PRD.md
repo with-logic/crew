@@ -1397,6 +1397,8 @@ The 40-char hex commit SHA the skill was resolved from. Short SHA is the first 8
 
 Every error below has a stable machine-readable name (for `--json` output) and a human-readable message. Implementations may phrase the human messages however they like but must use these identifiers in `--json`.
 
+Two entries in this table — `source_gone` and `tap_missing` — are **soft outcomes**, not failures. They carry exit 0, they never abort a run, and an implementation does not raise them the way it raises the rest: they surface as a per-skill outcome on `crew update` (§10.1) while the local install, marker, and state entry are all preserved. They are listed here so a `--json` consumer has one stable name and one declared exit code per observable outcome, whether or not the implementation models it as a thrown error internally.
+
 | Name | Exit | When |
 |---|---|---|
 | `invalid_ref` | 4 | The skill reference failed to parse (§8.4). |

@@ -27,6 +27,17 @@ export interface UninstallRecord {
   partial?: boolean;
 }
 
+/** Per-entry result of one `removeOne` call, keyed by §11.1's (name, scope, root). */
+export interface EntryOutcome {
+  readonly entry: StateEntry;
+  /**
+   * True when every agent asked to give up this entry did so, leaving no
+   * ownership behind. Only these entries may be dropped from state — an
+   * entry with retained ownership still has bytes on disk.
+   */
+  readonly fullyRemoved: boolean;
+}
+
 /**
  * Remove one named skill. If `agentFilter` is null, removes from every
  * agent the skill is on (full uninstall). If non-null, removes only
@@ -39,7 +50,7 @@ export function removeOne(
   ctx: CommandContext,
   pruned: boolean,
   agentFilter: readonly string[] | null,
-): { updatedState: StateFile; rec: UninstallRecord } {
+): { updatedState: StateFile; rec: UninstallRecord; outcomes: readonly EntryOutcome[] } {
   const name = typeof subject === "string" ? subject : subject.name;
   const entries =
     typeof subject === "string"
@@ -61,12 +72,13 @@ export function removeOne(
         { name: errorName },
       );
     }
-    return { updatedState: state, rec };
+    return { updatedState: state, rec, outcomes: [] };
   }
   // Per-entry processing: each (skill, scope, project_root) entry
   // potentially touches a different subset of agents.
   let nextState = state;
   let anySurvives = false;
+  const outcomes: EntryOutcome[] = [];
   for (const entry of entries) {
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
@@ -84,12 +96,14 @@ export function removeOne(
     if (remainingAgents.length > 0) {
       nextState = reduceEntryAgents(nextState, entry, remainingAgents);
       anySurvives = true;
+      outcomes.push({ entry, fullyRemoved: false });
     } else {
       nextState = dropScopedEntryAndUpdateRequiredBy(nextState, entry);
+      outcomes.push({ entry, fullyRemoved: true });
     }
   }
   if (anySurvives) rec.partial = true;
-  return { updatedState: nextState, rec };
+  return { updatedState: nextState, rec, outcomes };
 }
 
 /**

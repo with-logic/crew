@@ -7,6 +7,7 @@
  */
 
 import { afterEach, beforeEach } from "bun:test";
+import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
@@ -18,21 +19,32 @@ import {
   skillFrontmatter,
 } from "../../helpers/fixtures.ts";
 
-export { makeCrewHome };
+export { makeCrewHome, makeTempDir };
 
 let ccRoot: string;
 let restore: (() => void) | null = null;
 
-/** Redirect Claude Code at a temp root for the calling suite. */
+/**
+ * Redirect Claude Code at a temp root for the calling suite. Project
+ * scope is redirected too, so a suite can install the same skill at two
+ * §11.1 locations without touching a real agent directory.
+ */
 export function useTempAgentRoot(): void {
   beforeEach(() => {
     ccRoot = makeTempDir("crew-cc-");
-    const originals = { u: claudeCodeAdapter.userPath, d: claudeCodeAdapter.detect };
+    const originals = {
+      u: claudeCodeAdapter.userPath,
+      d: claudeCodeAdapter.detect,
+      p: claudeCodeAdapter.projectPath,
+    };
     (claudeCodeAdapter as { userPath: () => string }).userPath = () => ccRoot;
     (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
+    (claudeCodeAdapter as { projectPath: (cwd: string) => string }).projectPath = (cwd) =>
+      join(cwd, ".claude", "skills");
     restore = () => {
       (claudeCodeAdapter as { userPath: () => string }).userPath = originals.u;
       (claudeCodeAdapter as { detect: () => boolean }).detect = originals.d;
+      (claudeCodeAdapter as { projectPath: (cwd: string) => string }).projectPath = originals.p;
     };
   });
 
@@ -51,6 +63,13 @@ export function agentRoot(): string {
 export function run(home: string, argv: string[]) {
   const c = captureStreams();
   const code = runCli(argv, { home, streams: c.streams });
+  return { code, stdout: c.stdout(), stderr: c.stderr() };
+}
+
+/** Run the CLI against `home` from a specific `cwd` (for project scope). */
+export function runIn(home: string, argv: string[], cwd: string) {
+  const c = captureStreams();
+  const code = runCli(argv, { home, streams: c.streams, cwd });
   return { code, stdout: c.stdout(), stderr: c.stderr() };
 }
 

@@ -30,6 +30,11 @@ export function entryKey(e: StateEntry): string {
   return JSON.stringify([e.name, e.scope, e.project_root ?? ""]);
 }
 
+/** Key for just the install LOCATION — the (scope, root) half of §11.1's triple. */
+function locationKey(e: StateEntry): string {
+  return JSON.stringify([e.scope, e.project_root ?? ""]);
+}
+
 /**
  * Drop many entries in ONE traversal, scrubbing each removed name from
  * the `required_by` of survivors at the same location.
@@ -45,17 +50,33 @@ export function dropEntriesAndUpdateRequiredBy(
 ): StateFile {
   if (targets.length === 0) return state;
   const dropped = new Set<string>();
-  for (const t of targets) dropped.add(entryKey(t));
+  // Removed names indexed BY LOCATION, so each surviving entry costs one
+  // map lookup instead of a scan over every target: N+K, not N*K.
+  const removedAtLocation = new Map<string, Set<string>>();
+  for (const t of targets) {
+    dropped.add(entryKey(t));
+    const key = locationKey(t);
+    const names = removedAtLocation.get(key);
+    if (names) names.add(t.name);
+    else removedAtLocation.set(key, new Set([t.name]));
+  }
   const installations: StateEntry[] = [];
   for (const e of state.installations) {
     if (dropped.has(entryKey(e))) continue;
     // Only names removed at THIS entry's location may be scrubbed from
     // its edges; a same-named skill elsewhere keeps its own.
-    const names = new Set<string>();
-    for (const t of targets) {
-      if (sameLocation(e, t)) names.add(t.name);
+    const names = removedAtLocation.get(locationKey(e));
+    if (!names) {
+      installations.push(e);
+      continue;
     }
-    const kept = e.required_by.filter((n) => !names.has(n));
+    // A `for` loop rather than `.filter(cb)`: the callback would only be
+    // constructed-and-invoked on the subset of survivors that share a
+    // location with a removal, leaving an uncovered function object.
+    const kept: string[] = [];
+    for (const n of e.required_by) {
+      if (!names.has(n)) kept.push(n);
+    }
     installations.push(kept.length === e.required_by.length ? e : { ...e, required_by: kept });
   }
   return { schema_version: 1, installations };
@@ -98,7 +119,20 @@ export function dropScopedEntryAndUpdateRequiredBy(
   return { schema_version: 1, installations };
 }
 
-/** An autoremovable orphan: `explicit: false` AND empty `required_by`. */
-export function findOrphan(state: StateFile): StateEntry | undefined {
-  return state.installations.find((e) => !e.explicit && e.required_by.length === 0);
+/**
+ * An autoremovable orphan: `explicit: false` AND empty `required_by`,
+ * skipping any entry the caller has already attempted this run.
+ *
+ * The `attempted` set is what bounds the prune sweep. A removal that
+ * aborts on a safety check RETAINS the entry's ownership, so the entry
+ * stays in state still looking like an orphan; without the set, the
+ * caller's loop would be handed the same entry forever.
+ */
+export function findOrphan(
+  state: StateFile,
+  attempted: ReadonlySet<string>,
+): StateEntry | undefined {
+  return state.installations.find(
+    (e) => !e.explicit && e.required_by.length === 0 && !attempted.has(entryKey(e)),
+  );
 }

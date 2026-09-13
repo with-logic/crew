@@ -53,6 +53,11 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
       required,
     };
   }
+  // `failed` is the only remaining variant. `satisfies` turns a newly
+  // added outcome into a compile error here rather than letting it
+  // render silently as a failure. Type-only, so it costs no runtime
+  // branch and no coverage.
+  o satisfies Extract<Outcome, { kind: "failed" }>;
   return {
     status: style.red("failed"),
     detail: style.red(o.error.code.replace(/_/g, " ")),
