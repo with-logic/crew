@@ -21,18 +21,32 @@ export interface UninstallInput {
   readonly cwd: string;
   readonly skillName: string;
   readonly force: boolean;
+  /**
+   * Run every check but write nothing (§7.4 `--dry-run`). Required, not
+   * optional: omitting it would silently select the destructive path.
+   */
+  readonly dryRun: boolean;
 }
 
-/** Outcome of one uninstall operation on a physical dest. */
+/**
+ * Outcome of one uninstall operation on a physical dest.
+ *
+ * Under `dryRun` these describe what WOULD happen: the checks have all
+ * run and the decision is final, but no bytes were touched. Callers
+ * that render outcomes are responsible for the tense.
+ */
 export type UninstallOutcome =
-  /** Bytes removed; this was the last adapter owning the dest. */
+  /** Bytes removed (or, dry, would be); this was the last adapter owning the dest. */
   | { kind: "removed" }
-  /** Ownership removed from the marker; bytes stay because other adapters still own them. */
+  /** Marker ownership dropped (or would be); bytes stay, other adapters still own them. */
   | { kind: "detached"; remaining: readonly string[] }
   /** No marker existed; nothing to do. */
   | { kind: "absent" };
 
-/** Remove adapter ownership from a physical dest. Throws on abort. */
+/**
+ * Remove adapter ownership from a physical dest, or under `dryRun`
+ * decide what removal would do without writing. Throws on abort.
+ */
 export function uninstallSkillFromAgents(input: UninstallInput): UninstallOutcome {
   const base = baseFor(input.agents[0]!, input.scope, input.cwd);
   const dest = join(base, input.skillName);
@@ -62,7 +76,7 @@ function untrackedInstall(input: UninstallInput, dest: string): UninstallOutcome
       `\`${dest}\` exists but isn't crew-managed (no .crew.json) — refusing to remove`,
       { dest },
     );
-  rmrf(dest);
+  if (!input.dryRun) rmrf(dest);
   return { kind: "removed" };
 }
 
@@ -73,7 +87,7 @@ function inconsistentMarker(input: UninstallInput, marker: Marker, dest: string)
       `\`${dest}\` has a crew marker for \`${marker.name}\`, not \`${input.skillName}\` — investigate before forcing`,
       { dest, markerName: marker.name, incomingName: input.skillName },
     );
-  rmrf(dest);
+  if (!input.dryRun) rmrf(dest);
   return { kind: "removed" };
 }
 
@@ -85,9 +99,9 @@ function removeAdapterOwnership(
   const leaving = new Set(input.agents.map((a) => a.name));
   const remaining = (marker.agents ?? []).filter((a) => !leaving.has(a));
   if (remaining.length === 0) {
-    rmrf(dest);
+    if (!input.dryRun) rmrf(dest);
     return { kind: "removed" };
   }
-  writeJson(join(dest, ".crew.json"), { ...marker, agents: remaining.sort() });
+  if (!input.dryRun) writeJson(join(dest, ".crew.json"), { ...marker, agents: remaining.sort() });
   return { kind: "detached", remaining };
 }

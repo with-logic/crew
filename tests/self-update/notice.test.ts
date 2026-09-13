@@ -65,6 +65,7 @@ function makeHarness(latestTag: string | "throw" = "v99.99.99"): Harness {
         quiet: false,
         streams: streams.streams,
         stderrIsTty: true,
+        dryRun: false,
         ...overrides,
       };
     },

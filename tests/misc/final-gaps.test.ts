@@ -227,6 +227,7 @@ describe("uninstall edges via direct function call", () => {
       cwd: proj,
       skillName: "demo",
       force: false,
+      dryRun: false,
     });
     expect(res.kind).toBe("removed");
     expect(existsSync(join(base, "demo"))).toBe(false);

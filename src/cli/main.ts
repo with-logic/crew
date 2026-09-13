@@ -136,6 +136,7 @@ function runCliWithHome(
     quiet: parsed.flags.quiet,
     streams,
     stderrIsTty,
+    dryRun: parsed.flags.dryRun,
   });
 
   return exitCode;
