@@ -166,7 +166,7 @@ When a command asks for an installed skill name, you can use the bare name
 | `crew install <ref>…` | Install one or more skills into every detected agent; on misses, may suggest skills from trusted taps you haven't added yet. |
 | `crew uninstall <name>…` | Remove installed skills from every agent they were installed into. |
 | `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. `--dry-run` previews pending updates and new tap skills: tap clones are still refreshed, but no installed skill, marker, store entry, or `state.json` changes. |
-| `crew outdated [<name>…]` | Preview what `crew update` would change — pending updates and new tap skills. Same as `crew update --dry-run`, trimmed to what matters: tap clones are still refreshed, but nothing installed changes. |
+| `crew outdated [<name>…]` | Preview what `crew update` would change — pending updates, plus new skills added to a tap you installed whole. Same as `crew update --dry-run`, trimmed to what matters: tap clones are still refreshed, but nothing installed changes. |
 | `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. |
 | `crew skills` | Alias for `crew list`. |
 | `crew info <ref-or-name>` | Show details for an installed skill or one available in a tap. |

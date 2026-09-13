@@ -37,8 +37,8 @@ export const GROUPS: readonly CommandGroup[] = [
         signature: <>crew outdated [&lt;name&gt;…]</>,
         description: (
           <>
-            Preview what <code>crew update</code> would change — pending updates and new tap
-            skills. Refreshes your taps, but nothing installed changes.
+            Preview what <code>crew update</code> would change — pending updates, plus new skills
+            added to a tap you installed whole. Refreshes your taps, but nothing installed changes.
           </>
         ),
       },
