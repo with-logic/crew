@@ -98,9 +98,13 @@ Every command below is mandatory. Exit codes are defined in §15.
 ```
 crew install <ref> [<ref>...]     Install one or more skills.
 crew uninstall <selector> [<selector>...] Remove installed skills from every agent.
+crew remove <selector> [<selector>...]    Alias for `crew uninstall`.
+crew rm <selector> [<selector>...]        Alias for `crew uninstall`.
 crew update [<selector>...]       Update all installed skills, or only those selected.
+crew upgrade [<selector>...]      Alias for `crew update`.
 crew list                         List installed skills.
 crew skills                       Alias for `crew list`.
+crew ls                           Alias for `crew list`.
 crew search <query>               Search across configured taps.
 crew info <ref-or-selector>       Show details for an installed or searchable skill.
 
@@ -1960,6 +1964,7 @@ Implementations and test suites refer to criteria by ID.
 | ID | Reference | Assertion |
 |---|---|---|
 | C-CLI-01 | §5.1 | Every command listed in §5.1 is present and reachable. |
+| C-CLI-01b | §5.1 | Each alias behaves identically to its canonical command, including accepting that command's flags (e.g. `crew rm --prune <name>`): `crew remove` and `crew rm` → `crew uninstall`; `crew ls` → `crew list`; `crew upgrade` → `crew update`. |
 | C-CLI-02 | §5.5 | `crew help` (and `crew` with no arguments) prints the overview on stdout and exits 0. |
 | C-CLI-03 | §5.5 | `crew help <command>` prints per-command help on stdout and exits 0. |
 | C-CLI-04 | §5.1 | `crew version` prints a version string and exits 0. |

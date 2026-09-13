@@ -21,6 +21,11 @@ export const GROUPS: readonly CommandGroup[] = [
         description: "Remove installed skills from every agent. Bare and tap-qualified names work.",
       },
       {
+        name: "remove",
+        signature: <>crew remove &lt;name&gt;… / crew rm &lt;name&gt;…</>,
+        description: ["Aliases for ", <code key="crew-uninstall">crew uninstall</code>, "."],
+      },
+      {
         name: "update",
         signature: <>crew update [&lt;name&gt;…]</>,
         description: (
@@ -31,14 +36,19 @@ export const GROUPS: readonly CommandGroup[] = [
         ),
       },
       {
+        name: "upgrade",
+        signature: <>crew upgrade [&lt;name&gt;…]</>,
+        description: ["Alias for ", <code key="crew-update">crew update</code>, "."],
+      },
+      {
         name: "list",
         signature: <>crew list</>,
         description: "List installed skills, grouped by scope, with sources and resolved SHAs.",
       },
       {
         name: "skills",
-        signature: <>crew skills</>,
-        description: ["Alias for ", <code key="crew-list">crew list</code>, "."],
+        signature: <>crew skills / crew ls</>,
+        description: ["Aliases for ", <code key="crew-list">crew list</code>, "."],
       },
       {
         name: "info",

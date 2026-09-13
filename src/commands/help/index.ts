@@ -13,7 +13,7 @@
 
 import { CREW_VERSION } from "../../core/version.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
-import { COMMANDS } from "./content/index.ts";
+import { helpFor } from "./content/index.ts";
 import { overview, renderCommand } from "./render.ts";
 
 /** Entry point for the `help` command. */
@@ -22,7 +22,7 @@ export function helpCommand(ctx: CommandContext): CommandOutput {
   if (!sub) {
     return overview();
   }
-  const help = COMMANDS[sub];
+  const help = helpFor(sub);
   if (!help) {
     return overview();
   }
@@ -35,7 +35,7 @@ export function helpCommand(ctx: CommandContext): CommandOutput {
  * back to the overview if the name is unknown.
  */
 export function showCommandHelp(name: string): CommandOutput {
-  const help = COMMANDS[name];
+  const help = helpFor(name);
   if (!help) return overview();
   return renderCommand(help);
 }
