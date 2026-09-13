@@ -30,6 +30,7 @@ import { withStateLock } from "../../../state/lock.ts";
 import { rmrf } from "../../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
 import { removeOne, type UninstallRecord } from "../../uninstall/core.ts";
+import { dropEntriesAndUpdateRequiredBy } from "../../uninstall/state.ts";
 import { describe, planRemove, type RemovePlan } from "./plan.ts";
 import { renderTapRemove } from "./render.ts";
 
@@ -115,11 +116,17 @@ function removeWithSkills(ctx: CommandContext, plan: RemovePlan, dryRun: boolean
     if (list) list.push(e);
     else byName.set(e.name, [e]);
   }
+  // Each `removeOne` rebuilds the whole installations array, so K skills
+  // over N entries costs K*N visits. Run the per-agent filesystem work
+  // per skill (it must stay per-skill), collect the entries that came off
+  // cleanly, and apply the state change in one keyed traversal.
+  const cleanlyRemoved: StateEntry[] = [];
   for (const [name, entries] of byName) {
-    const { updatedState, rec } = removeOne(state, { raw: name, name, entries }, ctx, false, null);
-    state = updatedState;
+    const { rec } = removeOne(state, { raw: name, name, entries }, ctx, false, null);
     records.push(rec);
+    if (rec.failures.length === 0) cleanlyRemoved.push(...entries);
   }
+  state = dropEntriesAndUpdateRequiredBy(state, cleanlyRemoved);
 
   const failed = records.some((r) => r.failures.length > 0);
   if (!dryRun) {

@@ -13,13 +13,14 @@
  *      the CLI layer can format.
  */
 
-import { writeConfig } from "../config/load.ts";
+import { readConfig, writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
 import type { Config, ResolvedSkill, Scope, StateEntry, StateFile } from "../core/types.ts";
 import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { computeAgentSet } from "./agent-set.ts";
+import { assertTapsPresent, mergeAutoTaps } from "./config-merge.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules.ts";
 import { type InstallSummary, performInstall } from "./perform.ts";
 import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
@@ -108,7 +109,17 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     // Persist any auto-taps the resolver created BEFORE we start
     // writing state entries that reference them — otherwise a partial
     // crash would leave dangling tap names in state.
-    if (configWithAutoTaps !== config) writeConfig(configWithAutoTaps, home);
+    //
+    // Resolution ran before the lock, so `config` is a stale snapshot: a
+    // concurrent `crew tap remove` may have dropped a tap since. Writing
+    // `configWithAutoTaps` wholesale would resurrect it, and installing
+    // against it would record an entry pointing at a tap the user just
+    // removed. Merge only the taps the resolver ADDED into fresh config,
+    // and abort if a tap this install depends on is gone.
+    if (configWithAutoTaps !== config) {
+      writeConfig(mergeAutoTaps(readConfig(home), config, configWithAutoTaps), home);
+    }
+    assertTapsPresent(readConfig(home), resolvedAll);
 
     const freshState = readState(home);
     rewriteDiscoveryUpgradeMarkers(config, configWithAutoTaps, freshState.installations, cwd);

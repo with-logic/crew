@@ -4,10 +4,10 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
+import { paths, tapPath } from "../../../src/core/paths.ts";
 import { readState } from "../../../src/state/load.ts";
 import {
   agentRoot,
@@ -116,5 +116,45 @@ describe("C-TAP-16d tap remove --uninstall", () => {
     expect(r.stdout).toContain("Would uninstall alpha");
     expect(r.stdout).not.toContain("Uninstalling alpha");
     expect(r.stdout).toContain("Would remove tap mytap");
+  });
+
+  test("C-TAP-16d an agent with no adapter in this build keeps its ownership", () => {
+    const home = makeCrewHome();
+    expect(tapWithInstall(home, buildTapRepo())).toBe(0);
+    // State written by a future crew, or an adapter since removed: we
+    // cannot reach its install directory, so the bytes stay. Counting it
+    // as removed would drop the entry and the tap, orphaning a real
+    // install behind a success exit code.
+    const p = paths(home);
+    const state = JSON.parse(readFileSync(p.stateFile, "utf8")) as {
+      installations: { agents: string[] }[];
+    };
+    for (const e of state.installations) e.agents = ["future-agent-9000"];
+    writeFileSync(p.stateFile, JSON.stringify(state, null, 2));
+
+    const r = run(home, ["tap", "remove", "--uninstall", "mytap"]);
+
+    expect(r.code).toBe(1);
+    expect(readState(home).installations).toHaveLength(1);
+    expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(true);
+  });
+
+  test("removing one tap leaves a same-named skill from another tap alone", () => {
+    const home = makeCrewHome();
+    // Two taps each exposing a skill called `alpha`. Only `mytap`'s copy
+    // may come off; §11.1 keys an entry by (name, scope, project root),
+    // so selecting by name alone would take both.
+    expect(tapWithInstall(home, buildTapRepo(), "mytap")).toBe(0);
+    expect(run(home, ["tap", "add", `file://${buildTapRepo()}`, "othertap"]).code).toBe(0);
+    expect(readState(home).installations).toHaveLength(1);
+
+    const r = run(home, ["tap", "remove", "--uninstall", "mytap"]);
+
+    expect(r.code).toBe(0);
+    // `othertap` keeps its config row and its clone.
+    const config = readConfig(home);
+    expect(config.taps.some((t) => t.name === "mytap")).toBe(false);
+    expect(config.taps.some((t) => t.name === "othertap")).toBe(true);
+    expect(existsSync(tapPath("othertap", home))).toBe(true);
   });
 });

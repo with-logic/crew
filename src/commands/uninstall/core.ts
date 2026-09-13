@@ -110,14 +110,25 @@ function removeFromAgents(
   const entryCwd = cwdForEntry(entry, ctx.cwd);
   const groups = new Map<string, AgentAdapter[]>();
   for (const targetName of agentsToRemove) {
-    // An unknown target name in state shouldn't happen in normal use
-    // but may if state was written by a future crew; skip it
-    // silently rather than aborting the whole uninstall. Similarly,
-    // adapters that don't support the entry's scope (empty base)
-    // wouldn't be in state.agents to begin with, so we don't need
-    // a runtime branch for them.
+    // A target name in state with no adapter in this build — state
+    // written by a future crew, or an adapter since removed. We cannot
+    // reach its install directory, so its bytes stay on disk. Record a
+    // failure so the entry keeps that ownership: dropping it would hide
+    // a real install from every later attachment check, letting
+    // `tap remove --uninstall` delete the tap and orphan it.
+    // Adapters that don't support the entry's scope (empty base) never
+    // appear in `state.agents`, so they need no branch here.
     const adapter = agentByName(targetName);
-    if (!adapter) continue;
+    if (!adapter) {
+      rec.failures.push({
+        agent: targetName,
+        error: {
+          code: "unknown_agent",
+          message: `no adapter named \`${targetName}\` in this build — its install was left in place`,
+        },
+      });
+      continue;
+    }
     const base = baseFor(adapter, entry.scope, entryCwd);
     const dest = `${base}/${name}`;
     const existing = groups.get(dest);

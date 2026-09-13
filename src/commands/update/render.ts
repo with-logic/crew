@@ -5,7 +5,7 @@
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand.ts";
-import type { UpdateRow } from "../../install/update/types.ts";
+import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { columns, plural, shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
@@ -129,7 +129,14 @@ function tally(rows: readonly UpdateRow[], addedCount: number): Totals {
     else if (k === "skipped" || k === "missing_project_root") t.skipped++;
     else if (k === "source_gone") t.sourceGone++;
     else if (k === "tap_missing") t.tapMissing++;
-    else t.failed++;
+    else {
+      // `failed` is the only remaining variant. `satisfies` makes a newly
+      // added outcome a compile error rather than letting it be counted
+      // as a failure silently. Type-only: no runtime branch, no coverage
+      // cost, which a throwing `assertNever` would carry.
+      r.outcome satisfies Extract<Outcome, { kind: "failed" }>;
+      t.failed++;
+    }
   }
   return t;
 }
