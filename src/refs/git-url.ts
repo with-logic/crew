@@ -16,7 +16,7 @@ import { CrewError } from "../core/errors.ts";
 import type { GitSource } from "../core/types.ts";
 import { normalizeBrowserUrl, stripUrlQueryAndFragment } from "./browser-url.ts";
 import { displayUrl } from "./display-url.ts";
-import { splitGitRef, splitSubpath } from "./git-tails.ts";
+import { splitGitRef, splitSubpath, splitTrailingRef } from "./git-tails.ts";
 
 /** Shorthand host prefixes known to crew (§8.2). */
 const SHORTHAND_HOSTS: Record<string, string> = {
@@ -68,8 +68,15 @@ export function looksLikeAtShorthand(ref: string): boolean {
 export function parseGit(ref: string): GitSource {
   // §8.2: `?query` / `#fragment` are dropped before any grammar tail is read,
   // so text inside them can never be mistaken for an `@ref` or `//subpath`.
-  const { head, subpath } = splitSubpath(stripUrlQueryAndFragment(ref));
-  const { url: baseUrl, ref: gitRef } = splitGitRef(head);
+  const { head, subpath: rawSubpath } = splitSubpath(stripUrlQueryAndFragment(ref));
+  const { url: baseUrl, ref: leadingRef } = splitGitRef(head);
+  // §8.2: the ref may sit before or after the subpath. Ref-first wins and
+  // suppresses the trailing scan entirely, so a final path segment
+  // containing a literal `@` survives when the ref is spelled first.
+  const trailing =
+    leadingRef === null ? splitTrailingRef(rawSubpath) : { subpath: rawSubpath, ref: null };
+  const subpath = trailing.subpath;
+  const gitRef = leadingRef ?? trailing.ref;
   // §8.2 "Browser URLs": an explicit `@ref` / `//subpath` tail wins over
   // whatever the pasted URL encoded.
   const browser = normalizeBrowserUrl(baseUrl);
