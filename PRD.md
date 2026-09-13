@@ -180,6 +180,16 @@ Accepted on any command where they apply:
 - `--yes` — answer "yes" to any confirmation prompt.
 - `--force` — override safety checks as defined in §7 and §10. Never overrides spec validation failures or two-skills-same-name conflicts.
 
+**Flag uniqueness.** A flag marked *(repeatable)* above may be given more
+than once and accumulates its values; `--agent` is the only such flag.
+Every other flag — global, install-time, or command-specific, and
+whether it takes a value or is a presence-only boolean — is a
+`usage_error` (§13) if given more than once. The message names the
+offending flag. This rule exists because the alternative is silent: a
+repeated value flag would otherwise have one of the user's values
+discarded, and a repeated boolean collapse to a single `true`, so an
+invocation the user believed was meaningful would be quietly reinterpreted.
+
 ### 5.3 Install-time flags
 
 - `--from-git <url>[@<ref>]` — explicit git source, equivalent to passing the URL as the ref but disambiguates when the argument might look like a tap name.

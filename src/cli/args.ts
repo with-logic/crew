@@ -18,6 +18,7 @@
 import yargsFactory from "yargs/yargs";
 import type { CommandFlags } from "../commands/types.ts";
 import { CrewError } from "../core/errors.ts";
+import { flagTableKeyFor } from "./alias-registry.ts";
 
 /** Result of parsing. */
 export interface ParsedArgs {
@@ -25,6 +26,41 @@ export interface ParsedArgs {
   readonly subcommand: string | null;
   readonly positional: string[];
   readonly flags: CommandFlags;
+}
+
+/**
+ * Whether argv asks for `--json`, read straight off the raw tokens.
+ *
+ * A parse-stage failure has no `ParsedArgs` to consult, but the user's
+ * requested output mode still has to be honored (§5.2, C-CLI-08c) — a
+ * script piping stdout must get the structured error, not human text on
+ * stderr. So this deliberately does not go through yargs: it must answer
+ * even for the argv that made yargs throw.
+ *
+ * Last occurrence wins, matching yargs, so `--json --json=false` is false.
+ *
+ * The value forms follow yargs' own boolean coercion, verified against
+ * the parser rather than assumed: it accepts a SPACE-separated value
+ * (`--json false`), and treats any value other than a literal `true` as
+ * false — so `--json=FALSE`, `--json=0`, and `--json=no` are all false.
+ * Guessing differently here would hand a script human-readable text on
+ * an invocation the real parse would have treated as JSON, or vice versa.
+ */
+export function wantsJsonOutput(argv: readonly string[]): boolean {
+  let json = false;
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i]!;
+    if (token === "--") break;
+    if (token === "--json") {
+      // yargs consumes a following bare `true`/`false` as the value.
+      const next = argv[i + 1];
+      if (next === "true" || next === "false") {
+        json = next === "true";
+        i++;
+      } else json = true;
+    } else if (token.startsWith("--json=")) json = token.slice("--json=".length) === "true";
+  }
+  return json;
 }
 
 /** Global boolean flags. */
@@ -57,9 +93,6 @@ const STRING_SUB: Record<string, readonly string[]> = {
  * flags, and inheriting that table would start accepting flags nothing
  * honors. Dispatch owns the real alias table (`src/cli/dispatch.ts`).
  */
-const FLAG_TABLE_ALIASES: Record<string, string> = {
-  skills: "list",
-};
 /** Flags that should always be collected into a list. */
 const ARRAY_GLOBALS = ["agent"] as const;
 /** The subset of flags that is part of the public `CommandFlags` surface. */
@@ -78,7 +111,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   // Prefixed aliases (`taps` → `tap list`) are deliberately excluded:
   // they resolve to a *subcommand* that ignores the parent's flags, so
   // they keep rejecting them.
-  const flagKey = FLAG_TABLE_ALIASES[command] ?? command;
+  const flagKey = flagTableKeyFor(command);
   const booleans = [...BOOLEAN_GLOBALS, ...(BOOLEAN_SUB[flagKey] ?? [])];
   const strings = [...STRING_GLOBALS, ...(STRING_SUB[flagKey] ?? [])];
 

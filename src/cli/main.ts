@@ -12,7 +12,7 @@ import { crewHome } from "../core/paths.ts";
 import { maybeEmitUpdateNotice } from "../self-update/notice.ts";
 import { colorEnabled, makeStyler, type Styler, terminalWidth } from "../util/term.ts";
 import { nowIso } from "../util/time.ts";
-import { parseArgs } from "./args.ts";
+import { parseArgs, wantsJsonOutput } from "./args.ts";
 import { dispatch } from "./dispatch.ts";
 import { defaultStreams, type OutputStreams, writeError, writeSuccess } from "./output.ts";
 import {
@@ -79,7 +79,10 @@ function runCliWithHome(
   } catch (err) {
     // `parseArgs` only raises `CrewError`.
     const ce = err as CrewError;
-    writeError(ce, false, streams, style);
+    // There is no `ParsedArgs` to consult here, but the user's requested
+    // output mode still has to be honored (§5.2, C-CLI-08c): a script
+    // piping stdout must get the structured error, not human text.
+    writeError(ce, wantsJsonOutput(argv), streams, style);
     return ce.exitCode;
   }
 
