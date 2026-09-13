@@ -84,4 +84,46 @@ describe("--help target selection across flag values", () => {
     expect(uninstall.out).toContain("crew uninstall");
     expect(run(["uninstall", "--prune", "foo", "--help"]).out).toBe(uninstall.out);
   });
+
+  test("C-CLI-17e a command-scoped flag BEFORE its command still resolves the target", () => {
+    // The discovery parse has to know `--prune` is a boolean before it
+    // knows the command is `uninstall` — otherwise the unknown flag
+    // consumes `uninstall` as its value and the target is lost.
+    const uninstall = run(["help", "uninstall"]);
+    expect(uninstall.out).toContain("crew uninstall");
+    for (const argv of [
+      ["--prune", "uninstall", "--help"],
+      ["--prune", "uninstall", "-h"],
+    ]) {
+      const r = run(argv);
+      expect(r.code).toBe(0);
+      expect(r.out).toBe(uninstall.out);
+    }
+
+    const install = run(["help", "install"]);
+    for (const argv of [
+      ["--recursive", "install", "--help"],
+      ["--recursive", "install", "-h"],
+    ]) {
+      expect(run(argv).out).toBe(install.out);
+    }
+
+    // `--recursive` belongs to both `install` and `tap`; widening the
+    // discovery parse must not blur which command was named.
+    const tap = run(["help", "tap"]);
+    expect(tap.out).toContain("crew tap");
+    expect(run(["--recursive", "tap", "--help"]).out).toBe(tap.out);
+  });
+
+  test("C-CLI-17f a malformed value flag fails as usage_error, not an unnamed crash", () => {
+    // These parses run BEFORE the real parse installs its `.fail()`
+    // handler, so an untranslated yargs throw surfaced as
+    // `Error (undefined)` with an undefined exit code.
+    const home = makeCrewHome();
+    const c = captureStreams();
+    const code = runCli(["--help", "--agent"], { home, streams: c.streams });
+    expect(code).toBe(4);
+    expect(c.stderr()).toContain("usage_error");
+    expect(c.stderr()).not.toContain("undefined");
+  });
 });

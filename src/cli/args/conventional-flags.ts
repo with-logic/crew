@@ -7,7 +7,27 @@
  * that follows can't disagree.
  */
 
-import { baseParser, withFlagTables } from "./tables.ts";
+import { CrewError } from "../../core/errors.ts";
+import { baseParser, EVERY_COMMAND, withFlagTables } from "./tables.ts";
+
+/**
+ * Run a discovery parse, translating a parser failure into the stable
+ * `usage_error` (§13, exit 4).
+ *
+ * The real parse in `./index.ts` installs a `.fail()` handler for this;
+ * these parses run BEFORE it, so without translation a malformed value
+ * flag (`crew --help --agent`) escapes as a raw `YError`. The CLI's
+ * top-level catch treats any throw as a `CrewError`, so that surfaced as
+ * `Error (undefined)` with an undefined exit code — a crash with no
+ * error name rather than a usage message.
+ */
+function discover<T>(parse: () => T): T {
+  try {
+    return parse();
+  } catch (err) {
+    throw new CrewError("usage_error", (err as Error)?.message ?? "argument error");
+  }
+}
 
 /**
  * The positional arguments of `argv`, asked of the parser rather than
@@ -17,15 +37,22 @@ import { baseParser, withFlagTables } from "./tables.ts";
  * !a.startsWith("-"))` answers `project` for `crew --scope project
  * install --help`. Only the parser knows `project` belongs to `--scope`.
  *
- * Two passes: the first uses the global tables to learn the command, the
- * second re-parses with that command's own tables. The second pass is
- * what makes `crew uninstall --prune foo --help` see `foo` as a
- * positional — without it the unknown `--prune` consumes it as a value.
+ * Two passes. The first is widened to EVERY command's tables, because a
+ * command-scoped flag may appear BEFORE its command (`crew --prune
+ * uninstall --help`) — knowing only the globals there, the unknown
+ * `--prune` would swallow `uninstall` and the target would be lost. That
+ * pass is only used to learn the command; the second re-parses with that
+ * one command's tables so arity is resolved exactly, which is what
+ * `crew autoupdate enable --interval 4h --help` needs.
+ *
+ * Widening is safe here and wrong for the real parse: discovery only asks
+ * which token is the command, while the real parse in `./index.ts` must
+ * still reject a flag that belongs to a different command.
  */
 function positionalsOf(argv: readonly string[]): string[] {
-  const first = withFlagTables(baseParser(), undefined).parseSync([...argv]);
+  const first = discover(() => withFlagTables(baseParser(), EVERY_COMMAND).parseSync([...argv]));
   const command = ((first["_"] as unknown[]) ?? []).map(String)[0];
-  const parsed = withFlagTables(baseParser(), command).parseSync([...argv]);
+  const parsed = discover(() => withFlagTables(baseParser(), command).parseSync([...argv]));
   return ((parsed["_"] as unknown[]) ?? []).map(String);
 }
 
@@ -38,7 +65,7 @@ function positionalsOf(argv: readonly string[]): string[] {
  * exactly the forms it can't see.
  */
 function effectiveJson(argv: readonly string[]): boolean {
-  const parsed = withFlagTables(baseParser(), undefined).parseSync([...argv]);
+  const parsed = discover(() => withFlagTables(baseParser(), EVERY_COMMAND).parseSync([...argv]));
   return Boolean(parsed["json"]);
 }
 

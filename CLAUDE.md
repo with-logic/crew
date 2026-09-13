@@ -91,9 +91,11 @@ still describe the thing accurately.
   - [`proper-lockfile`](https://github.com/moxystudio/node-proper-lockfile)
     — cross-process advisory locking. Used by `src/state/lock.ts`.
   - [`yargs`](https://github.com/yargs/yargs) — argv parser. Used by
-    `src/cli/args.ts`, configured as a pure parser (no auto-help, no
-    auto-exit). The rest of the CLI machinery (dispatch, output
-    formatting, error mapping) is still our own.
+    `src/cli/args/`, configured as a pure parser (no auto-help, no
+    auto-exit) in `src/cli/args/tables.ts`, which also owns the flag
+    tables so the `--help`/`--version` rewrite and the real parse can't
+    disagree about what is a flag value. The rest of the CLI machinery
+    (dispatch, output formatting, error mapping) is still our own.
 
   Things we **don't** pull in as libraries and why:
   - **SHA-256 / content hash** — Node's `crypto.createHash` is in stdlib,
@@ -562,7 +564,8 @@ start.
 | Want to… | Touch… |
 |---|---|
 | Add a new command | `src/commands/<name>.ts` (or `src/commands/<name>/` for multi-file commands); register in `src/cli/dispatch.ts`; add help entry at `src/commands/help/content/<name>.ts` and register in `src/commands/help/content/index.ts` |
-| Add a new global flag | `src/cli/args.ts` (BOOLEAN_GLOBALS / VALUE_GLOBALS); thread through `CommandFlags` in `src/commands/types.ts` |
+| Add a new global flag | `src/cli/args/tables.ts` (BOOLEAN_GLOBALS / STRING_GLOBALS / ARRAY_GLOBALS); thread through `CommandFlags` in `src/commands/types.ts` |
+| Add a new command-scoped flag | `src/cli/args/tables.ts` (BOOLEAN_SUB / STRING_SUB), keyed by command name; read it from `ctx.flags.extras` |
 | Add a new agent adapter | new file in `src/agents/`; register in `src/agents/registry.ts` |
 | Add a new error type | `src/core/errors.ts` (both `CrewErrorName` and `EXIT_CODES`); update PRD §13/§15 |
 | Change skill validation | `src/skill/validate.ts`; update PRD §9 step 4 and §18 C-SPEC |
