@@ -1420,6 +1420,16 @@ JSON error payloads remain the stable machine contract:
 `{ "error": { "name": string, "message": string, "details": object } }`.
 Human-mode remedy hints are not part of that payload.
 
+**Credentials never reach error output.** A git URL may legitimately
+carry userinfo or a credential-bearing query parameter, and an error
+message often echoes the reference that failed. Redaction is therefore
+applied at the output boundary every error passes through, not left to
+each message: the secret must not appear on stdout or stderr in either
+mode, while `details` keys survive so the machine contract above holds.
+Implementations SHOULD also render a safe form at construction sites
+that compose a URL into a sentence, because a redacted URL reads better
+there than a scrub of the finished text.
+
 **Human-mode error quality.** In human mode, an error message should
 name the offending thing (path, skill, ref, URL) and — whenever a
 reasonable next step exists — point the user at what to try. The stable

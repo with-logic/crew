@@ -111,4 +111,23 @@ describe("tap credentials never reach output", () => {
     );
     expect(json.stdout()).not.toContain(SECRET);
   });
+
+  test("C-TAP-26 a wrong-shaped authenticated URL is redacted in both modes", () => {
+    // Well-formed enough for `new URL`, but `/onlyowner` has no repository
+    // segment, so canonicalization rejects it and the reference is echoed
+    // back. Unlike the malformed and blob cases, this path reaches the CLI
+    // error boundary with a parseable URL still carrying live credentials.
+    const raw = `https://user:${SECRET}@github.com/onlyowner`;
+
+    const human = captureStreams();
+    expect(runCli(["install", raw], { home: makeCrewHome(), streams: human.streams })).toBe(4);
+    expect(human.stderr()).not.toContain(SECRET);
+    expect(human.stderr()).toContain("***");
+
+    const json = captureStreams();
+    expect(
+      runCli(["install", "--json", raw], { home: makeCrewHome(), streams: json.streams }),
+    ).toBe(4);
+    expect(json.stdout()).not.toContain(SECRET);
+  });
 });

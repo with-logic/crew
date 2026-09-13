@@ -45,6 +45,27 @@ describe("credentials never reach an error message", () => {
       expect((err as CrewError).message).not.toContain(SECRET);
     }
   });
+
+  // The blob and malformed cases above take branches that were already
+  // redacted. This one is well-formed enough for `new URL` yet fails the
+  // repository-shape check (`/owner` with no repo), which is the path that
+  // echoed the raw reference back.
+  test.each([
+    [`https://user:${SECRET}@github.com/onlyowner`],
+    [`https://${SECRET}@github.com/onlyowner`],
+    [`https://user:${SECRET}@github.com/`],
+  ])("%s: a parseable but wrong-shaped authenticated URL is redacted", (raw) => {
+    try {
+      parseRef(raw);
+      throw new Error("expected parseRef to reject a URL with no repository segment");
+    } catch (err) {
+      expect(err).toBeInstanceOf(CrewError);
+      const crewErr = err as CrewError;
+      expect(crewErr.code).toBe("invalid_ref");
+      expect(crewErr.message).not.toContain(SECRET);
+      expect(JSON.stringify(crewErr.details)).not.toContain(SECRET);
+    }
+  });
 });
 
 describe("userinfo survives for acquisition", () => {
@@ -97,6 +118,21 @@ describe("refs containing a slash", () => {
 
   test("a slash ref works without a subpath", () => {
     expect(asGit("gh:acme/skills@feature/foo").ref).toBe("feature/foo");
+  });
+
+  // The `@owner/repo` shorthand is recognised by counting `owner/repo`
+  // segments, so a slash INSIDE the ref is the case most at risk of being
+  // miscounted as a third segment — and with no `//subpath` to terminate the
+  // body, nothing else marks where the repo ends.
+  test.each([
+    ["@acme/skills@feature/foo", "feature/foo"],
+    ["@acme/skills@release/2.0", "release/2.0"],
+    ["@acme/skills@feature/foo/bar", "feature/foo/bar"],
+  ])("%s: the @owner/repo shorthand keeps a slash ref without a subpath", (raw, ref) => {
+    const parsed = asGit(raw);
+    expect(parsed.url).toBe(GH);
+    expect(parsed.ref).toBe(ref);
+    expect(parsed.subpath).toBe("");
   });
 
   test("whitespace still disqualifies a ref, leaving the `@` in the URL", () => {
