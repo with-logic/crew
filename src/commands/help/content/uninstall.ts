@@ -28,6 +28,10 @@ export const uninstallHelp: CommandHelp = {
       description:
         "Don't complain if the skill isn't installed, or if Homecrew's record of it got tampered with.",
     },
+    {
+      flag: "--verbose",
+      description: "Show each removal path on stderr as it happens.",
+    },
   ],
   examples: [
     {

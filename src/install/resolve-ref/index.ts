@@ -18,6 +18,7 @@
 
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapConfig, TapSource } from "../../core/types.ts";
+import { safePath } from "../../util/redact.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 import { enumerateCandidates } from "../attribute-bare-name.ts";
 import { indexTap, type TapIndex } from "../tap-index.ts";
@@ -139,7 +140,7 @@ function resolveBare(
   if (kindHint === "non-tap") {
     const filtered = all.filter((c): c is NonTapNameCandidate => c.kind !== "tap");
     if (filtered.length === 0) {
-      const tapNames = config.taps.map((t) => t.name).join(", ");
+      const tapNames = config.taps.map((t) => safePath(t.name)).join(", ");
       throw new CrewError(
         "invalid_ref",
         `\`${name}\` isn't a skill or namespace in any configured tap (searched: ${tapNames || "<none>"})`,
@@ -164,7 +165,10 @@ function resolveBare(
   }
 
   if (all.length === 0) {
-    const tapNames = config.taps.map((t) => t.name).join(", ");
+    // Tap names are any non-empty string (§6.1), and a remedy hint is NOT
+    // sanitized by `CrewError` the way a message is — it is passed through
+    // to the renderer verbatim. Escape the names as they are joined.
+    const tapNames = config.taps.map((t) => safePath(t.name)).join(", ");
     throw new CrewError(
       "invalid_ref",
       `\`${name}\` was not found in any configured tap.`,

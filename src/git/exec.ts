@@ -10,6 +10,9 @@
  * one place that touches the subprocess boundary.
  */
 
+import { progress } from "../util/progress.ts";
+import { safeArgs, safePath } from "../util/redact.ts";
+
 /** Result of running a git command. */
 export interface GitResult {
   readonly stdout: string;
@@ -34,6 +37,10 @@ let runner: GitRunner = defaultRunner;
 
 /** Run `git` with the given args. */
 export function runGit(args: readonly string[], options: GitRunOptions = {}): GitResult {
+  // Argv can carry a clone URL with credentials, so it never reaches
+  // the sink unredacted (see `util/redact.ts`).
+  const rendered = safeArgs(args);
+  progress(options.cwd ? `$ git ${rendered}  (in ${safePath(options.cwd)})` : `$ git ${rendered}`);
   const result = runner(args, options);
   if (result.exitCode !== 0 && options.throwOnError !== false) {
     const stderr = result.stderr.trim();

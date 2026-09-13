@@ -5,22 +5,35 @@
  * command so the user can see exactly how to resolve the collision.
  */
 
+import { safePath } from "../../util/redact.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 
-/** Render a ready-to-paste install command for a candidate. */
+/**
+ * Render a ready-to-paste install command for a candidate.
+ *
+ * Tap, namespace, and skill names come from configured taps and from the
+ * user's argv, so they are untrusted here. They are escaped as they are
+ * interpolated — not after the caller has joined lines — because once a
+ * newline is inside the composed message it is indistinguishable from the
+ * layout breaks `ambiguityError` adds deliberately (§5.2).
+ */
 export function formatCandidate(c: NameCandidate, bareName: string): string {
+  const name = safePath(bareName);
   if (c.kind === "tap") {
-    return `crew install --tap ${c.tap.name}    # install every skill in the \`${c.tap.name}\` tap`;
+    const tap = safePath(c.tap.name);
+    return `crew install --tap ${tap}    # install every skill in the \`${tap}\` tap`;
   }
   if (c.kind === "namespace") {
-    return `crew install ${c.tap.name}/${c.namespace}    # ${c.members.length} skill${c.members.length === 1 ? "" : "s"} in namespace \`${c.namespace}\``;
+    const tap = safePath(c.tap.name);
+    const ns = safePath(c.namespace);
+    return `crew install ${tap}/${ns}    # ${c.members.length} skill${c.members.length === 1 ? "" : "s"} in namespace \`${ns}\``;
   }
-  const tapName = c.tap.name;
-  const ns = c.location.namespace;
+  const tapName = safePath(c.tap.name);
+  const ns = c.location.namespace === null ? null : safePath(c.location.namespace);
   if (ns !== null) {
-    return `crew install ${tapName}/${ns}/${bareName}    # the skill \`${bareName}\` in namespace \`${ns}\``;
+    return `crew install ${tapName}/${ns}/${name}    # the skill \`${name}\` in namespace \`${ns}\``;
   }
-  return `crew install ${tapName}/${bareName}    # the skill \`${bareName}\` in tap \`${tapName}\``;
+  return `crew install ${tapName}/${name}    # the skill \`${name}\` in tap \`${tapName}\``;
 }
 
 /** A short one-line label for the prompt ("the `foo` tap", etc.) */

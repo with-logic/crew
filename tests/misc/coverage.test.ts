@@ -19,7 +19,8 @@ import { isOnPath } from "../../src/agents/path.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { CrewError, fail } from "../../src/core/errors.ts";
 import { runGit } from "../../src/git/exec.ts";
-import { classifyRef, initRepo } from "../../src/git/repo.ts";
+import { classifyRef } from "../../src/git/refs.ts";
+import { initRepo } from "../../src/git/repo.ts";
 import { copyTree } from "../../src/util/copy.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
