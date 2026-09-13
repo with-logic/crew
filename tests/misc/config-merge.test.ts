@@ -72,6 +72,56 @@ describe("mergeAutoTaps", () => {
     // Same object identity back: no taps to splice in, so no new array.
     expect(mergeAutoTaps(fresh, before, before)).toBe(fresh);
   });
+
+  test("a resolver MODIFICATION to an existing tap survives the merge", () => {
+    // `crew install --recursive <dir>` against an already-registered tap
+    // upgrades that tap's `discovery` in place. The name is unchanged, so
+    // a name-only "is this new?" test discards the upgrade and recursive
+    // discovery silently fails to turn on.
+    const original = gitTap("nested", "https://example.test/nested.git");
+    const before = configWith([original]);
+    const upgraded: TapConfig = { ...original, discovery: "recursive" };
+    const extended = configWith([upgraded]);
+    const fresh = configWith([original]);
+
+    const merged = mergeAutoTaps(fresh, before, extended);
+
+    expect(merged.taps).toHaveLength(1);
+    expect(merged.taps[0]!.discovery).toBe("recursive");
+  });
+
+  test("a modification is kept while a concurrent removal is still dropped", () => {
+    // Both rules at once: the resolver upgraded `nested` AND a concurrent
+    // `tap remove` dropped `gone`. Neither goal may be traded for the
+    // other — the upgrade lands, the removed tap stays removed.
+    const nested = gitTap("nested", "https://example.test/nested.git");
+    const gone = gitTap("gone", "https://example.test/gone.git");
+    const before = configWith([nested, gone]);
+    const extended = configWith([{ ...nested, discovery: "recursive" }, gone]);
+    const fresh = configWith([nested]);
+
+    const merged = mergeAutoTaps(fresh, before, extended);
+
+    expect(merged.taps.map((t) => t.name)).toEqual(["nested"]);
+    expect(merged.taps[0]!.discovery).toBe("recursive");
+  });
+
+  test("a concurrent edit to an untouched tap is not clobbered", () => {
+    // The resolver only ever upgrades `discovery`. Any other field a
+    // concurrent writer changed must survive, so the merge applies the
+    // resolver's delta rather than overwriting fresh's row wholesale.
+    const original = gitTap("nested", "https://example.test/nested.git");
+    const before = configWith([original]);
+    const extended = configWith([{ ...original, discovery: "recursive" }]);
+    // Concurrently re-registered under a new URL.
+    const concurrently = gitTap("nested", "https://example.test/moved.git");
+    const fresh = configWith([concurrently]);
+
+    const merged = mergeAutoTaps(fresh, before, extended);
+
+    expect(merged.taps[0]!.url).toBe("https://example.test/moved.git");
+    expect(merged.taps[0]!.discovery).toBe("recursive");
+  });
 });
 
 describe("assertTapsPresent", () => {
