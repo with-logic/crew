@@ -17,9 +17,16 @@ export const GROUPS: readonly CommandGroup[] = [
       },
       {
         name: "uninstall",
-        signature: <>crew uninstall [--scope {"{user,project}"}] &lt;name&gt;…</>,
-        description:
-          "Remove installed skills from every agent. Bare and tap-qualified names work. One scope at a time: your system-wide install by default, or this project's with --scope project.",
+        signature: <>crew uninstall [--scope {"{user,project}"}] &lt;selector&gt;…</>,
+        description: (
+          <>
+            Remove installed skills from every agent. A selector is a skill (bare or tap-qualified),
+            a tap, or a namespace — qualified as <code>acme/marketing</code>, or bare when only one
+            of your taps has skills under that name. <span className={styles.flag}>--all</span>{" "}
+            clears the whole scope. One scope at a time: your user-scoped install by default, or
+            this project&apos;s with <span className={styles.flag}>--scope project</span>.
+          </>
+        ),
       },
       {
         name: "update",

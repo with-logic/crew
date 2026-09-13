@@ -17,8 +17,12 @@
  * alive does NOT trigger pruning — the skill is still installed, so
  * its dependencies are still required.
  *
- * Per-skill removal and state mutation live in sibling modules
- * (`./core.ts`, `./state.ts`).
+ * A selector may also name a collection (§7.4): a configured tap or a
+ * namespace, expanding to every installed entry it covers. `--all`
+ * removes everything at the target scope behind a confirmation.
+ *
+ * Per-skill removal, selection, and state mutation live in sibling
+ * modules (`./core.ts`, `./select.ts`, `./state.ts`).
  */
 
 import { ALL_AGENTS, agentByName } from "../../agents/registry.ts";
@@ -29,23 +33,29 @@ import type { Config, StateFile } from "../../core/types.ts";
 import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
-import { resolveStateSubject } from "../../state/subjects.ts";
 import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
-import { narrowSubjectToScope } from "./scope.ts";
+import { allowsEmpty, allTargets, confirmAll, countAllTargets, selectedTargets } from "./select.ts";
 import { findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
-  if (ctx.positional.length === 0) {
+  const all = Boolean(ctx.flags.extras["all"]);
+  if (ctx.positional.length === 0 && !all) {
     throw new CrewError(
       "usage_error",
-      "`crew uninstall` needs at least one skill name — run `crew list` to see what's installed",
+      "`crew uninstall` needs at least one skill name — run `crew list` to see what's installed, or pass `--all` to remove everything",
     );
   }
   const prune = Boolean(ctx.flags.extras["prune"]);
   const agentFilter = validateAgentFilter(ctx.flags.agent);
+
+  // §14: the state lock must not span a human decision. `--all` counts
+  // and confirms against an unlocked read, then re-reads under the lock
+  // so the removal acts on state as it is *now*, not as it was at the
+  // prompt.
+  if (all) confirmAll(ctx, countAllTargets(ctx, readState(ctx.home)));
 
   const records: UninstallRecord[] = [];
   let exitCode = 0;
@@ -53,16 +63,19 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
   withStateLock(() => {
     let state = readState(ctx.home);
     const removedRoots: (string | null)[] = [];
-    for (const raw of ctx.positional) {
-      // §7.4 "Scope": a selector only ever targets one scope.
-      const subject = narrowSubjectToScope(
-        resolveStateSubject(state, raw),
-        ctx.flags.scope,
-        ctx.cwd,
-        ctx.flags.force,
+    const config = readConfig(ctx.home);
+    const targets = all ? allTargets(ctx, state) : selectedTargets(ctx, state, config);
+    for (const target of targets) {
+      const { updatedState, rec, meta } = removeOne(
+        state,
+        target.subject,
+        ctx,
+        false,
+        agentFilter,
+        allowsEmpty(target),
       );
-      const { updatedState, rec, meta } = removeOne(state, subject, ctx, false, agentFilter);
       state = updatedState;
+      if (target.kind === "collection") rec.collection = target.collection;
       records.push(rec);
       removedRoots.push(...meta.fullyRemovedRoots);
       if (rec.failures.length > 0) exitCode = 1;
