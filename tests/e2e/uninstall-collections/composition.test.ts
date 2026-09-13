@@ -98,6 +98,30 @@ describe("collection selector composition", () => {
     expect(installed(home)).toEqual([]);
   });
 
+  test("C-UNINST-26 an unrelated project install does not hide a lone collection install", () => {
+    const home = makeCrewHome();
+    const acmeProject = makeTempDir("crew-proj-acme-");
+    const otherProject = makeTempDir("crew-proj-other-");
+    expect(addTap(home, buildTap("crew-multi-a-", { ".": ["alpha"] }), "acme")).toBe(0);
+    expect(addTap(home, buildTap("crew-multi-b-", { ".": ["beta"] }), "other")).toBe(0);
+    expect(install(home, ["--scope", "project", "acme"], acmeProject)).toBe(0);
+    expect(install(home, ["--scope", "project", "other"], otherProject)).toBe(0);
+
+    // §7.4's lone-project fallback asks whether the SELECTED collection has
+    // one project install, not whether the machine does. Counting globally
+    // let `other` in an unrelated project silence this removal: it exited 0
+    // having removed nothing, which reads as success.
+    const elsewhere = makeTempDir("crew-elsewhere-multi-");
+    expect(
+      runCli(["uninstall", "--scope", "project", "acme"], {
+        home,
+        cwd: elsewhere,
+        streams: quiet(),
+      }),
+    ).toBe(0);
+    expect(installed(home)).toEqual(["beta"]);
+  });
+
   test("C-UNINST-19 collection removal composes with --prune", () => {
     const home = makeCrewHome();
     const src = makeTempDir("crew-dep-");

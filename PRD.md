@@ -169,8 +169,10 @@ Only flags documented as repeatable (`--agent`) may appear more than once. Passi
   (§7.4 step 5) and is no longer required by anything. Equivalent to
   running `crew uninstall` followed by an autoremove pass.
 - `--all` — remove every skill installed at the target scope. Takes no
-  positional selectors; combining the two is a `usage_error`. Because this
-  is the only mass-removal shape crew has, it requires confirmation:
+  positional selectors; combining the two is a `usage_error`. Tap and
+  namespace selectors (§7.4) also remove many skills at once, but each
+  names the collection it will empty; `--all` names nothing and is bounded
+  only by the scope, so it alone requires confirmation:
   `--yes`, or an interactive `[y/N]` prompt. When stdin is not a TTY and
   `--yes` was not given, the command aborts with a `usage_error` naming
   `--yes` rather than removing anything. With nothing installed at the

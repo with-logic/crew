@@ -12,6 +12,7 @@ import { agentByName } from "../../agents/registry.ts";
 import { uninstallSkillFromAgents } from "../../agents/uninstall.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
+import type { CollectionKind } from "../../state/collections.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
 import { dropScopedEntriesAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
@@ -26,7 +27,7 @@ export interface UninstallRecord {
   /** True if the state entry still survives after this call (partial --agent removal). */
   partial?: boolean;
   /** Set when this record came from a tap or namespace selector (§7.4). */
-  collection?: { readonly kind: "skill" | "tap" | "namespace"; readonly name: string };
+  collection?: { readonly kind: CollectionKind; readonly name: string };
 }
 
 /**

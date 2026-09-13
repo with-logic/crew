@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { closeSync, openSync, readdirSync, readSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseDuration } from "../../../src/commands/autoupdate/duration.ts";
@@ -34,6 +34,32 @@ describe("json utilities", () => {
     writeJson(f, { hello: "world" });
     expect(readJson<{ hello: string }>(f)).toEqual({ hello: "world" });
   });
+  test("writeJson replaces the destination rather than truncating it", () => {
+    // Commands that take no state lock (§14 exempts read-only ones, and
+    // `crew uninstall --all` counts before prompting) read state.json
+    // concurrently with a writer. A plain writeFileSync truncates in
+    // place, so such a reader could observe an empty file and report
+    // "nothing installed". Replacing by rename removes that window: the
+    // old inode keeps its bytes until the new one is fully written.
+    const d = makeTempDir();
+    const f = join(d, "state.json");
+    writeJson(f, { installations: ["before"] });
+    const inodeBefore = statSync(f).ino;
+    // An open handle to the old inode still sees the old content, which
+    // is exactly what a mid-write concurrent reader would hold.
+    const held = openSync(f, "r");
+    writeJson(f, { installations: ["after"] });
+    const buf = Buffer.alloc(256);
+    const n = readSync(held, buf, 0, 256, 0);
+    closeSync(held);
+
+    expect(JSON.parse(buf.subarray(0, n).toString())).toEqual({ installations: ["before"] });
+    expect(readJson<{ installations: string[] }>(f)).toEqual({ installations: ["after"] });
+    expect(statSync(f).ino).not.toBe(inodeBefore);
+    // No temp file is left behind.
+    expect(readdirSync(d)).toEqual(["state.json"]);
+  });
+
   test("tryReadJson throws on invalid JSON", () => {
     const d = makeTempDir();
     const f = join(d, "a.json");

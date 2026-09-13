@@ -44,6 +44,25 @@ export function writeText(path: string, contents: string): void {
   writeFileSync(path, contents, { encoding: "utf8" });
 }
 
+/**
+ * Write a file as UTF-8 by writing a sibling temp file and renaming over
+ * the destination, so a concurrent reader sees either the old bytes or
+ * the new ones and never a half-written file.
+ *
+ * `state.json` needs this because readers that take no lock (§14 exempts
+ * read-only commands, and `--all` counts before prompting) would
+ * otherwise be able to observe the truncation window of a plain
+ * `writeFileSync` as an empty state and report "nothing installed".
+ */
+export function writeTextAtomic(path: string, contents: string): void {
+  ensureDir(dirname(path));
+  // Same directory, so the rename stays within one filesystem and is
+  // therefore atomic. The pid keeps concurrent writers off each other.
+  const tmp = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmp, contents, { encoding: "utf8" });
+  renameSync(tmp, path);
+}
+
 /** Recursively remove a path if it exists. No-op if missing. */
 export function rmrf(path: string): void {
   rmSync(path, { recursive: true, force: true });
