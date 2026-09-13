@@ -69,8 +69,22 @@ export function writeText(path: string, contents: string): void {
   // The suffix keeps the temp name out of any directory listing crew
   // treats as meaningful (a skill dir, a tap root) if we crash mid-write.
   const tmp = `${path}.tmp-${process.pid}-${Date.now()}`;
-  writeFileSync(tmp, contents, { encoding: "utf8", mode: modeFor(path) });
-  renameSync(tmp, path);
+  try {
+    writeFileSync(tmp, contents, { encoding: "utf8", mode: modeFor(path) });
+    renameSync(tmp, path);
+  } catch (err) {
+    // The temp file can hold whatever the caller was writing — config.yaml
+    // carries credential-bearing clone URLs — so a failed write or rename
+    // must not leave it behind. Cleanup failure is swallowed deliberately:
+    // the original error is what the user needs, and masking it with an
+    // unlink error would hide the real cause.
+    try {
+      rmSync(tmp, { force: true });
+    } catch {
+      // Nothing useful to do; rethrowing the original below.
+    }
+    throw err;
+  }
 }
 
 /** The existing file's permission bits, or `NEW_FILE_MODE` if it is new. */
