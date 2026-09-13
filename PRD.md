@@ -202,9 +202,15 @@ shape of help output; wording is left to each implementation.
 - `crew --json help` and `crew help <command> --json` MUST emit
   machine-readable structured help.
 - `--help` or `-h` anywhere on the command line MUST behave as
-  `crew help <command>`, where `<command>` is the first non-flag token
-  (skipping only a LEADING `help`, so `crew help help --help` still
-  resolves to `crew help help`); with no such token it is `crew help`.
+  `crew help <command>`, where `<command>` is the first POSITIONAL
+  argument as the parser resolves it — not merely the first token that
+  does not begin with `-`, since a flag's value is also such a token
+  (`crew --scope project install --help` selects `install`, not
+  `project`). Resolving it MUST account for command-scoped flag arity
+  even when such a flag precedes its command, so `crew --prune uninstall
+  --help` selects `uninstall`. A LEADING `help` is skipped, so `crew help
+  help --help` still resolves to `crew help help`; with no positional it
+  is `crew help`.
   Other flags and positionals are ignored, except `--json`, which still
   selects structured help. `crew tap remove --help` shows the `tap`
   page — subcommand words are not separate help pages.
@@ -2059,6 +2065,9 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-17a | §5.5 | Every `--json` spelling the parser accepts behaves identically for a rewritten flag form and its canonical command: `crew --help --json=true` matches `crew help --json=true`, `crew --version --json=true` matches `crew version --json=true`, and last-occurrence-wins applies to both (`--json --json=false` selects human output). |
 | C-CLI-17b | §5.5 | `--help` takes precedence over a first-token version flag in either order: `crew --version --help` and `crew --help --version` both print the overview and exit 0. |
 | C-CLI-17c | §5.5 | Only a leading `help` token is skipped when resolving the help target, so `crew help help --help` prints the `help` command's page, not the overview. |
+| C-CLI-17d | §5.5 | The help target is the first parser positional, so a flag's value is never mistaken for the command. `crew --scope project install --help`, `crew --agent codex install --help`, `crew --from-git gh:acme/skills install --help`, and the spaced boolean `crew --help --json false install` all print the `install` page, byte-identical to `crew help install`. |
+| C-CLI-17e | §5.5 | A command-scoped flag placed BEFORE its command still resolves the target: `crew --prune uninstall --help` prints the `uninstall` page and `crew --recursive install -h` prints the `install` page, byte-identical to their canonical forms. |
+| C-CLI-17f | §5.5, §13 | A malformed value flag in a conventional-flag rewrite fails as `usage_error` with exit 4, not as an unnamed internal error: `crew --help --agent` (no value) reports the stable error name. |
 
 ### 18.4 Worked examples
 
