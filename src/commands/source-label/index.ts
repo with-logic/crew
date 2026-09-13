@@ -27,6 +27,11 @@ import { SHORTHAND_HOSTS } from "../../refs/git-url.ts";
 import { shortenHome } from "../../util/format.ts";
 import { displayUrl, safeLabel } from "./display-safety.ts";
 
+// Re-exported so callers outside this directory never reach past
+// `index.ts` into the internals (a stale flat copy of this module was
+// previously importable and drifted).
+export { safeLabel } from "./display-safety.ts";
+
 /**
  * Host → display prefix, inverted from the parser's own prefix → host
  * table so the two cannot disagree about which hosts have a shorthand.
@@ -104,7 +109,11 @@ function gitLabel(tap: TapConfig, entryPath: string): string {
 export function repoLabel(url: string): string {
   const clean = displayUrl(url);
   // `file://` has no host to shorten against, and its path is the whole
-  // identity of the repo — keep it exactly as the user would type it.
+  // identity of the repo, so there is no shorthand to try — return the
+  // display form unchanged. Note `clean` has already been through
+  // `displayUrl`, so a credential or control character in the path is
+  // masked or escaped here too; this is a display string, not a URL to
+  // clone from.
   if (clean.startsWith("file://")) return clean;
   const shorthand = shorthandFor(clean);
   return shorthand ?? clean;

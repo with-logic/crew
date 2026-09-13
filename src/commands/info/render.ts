@@ -13,6 +13,7 @@
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { plural, shortenHome, timeAgo, twoColumnTable, wrap } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
+import { safeLabel } from "../source-label/index.ts";
 
 export interface InstalledInfo {
   /** The entry that drives the top-level metadata (user scope if any). */
@@ -40,10 +41,14 @@ export interface SkillInfo {
 
 export function renderInstalled(info: InstalledInfo, style: Styler, width: number): string[] {
   const { primary, entries, description } = info;
+  // `sourceLabel` is already display-safe, but `tapName` comes straight
+  // from persisted config and reaches the terminal raw otherwise — a
+  // control character in a hand-edited or malformed tap name could forge
+  // output. Same escaping the label itself gets (§13).
   const from =
     info.tapName === null
       ? info.sourceLabel
-      : `${info.sourceLabel} ${style.dim(`(tap ${info.tapName})`)}`;
+      : `${info.sourceLabel} ${style.dim(`(tap ${safeLabel(info.tapName)})`)}`;
   const lines: string[] = [];
   lines.push(style.bold(primary.name));
   lines.push("");
