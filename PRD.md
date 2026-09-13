@@ -315,6 +315,9 @@ With `--json`, help MUST emit a structured payload:
 │   └── <tap-name>/
 ├── cache/               # ephemeral git clones of ad-hoc git sources
 │   └── git/<host>/<owner>/<repo>@<ref>/
+├── locks/               # per-tap clone locks (see §14)
+│   └── tap-<hash>
+
 ├── store/               # content-addressed canonical skill copies
 │   └── <skill-name>@<short-sha>/
 ├── logs/
@@ -324,7 +327,7 @@ With `--json`, help MUST emit a structured payload:
         └── Info.plist
 ```
 
-All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable.
+All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable. `locks/` holds coordination lockfiles and MUST NOT live under `cache/`: `crew cache clean` deletes that tree wholesale, which would remove a lock another process is actively holding.
 
 ### 6.1 `config.yaml` schema
 
@@ -928,10 +931,12 @@ is read-only:
 - Per-tap clone locks (§14) ARE acquired, because a dry run still
   fetches and so still mutates a shared clone.
 
-Refreshed tap clones are the only thing a dry run writes. User-facing
-descriptions of the flag MUST NOT claim it writes nothing at all;
-they state that collections still refresh while nothing installed
-changes.
+A dry run writes exactly two things: the refreshed tap clones under
+`taps/`, and the transient lockfiles under `locks/` that guard them for
+the duration of the run. It writes no `state.json`, no store entry, and
+no installed skill or marker. User-facing descriptions of the flag MUST
+NOT claim it writes nothing at all; they state that collections still
+refresh while nothing installed changes.
 
 Human output tags the header with `(dry run)` and renders the pending
 rows as "would update" / "would add". `--json` output includes
@@ -1387,7 +1392,7 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `not_installed_here` | 6 | Uninstall agent has no marker. |
 | `no_agents` | 4 | No agent tools detected or all disabled. |
 | `config_invalid` | 4 | `config.yaml` did not parse. |
-| `state_locked` | 7 | Could not acquire `state.json.lock` within timeout. |
+| `state_locked` | 7 | Could not acquire a coordination lock within the timeout — either the state lock (`state.json.lock`) or a per-tap clone lock (§14). |
 | `autoupdate_failure` | 8 | Autoupdate enable/disable couldn't load/unload the platform scheduler. |
 | `self_update_unavailable` | 5 | `crew self-update` couldn't reach the release feed, the asset is missing for the current arch, or the named `--version` doesn't exist. |
 | `self_update_failed` | 8 | `crew self-update` fetched a new binary but couldn't replace the running one (e.g. the install prefix isn't writable). |

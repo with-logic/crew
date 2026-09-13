@@ -8,22 +8,29 @@
  * resolving commit A and reading its bytes, so state would record A
  * for B's content.
  *
- * Every run that reads or refreshes tap clones therefore holds a lock
- * per tap for the whole span: refresh → re-expansion → per-skill source
- * read and staging. Dry runs hold them too — a preview still fetches,
- * so it still mutates the clone.
+ * Every command that reads or refreshes tap clones therefore holds a
+ * lock per tap for the whole span it needs them: refresh →
+ * re-expansion → per-skill source read and staging. Dry runs hold them
+ * too — a preview still fetches, so it still mutates the clone.
+ *
+ * The lock wraps the COMMAND's span, not a single helper, because the
+ * hazard is the window between resolving a SHA and reading bytes at
+ * that SHA — a window that spans several calls. `acquireTap` and
+ * `refreshTaps` cannot lock internally: the locks are not reentrant, so
+ * a helper-level lock would deadlock any caller that already holds one.
  *
  * Locks are acquired in sorted tap-name order so two runs touching the
  * same set can never deadlock waiting on each other. Lockfiles live
- * under `cache/locks/` rather than beside the clones, so nothing in
- * `taps/` is mistaken for a tap directory.
+ * under `locks/` — not beside the clones, where they could be mistaken
+ * for a tap directory, and not under `cache/`, which `crew cache clean`
+ * deletes wholesale.
  */
 
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { paths } from "../core/paths.ts";
 import type { TapConfig } from "../core/types.ts";
-import { acquireLock, type HeldLock } from "../state/advisory-lock.ts";
+import { acquireLock, type HeldLock } from "../util/advisory-lock.ts";
 import { ensureDir } from "../util/fs.ts";
 
 /**
@@ -34,7 +41,7 @@ import { ensureDir } from "../util/fs.ts";
  */
 export function tapLockTarget(name: string, home: string): string {
   const digest = createHash("sha256").update(name).digest("hex").slice(0, 16);
-  return join(paths(home).cacheDir, "locks", `tap-${digest}`);
+  return join(paths(home).locksDir, `tap-${digest}`);
 }
 
 /**
@@ -45,7 +52,7 @@ export function tapLockTarget(name: string, home: string): string {
 export function withTapLocks<T>(taps: readonly TapConfig[], home: string, fn: () => T): T {
   const names = [...new Set(taps.map((t) => t.name))].sort();
   if (names.length === 0) return fn();
-  ensureDir(join(paths(home).cacheDir, "locks"));
+  ensureDir(paths(home).locksDir);
 
   const held: HeldLock[] = [];
   try {
