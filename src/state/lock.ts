@@ -5,13 +5,13 @@
  * acquires an advisory lock before doing so. Read-only commands do not.
  *
  * The lock primitive itself (retry loop, stale reclamation, timeout →
- * `state_locked`) lives in `./advisory-lock.ts`, shared with the
+ * `state_locked`) lives in `../util/advisory-lock.ts`, shared with the
  * per-tap clone locks. The lockfile lives at `<stateFile>.lock`, which
  * matches §6's `state.json.lock` path exactly.
  */
 
 import { crewHome, paths } from "../core/paths.ts";
-import { acquireLock, defaultTimeoutMs, type HeldLock, withLock } from "./advisory-lock.ts";
+import { acquireLock, defaultTimeoutMs, type HeldLock, withLock } from "../util/advisory-lock.ts";
 
 /** Handle representing a held state lock. */
 export type StateLock = HeldLock;

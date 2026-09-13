@@ -14,9 +14,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { runCli } from "../../../src/cli/main.ts";
 import { tapLockTarget } from "../../../src/sources/tap-lock.ts";
-import { acquireLock } from "../../../src/state/advisory-lock.ts";
+import { acquireLock } from "../../../src/util/advisory-lock.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import {
   commitAll,
@@ -92,6 +93,40 @@ describe("C-UPD-18d crew update locks tap clones", () => {
     try {
       const c = captureStreams();
       expect(runCli(["update", "--dry-run"], { home, streams: c.streams })).toBe(0);
+    } finally {
+      held.release();
+    }
+  });
+
+  test("`crew tap update` takes the same lock", () => {
+    const { home, tap, code } = installFromTap();
+    expect(code).toBe(0);
+    // `tap update` fast-forwards the working tree, so it is a writer:
+    // without the lock it could move the checkout out from under an
+    // install that has already resolved a SHA from it.
+    const held = acquireLock(tapLockTarget(tap, home));
+    try {
+      const c = captureStreams();
+      expect(runCli(["tap", "update"], { home, streams: c.streams })).toBe(7);
+    } finally {
+      held.release();
+    }
+  });
+
+  test("`crew cache clean` does not delete a held clone lock", () => {
+    const { home, tap, code } = installFromTap();
+    expect(code).toBe(0);
+    const target = tapLockTarget(tap, home);
+    const held = acquireLock(target);
+    try {
+      const c = captureStreams();
+      expect(runCli(["cache", "clean"], { home, streams: c.streams })).toBe(0);
+      // The lockfile lives outside `cache/`, so housekeeping cannot
+      // remove it while another process holds it — the lock still
+      // excludes a second acquirer afterwards.
+      expect(existsSync(target)).toBe(true);
+      const other = captureStreams();
+      expect(runCli(["tap", "update"], { home, streams: other.streams })).toBe(7);
     } finally {
       held.release();
     }

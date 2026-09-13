@@ -53,6 +53,7 @@ export interface CrewPaths {
   readonly stateLock: string;
   readonly tapsDir: string;
   readonly cacheDir: string;
+  readonly locksDir: string;
   readonly gitCacheDir: string;
   readonly storeDir: string;
   readonly logsDir: string;
@@ -74,6 +75,10 @@ export function paths(home: string = crewHome()): CrewPaths {
     stateLock: join(home, "state.json.lock"),
     tapsDir: join(home, "taps"),
     cacheDir: join(home, "cache"),
+    // Coordination locks live OUTSIDE `cache/`: `crew cache clean` deletes
+    // that tree wholesale, which would remove a lockfile another process
+    // is actively holding.
+    locksDir: join(home, "locks"),
     gitCacheDir: join(home, "cache", "git"),
     storeDir: join(home, "store"),
     logsDir: join(home, "logs"),

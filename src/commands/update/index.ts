@@ -60,8 +60,14 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   const home = ctx.home ?? crewHome();
   const dryRun = ctx.flags.dryRun;
 
-  // A dry run reads, fetches tap clones, and reports; it never locks,
-  // writes state, or GCs the store.
+  // What a dry run does: reads state, fetches and fast-forwards tap
+  // clones, and reports. What it does not: write `state.json`, take the
+  // state lock, stage into the store, GC the store, or touch any
+  // installed skill or marker.
+  //
+  // It does take per-tap clone locks and creates their lockfiles under
+  // `locks/` — a preview still mutates the clone it fetches, so it must
+  // exclude concurrent writers for the same reason a real run does.
   const plan = dryRun
     ? planUpdate(ctx, config, home, true)
     : withStateLock(() => {
