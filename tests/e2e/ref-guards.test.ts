@@ -1,11 +1,11 @@
 /**
- * CLI-level guards on reference and flag input (§8.4 C-REF-22a, §5.2 C-CLI-08a).
+ * CLI-level guards on reference input (§8.4 C-REF-22a/22c).
  *
- * Two guards that have to hold at the command boundary, not just in the
- * parser: a git subpath may not escape its repository, and a flag that
- * takes one value may not be passed twice. The subpath cases run through
- * three separate entry points because each reaches acquisition by its
- * own route.
+ * A git subpath may not escape its repository — lexically with `..`, or
+ * through a committed symlink at the leaf or any parent above it. Each
+ * case runs through several entry points because every one reaches
+ * acquisition by its own route. Flag guards live in
+ * `flag-guards.test.ts`.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -53,7 +53,7 @@ function errorName(stdout: string): string {
   return (JSON.parse(stdout) as { error: { name: string } }).error.name;
 }
 
-describe("reference and flag guards", () => {
+describe("reference guards", () => {
   test("C-REF-22a --from-git rejects a subpath that escapes the repo", () => {
     const home = makeCrewHome();
     const repo = makeRepoWithSkill("demo");
@@ -114,42 +114,37 @@ describe("reference and flag guards", () => {
     expect(existsSync(join(ccRoot, "pwned"))).toBe(false);
   });
 
-  test("C-CLI-08a a repeated boolean flag is a usage_error", () => {
+  test("C-REF-22c a symlinked PARENT directory cannot escape the clone", () => {
     const home = makeCrewHome();
-    // Yargs collapses a repeated boolean to `true`, leaving no trace in
-    // the parsed result — so only raw argv can witness these.
-    for (const argv of [
-      ["install", "--json", "--json", "foo"],
-      ["install", "--force", "--force", "foo"],
-      ["install", "--recursive", "--recursive", "foo"],
-    ]) {
-      const capture = captureStreams();
-      const code = runCli(argv, { home, streams: capture.streams });
-      expect(code).toBe(4);
-      expect(capture.stderr()).toContain("more than once");
-    }
+    // The leaf is an ordinary directory; the *parent* is the symlink, so
+    // a leaf-only check would pass this.
+    const outside = makeTempDir("crew-outside-");
+    makeSkill(outside, "pwned", skillFrontmatter({ name: "pwned" }));
+    const repo = makeTempDir("crew-guard-");
+    makeGitRepo(repo);
+    makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
+    symlinkSync(outside, join(repo, "via"));
+    commitAll(repo, "add parent symlink");
+
+    const capture = captureStreams();
+    const code = runCli(["install", "--json", `file://${repo}//via/pwned`], {
+      home,
+      streams: capture.streams,
+    });
+
+    expect(code).toBe(4);
+    expect(errorName(capture.stdout())).toBe("invalid_ref");
   });
 
-  test("C-CLI-08a a repeated single-value flag is a usage_error", () => {
-    const home = makeCrewHome();
-    for (const argv of [
-      ["install", "--from-git", "@a/b", "--from-git", "@c/d"],
-      ["install", "--scope", "user", "--scope", "project", "foo"],
-    ]) {
-      const capture = captureStreams();
-      const code = runCli(argv, { home, streams: capture.streams });
-      expect(code).toBe(4);
-      expect(capture.stderr()).toContain("more than once");
-    }
-  });
-
-  test("C-CLI-08a the repeatable --agent flag still collects every value", () => {
+  test("C-REF-22a crew info rejects an escaping subpath", () => {
     const home = makeCrewHome();
     const repo = makeRepoWithSkill("demo");
-    const code = runCli(
-      ["install", "--agent", "claude-code", "--agent", "codex", `file://${repo}//demo`],
-      { home, streams: captureStreams().streams },
-    );
-    expect(code).toBe(0);
+    const capture = captureStreams();
+    const code = runCli(["info", "--json", `file://${repo}//../../../etc`], {
+      home,
+      streams: capture.streams,
+    });
+    expect(code).toBe(4);
+    expect(errorName(capture.stdout())).toBe("invalid_ref");
   });
 });

@@ -35,7 +35,7 @@ export const installHelp: CommandHelp = {
         "For direct git/path sources, fall back to bounded recursive discovery when standard tap layouts find no skills.",
     },
     {
-      flag: "--from-git <url>",
+      flag: "--from-git <git-source>",
       description:
         "Install from a git source, no guessing. Handy when a bare `owner/repo` would otherwise be read as a tap name — `--from-git acme/skills` means GitHub.",
     },

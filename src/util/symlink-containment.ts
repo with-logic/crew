@@ -15,25 +15,42 @@
  */
 
 import { lstatSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { toPosix } from "./fs.ts";
 
 /**
- * Throw unless `target` is reachable from `root` without traversing a
- * symlink.
+ * Throw unless `target` is contained by `root`: lexically beneath it,
+ * and reachable without traversing a symlink.
  *
- * Checks every path segment, not just the leaf: a symlinked parent
- * directory redirects just as effectively as a symlinked leaf. The
- * caller supplies `describe` so the message names the thing the user
- * typed (a tap, a reference) rather than an internal path.
+ * Two checks, and both are required. The lexical one rejects a subpath
+ * that climbs out with `..` — persisted config is not re-validated by
+ * the reference parser, so a hand-edited or legacy `../…` reaches here
+ * with no symlink anywhere for the second check to catch. The symlink
+ * walk then covers every path segment, not just the leaf, because a
+ * symlinked parent directory redirects just as effectively.
+ *
+ * The caller supplies `describe` so the message names the thing the
+ * user typed (a tap, a reference) rather than an internal path.
  */
 export function assertNoSymlinkEscape(root: string, target: string, describe: string): void {
   const rootAbs = resolve(root);
-  let current = resolve(target);
+  const targetAbs = resolve(target);
+  // `relative` is the lexical test: a target below the root never needs
+  // to climb, so a leading `..` means it escaped. An absolute result
+  // means the two share no common base at all (different drives).
+  const rel = relative(rootAbs, targetAbs);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    throw new CrewError(
+      "invalid_ref",
+      `${describe} resolves outside the source, which would read content that isn't part of it`,
+      { offending: toPosix(rel) },
+    );
+  }
+  let current = targetAbs;
   // Walk from the target up to the root, rejecting any symlink on the
-  // way. `dirname` terminates at the filesystem root, so the loop is
-  // bounded even when `target` sits outside `root`.
+  // way. Containment is already proven above, so this terminates at
+  // `rootAbs`.
   while (current.length > rootAbs.length) {
     // Callers check the resolved location exists first, so every segment
     // between it and the root exists too — `lstatSync` cannot fail here.
