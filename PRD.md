@@ -503,7 +503,12 @@ e.g. by a scheduler). When the selector matches entries only at other
 scopes or other project roots, the command reports `not_installed_here`
 and the human remedy names where the skill *is* installed together with
 the command that would remove it; `--force` turns this into a no-op as
-usual.
+usual. In `--json` mode that error's `details` carry
+`installed_locations`: an array of `{ scope, project_root }` objects,
+one per entry the selector matched, with `project_root` null at user
+scope. The field is deliberately not named `installed_at`, which means
+an ISO 8601 timestamp everywhere else in the state (§11.1) and marker
+(§7.5) contracts.
 
 **Agent set.** The default is to remove the skill from every agent
 it's recorded against in state. `--agent <name>` (repeatable,

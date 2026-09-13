@@ -30,7 +30,21 @@ export function readState(home: string = crewHome()): StateFile {
   if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.installations)) {
     return { schema_version: 1, installations: [] };
   }
-  return { schema_version: 1, installations: parsed.installations as StateEntry[] };
+  const installations = (parsed.installations as StateEntry[]).filter(hasUsableLocation);
+  return { schema_version: 1, installations };
+}
+
+/**
+ * §11.1 requires a project-scope entry to carry the `project_root` it
+ * was installed under: that path is the authoritative install location,
+ * and commands paste it into user-facing remedies. `state.json` is
+ * user-editable and may predate the field, so an entry missing it is
+ * dropped here rather than allowed to reach a caller that would render
+ * an empty path (`cd ''`) or resolve against the wrong directory.
+ * `doctor --repair` rebuilds such entries from their markers.
+ */
+function hasUsableLocation(entry: StateEntry): boolean {
+  return entry.scope !== "project" || typeof entry.project_root === "string";
 }
 
 /** Write state.json, replacing whatever was there. */
