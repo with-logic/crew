@@ -52,8 +52,16 @@ export const DISCOVERY: CommandGroup = {
     },
     {
       name: "untap",
-      signature: <>crew untap &lt;name&gt;</>,
-      description: ["Alias for ", <code key="crew-untap-tap-remove">crew tap remove</code>, "."],
+      signature: <>crew untap [--uninstall] [--force] &lt;name&gt;</>,
+      description: [
+        "Alias for ",
+        <code key="crew-untap-tap-remove">crew tap remove</code>,
+        ". Refuses to remove a tap that still has skills installed from it; ",
+        <code key="crew-untap-uninstall">--uninstall</code>,
+        " removes those skills first, and ",
+        <code key="crew-untap-force">--force</code>,
+        " drops the tap but keeps them installed.",
+      ],
     },
     {
       name: "tap-update",

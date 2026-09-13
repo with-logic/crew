@@ -25,6 +25,42 @@ function sameLocation(e: StateEntry, target: StateEntry): boolean {
   return e.scope === target.scope && (e.project_root ?? null) === (target.project_root ?? null);
 }
 
+/** Location-qualified key for one entry, per §11.1's (skill, scope, root) triple. */
+export function entryKey(e: StateEntry): string {
+  return JSON.stringify([e.name, e.scope, e.project_root ?? ""]);
+}
+
+/**
+ * Drop many entries in ONE traversal, scrubbing each removed name from
+ * the `required_by` of survivors at the same location.
+ *
+ * `dropScopedEntryAndUpdateRequiredBy` walks every installation per
+ * call, so removing K skills from a tap costs K full passes over N
+ * entries. Callers that already know the whole removal set — the
+ * `tap remove --uninstall` path — use this instead.
+ */
+export function dropEntriesAndUpdateRequiredBy(
+  state: StateFile,
+  targets: readonly StateEntry[],
+): StateFile {
+  if (targets.length === 0) return state;
+  const dropped = new Set<string>();
+  for (const t of targets) dropped.add(entryKey(t));
+  const installations: StateEntry[] = [];
+  for (const e of state.installations) {
+    if (dropped.has(entryKey(e))) continue;
+    // Only names removed at THIS entry's location may be scrubbed from
+    // its edges; a same-named skill elsewhere keeps its own.
+    const names = new Set<string>();
+    for (const t of targets) {
+      if (sameLocation(e, t)) names.add(t.name);
+    }
+    const kept = e.required_by.filter((n) => !names.has(n));
+    installations.push(kept.length === e.required_by.length ? e : { ...e, required_by: kept });
+  }
+  return { schema_version: 1, installations };
+}
+
 /** Replace `target`'s `agents` array with `remaining`. */
 export function reduceEntryAgents(
   state: StateFile,

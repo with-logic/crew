@@ -6,7 +6,7 @@
  * files under the 200-line cap.
  */
 
-import type { UpdateRow } from "../../install/update/types.ts";
+import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import type { Styler } from "../../util/term.ts";
 
 export interface RowParts {
@@ -66,5 +66,10 @@ export function symbolFor(row: UpdateRow, style: Styler): string {
   if (o.kind === "up_to_date") return style.symbol("muted");
   if (o.kind === "skipped" || o.kind === "missing_project_root") return style.symbol("muted");
   if (o.kind === "source_gone" || o.kind === "tap_missing") return style.symbol("warn");
+  // `failed` is the only remaining variant. `satisfies` turns a newly
+  // added outcome into a compile error here rather than letting it
+  // inherit the failure symbol unnoticed. Type-only, so it costs no
+  // runtime branch and no coverage.
+  o satisfies Extract<Outcome, { kind: "failed" }>;
   return style.symbol("fail");
 }
