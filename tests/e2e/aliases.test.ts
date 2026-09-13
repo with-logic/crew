@@ -86,6 +86,23 @@ describe("top-level aliases", () => {
     expect(JSON.parse(upgrade.stdout())).toHaveProperty("rows");
   });
 
+  test("C-CLI-01b crew upgrade emits the scheduled-update status line", () => {
+    // The §10.2 status line is keyed off the CANONICAL command, so an alias
+    // has to reach it too — a scheduled run invoked as `crew upgrade` must
+    // still be parseable by whatever reads the log. The `--json` alias test
+    // above cannot cover this: §10.4's suppression rules silence the line
+    // under `--json`, so only a non-JSON run exercises the branch.
+    const saved = process.env["CREW_AUTOUPDATE_LOG"];
+    process.env["CREW_AUTOUPDATE_LOG"] = "1";
+    const c = captureStreams();
+    const code = runCli(["upgrade", "--quiet"], { home: makeCrewHome(), streams: c.streams });
+    if (saved === undefined) delete process.env["CREW_AUTOUPDATE_LOG"];
+    else process.env["CREW_AUTOUPDATE_LOG"] = saved;
+    expect(code).toBe(0);
+    expect(c.stdout()).toBe("");
+    expect(c.stderr()).toMatch(/^crew-autoupdate \S+ exit=0\n$/);
+  });
+
   test("C-CLI-01b crew remove and crew rm are aliases for crew uninstall", () => {
     const home = makeCrewHome();
     const c = captureStreams();
