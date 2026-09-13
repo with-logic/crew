@@ -699,6 +699,18 @@ location is a symlink, and reject with `invalid_ref` naming the offending
 segment. Otherwise `gh:acme/skills//outside`, where `outside` is a
 committed symlink, would install content that was never in the source.
 
+Both checks belong where a subpath becomes a real location, not only
+where a reference is parsed. A tap's `subpath` is persisted in
+`config.yaml` and read back without passing through the reference
+grammar, so a hand-edited entry, a row written by an older version, or a
+directory that became a symlink after `crew tap add` reaches discovery
+having never been validated. Implementations MUST therefore re-verify
+containment — lexical and symlink — each time a stored subpath is
+resolved against its clone. Commands that treat an unusable tap as a
+warning rather than a failure (§16.6) MUST still distinguish a
+containment refusal from an unreachable source: advising the user to
+retry when back online never resolves a subpath that escapes its clone.
+
 Tap-source identifiers are matched case-insensitively and canonicalized to
 lowercase before lookup. For example, `crew install Core/Python-Testing`
 resolves identically to `crew install core/python-testing`. This
@@ -1711,6 +1723,7 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-22a | §8.4 | A git subpath containing a `..` component, starting with `/`, or containing a backslash is `invalid_ref` (exit 4) at every entry point that accepts a git reference — positional install, `--from-git`, `crew tap add`, and `crew info`. |
 | C-REF-22b | §8.4 | A git subpath's `.` components and repeated `/` separators are collapsed, so `//./a//b` resolves to `a/b`. |
 | C-REF-22c | §8.4 | A subpath that is lexically valid but resolves through a committed symlink — at the named path or any directory above it — is `invalid_ref` (exit 4), and nothing from the symlink's target is installed. |
+| C-REF-22d | §8.4 | Containment is re-checked when a stored tap subpath is resolved, not only when a reference is parsed: a `subpath` in `config.yaml` that escapes its clone (via `..` or a symlink) is refused wherever the tap is indexed. Read-only commands that treat an unusable tap as a warning (§16.6) report the containment failure for what it is rather than as an unreachable source. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
