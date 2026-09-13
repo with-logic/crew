@@ -2,7 +2,7 @@ import type { CommandHelp } from "./types.ts";
 
 export const installHelp: CommandHelp = {
   name: "install",
-  synopsis: "crew install <skill> [<skill>...]",
+  synopsis: "crew install <skill> [<skill>...] | crew install --from-git <source>",
   summary: [
     "Install a skill and make it available in every agent coder on your machine.",
     "Homecrew installs the same skill into every supported agent coder you have — Claude Code, Codex, Cursor, Gemini, and more. One command, all your agents. You don't have to think about where the skill goes; Homecrew figures out the right place for each tool.",
@@ -34,6 +34,11 @@ export const installHelp: CommandHelp = {
       description:
         "For direct git/path sources, fall back to bounded recursive discovery when standard tap layouts find no skills.",
     },
+    {
+      flag: "--from-git <git-source>",
+      description:
+        "Install from a git source, no guessing. Handy when a bare `owner/repo` would otherwise be read as a tap name — `--from-git acme/skills` means GitHub.",
+    },
     { flag: "--json", description: "Machine-readable output." },
   ],
   examples: [
@@ -60,6 +65,10 @@ export const installHelp: CommandHelp = {
     {
       command: "crew install ./my-skill",
       description: "Install a skill you're developing locally.",
+    },
+    {
+      command: "crew install --from-git acme/skills",
+      description: "Force a git interpretation: `acme/skills` is the GitHub repo, not a tap.",
     },
     {
       command: "crew install --scope project team/conventions",
