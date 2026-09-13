@@ -63,4 +63,16 @@ describe("top-level aliases", () => {
     expect(runCli(["untap"], { home, streams: c.streams })).toBe(4);
     expect(c.stderr()).toContain("`crew tap remove` needs exactly one tap name");
   });
+
+  test("prefixed aliases keep rejecting flags their subcommand ignores", () => {
+    // `taps`/`untap` resolve to `tap list` / `tap remove`, neither of
+    // which honours `--recursive`. Bare aliases inherit their canonical
+    // command's flag table; prefixed ones deliberately must not.
+    const home = makeCrewHome();
+    for (const cmd of ["taps", "untap"]) {
+      const c = captureStreams();
+      expect(runCli([cmd, "--recursive"], { home, streams: c.streams })).toBe(4);
+      expect(c.stderr()).toContain("Unknown argument: recursive");
+    }
+  });
 });

@@ -20,6 +20,7 @@ import type { CommandContext, CommandOutput } from "../commands/types.ts";
 import { uninstallCommand } from "../commands/uninstall/index.ts";
 import { updateCommand } from "../commands/update/index.ts";
 import { CrewError } from "../core/errors.ts";
+import { COMMAND_ALIASES } from "./alias-registry.ts";
 
 export type CommandHandler = (ctx: CommandContext) => CommandOutput;
 
@@ -38,14 +39,6 @@ export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   "self-update": selfUpdateCommand,
   help: helpCommand,
   version: versionCommand,
-};
-
-type CommandAlias = readonly [canonical: string, ...positionalPrefix: string[]];
-
-const COMMAND_ALIASES: Record<string, CommandAlias> = {
-  skills: ["list"],
-  taps: ["tap", "list"],
-  untap: ["tap", "remove"],
 };
 
 /** Dispatch a command name to its handler, returning the result. */

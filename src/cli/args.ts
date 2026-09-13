@@ -18,6 +18,7 @@
 import yargsFactory from "yargs/yargs";
 import type { CommandFlags } from "../commands/types.ts";
 import { CrewError } from "../core/errors.ts";
+import { flagTableKeyFor } from "./alias-registry.ts";
 
 /** Result of parsing. */
 export interface ParsedArgs {
@@ -25,6 +26,41 @@ export interface ParsedArgs {
   readonly subcommand: string | null;
   readonly positional: string[];
   readonly flags: CommandFlags;
+}
+
+/**
+ * Whether argv asks for `--json`, read straight off the raw tokens.
+ *
+ * A parse-stage failure has no `ParsedArgs` to consult, but the user's
+ * requested output mode still has to be honored (§5.2, C-CLI-08c) — a
+ * script piping stdout must get the structured error, not human text on
+ * stderr. So this deliberately does not go through yargs: it must answer
+ * even for the argv that made yargs throw.
+ *
+ * Last occurrence wins, matching yargs, so `--json --json=false` is false.
+ *
+ * The value forms follow yargs' own boolean coercion, verified against
+ * the parser rather than assumed: it accepts a SPACE-separated value
+ * (`--json false`), and treats any value other than a literal `true` as
+ * false — so `--json=FALSE`, `--json=0`, and `--json=no` are all false.
+ * Guessing differently here would hand a script human-readable text on
+ * an invocation the real parse would have treated as JSON, or vice versa.
+ */
+export function wantsJsonOutput(argv: readonly string[]): boolean {
+  let json = false;
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i]!;
+    if (token === "--") break;
+    if (token === "--json") {
+      // yargs consumes a following bare `true`/`false` as the value.
+      const next = argv[i + 1];
+      if (next === "true" || next === "false") {
+        json = next === "true";
+        i++;
+      } else json = true;
+    } else if (token.startsWith("--json=")) json = token.slice("--json=".length) === "true";
+  }
+  return json;
 }
 
 /** Global boolean flags. */
@@ -42,9 +78,21 @@ const BOOLEAN_SUB: Record<string, readonly string[]> = {
 /** Subcommand-specific string flags. */
 const STRING_SUB: Record<string, readonly string[]> = {
   autoupdate: ["interval"],
+  // `--tap <name>` narrows `crew list` to one tap (a value flag here;
+  // install's `--tap` is a presence flag — the tables are per-command).
+  list: ["tap"],
   // `--version <tag>` pins a specific release (e.g. `v0.4.0`).
   "self-update": ["version"],
 };
+/**
+ * Bare command aliases, for flag-table lookup only.
+ *
+ * Only aliases that resolve to a canonical command with no positional
+ * prefix belong here. `taps` (→ `tap list`) and `untap` (→ `tap remove`)
+ * must NOT be listed: they target a subcommand that ignores `tap`'s own
+ * flags, and inheriting that table would start accepting flags nothing
+ * honors. Dispatch owns the real alias table (`src/cli/dispatch.ts`).
+ */
 /** Flags that should always be collected into a list. */
 const ARRAY_GLOBALS = ["agent"] as const;
 /** The subset of flags that is part of the public `CommandFlags` surface. */
@@ -58,8 +106,14 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   const command = effective[0]!;
   const rest = effective.slice(1);
 
-  const booleans = [...BOOLEAN_GLOBALS, ...(BOOLEAN_SUB[command] ?? [])];
-  const strings = [...STRING_GLOBALS, ...(STRING_SUB[command] ?? [])];
+  // Bare aliases (`skills` → `list`) take their canonical command's
+  // flags; without this the parser rejects a flag the alias documents.
+  // Prefixed aliases (`taps` → `tap list`) are deliberately excluded:
+  // they resolve to a *subcommand* that ignores the parent's flags, so
+  // they keep rejecting them.
+  const flagKey = flagTableKeyFor(command);
+  const booleans = [...BOOLEAN_GLOBALS, ...(BOOLEAN_SUB[flagKey] ?? [])];
+  const strings = [...STRING_GLOBALS, ...(STRING_SUB[flagKey] ?? [])];
 
   let parsed: Record<string, unknown>;
   try {
@@ -100,6 +154,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
   const positional = ((parsed["_"] as unknown[]) ?? []).map(String);
 
+  rejectRepeatedScalars(parsed);
+
   const scope = stringOrUndefined(parsed["scope"]) ?? "user";
   if (scope !== "user" && scope !== "project")
     throw new CrewError(
@@ -133,6 +189,28 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   };
 
   return { command, subcommand: null, positional, flags };
+}
+
+/**
+ * Reject a non-repeatable flag that was given more than once.
+ *
+ * `duplicate-arguments-array` makes yargs hand back an array for a
+ * repeated flag. Only `--agent` is repeatable; for every other flag an
+ * array value would be silently dropped downstream (`extras` keeps only
+ * strings and booleans) or fall back to its default, so the user's
+ * explicit choice would vanish without a word. Fail loudly instead.
+ */
+function rejectRepeatedScalars(parsed: Record<string, unknown>): void {
+  const repeatable = new Set<string>(ARRAY_GLOBALS);
+  for (const [key, value] of Object.entries(parsed)) {
+    if (key === "_" || key === "$0" || repeatable.has(key)) continue;
+    if (!Array.isArray(value)) continue;
+    throw new CrewError(
+      "usage_error",
+      `\`--${key}\` was given more than once — it takes a single value`,
+      { flag: key },
+    );
+  }
 }
 
 function stringOrUndefined(v: unknown): string | undefined {

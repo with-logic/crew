@@ -1,33 +1,34 @@
 /**
  * `crew list` — show every skill crew is tracking (§5.1).
  *
- * Reads `state.json` (no lock — read-only) and hands the sorted, scope-
- * filtered entries to `./render.ts`. `--scope` is a filter here, not a
- * target: with no flag both scopes are shown; `--scope user` /
- * `--scope project` narrow to that scope. The JSON payload reports the
- * filter in `scope` (`null` when unfiltered) so scripts can tell which
- * view they got.
+ * Reads `state.json` (no lock — read-only), applies the `--scope`,
+ * `--agent`, and `--tap` filters from `./filters.ts`, and hands the
+ * sorted survivors to `./render.ts`. Every flag is a filter here, not a
+ * target: with no flags everything is shown. The JSON payload reports
+ * each filter (`scope`, `agent`, `tap`) so scripts can tell which view
+ * they got.
  */
 
-import type { Scope, StateEntry } from "../../core/types.ts";
+import type { StateEntry } from "../../core/types.ts";
 import { readState } from "../../state/load.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
+import { applyListFilters, hasAgentOrTapFilter, readListFilters } from "./filters.ts";
 import { renderEmpty, renderList } from "./render.ts";
 
 export function listCommand(ctx: CommandContext): CommandOutput {
+  const filters = readListFilters(ctx);
   const state = readState(ctx.home);
-  const scope: Scope | null = ctx.flags.scopeGiven ? ctx.flags.scope : null;
-  const filtered =
-    scope === null ? state.installations : state.installations.filter((e) => e.scope === scope);
-  const sorted = [...filtered].sort(compareEntries);
+  const sorted = applyListFilters(state.installations, filters).sort(compareEntries);
 
   const human =
-    sorted.length === 0 ? renderEmpty(scope, ctx.style) : renderList(sorted, scope, ctx.style);
+    sorted.length === 0
+      ? renderEmpty(filters.scope, hasAgentOrTapFilter(filters), ctx.style)
+      : renderList(sorted, filters.scope, ctx.style);
 
   return {
     exitCode: 0,
     human,
-    json: { scope, installations: sorted },
+    json: { scope: filters.scope, agent: filters.agent, tap: filters.tap, installations: sorted },
   };
 }
 
