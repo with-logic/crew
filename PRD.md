@@ -167,6 +167,31 @@ the flags its canonical command accepts; an alias that resolves to a
 subcommand (`crew taps` → `crew tap list`) accepts only that
 subcommand's flags.
 
+**Source labels.** `state.source.tap` names a tap. A registered tap
+(§16.3) has a *configured* name — supplied by the user or derived from the
+source when `crew tap add` is called without one — and human output shows
+it as-is, because it is the name every tap subcommand takes. An auto tap
+(§16.5) carries a name crew derived from the URL without the user ever
+seeing it, so showing it as the source tells the user nothing about where
+the skill came from. Human output for an auto tap SHOULD therefore render
+the source as a reference: an explicit clone URL, shortened to `@owner/repo`
+(GitHub), `gl:`/`bb:` (the other shorthand hosts) only when that shorthand
+resolves back to exactly the recorded URL, followed by `//<location>` where
+the location is the tap's subpath joined with the skill's path inside the
+tap. A path-kind auto tap shows the directory. Derived auto-tap names remain
+*visible* where they are actionable — `crew info` shows the name `crew tap
+remove` would take — but they are not the source label. The label is a
+display concern only: `--json` continues to report `source.tap` and
+`source.path` unchanged. An entry whose tap is no longer in `config.yaml`
+falls back to `<tap>/<path>`. A label is a display string, not a clone
+URL: for a URL carrying a scheme, the whole userinfo component is
+replaced with `***` (a token is commonly the username with no password,
+so masking only the password would not be enough); query strings and
+fragments are dropped; and control characters — C0, DEL, and C1, since a
+terminal in 8-bit mode reads C1 as an escape sequence — are rendered as
+`\xNN` escapes. An SCP-style remote (`git@host:owner/repo`) keeps its
+user, which names the protocol account rather than a secret (§13).
+
 ### 5.2 Global flags
 
 Accepted on any command where they apply:
@@ -861,6 +886,12 @@ the state lock. If the argument matches one or more installed state entries,
 agents, and local description when available. A tap-qualified selector such as
 `<tap>/<skill>` or `<tap>/<namespace>/<skill>` narrows the installed entries by
 `state.source.tap`, optional namespace path, and `state.name`.
+
+The source is rendered with the same human label rule as `crew list` (§5.1).
+Because the label replaces an auto tap's derived name, and that name is what
+`crew tap remove` takes, the installed view SHOULD also show the tap name
+beside the label for auto taps. `--json` adds the rendered label as
+`source_label` alongside the unchanged `installed` entry.
 
 If the argument does not match installed state, `crew info` resolves it as an
 install reference and previews the valid skills available at that source. An
@@ -1903,6 +1934,7 @@ Implementations and test suites refer to criteria by ID.
 | ID | Reference | Assertion |
 |---|---|---|
 | C-INFO-01 | §9.1 | `crew info <tap>/<skill>` resolves the argument against installed state first; if matching state entries exist, it renders the installed view rather than walking the tap source. |
+| C-INFO-02 | §9.1 | `crew info <installed-skill>` renders the source with the §5.1 label rule, and for an auto tap also shows that tap's name so the user can act on it. `--json` carries the rendered label as `source_label`. |
 
 #### C-UNINST: Uninstall (§7.4)
 
@@ -1986,6 +2018,9 @@ Implementations and test suites refer to criteria by ID.
 | C-LIST-05 | §5.1 | `crew list --tap <name>` shows only installations attributed to that tap; an unknown tap is a `usage_error` pointing at `crew tap list`; `--json` reports the filter in `tap`. |
 | C-LIST-06 | §5.1 | `--agent`, `--tap`, and `--scope` compose; when the combination matches nothing and an agent or tap filter was given, `crew list` says no skills match those filters. |
 | C-LIST-07 | §5.1, §5.2 | A repeated single-value flag (e.g. `crew list --tap a --tap b`) is a `usage_error` per §5.2's flag-uniqueness rule; it never silently drops the filter. `crew skills` accepts every flag `crew list` accepts. |
+| C-LIST-08 | §5.1 | `crew list` shows a registered tap's configured name in the source column, and renders an auto tap as a reference (`@owner/repo//<location>`, host shorthand, or the directory for a path tap) rather than the derived tap name. `--json` reports `source.tap` and `source.path` unchanged. |
+| C-LIST-09 | §5.1 | A source label rendered for an auto git tap parses as a reference resolving to that tap's exact URL and the skill's location inside the repo, for any URL carrying no credentials. Where a scheme URL carries userinfo, C-LIST-10's masking takes precedence and the label identifies the remote without remaining usable for cloning. An entry whose tap is absent from `config.yaml` falls back to `<tap>/<path>`. |
+| C-LIST-10 | §5.1 | A source label never discloses URL credentials or emits control characters: a scheme URL's entire userinfo is masked to `***` (including a username-only token), query strings and fragments are dropped, and C0, DEL, and C1 control characters are escaped as `\xNN`. An SCP-style remote keeps its protocol user. |
 | C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same install location (`(scope, project_root)`). |
 | C-STATE-11 | §11.2 | `crew doctor` reports `missing_project_root` for any project-scope entry whose `project_root` directory no longer exists. |
 
