@@ -12,6 +12,7 @@ import type { TapConfig } from "../../core/types.ts";
 import { ensureClone } from "../../git/repo.ts";
 import { rewriteTapMarkers } from "../../install/rewrite-tap-markers.ts";
 import { deriveAutoTapName } from "../../install/tap-naming.ts";
+import { displayText } from "../../refs/display-url.ts";
 import { NAME_PATTERN } from "../../refs/parse.ts";
 import { readState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
@@ -96,7 +97,9 @@ function performAdd(
   if (sameName) {
     throw new CrewError(
       "usage_error",
-      `tap \`${name}\` is already configured at \`${displayTarget(sameName)}\` — to add this one under a different name, run \`crew tap add ${rawArg} <tap-name>\``,
+      // `rawArg` is echoed back as a runnable command, so it must be redacted
+      // too: otherwise the remedy itself publishes the user's credentials.
+      `tap \`${name}\` is already configured at \`${displayTarget(sameName)}\` — to add this one under a different name, run \`crew tap add ${displayText(rawArg)} <tap-name>\``,
       { name, existing: displayTarget(sameName), incoming: displayTarget(target) },
     );
   }

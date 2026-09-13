@@ -14,6 +14,7 @@
 
 import type { CommandOutput } from "../commands/types.ts";
 import type { CrewError, CrewErrorName } from "../core/errors.ts";
+import { displayDetails, displayText } from "../refs/display-url.ts";
 import type { Styler } from "../util/term.ts";
 
 /** Writable stream shape used by `writeOutput` — lets tests pass buffers. */
@@ -66,8 +67,8 @@ export function writeError(
         {
           error: {
             name: err.code,
-            message: err.message,
-            details: err.details ?? {},
+            message: displayText(err.message),
+            details: displayDetails(err.details ?? {}),
           },
         },
         null,
@@ -85,8 +86,18 @@ export function writeError(
   }
 }
 
+/**
+ * The single sink every human-readable error message and remedy hint passes
+ * through, so redaction here covers present and future errors rather than
+ * relying on each construction site to remember.
+ *
+ * A message is prose that may have a URL interpolated into it (see
+ * `acquireTap`'s `no_skills_found`, which embeds `tap.url`), and that URL can
+ * carry userinfo or a credential-bearing query parameter. `displayText` scans
+ * for URL-shaped substrings, which a whole-string URL parse cannot do.
+ */
 function writeMessageBlock(message: string, streams: OutputStreams): void {
-  for (const line of message.split("\n")) {
+  for (const line of displayText(message).split("\n")) {
     streams.stderr(line.length === 0 ? "\n" : `  ${line}\n`);
   }
 }

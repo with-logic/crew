@@ -14,6 +14,9 @@
 
 import { CrewError } from "../core/errors.ts";
 import type { GitSource } from "../core/types.ts";
+import { normalizeBrowserUrl, stripUrlQueryAndFragment } from "./browser-url.ts";
+import { displayUrl } from "./display-url.ts";
+import { splitGitRef, splitSubpath } from "./git-tails.ts";
 
 /** Shorthand host prefixes known to crew (§8.2). */
 const SHORTHAND_HOSTS: Record<string, string> = {
@@ -61,52 +64,29 @@ export function looksLikeAtShorthand(ref: string): boolean {
   return owner.length > 0 && repo.length > 0;
 }
 
-/** Parse a git source per §8.2. Handles URL, ref, and subpath. */
+/** Parse a git source per §8.2. Handles URL, ref, subpath, and browser URLs. */
 export function parseGit(ref: string): GitSource {
-  const { head, subpath } = splitSubpath(ref);
+  // §8.2: `?query` / `#fragment` are dropped before any grammar tail is read,
+  // so text inside them can never be mistaken for an `@ref` or `//subpath`.
+  const { head, subpath } = splitSubpath(stripUrlQueryAndFragment(ref));
   const { url: baseUrl, ref: gitRef } = splitGitRef(head);
-  const canonical = canonicalizeUrl(baseUrl);
+  // §8.2 "Browser URLs": an explicit `@ref` / `//subpath` tail wins over
+  // whatever the pasted URL encoded.
+  const browser = normalizeBrowserUrl(baseUrl);
+  const canonical = canonicalizeUrl(browser.url);
   if (canonical === null) {
-    throw new CrewError("invalid_ref", `\`${ref}\` isn't a valid git reference`, { ref });
+    // A well-formed but wrong-shaped URL (`https://user:token@host/owner` with
+    // no repo) still carries real credentials, so the echoed reference is
+    // rendered safe in both the message and the structured details.
+    const shown = displayUrl(ref);
+    throw new CrewError("invalid_ref", `\`${shown}\` isn't a valid git reference`, { ref: shown });
   }
   return {
     type: "git",
     url: canonical,
-    ref: gitRef,
-    subpath,
+    ref: gitRef ?? browser.ref,
+    subpath: subpath.length > 0 ? subpath : browser.subpath,
   };
-}
-
-/** Split `head//sub` into head and subpath. Empty subpath if no `//`. */
-function splitSubpath(ref: string): { head: string; subpath: string } {
-  // For URL-shaped refs we must not confuse `https://` with the `//` separator.
-  // Strategy: find the first `//` that doesn't belong to the scheme delimiter.
-  const schemeIdx = ref.indexOf("://");
-  const searchFrom = schemeIdx >= 0 ? schemeIdx + 3 : 0;
-  const idx = ref.indexOf("//", searchFrom);
-  if (idx < 0) {
-    return { head: ref, subpath: "" };
-  }
-  return { head: ref.slice(0, idx), subpath: ref.slice(idx + 2) };
-}
-
-/** Split `head@ref` into `{url, ref}`. Some URLs contain `@` (ssh-style user); handle that. */
-function splitGitRef(head: string): { url: string; ref: string | null } {
-  // Ssh-style `git@host:owner/repo` has an `@` that does not delimit a ref.
-  // Strategy: the ref, if present, is everything after the LAST `@` in the
-  // tail-segment of the URL (after the last `/`), and it must not contain a `:`.
-  const lastSlash = head.lastIndexOf("/");
-  const tail = lastSlash >= 0 ? head.slice(lastSlash + 1) : head;
-  const atIdx = tail.lastIndexOf("@");
-  if (atIdx <= 0) {
-    return { url: head, ref: null };
-  }
-  const possibleRef = tail.slice(atIdx + 1);
-  if (possibleRef.length === 0 || /[\s/]/.test(possibleRef)) {
-    return { url: head, ref: null };
-  }
-  const url = head.slice(0, head.length - tail.length) + tail.slice(0, atIdx);
-  return { url, ref: possibleRef };
 }
 
 /** Canonicalize a git URL: expand shorthand, strip `.git`, normalize. */
