@@ -90,14 +90,19 @@ export function writeError(
 }
 
 function writeMessageBlock(message: string, streams: OutputStreams): void {
-  // Every newline reaching here is layout: callers compose multi-line
-  // messages by joining trusted literals (see `ambiguityError`), while
-  // untrusted values are escaped at the point of interpolation, where
-  // the distinction is still known — `CrewError` runs `sanitizeLine`
-  // over each interpolated value as the message is built. Splitting
-  // here is therefore safe, and `sanitizeLine` per line is a second
-  // layer for any caller that forgets.
-  for (const line of message.split("\n")) {
+  // This is the single funnel for every human-readable error message and
+  // remedy hint, so credential redaction belongs here rather than at each
+  // message site. A message can interpolate a source URL — see
+  // `acquireTap`'s `no_skills_found`, which embeds `tap.url` — and that URL
+  // can carry userinfo or a secret query parameter. `redactText` scans the
+  // prose for URL-shaped substrings, which a whole-string URL parser can't
+  // do. The `--json` path redacts at its own boundary; this is the same
+  // guarantee for stderr.
+  //
+  // Newlines reaching here are layout: `CrewError` has already escaped
+  // control characters in untrusted data at construction, and the handful of
+  // genuinely multi-line errors compose their breaks from trusted literals.
+  for (const line of redactText(message).split("\n")) {
     const safe = sanitizeLine(line);
     streams.stderr(safe.length === 0 ? "\n" : `  ${safe}\n`);
   }

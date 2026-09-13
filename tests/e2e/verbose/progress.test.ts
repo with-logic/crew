@@ -67,6 +67,10 @@ describe("--verbose progress", () => {
     const home = makeCrewHome();
     const innerHome = makeCrewHome();
     const repo = makeRepo();
+    // A distinct skill name: the redirected adapter root is shared across
+    // both runs, so two `demo`s would collide and the outer run would
+    // report "already installed" instead of emitting its install line.
+    const innerRepo = makeRepo("inner");
     const outer = captureStreams();
     const innerCapture = captureStreams();
     let nestedRuns = 0;
@@ -83,7 +87,14 @@ describe("--verbose progress", () => {
         // sink is observable.
         if (nestedRuns === 0 && s.startsWith("crew: ")) {
           nestedRuns++;
-          runCli(["list"], { home: innerHome, streams: innerCapture.streams });
+          // The inner command must be one that WOULD emit progress if it
+          // borrowed the outer sink. `list` emits none, so asserting it
+          // produced no progress line could never fail, whatever the sink
+          // did — the assertion has to be able to fail to mean anything.
+          runCli(["install", `file://${innerRepo}`], {
+            home: innerHome,
+            streams: innerCapture.streams,
+          });
         }
       },
     };

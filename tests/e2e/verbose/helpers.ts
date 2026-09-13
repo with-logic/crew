@@ -31,10 +31,16 @@ export function redirectClaudeCode(): void {
   });
 }
 
-/** A local git repo holding one `demo` skill. */
-export function makeRepo(): string {
+/**
+ * A local git repo holding one skill, named `demo` unless given another.
+ *
+ * The name matters when two runs share a redirected adapter root: two
+ * skills called `demo` land on the same destination, and the second run
+ * reports it already installed rather than doing the work.
+ */
+export function makeRepo(name: string = "demo"): string {
   const repo = makeTempDir("crew-repo-");
-  makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
+  makeSkill(repo, name, skillFrontmatter({ name }));
   makeGitRepo(repo);
   return repo;
 }
