@@ -127,4 +127,25 @@ describe("parseRef: @ref after //subpath", () => {
       subpath: "py@v2",
     });
   });
+
+  test("C-REF-33 a slash-containing ref is ref-first only; ref-last keeps it as subpath", () => {
+    // The two positions are NOT interchangeable for a slash-containing
+    // ref, and that asymmetry is deliberate: a subpath may contain `@`,
+    // so `//a@b/c` cannot distinguish a ref from a directory named
+    // `a@b`. Ref-first is the unambiguous spelling.
+    expect(parseRef("gh:acme/skills@feature/foo//skills")).toEqual({
+      type: "git",
+      url: "https://github.com/acme/skills.git",
+      ref: "feature/foo",
+      subpath: "skills",
+    });
+    // Ref-last with a slash is a legal SUBPATH, not a ref and not an
+    // error — refusing it would reject a directory a user may have.
+    expect(parseRef("gh:acme/skills//skills@feature/foo")).toEqual({
+      type: "git",
+      url: "https://github.com/acme/skills.git",
+      ref: null,
+      subpath: "skills@feature/foo",
+    });
+  });
 });
