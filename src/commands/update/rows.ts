@@ -2,11 +2,16 @@
  * Per-row formatting for `crew update` human output (§10.1).
  *
  * Maps each `UpdateRow` outcome to a status word, a detail cell, and a
- * leading symbol. Kept separate from `render.ts`, which owns layout
- * (header, tap sections, totals).
+ * leading symbol, and builds the two cells both `crew update` and
+ * `crew outdated` render identically: the name cell (with its project
+ * location) and additions grouped by tap. Kept separate from the two
+ * `render.ts` files, which own their own layout (headers, totals,
+ * closing lines) and differ deliberately.
  */
 
+import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
+import { shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 
 export interface RowParts {
@@ -79,4 +84,26 @@ export function symbolFor(row: UpdateRow, style: Styler): string {
 
 function shortSha(sha: string | null): string {
   return sha ? sha.slice(0, 8) : "local";
+}
+
+/**
+ * The name cell for a row: symbol, skill name, and — for a project
+ * install — where it lives. Shared so the two renderers can't drift on
+ * how a project-scoped row identifies itself.
+ */
+export function nameCell(row: UpdateRow, style: Styler): string {
+  const base = `  ${symbolFor(row, style)} ${style.bold(row.name)}`;
+  if (row.scope !== "project" || !row.project_root) return base;
+  return `${base} ${style.dim(`(in ${shortenHome(row.project_root)})`)}`;
+}
+
+/** Group re-expansion rows by tap name, preserving encounter order. */
+export function groupByTap(rows: readonly TapReexpandRow[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const r of rows) {
+    const names = out.get(r.tap);
+    if (names) names.push(r.name);
+    else out.set(r.tap, [r.name]);
+  }
+  return out;
 }

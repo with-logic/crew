@@ -33,6 +33,16 @@ export const GROUPS: readonly CommandGroup[] = [
         ),
       },
       {
+        name: "outdated",
+        signature: <>crew outdated [&lt;name&gt;…]</>,
+        description: (
+          <>
+            Preview what <code>crew update</code> would change — pending updates, plus new skills
+            added to a tap you installed whole. Refreshes your taps, but nothing installed changes.
+          </>
+        ),
+      },
+      {
         name: "list",
         signature: <>crew list</>,
         description: "List installed skills, grouped by scope, with sources and resolved SHAs.",

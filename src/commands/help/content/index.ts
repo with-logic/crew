@@ -12,6 +12,7 @@ import { helpHelp } from "./help.ts";
 import { infoHelp } from "./info.ts";
 import { installHelp } from "./install.ts";
 import { listHelp } from "./list.ts";
+import { outdatedHelp } from "./outdated.ts";
 import { searchHelp } from "./search.ts";
 import { selfUpdateHelp } from "./self-update.ts";
 import { skillsHelp } from "./skills.ts";
@@ -34,7 +35,7 @@ export interface CommandGroup {
 export const GROUPS: readonly CommandGroup[] = [
   {
     title: "Managing skills",
-    commands: ["install", "uninstall", "update", "list", "skills", "info"],
+    commands: ["install", "uninstall", "update", "outdated", "list", "skills", "info"],
   },
   { title: "Discovery", commands: ["search", "tap", "taps", "untap"] },
   { title: "Agents & automation", commands: ["agents", "autoupdate"] },
@@ -46,6 +47,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
   install: installHelp,
   uninstall: uninstallHelp,
   update: updateHelp,
+  outdated: outdatedHelp,
   list: listHelp,
   skills: skillsHelp,
   info: infoHelp,
@@ -67,6 +69,7 @@ export const ONELINERS: Record<string, string> = {
   install: "Install a skill everywhere at once.",
   uninstall: "Remove a skill (use --prune to tidy up leftovers).",
   update: "Catch installed skills up to the latest.",
+  outdated: "See which skills have updates available.",
   list: "See what you have installed.",
   skills: "Alias for `list`.",
   info: "Get the details on a skill.",

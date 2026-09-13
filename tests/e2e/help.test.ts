@@ -15,6 +15,7 @@ const EVERY_COMMAND = [
   "install",
   "uninstall",
   "update",
+  "outdated",
   "list",
   "skills",
   "info",
