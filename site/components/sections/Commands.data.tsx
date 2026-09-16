@@ -11,9 +11,12 @@ export const GROUPS: readonly CommandGroup[] = [
     commands: [
       {
         name: "install",
-        signature: <>crew install &lt;ref&gt;…</>,
-        description:
-          "Install one or more skills into every detected agent; on misses, may suggest trusted taps you haven't added yet.",
+        signature: <>crew install &lt;ref&gt;… | crew install --from-git &lt;source&gt;</>,
+        description: [
+          "Install one or more skills into every detected agent; on misses, may suggest trusted taps you haven't added yet. ",
+          <code key="crew-install-from-git">--from-git</code>,
+          " reads its value as a git source, so a bare owner/repo means GitHub rather than tap/skill.",
+        ],
       },
       {
         name: "uninstall",

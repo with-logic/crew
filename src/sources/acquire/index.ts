@@ -23,6 +23,7 @@ import { crewHome, tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { ensureClone, resolveRef } from "../../git/repo.ts";
 import { isDirectory } from "../../util/fs.ts";
+import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
@@ -32,7 +33,12 @@ export interface AcquiredTap {
   readonly resolvedSha: string | null;
 }
 
-/** Materialize a tap on disk. Throws `source_unreachable` / `no_skills_found` on failure. */
+/**
+ * Materialize a tap on disk. Throws `source_unreachable` when the clone
+ * cannot be obtained, `no_skills_found` when the subpath doesn't exist,
+ * and `invalid_ref` when the stored subpath escapes the clone (see
+ * `tapRootDir`).
+ */
 export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredTap {
   if (tap.kind === "path") {
     if (!isDirectory(tap.path)) {
@@ -48,7 +54,8 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
   const clonePath = tapPath(tap.name, home);
   ensureClone(tap.url, clonePath);
   const sha = resolveRef(clonePath, null);
-  const rootDir = tap.subpath.length > 0 ? join(clonePath, tap.subpath) : clonePath;
+  // `tapRootDir` proves containment (lexical + symlink) as it resolves.
+  const rootDir = tapRootDir(clonePath, tap);
   if (!isDirectory(rootDir)) {
     throw new CrewError(
       "no_skills_found",
@@ -59,11 +66,24 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
   return { rootDir, resolvedSha: sha };
 }
 
-/** The directory that holds the tap's skills (after subpath, if any). */
+/**
+ * The directory that holds the tap's skills (after subpath, if any).
+ *
+ * Containment is enforced here rather than at each call site, because
+ * this is the single place a stored subpath becomes a real location.
+ * `config.yaml` is read back from disk without passing through the
+ * reference parser, so a hand-edited `../…` or a subpath that became a
+ * symlink after `tap add` would otherwise reach discovery unchecked —
+ * install validated it, but `crew search` and `crew info` index taps
+ * through their own path.
+ */
 export function tapRootDir(
   clonePath: string,
-  tap: Pick<TapConfig, "kind" | "subpath" | "path">,
+  tap: Pick<TapConfig, "kind" | "subpath" | "path" | "name">,
 ): string {
   if (tap.kind === "path") return tap.path;
-  return tap.subpath.length > 0 ? join(clonePath, tap.subpath) : clonePath;
+  if (tap.subpath.length === 0) return clonePath;
+  const rootDir = join(clonePath, tap.subpath);
+  assertNoSymlinkEscape(clonePath, rootDir, `tap \`${tap.name}\` subpath \`${tap.subpath}\``);
+  return rootDir;
 }

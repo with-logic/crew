@@ -2,6 +2,7 @@
  * Configured-tap search for `crew search` (§16.6).
  */
 
+import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { indexTap, type SkillLocation } from "../../install/tap-index.ts";
 import { loadSkill } from "../../skill/load.ts";
@@ -32,7 +33,15 @@ function collectHitsFromTap(
   let index: ReturnType<typeof indexTap>;
   try {
     index = indexTap(tap, home);
-  } catch {
+  } catch (err) {
+    // §16.6 makes an unreachable tap a warning, not a failure. A tap
+    // whose stored subpath escapes its clone is a different matter:
+    // reporting it as "couldn't be reached" would tell the user to
+    // retry when online, which never fixes it. Name it for what it is.
+    if (err instanceof CrewError && err.code === "invalid_ref") {
+      warnings.push(`warning: tap \`${tap.name}\` skipped — ${err.message}`);
+      return;
+    }
     warnings.push(
       `warning: tap \`${tap.name}\` isn't cloned yet and couldn't be reached — skipping. run \`crew tap update ${tap.name}\` when you're back online.`,
     );
