@@ -13,14 +13,22 @@ const style = makeStyler(false);
 
 describe("renderDoctor — empty-findings branch", () => {
   test("prints the OK line and a --verify hint when verify was not set", () => {
-    const lines = renderDoctor([], { repair: false, verify: false }, style);
+    const lines = renderDoctor(
+      [],
+      { repair: false, verify: false, dryRun: false, applied: false },
+      style,
+    );
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain("Everything looks good");
     expect(lines[1]).toContain("crew doctor --verify");
   });
 
   test("prints only the OK line when --verify was passed", () => {
-    const lines = renderDoctor([], { repair: false, verify: true }, style);
+    const lines = renderDoctor(
+      [],
+      { repair: false, verify: true, dryRun: false, applied: false },
+      style,
+    );
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("Everything looks good");
   });

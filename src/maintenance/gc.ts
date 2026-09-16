@@ -11,44 +11,56 @@ import { crewHome, paths } from "../core/paths.ts";
 import type { StateFile } from "../core/types.ts";
 import { isDirectory, listDir, rmrf } from "../util/fs.ts";
 
-/** Compute the set of store entries still in use. */
+/**
+ * Compute the set of store entries still in use.
+ *
+ * `shortShaFor` keys a git source by its resolved SHA and a path
+ * source by the first 8 chars of the directory's content hash — which
+ * state records in `content_hash`. Reconstructing both here keeps a
+ * live path-source entry out of the orphan list.
+ */
 export function referencedStoreEntries(state: StateFile): Set<string> {
   const names = new Set<string>();
   for (const inst of state.installations) {
-    if (inst.resolved_sha === null) {
-      // Path sources: match whatever short-sha suffix they hashed to.
-      // We don't know the hash from here without reading the store; store
-      // entries for path sources are therefore kept unconditionally.
-    } else {
-      names.add(`${inst.name}@${inst.resolved_sha.slice(0, 8)}`);
-    }
+    const short =
+      inst.resolved_sha === null
+        ? inst.content_hash.slice("sha256:".length, "sha256:".length + 8)
+        : inst.resolved_sha.slice(0, 8);
+    names.add(`${inst.name}@${short}`);
   }
   return names;
 }
 
-/** Remove unreferenced store entries. Returns the names removed. */
-export function garbageCollectStore(state: StateFile, home: string = crewHome()): string[] {
+/**
+ * Names of store entries no state entry references. Path-source
+ * entries are indistinguishable from stale ones here, so anything
+ * unreferenced is reported; it gets recreated on the next install.
+ */
+export function orphanStoreEntries(state: StateFile, home: string = crewHome()): string[] {
   const ref = referencedStoreEntries(state);
   const storeDir = paths(home).storeDir;
   if (!isDirectory(storeDir)) {
     return [];
   }
-  const removed: string[] = [];
+  const orphans: string[] = [];
   for (const name of listDir(storeDir)) {
-    const p = join(storeDir, name);
-    if (!isDirectory(p)) {
+    if (!isDirectory(join(storeDir, name))) {
       continue;
     }
-    // Keep if exactly matches a referenced `name@short` OR if it's a
-    // path-source entry (we can't easily tell those apart; conservatively
-    // keep anything referenced and skip pruning path-sources).
     if (ref.has(name)) {
       continue;
     }
-    // Best-effort: delete anything unreferenced. Path-source entries will
-    // be recreated next time they're installed.
-    rmrf(p);
-    removed.push(name);
+    orphans.push(name);
+  }
+  return orphans;
+}
+
+/** Remove unreferenced store entries. Returns the names removed. */
+export function garbageCollectStore(state: StateFile, home: string = crewHome()): string[] {
+  const storeDir = paths(home).storeDir;
+  const removed = orphanStoreEntries(state, home);
+  for (const name of removed) {
+    rmrf(join(storeDir, name));
   }
   return removed;
 }

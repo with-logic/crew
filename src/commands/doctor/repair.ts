@@ -17,7 +17,24 @@ import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { garbageCollectStore } from "../../maintenance/gc.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
+import { isDirectory } from "../../util/fs.ts";
 import type { MarkerEntry } from "./markers.ts";
+
+/**
+ * True when the entry is project-scope and its recorded root is gone,
+ * so no marker could have been read for it (§11.2 check 8).
+ *
+ * A root replaced by a regular file counts as gone: nothing can be
+ * read beneath it, so treating it as usable would drop the entry's
+ * state on the assumption a marker exists there.
+ */
+function isUnreadableProjectEntry(entry: StateEntry): boolean {
+  return (
+    entry.scope === "project" &&
+    entry.project_root !== undefined &&
+    !isDirectory(entry.project_root)
+  );
+}
 
 /** Runs inside a state lock; caller just invokes and forgets. */
 export function repairState(markers: readonly MarkerEntry[], home: string): void {
@@ -49,13 +66,21 @@ export function repairState(markers: readonly MarkerEntry[], home: string): void
     // — remove. With path sharing (§7.2), one physical marker can
     // cover multiple adapters via `marker.agents`, so we consider any
     // of `entry.agents` "backed" if it's listed on any live marker.
-    const keep = current.installations.filter((entry) =>
-      markers.some(
-        (m) =>
-          m.record.marker.name === entry.name &&
-          m.record.scope === entry.scope &&
-          entry.agents.some((t) => m.record.marker.agents.includes(t)),
-      ),
+    //
+    // A project entry whose `project_root` has vanished is NOT orphaned
+    // in that sense: `buildMarkerIndex` never walked that root, so its
+    // marker is unread rather than absent. §11.2 leaves a moved project
+    // to the user, so dropping the entry here would silently discard
+    // the only record of the install.
+    const keep = current.installations.filter(
+      (entry) =>
+        isUnreadableProjectEntry(entry) ||
+        markers.some(
+          (m) =>
+            m.record.marker.name === entry.name &&
+            m.record.scope === entry.scope &&
+            entry.agents.some((t) => m.record.marker.agents.includes(t)),
+        ),
     );
     current = { schema_version: 1, installations: keep };
 

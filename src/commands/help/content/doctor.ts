@@ -17,12 +17,20 @@ export const doctorHelp: CommandHelp = {
     {
       flag: "--repair",
       description:
-        "Actually fix what's fixable: rebuild bookkeeping, tidy up leftover files, reconcile scheduled updates.",
+        "Actually fix what's fixable: rebuild bookkeeping and tidy up leftover files. Scheduled updates aren't reconciled — if those have drifted, run `crew autoupdate disable` then `crew autoupdate enable`.",
+    },
+    {
+      flag: "--dry-run",
+      description: "With `--repair`, list what a repair would fix without changing anything.",
     },
     { flag: "--json", description: "Machine-readable list of findings." },
   ],
   examples: [
     { command: "crew doctor", description: "Quick health check." },
+    {
+      command: "crew doctor --repair --dry-run",
+      description: "Preview what `--repair` would do before letting it loose.",
+    },
     {
       command: "crew doctor --verify",
       description: "Thorough check that also flags any local edits you've made.",
