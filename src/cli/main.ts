@@ -12,6 +12,7 @@ import { crewHome } from "../core/paths.ts";
 import { maybeEmitUpdateNotice } from "../self-update/notice.ts";
 import { colorEnabled, makeStyler, type Styler, terminalWidth } from "../util/term.ts";
 import { nowIso } from "../util/time.ts";
+import { canonicalCommand } from "./aliases.ts";
 import { parseArgs } from "./args.ts";
 import { dispatch } from "./dispatch.ts";
 import { defaultStreams, type OutputStreams, writeError, writeSuccess } from "./output.ts";
@@ -121,7 +122,9 @@ function runCliWithHome(
   }
   // §10.2: scheduled updates append one status line before exit. Keeping
   // this at the CLI boundary covers both normal `update` exits and crashes.
-  if (parsed.command === "update" && process.env["CREW_AUTOUPDATE_LOG"] === "1") {
+  // Keyed off the canonical command so `crew upgrade` logs identically.
+  const canonical = canonicalCommand(parsed.command);
+  if (canonical === "update" && process.env["CREW_AUTOUPDATE_LOG"] === "1") {
     streams.stderr(`crew-autoupdate ${nowIso()} exit=${exitCode}\n`);
   }
 
@@ -130,7 +133,7 @@ function runCliWithHome(
   // The function has its own suppression rules — we call it
   // unconditionally and let it decide.
   maybeEmitUpdateNotice({
-    command: parsed.command,
+    command: canonical,
     home,
     json: parsed.flags.json,
     quiet: parsed.flags.quiet,
