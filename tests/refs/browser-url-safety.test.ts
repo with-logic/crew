@@ -149,18 +149,18 @@ describe("refs containing a slash", () => {
 });
 
 describe("malformed URLs use the stable error name", () => {
-  test.each([
-    "https://:::/acme/skills",
-    "https://exa mple.com/a/b",
-  ])("%s is invalid_ref, not a raw TypeError", (raw) => {
-    try {
-      parseRef(raw);
-      throw new Error("expected parseRef to reject a malformed URL");
-    } catch (err) {
-      expect(err).toBeInstanceOf(CrewError);
-      expect((err as CrewError).code).toBe("invalid_ref");
-    }
-  });
+  test.each(["https://:::/acme/skills", "https://exa mple.com/a/b"])(
+    "%s is invalid_ref, not a raw TypeError",
+    (raw) => {
+      try {
+        parseRef(raw);
+        throw new Error("expected parseRef to reject a malformed URL");
+      } catch (err) {
+        expect(err).toBeInstanceOf(CrewError);
+        expect((err as CrewError).code).toBe("invalid_ref");
+      }
+    },
+  );
 });
 
 describe("blob links with no path", () => {
