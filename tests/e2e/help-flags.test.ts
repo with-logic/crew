@@ -132,14 +132,22 @@ describe("conventional flag edge cases", () => {
     }
   });
 
-  test("C-CLI-17a `--json` honors last-occurrence-wins in rewritten forms", () => {
+  test("C-CLI-17a a repeated `--json` is rejected identically in rewritten forms", () => {
+    // §5.2: only `--agent` repeats. The rewrite must not launder a repeated
+    // `--json` into one effective value the canonical command would reject.
     const canonical = run(["help", "--json", "--json=false"]);
-    expect(canonical.out).not.toStartWith("{");
-    expect(run(["--help", "--json", "--json=false"]).out).toBe(canonical.out);
-
-    const jsonLast = run(["help", "--json=false", "--json"]);
-    expect(jsonLast.out).toStartWith("{");
-    expect(run(["--help", "--json=false", "--json"]).out).toBe(jsonLast.out);
+    expect(canonical.code).toBe(4);
+    expect(canonical.err).toContain("`--json` was given more than once");
+    for (const argv of [
+      ["--help", "--json", "--json=false"],
+      ["--help", "--json=false", "--json"],
+      ["--version", "--json", "--json"],
+    ]) {
+      const rewritten = run(argv);
+      expect(rewritten.code).toBe(4);
+      expect(rewritten.out).toBe("");
+      expect(rewritten.err).toBe(canonical.err);
+    }
   });
 
   test("C-CLI-17b `--help` beats a first-token version flag in either order", () => {

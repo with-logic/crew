@@ -224,9 +224,11 @@ shape of help output; wording is left to each implementation.
 - The `--json` carried through either rewrite MUST be the flag's
   effective parsed value, not the presence of a bare `--json` token.
   Every spelling the parser accepts (`--json`, `--json=true`,
-  `--json=false`) and its last-occurrence-wins semantics MUST apply
-  identically to the rewritten and canonical forms, so
-  `crew --help --json=true` matches `crew help --json=true`.
+  `--json=false`) MUST apply identically to the rewritten and canonical
+  forms, so `crew --help --json=true` matches `crew help --json=true`.
+  A repeated `--json` is a `usage_error` under §5.2; the rewrite MUST
+  NOT launder it, so `crew --help --json --json=false` fails exactly as
+  `crew help --json --json=false` does.
 
 **Overview MUST contain:**
 
@@ -2062,7 +2064,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-15 | §5.5 | `crew --help`, `crew -h`, `crew <command> --help`, and `crew <command> -h` print the same output as `crew help` / `crew help <command>` on stdout and exit 0; `--json` selects structured help. |
 | C-CLI-16 | §5.5 | `crew --version`, `crew -v`, and `crew -V` print the same output as `crew version` and exit 0; `--json` emits `{version}`. |
 | C-CLI-17 | §5.5 | `-v` after a command name (e.g. `crew install -v`) is an unknown flag: `usage_error`, exit 4. |
-| C-CLI-17a | §5.5 | Every `--json` spelling the parser accepts behaves identically for a rewritten flag form and its canonical command: `crew --help --json=true` matches `crew help --json=true`, `crew --version --json=true` matches `crew version --json=true`, and last-occurrence-wins applies to both (`--json --json=false` selects human output). |
+| C-CLI-17a | §5.5 | Every `--json` spelling the parser accepts behaves identically for a rewritten flag form and its canonical command: `crew --help --json=true` matches `crew help --json=true`, `crew --version --json=true` matches `crew version --json=true`, and a repeated `--json` (`--json --json=false`) is the same §5.2 `usage_error` (exit 4) for both. |
 | C-CLI-17b | §5.5 | `--help` takes precedence over a first-token version flag in either order: `crew --version --help` and `crew --help --version` both print the overview and exit 0. |
 | C-CLI-17c | §5.5 | Only a leading `help` token is skipped when resolving the help target, so `crew help help --help` prints the `help` command's page, not the overview. |
 | C-CLI-17d | §5.5 | The help target is the first parser positional, so a flag's value is never mistaken for the command. `crew --scope project install --help`, `crew --agent codex install --help`, `crew --from-git gh:acme/skills install --help`, and the spaced boolean `crew --help --json false install` all print the `install` page, byte-identical to `crew help install`. |

@@ -70,12 +70,29 @@ function effectiveJson(argv: readonly string[]): boolean {
 }
 
 /**
+ * The `--json` tokens to carry through a rewrite.
+ *
+ * §5.2 makes a repeated `--json` a `usage_error`, and the canonical form
+ * gets that from the real parse. Collapsing the repeats to one effective
+ * value here would launder them, so every spelled occurrence is
+ * forwarded verbatim and the real parse rejects the rewritten form the
+ * same way. A single occurrence carries its effective value (`--json
+ * true`, `--json=false`, …), which only the parser can tell.
+ */
+function jsonFlags(argv: readonly string[]): readonly string[] {
+  const spelled = argv.filter((a) => a === "--json" || a.startsWith("--json="));
+  if (spelled.length > 1) return spelled;
+  return effectiveJson(argv) ? ["--json"] : [];
+}
+
+/**
  * Rewrite conventional flags onto the canonical commands:
  *
  *   - `--help` / `-h` anywhere → `help <command>`, where `<command>` is
  *     the first POSITIONAL (skipping only a LEADING `help`, so `crew help
  *     help --help` still reaches the `help` page). Every other flag is
- *     dropped; `--json` is re-emitted at its effective value.
+ *     dropped; `--json` is re-emitted at its effective value, or
+ *     verbatim when repeated so the parse rejects it (§5.2).
  *   - `--version` / `-v` / `-V` as the FIRST token → `version`. After a
  *     command name they stay unknown flags, so `-v` remains free for a
  *     future `--verbose` short form.
@@ -89,7 +106,7 @@ export function rewriteConventionalFlags(argv: readonly string[]): readonly stri
   const wantsVersion = first === "--version" || first === "-v" || first === "-V";
   if (!(wantsHelp || wantsVersion)) return argv;
 
-  const json = effectiveJson(argv) ? ["--json"] : [];
+  const json = jsonFlags(argv);
   // §5.5 precedence: `--help` beats a first-token version flag.
   if (wantsHelp) {
     const rest = argv[0] === "help" ? argv.slice(1) : argv;
