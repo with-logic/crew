@@ -35,7 +35,7 @@
 import { readConfig } from "../../config/load.ts";
 import { crewHome } from "../../core/paths.ts";
 import { installNewTapChild } from "../../install/install-new-tap-child.ts";
-import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand.ts";
+import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import { updateOneEntry } from "../../install/update/entry.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
 import { garbageCollectStore } from "../../maintenance/gc.ts";

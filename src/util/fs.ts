@@ -21,7 +21,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 /** Ensure a directory exists (like `mkdir -p`). */
 export function ensureDir(path: string, mode: number = 0o755): void {
@@ -47,6 +47,39 @@ export function writeText(path: string, contents: string): void {
 /** Recursively remove a path if it exists. No-op if missing. */
 export function rmrf(path: string): void {
   rmSync(path, { recursive: true, force: true });
+}
+
+/**
+ * True when `candidate` resolves to something STRICTLY BENEATH `root`.
+ * The root itself is not "inside" itself and returns false.
+ *
+ * That exclusion is deliberate, not an oversight. The caller this exists
+ * for is `rmrfInside`, which guards a recursive delete: a bug or a
+ * corrupted config that collapsed a target down to the managed root
+ * would otherwise wipe every tap clone at once. Refusing the root makes
+ * that class of mistake a no-op instead.
+ *
+ * Both sides are resolved first, so `..` segments, duplicate separators,
+ * and relative inputs are all accounted for.
+ */
+export function isInside(root: string, candidate: string): boolean {
+  const rel = relative(resolve(root), resolve(candidate));
+  return rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
+/**
+ * Recursively delete `path`, but only when it sits inside `root`.
+ *
+ * Deletion targets built from persisted names (a tap name from
+ * `config.yaml`, say) are attacker- or corruption-controlled strings
+ * flowing into a recursive delete. Callers pass the directory crew owns
+ * and we refuse anything that resolves outside it. Returns true when
+ * something was deleted.
+ */
+export function rmrfInside(root: string, path: string): boolean {
+  if (!isInside(root, path)) return false;
+  rmrf(path);
+  return true;
 }
 
 /** Does a path exist? */
