@@ -256,6 +256,32 @@ is crew-owned; a source-authored marker would poison the install.
 - real `git` subprocesses against local `file://` repos;
 - the real YAML parser against real SKILL.md bytes.
 
+**Tests never contact the network.** Real local `git`, yes; remote
+hosts, no. A test that clones from a remote makes CI depend on a third
+party being reachable and fast, and hangs on an offline runner. Use a
+local `file://` repo (`makeGitRepo`) when the clone should succeed, and
+a nonexistent local path when it should fail — that fails instantly and
+offline.
+
+This is easy to violate by accident, because `crew install` materializes
+configured taps on demand: a fixture carrying a remote URL turns a
+local-looking assertion into a live clone. Two things enforce it:
+
+- `tests/helpers/no-network.ts` wraps the git seam and rejects any
+  `clone`/`fetch`/`ls-remote`/`push`/`pull` whose remote isn't a
+  `file://` URL or a local path. It's an assertion about remotes, not a
+  git mock, so real local git still runs normally. A test that
+  genuinely needs a remote must opt in via `allowRemoteGit()`.
+- `makeCrewHome()` seeds a `config.yaml` whose default `core` tap points
+  at an unreachable local path. The real default is a GitHub URL, and
+  any command that resolves a bare name or refreshes taps would
+  otherwise clone it.
+
+Because crew deliberately soft-fails an unreachable tap (PRD §16.6),
+several call sites swallow the tripwire's error. A global `afterEach` in
+the preload therefore fails any test that recorded a violation, so a
+swallowed one can't pass silently.
+
 Mocks are confined to exactly three boundaries:
 
 - `src/git/exec.ts` — for corner cases like "what if `git` returns
@@ -619,6 +645,10 @@ on `$PATH`.
 - **Don't mock `git`** at the `Bun.spawnSync` level. Use the
   `setGitRunner` seam or build a real local repo with
   `makeGitRepo` + `commitAll`.
+- **Don't let a test reach the network.** No remote URLs in fixtures;
+  use `file://` repos, or a nonexistent local path when the clone is
+  meant to fail. The preload tripwire fails the run if you do — see
+  "Tests never contact the network" above.
 - **Don't write to `~/.claude/skills/`, `~/.codex/skills/`, or
   `~/.gemini/skills/` from tests.** Redirect the adapter's `userPath`.
 - **Don't introduce a new dependency without a strong reason.** We

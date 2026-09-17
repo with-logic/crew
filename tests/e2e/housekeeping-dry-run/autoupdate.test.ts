@@ -50,6 +50,9 @@ describe("C-AUTO-11 autoupdate enable/disable --dry-run", () => {
   test("macOS enable names the plist, calls no launchctl, writes nothing", () => {
     setAutoupdatePlatform("darwin");
     const home = makeCrewHome();
+    // `makeCrewHome` seeds config.yaml (offline core tap), so "writes
+    // nothing" means the bytes are untouched rather than the file absent.
+    const configBefore = readFileSync(paths(home).configFile, "utf8");
     const c = captureStreams();
     const code = runCli(["autoupdate", "enable", "--interval", "30m", "--dry-run"], {
       home,
@@ -61,7 +64,7 @@ describe("C-AUTO-11 autoupdate enable/disable --dry-run", () => {
     expect(c.stdout()).toContain("sh.crew.autoupdate.plist");
     expect(schedulerCalls).toBe(0);
     expect(existsSync(paths(home).autoupdatePlist)).toBe(false);
-    expect(existsSync(paths(home).configFile)).toBe(false);
+    expect(readFileSync(paths(home).configFile, "utf8")).toBe(configBefore);
     expect(existsSync(paths(home).stateFile)).toBe(false);
   });
 
