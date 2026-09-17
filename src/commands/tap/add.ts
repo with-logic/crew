@@ -16,7 +16,7 @@ import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
 import type { Config, TapConfig } from "../../core/types.ts";
-import { ensureClone } from "../../git/repo.ts";
+import { ensureClone } from "../../git/repo/index.ts";
 import { rewriteTapMarkers } from "../../install/rewrite-tap-markers.ts";
 import { deriveAutoTapName } from "../../install/tap-naming.ts";
 import { NAME_PATTERN } from "../../refs/parse.ts";

@@ -4,7 +4,8 @@
 
 import { join, relative } from "node:path";
 import type { LoadedSkill } from "../../core/types.ts";
-import { checkoutSha, cloneRepo } from "../../git/repo.ts";
+import { cloneRepo } from "../../git/repo/index.ts";
+import { checkoutSha } from "../../git/repo/refs.ts";
 import { hasSkillMd } from "../../skill/load.ts";
 import { expandSkills } from "../../sources/expand.ts";
 import { toPosix } from "../../util/fs.ts";
