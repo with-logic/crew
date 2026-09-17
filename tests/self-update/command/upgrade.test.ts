@@ -1,34 +1,27 @@
 /**
- * End-to-end tests for `crew self-update` (via `runCli`).
- *
- * The network + filesystem seams are stubbed: `setReleaseFetcher`,
- * `setAssetDownloader`, `setXattrClearer`.
- *
- * The post-command update notice is suppressed by passing a streams
- * override (which sets stderrIsTty=false by default). Tests that need
- * to see the notice opt in explicitly via `stderrIsTty: true`.
+ * `crew self-update` through the CLI (§17.2): `--check` and the full upgrade.
  */
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runCli } from "../../src/cli/main.ts";
-import { CrewError } from "../../src/core/errors.ts";
-import { CREW_VERSION } from "../../src/core/version.ts";
-import { readVersionCheck, writeVersionCheck } from "../../src/self-update/check.ts";
+import { runCli } from "../../../src/cli/main.ts";
+import { CrewError } from "../../../src/core/errors.ts";
+import { CREW_VERSION } from "../../../src/core/version.ts";
+import { readVersionCheck } from "../../../src/self-update/check.ts";
 import {
   resetAssetDownloader,
   resetXattrClearer,
   setAssetDownloader,
   setXattrClearer,
-} from "../../src/self-update/download.ts";
-import { resetReleaseFetcher, setReleaseFetcher } from "../../src/self-update/github.ts";
+} from "../../../src/self-update/download.ts";
+import { resetReleaseFetcher, setReleaseFetcher } from "../../../src/self-update/github.ts";
 import {
   resetReleaseSignatureVerifier,
   setReleaseSignatureVerifier,
-} from "../../src/self-update/signature.ts";
-import { captureStreams, makeCrewHome } from "../helpers/env.ts";
-import { currentAssetName, downloaderForBinary, releaseAssets } from "./helpers.ts";
+} from "../../../src/self-update/signature.ts";
+import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { currentAssetName, downloaderForBinary, releaseAssets } from "../helpers.ts";
 
 // Force darwin for deterministic asset names in the happy-path tests.
 const originalPlatform = process.platform;
@@ -155,58 +148,5 @@ describe("crew self-update (full upgrade)", () => {
     const code = runCli(["self-update", "--check"], { home, streams: cap.streams });
     expect(code).toBe(5);
     expect(cap.stderr()).toContain("Error");
-  });
-});
-
-describe("post-command update notice", () => {
-  test("suppressed for `crew version` even with a cached newer tag", () => {
-    const home = makeCrewHome();
-    writeVersionCheck("v99.99.99", home);
-    const cap = captureStreams();
-    const code = runCli(["version"], {
-      home,
-      streams: cap.streams,
-      stderrIsTty: true,
-    });
-    expect(code).toBe(0);
-    expect(cap.stderr()).toBe("");
-  });
-
-  test("emits on stderr for normal commands when a newer tag is cached", () => {
-    const home = makeCrewHome();
-    writeVersionCheck("v99.99.99", home);
-    const cap = captureStreams();
-    const code = runCli(["list"], { home, streams: cap.streams, stderrIsTty: true });
-    expect(code).toBe(0);
-    expect(cap.stderr()).toContain("A new version of Homecrew is available");
-    expect(cap.stderr()).toContain("v99.99.99");
-  });
-
-  test("also emits on the error path when stderrIsTty is true", () => {
-    const home = makeCrewHome();
-    writeVersionCheck("v99.99.99", home);
-    const cap = captureStreams();
-    const code = runCli(["definitely-not-a-command"], {
-      home,
-      streams: cap.streams,
-      stderrIsTty: true,
-    });
-    expect(code).toBe(4);
-    expect(cap.stderr()).toContain("Error");
-    expect(cap.stderr()).toContain("A new version of Homecrew is available");
-  });
-
-  test("performs a synchronous fetch when the record is stale", () => {
-    const home = makeCrewHome();
-    const fetches: string[] = [];
-    setReleaseFetcher((url) => {
-      fetches.push(url);
-      return { tag: RUNNING_TAG, assets: {} };
-    });
-    const cap = captureStreams();
-    // No record on disk → stale → should trigger one fetch.
-    runCli(["list"], { home, streams: cap.streams, stderrIsTty: true });
-    expect(fetches.length).toBe(1);
-    expect(fetches[0]).toBe("https://crew.logic.inc/latest-version.json");
   });
 });
