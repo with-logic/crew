@@ -48,7 +48,6 @@ import { renderUpdate } from "./render.ts";
 import { chooseEntries, tapsToRefreshFor, withTransitive } from "./selection.ts";
 
 export function updateCommand(ctx: CommandContext): CommandOutput {
-  const config = readConfig(ctx.home);
   const home = ctx.home ?? crewHome();
 
   const rawNames = ctx.positional;
@@ -59,6 +58,11 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   let hardFailure = false;
 
   const newState = withStateLock(() => {
+    // Read config INSIDE the lock. A pre-lock snapshot can name a tap a
+    // concurrent `crew tap remove --force` has since dropped; refreshing
+    // from it would re-clone the tap the user just deleted instead of
+    // reporting the §10.1 soft `tap_missing` outcome.
+    const config = readConfig(home);
     let current = readState(home);
 
     // Dep-closure expansion — may add more entries, but they all live in

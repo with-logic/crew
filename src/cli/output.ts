@@ -107,6 +107,8 @@ const REMEDIES: Partial<Record<CrewErrorName, string>> = {
     "Homecrew couldn't reach the source. Check the URL, your network, and that you have access to the repo.",
   source_gone:
     "The source resolved, but the skill is no longer in it. Your local copy is kept; run `crew uninstall <name>` if you want it gone.",
+  tap_missing:
+    "The skill's tap is no longer in your config. Your local copy is kept; re-add the tap with `crew tap add <url>`, or rebuild it from markers with `crew doctor --repair`.",
   ref_not_found:
     "That tag, branch, or SHA doesn't exist upstream. Run `git ls-remote <url>` to see what's there.",
   ambiguous_reference:

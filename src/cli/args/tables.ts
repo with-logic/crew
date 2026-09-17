@@ -18,7 +18,7 @@ export const STRING_GLOBALS = ["scope"] as const;
 export const BOOLEAN_SUB: Readonly<Record<string, readonly string[]>> = {
   doctor: ["verify", "repair"],
   install: ["tap", "bundle", "skill", "recursive"],
-  tap: ["recursive"],
+  tap: ["recursive", "uninstall"],
   uninstall: ["prune"],
   "self-update": ["check"],
 };

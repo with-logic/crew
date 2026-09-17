@@ -47,6 +47,25 @@ export const COMMAND_ALIASES = {
   untap: ["tap", "remove"],
 } as const satisfies Record<string, CommandAlias>;
 
+/**
+ * Boolean flags a *prefixed* alias accepts (§5.1). `aliasFlagKey` gives a
+ * prefixed alias (`untap` → `tap remove`) no subcommand flags at all, so
+ * without an entry here `crew untap --uninstall` rejects a flag the
+ * documented alias supports.
+ *
+ * Each entry lists only the flags the alias's resolved subcommand accepts,
+ * not the whole canonical table: `crew tap remove` ignores `--recursive`,
+ * so `crew untap --recursive` stays a usage error.
+ */
+const ALIAS_FLAGS: Record<string, readonly string[]> = {
+  untap: ["uninstall"],
+};
+
+/** The boolean flags `ALIAS_FLAGS` grants a user-typed word (none for most). */
+export function aliasBooleanFlags(command: string): readonly string[] {
+  return lookup(ALIAS_FLAGS, command) ?? [];
+}
+
 /** A command word that is an alias for something else. */
 export type AliasCommand = keyof typeof COMMAND_ALIASES;
 
