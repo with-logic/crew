@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { parseArgs } from "../../src/cli/args.ts";
+import { parseArgs } from "../../src/cli/args/index.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {

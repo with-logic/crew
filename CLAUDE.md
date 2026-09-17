@@ -91,7 +91,7 @@ still describe the thing accurately.
   - [`proper-lockfile`](https://github.com/moxystudio/node-proper-lockfile)
     — cross-process advisory locking. Used by `src/state/lock.ts`.
   - [`yargs`](https://github.com/yargs/yargs) — argv parser. Used by
-    `src/cli/args.ts`, configured as a pure parser (no auto-help, no
+    `src/cli/args/index.ts`, configured as a pure parser (no auto-help, no
     auto-exit). The rest of the CLI machinery (dispatch, output
     formatting, error mapping) is still our own.
 
@@ -562,7 +562,7 @@ start.
 | Want to… | Touch… |
 |---|---|
 | Add a new command | `src/commands/<name>.ts` (or `src/commands/<name>/` for multi-file commands); register in `src/cli/dispatch.ts`; add help entry at `src/commands/help/content/<name>.ts` and register in `src/commands/help/content/index.ts` |
-| Add a new global flag | `src/cli/args.ts` (BOOLEAN_GLOBALS / VALUE_GLOBALS); thread through `CommandFlags` in `src/commands/types.ts` |
+| Add a new global flag | `src/cli/args/tables.ts` (BOOLEAN_GLOBALS / STRING_GLOBALS); thread through `CommandFlags` in `src/commands/types.ts` |
 | Add a new agent adapter | new file in `src/agents/`; register in `src/agents/registry.ts` |
 | Add a new error type | `src/core/errors.ts` (both `CrewErrorName` and `EXIT_CODES`); update PRD §13/§15 |
 | Change skill validation | `src/skill/validate.ts`; update PRD §9 step 4 and §18 C-SPEC |
