@@ -2,10 +2,10 @@ import type { CommandHelp } from "./types.ts";
 
 export const updateHelp: CommandHelp = {
   name: "update",
-  synopsis: "crew update [<name>...]",
+  synopsis: "crew update [<selector>...]",
   summary: [
     "Catch your installed skills up to the latest versions.",
-    "Run this whenever you want to pull in improvements the authors have published since you installed. With no arguments, every skill you have is checked; pass one or more names (`pdf` or `anthropic/pdf`) to update just those.",
+    "Run this whenever you want to pull in improvements the authors have published since you installed. With no arguments, every skill you have is checked; pass one or more selectors to narrow it down. A selector is a skill name (`pdf` or `anthropic/pdf`), a tap name (`acme`), or a namespace (`acme/marketing`, or bare `marketing` when only one tap has it) — a tap or namespace updates everything you installed from it. A skill name always wins over a tap or namespace of the same name.",
     "If you installed a whole collection of skills at once (e.g. `crew install @your-org/skills`), any new ones the team has added show up automatically. Skills you pinned to a specific version (`skill@v1.0.0`) are left alone unless you pass `--force`.",
     "If a skill has dependencies, updating it also updates the things it depends on — your setup stays consistent.",
   ],
@@ -35,6 +35,15 @@ export const updateHelp: CommandHelp = {
     {
       command: "crew update core/python-testing",
       description: "Update a skill using its tap-qualified name.",
+    },
+    {
+      command: "crew update acme",
+      description:
+        "Update everything you installed from the `acme` tap (and pick up new skills it added).",
+    },
+    {
+      command: "crew update acme/marketing",
+      description: "Update just the skills in one namespace of a tap.",
     },
     {
       command: "crew update --force my-pinned-skill",

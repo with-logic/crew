@@ -167,8 +167,9 @@ When a command asks for an installed skill name, you can use the bare name
 | `crew install --from-git <source>` | Install from a git source without a positional ref. Forces the value to be read as git, so a bare `owner/repo` means GitHub rather than `<tap>/<skill>`. Combines with positional refs. |
 | `crew uninstall <name>…` | Remove installed skills from every agent they were installed into. |
 | `crew remove <name>…`, `crew rm <name>…` | Aliases for `crew uninstall`. |
-| `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. `--dry-run` previews pending updates and new tap skills: tap clones are still refreshed, but no installed skill, marker, store entry, or `state.json` changes. |
+| `crew update [<name>…]` | Update all installed skills, or only those named. A name can also be a tap or namespace to update everything installed from it. Pinned SHAs are skipped unless `--force`. `--dry-run` previews pending updates and new tap skills without writing anything. |
 | `crew upgrade [<name>…]` | Alias for `crew update`. |
+| `crew update [<selector>…]` | Update all installed skills, or only those selected. A selector is a skill name (`pdf`, `anthropic/pdf`), a tap name (`acme`), or a namespace (`acme/marketing`); a tap or namespace updates everything installed from it, and a skill name wins over a same-named collection. Pinned SHAs are skipped unless `--force`. `--dry-run` previews pending updates and new tap skills: tap clones are still refreshed, but no installed skill, marker, store entry, or `state.json` changes. |
 | `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. |
 | `crew skills`, `crew ls` | Aliases for `crew list`. |
 | `crew info <ref-or-name>` | Show details for an installed skill or one available in a tap. |
