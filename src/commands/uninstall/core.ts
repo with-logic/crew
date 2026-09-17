@@ -14,7 +14,7 @@ import { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
-import { dropScopedEntryAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
+import { dropInstallLocation, reduceEntryAgents } from "./state.ts";
 
 export interface UninstallRecord {
   name: string;
@@ -28,24 +28,35 @@ export interface UninstallRecord {
 }
 
 /**
- * Remove one named skill. If `agentFilter` is null, removes from every
- * agent the skill is on (full uninstall). If non-null, removes only
- * from the named agents; the state entry survives with a reduced
+ * Internal routing data about one `removeOne` call. Kept out of
+ * `UninstallRecord` because that type is serialized verbatim into
+ * `--json`, and these absolute paths are an implementation detail of
+ * prune routing rather than part of the command's output contract.
+ */
+export interface RemovalMeta {
+  /**
+   * Project roots of the entries this call FULLY removed (project scope
+   * only). Empty when nothing was removed, or when every entry survived
+   * a partial `--agent` removal — `--prune` keys off exactly that.
+   */
+  fullyRemovedRoots: (string | null)[];
+}
+
+/**
+ * Remove the entries a resolved subject names (already narrowed to the
+ * target scope by the caller). If `agentFilter` is null, removes from
+ * every agent the skill is on (full uninstall). If non-null, removes
+ * only from the named agents; the state entry survives with a reduced
  * `agents` list if any remain.
  */
 export function removeOne(
   state: StateFile,
-  subject: string | StateSubject,
+  subject: StateSubject,
   ctx: CommandContext,
   pruned: boolean,
   agentFilter: readonly string[] | null,
-): { updatedState: StateFile; rec: UninstallRecord } {
-  const name = typeof subject === "string" ? subject : subject.name;
-  const entries =
-    typeof subject === "string"
-      ? state.installations.filter((e) => e.name === name)
-      : subject.entries;
-  const errorName = typeof subject === "string" ? subject : subject.raw;
+): { updatedState: StateFile; rec: UninstallRecord; meta: RemovalMeta } {
+  const { name, entries, raw: errorName } = subject;
   const rec: UninstallRecord = {
     name,
     removedFrom: [],
@@ -53,6 +64,7 @@ export function removeOne(
     failures: [],
     ...(pruned ? { pruned: true } : {}),
   };
+  const meta: RemovalMeta = { fullyRemovedRoots: [] };
   if (entries.length === 0) {
     if (!(ctx.flags.force || pruned)) {
       throw new CrewError(
@@ -61,7 +73,7 @@ export function removeOne(
         { name: errorName },
       );
     }
-    return { updatedState: state, rec };
+    return { updatedState: state, rec, meta };
   }
   // Per-entry processing: each (skill, scope) pair potentially touches
   // a different subset of agents.
@@ -71,17 +83,31 @@ export function removeOne(
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
       : entry.agents;
+    const failedBefore = rec.failures.length;
     removeFromAgents(entry, agentsToRemove, name, ctx, rec);
-    const remainingAgents = entry.agents.filter((t) => !agentsToRemove.includes(t));
+    // Agents whose removal aborted on a safety check keep their bytes on
+    // disk, so they keep their state ownership too (§7.4 step 5). That
+    // retention is what excludes an abort from `fullyRemovedRoots`
+    // below: the entry survives, so the full-removal branch never runs.
+    const abortedAgents = rec.failures.slice(failedBefore).map((f) => f.agent);
+    const remainingAgents = entry.agents.filter(
+      (t) => !agentsToRemove.includes(t) || abortedAgents.includes(t),
+    );
     if (remainingAgents.length > 0) {
-      nextState = reduceEntryAgents(nextState, name, entry.scope, remainingAgents);
-      anySurvives = true;
+      nextState = reduceEntryAgents(nextState, entry, remainingAgents);
+      // A partial `--agent` removal leaves a live install; an aborted
+      // one leaves protected bytes. Either way the entry survives, so
+      // `partial` only marks the former (see `rec.failures` for the latter).
+      if (abortedAgents.length === 0) anySurvives = true;
     } else {
-      nextState = dropScopedEntryAndUpdateRequiredBy(nextState, name, entry.scope);
+      // Only a FULL removal frees this location's dependencies (§7.4
+      // step 5); a surviving partial `--agent` removal still needs them.
+      meta.fullyRemovedRoots.push(entry.project_root ?? null);
+      nextState = dropInstallLocation(nextState, entry);
     }
   }
   if (anySurvives) rec.partial = true;
-  return { updatedState: nextState, rec };
+  return { updatedState: nextState, rec, meta };
 }
 
 /**
