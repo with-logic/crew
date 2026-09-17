@@ -2,7 +2,7 @@
  * Alias help-page construction (§5.1, §5.5).
  *
  * An alias accepts exactly the flags its canonical command accepts,
- * because `src/cli/args.ts` resolves the alias before consulting the
+ * because `src/cli/args/tables.ts` resolves the alias before consulting the
  * flag tables. Hand-copying those lists is how they drifted: `remove`
  * and `rm` listed two of uninstall's four flags. `aliasHelp` derives
  * the `flags` array from the canonical entry instead, so a flag added
