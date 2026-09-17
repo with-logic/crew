@@ -7,9 +7,8 @@
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { commitAll, makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { cloneDirForTap, commitAll, makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { buildTap, headSha } from "./helpers.ts";
 
 describe("tap update + fetch policy", () => {
@@ -21,7 +20,7 @@ describe("tap update + fetch policy", () => {
       home,
       streams: captureStreams().streams,
     });
-    const shaBefore = headSha(tapPath("local", home));
+    const shaBefore = headSha(cloneDirForTap("local", home)!);
 
     // Upstream adds a new skill + commit.
     makeSkill(repo, "beta", skillFrontmatter({ name: "beta", description: "added after add" }));
@@ -29,11 +28,11 @@ describe("tap update + fetch policy", () => {
 
     // Run search. This MUST NOT fetch; HEAD should not move.
     runCli(["search", "alpha"], { home, streams: captureStreams().streams });
-    expect(headSha(tapPath("local", home))).toBe(shaBefore);
+    expect(headSha(cloneDirForTap("local", home)!)).toBe(shaBefore);
 
     // Same invariant for bare-name install.
     runCli(["install", "alpha"], { home, streams: captureStreams().streams });
-    expect(headSha(tapPath("local", home))).toBe(shaBefore);
+    expect(headSha(cloneDirForTap("local", home)!)).toBe(shaBefore);
   });
 
   test("search warns + skips a never-cloned unreachable tap (exit 0)", () => {

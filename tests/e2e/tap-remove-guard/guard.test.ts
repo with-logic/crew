@@ -6,8 +6,8 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
 import { readState } from "../../../src/state/load.ts";
+import { cloneDirForTap } from "../../helpers/fixtures.ts";
 import { buildTapRepo, makeCrewHome, run, tapWithInstall, useTempAgentRoot } from "./helpers.ts";
 
 useTempAgentRoot();
@@ -25,7 +25,7 @@ describe("C-TAP-16c attached-skill guard", () => {
     expect(r.stderr).toContain("--force mytap");
     // The tap and its clone survive the refusal.
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(true);
-    expect(existsSync(tapPath("mytap", home))).toBe(true);
+    expect(existsSync(cloneDirForTap("mytap", home)!)).toBe(true);
     expect(readState(home).installations).toHaveLength(1);
   });
 

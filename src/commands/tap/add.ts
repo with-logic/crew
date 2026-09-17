@@ -14,7 +14,7 @@
 
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import { tapPath } from "../../core/paths.ts";
+import { repoClonePath } from "../../core/repo-path.ts";
 import type { Config, TapConfig } from "../../core/types.ts";
 import { ensureClone } from "../../git/repo/index.ts";
 import { rewriteTapMarkers } from "../../install/rewrite-tap-markers.ts";
@@ -150,15 +150,7 @@ function applyAdd(ctx: CommandContext, config: Config, plan: TapAddPlan, input: 
     return;
   }
   if (plan.outcome === "promoted") {
-    promoteExistingTap(
-      ctx.home,
-      ctx.cwd,
-      config,
-      plan.sameTarget,
-      target.kind,
-      explicitName,
-      recursive,
-    );
+    promoteExistingTap(ctx.home, ctx.cwd, config, plan.sameTarget, explicitName, recursive);
     return;
   }
   // `added` is the only remaining variant. `satisfies` makes a newly
@@ -166,7 +158,7 @@ function applyAdd(ctx: CommandContext, config: Config, plan: TapAddPlan, input: 
   // it inherit the clone-and-write path, without costing an unreachable
   // branch under the 100% coverage gate.
   plan satisfies Extract<TapAddPlan, { outcome: "added" }>;
-  if (target.kind === "git") cloneNewTap(name, target.url, ctx.home);
+  if (target.kind === "git") cloneNewTap(target.url, ctx.home);
   writeConfig({ ...config, taps: [...config.taps, newTapOf(name, target, recursive)] }, ctx.home);
 }
 
@@ -175,13 +167,21 @@ function deriveName(target: TapAddTarget): string {
   return target.path.split("/").filter(Boolean).pop() ?? "local";
 }
 
-/** Clone a new git tap; a failed clone leaves no partial directory (§16.3). */
-function cloneNewTap(name: string, url: string, home: string): void {
-  const cloneDir = tapPath(name, home);
+/**
+ * Materialize the repository's shared clone (§6); a failed clone leaves
+ * no partial directory (§16.3).
+ *
+ * Clones are shared between taps on the same repository, so cleanup is
+ * limited to a directory this call created: a pre-existing one belongs
+ * to another tap and must survive a failure here.
+ */
+function cloneNewTap(url: string, home: string): void {
+  const cloneDir = repoClonePath(url, home);
+  const preexisting = exists(cloneDir);
   try {
     ensureClone(url, cloneDir);
   } catch (err) {
-    if (exists(cloneDir)) rmrf(cloneDir);
+    if (!preexisting && exists(cloneDir)) rmrf(cloneDir);
     throw err;
   }
 }

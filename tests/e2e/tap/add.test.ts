@@ -9,8 +9,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { cloneDirForTap, cloneDirs } from "../../helpers/fixtures.ts";
 import { buildTapRepo } from "./helpers.ts";
 
 describe("crew tap", () => {
@@ -23,7 +23,7 @@ describe("crew tap", () => {
       streams: captureStreams().streams,
     });
     expect(code).toBe(0);
-    expect(existsSync(join(tapPath("mytap", home), ".git"))).toBe(true);
+    expect(existsSync(join(cloneDirForTap("mytap", home)!, ".git"))).toBe(true);
   });
 
   test("C-TAP-02 add with explicit name", () => {
@@ -134,7 +134,7 @@ describe("crew tap", () => {
     // Config must NOT list the failed tap.
     expect(readConfig(home).taps.some((t) => t.name === "typo-tap")).toBe(false);
     // No leftover clone dir either.
-    expect(existsSync(tapPath("typo-tap", home))).toBe(false);
+    expect(cloneDirs(home)).toEqual([]);
   });
 
   test("a tap with a @ref tail is rejected (taps track default branch)", () => {

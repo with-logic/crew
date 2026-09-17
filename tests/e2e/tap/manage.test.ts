@@ -7,9 +7,8 @@ import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { cloneDirs, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { buildTapRepo } from "./helpers.ts";
 
 describe("crew tap", () => {
@@ -23,7 +22,8 @@ describe("crew tap", () => {
     const code = runCli(["tap", "remove", "mytap"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(false);
-    expect(existsSync(tapPath("mytap", home))).toBe(false);
+    // The repository's shared clone goes with the last tap referencing it.
+    expect(cloneDirs(home)).toEqual([]);
   });
 
   test("C-TAP-04 list reports every tap", () => {
