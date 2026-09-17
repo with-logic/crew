@@ -21,7 +21,7 @@ import type { Config, TapConfig, TapSource } from "../../core/types.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 import { enumerateCandidates } from "../attribute-bare-name.ts";
 import { indexTap, type TapIndex } from "../tap-index.ts";
-import { ambiguityError, flagFor } from "./errors.ts";
+import { ambiguityError, flagFor, twoSegmentMissError } from "./errors.ts";
 
 /** Force-one-kind hint from a `--tap` / `--bundle` / `--skill` flag. */
 export type SpecificKindHint = "tap" | "namespace" | "skill";
@@ -120,12 +120,7 @@ function resolveTwoSegment(source: TapSource, config: Config, home: string): Non
       `\`${first}/${second}\` is a namespaced skill in multiple taps`,
     );
   }
-  throw new CrewError(
-    "invalid_ref",
-    `\`${first}/${second}\` does not match any configured tap or namespace.\nNo tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
-    { first, second },
-    `Run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
-  );
+  throw twoSegmentMissError(first, second, source.ref);
 }
 
 function resolveBare(

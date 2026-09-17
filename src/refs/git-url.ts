@@ -19,6 +19,42 @@ import { displayUrl } from "./display-url.ts";
 import { splitGitRef, splitSubpath } from "./git-tails.ts";
 import { normalizeSubpath } from "./subpath.ts";
 
+/**
+ * A bare authority: dot-separated DNS labels with an optional numeric
+ * port. Deliberately strict — the scheme-less form prepends `https://`,
+ * so anything `new URL` could reinterpret (userinfo, query, fragment,
+ * a non-numeric port) must never reach it. `github.com@evil.example/o/r`
+ * would otherwise parse as host `evil.example` with `github.com` as
+ * userinfo, letting a GitHub-looking reference clone from elsewhere.
+ */
+const SCHEMELESS_AUTHORITY =
+  /^(?=.*\.)[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:(\d+))?$/i;
+
+/** A port is only a port if it is one TCP can name. */
+function validPort(port: string | undefined): boolean {
+  if (port === undefined) return true;
+  const n = Number(port);
+  return n >= 1 && n <= 65535;
+}
+
+/**
+ * True if `ref` is a scheme-less git host reference (§8.5 rule 4): the
+ * first `/`-segment is a bare `host[:port]` containing a `.` (tap names
+ * can't) and there are at least `host/owner/repo` segments before any
+ * `//subpath` tail.
+ *
+ * An out-of-range port fails here rather than downstream, so the value
+ * falls through to tap parsing and reports `invalid_ref` instead of
+ * surfacing whatever `new URL` happens to throw.
+ */
+export function looksLikeSchemelessHost(ref: string): boolean {
+  const head = ref.split("//", 1)[0]!;
+  const segments = head.split("/");
+  if (segments.length < 3) return false;
+  const match = SCHEMELESS_AUTHORITY.exec(segments[0]!);
+  return match !== null && validPort(match[5]);
+}
+
 /** Shorthand host prefixes known to crew (§8.2). */
 const SHORTHAND_HOSTS: Record<string, string> = {
   gh: "github.com",

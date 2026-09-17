@@ -10,6 +10,8 @@ export interface KnownInstallSuggestion {
   readonly tap: KnownTap;
   readonly skill: KnownTapSkill | null;
   readonly installRef: string;
+  /** Set when the user typed the tap's GitHub `owner/repo` rather than a name in it (§8.5). */
+  readonly repo?: string;
 }
 
 export function knownMatchesForTap(tap: KnownTap, source: TapSource): KnownInstallSuggestion[] {
@@ -53,7 +55,27 @@ function twoSegmentMatches(
       out.push(skillSuggestion(tap, skill, ref));
     }
   }
+  // Both readings can be true at once: `acme/skills` may name a skill
+  // inside tap `acme` AND be the GitHub repo the tap itself lives at.
+  // Suppressing the repo reading whenever a skill matched hid the
+  // whole-tap option from users who meant it, so both are offered.
+  if (matchesGitHubRepo(tap, sourceTap, name)) {
+    // §8.4 allows `tap-name @ tap-ref` for a whole-tap install, so the
+    // user's `@ref` survives into the suggested command.
+    out.push({
+      tap,
+      skill: null,
+      installRef: `${tap.name}${ref === null ? "" : `@${ref}`}`,
+      repo: `${sourceTap}/${name}`,
+    });
+  }
   return out;
+}
+
+/** `owner/repo` typed where a tap ref was expected, and the known tap lives at that GitHub repo. */
+function matchesGitHubRepo(tap: KnownTap, owner: string, repo: string): boolean {
+  const url = tap.url.endsWith(".git") ? tap.url.slice(0, -4) : tap.url;
+  return sameText(url, `https://github.com/${owner}/${repo}`);
 }
 
 function threeSegmentMatches(
