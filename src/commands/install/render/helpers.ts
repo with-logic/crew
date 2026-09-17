@@ -8,7 +8,7 @@
 import { join } from "node:path";
 import { baseFor } from "../../../agents/adapter.ts";
 import { agentByName } from "../../../agents/registry.ts";
-import type { InstallRecord, PerAgentResult } from "../../../install/perform.ts";
+import type { InstallRecord, PerAgentResult } from "../../../install/perform/index.ts";
 import { shortenHome } from "../../../util/format.ts";
 import type { Styler } from "../../../util/term.ts";
 
