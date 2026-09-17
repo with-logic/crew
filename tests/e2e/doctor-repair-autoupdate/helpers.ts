@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach } from "bun:test";
-import { resetLaunchctlRunner } from "../../../src/autoupdate/launchd.ts";
+import { resetLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
 import { resetAutoupdatePlatform } from "../../../src/autoupdate/scheduler.ts";
 import { resetSystemctlRunner } from "../../../src/autoupdate/systemd.ts";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";

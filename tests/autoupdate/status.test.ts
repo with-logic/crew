@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { resetLaunchctlRunner, setLaunchctlRunner } from "../../src/autoupdate/launchd.ts";
+import { resetLaunchctlRunner, setLaunchctlRunner } from "../../src/autoupdate/launchctl.ts";
 import { resetAutoupdatePlatform, setAutoupdatePlatform } from "../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { paths } from "../../src/core/paths.ts";

@@ -6,12 +6,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../../src/agents/gemini-cli.ts";
-import { resetLaunchctlRunner, setLaunchctlRunner } from "../../../src/autoupdate/launchd.ts";
+import { resetLaunchctlRunner, setLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
 import {
   resetAutoupdatePlatform,
   setAutoupdatePlatform,

@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { setLaunchctlRunner } from "../../../src/autoupdate/launchd.ts";
+import { setLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
 import { setAutoupdatePlatform } from "../../../src/autoupdate/scheduler.ts";
 import { setSystemctlRunner } from "../../../src/autoupdate/systemd.ts";
 import { runCli } from "../../../src/cli/main.ts";

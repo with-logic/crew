@@ -10,7 +10,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { setLaunchctlRunner } from "../../../src/autoupdate/launchd.ts";
+import { setLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig } from "../../../src/config/load.ts";
 import { paths } from "../../../src/core/paths.ts";
