@@ -51,7 +51,8 @@ CLI would notice — also check whether these user-facing surfaces
 describe the thing you just changed, and keep them in sync:
 
 - `site/` — the landing page at `crew.logic.inc`. Sections most
-  likely to go stale: `Commands.tsx` (command reference),
+  likely to go stale: `Commands.tsx` (command reference; its data lives
+  in `Commands.data/`, one file per group),
   `HowItWorks.tsx` (what the flow looks like), `Taps.tsx` (how
   taps are structured), `Faq.tsx` (common questions), and the
   hero terminal demo in `Hero.tsx`.
