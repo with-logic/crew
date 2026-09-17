@@ -23,7 +23,7 @@
     "update-known-tap-pins": "bun run known-taps update",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check .",
+    "lint": "biome check . && bun run scripts/check-file-size.ts",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "check": "bun run check-release-signing-key && bun run known-taps check && bun run typecheck && bun run lint && bun test"
