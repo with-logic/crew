@@ -531,6 +531,32 @@ skill pulled in only as a dependency stays on disk until the user
 names it directly or asks for a prune. This matches `apt-get remove` /
 `brew uninstall` defaults, not `apt-get autoremove`.
 
+**`--dry-run`.** With `--dry-run` (§5.2), `crew uninstall` runs the
+selector resolution, agent grouping, and every safety check above
+(`not_installed_here`, `untracked_directory`, `inconsistent_marker`
+still abort exactly as they would for a real run), but writes nothing:
+no install directory is removed, no marker is rewritten, `state.json`
+is neither written nor created, no auto tap is garbage-collected, and
+the state lock (§14) is not taken — acquiring it would itself create
+`state.json`.
+
+The output is tagged as a dry run and reports three things separately:
+
+- the skills and agents that **would be removed**, including any
+  orphans a `--prune` pass would then remove;
+- the agents that **would be retained** — each named, not merely
+  counted, so the user can see where the skill still lives; `--json`
+  reports them in `remainingAgents`. A real run reports the same
+  agents the same way, so a preview can never disagree with it.
+  Retention is determined by OUTCOME, not by what the user asked for:
+  an agent excluded by an `--agent` filter is retained, and so is one
+  whose removal aborts on a safety check, because its bytes remain on
+  disk either way;
+- any safety check that **would abort**, with the same error as a real
+  run.
+
+`--json` carries `dry_run: true`.
+
 ### 7.5 Marker format (`.crew.json`)
 
 Written into every Homecrew-installed skill directory. JSON, UTF-8, trailing newline. The marker is Homecrew's authoritative record at the install site; `state.json` is a convenience index but can be rebuilt from markers (§13, `crew doctor --repair`).
@@ -1219,6 +1245,11 @@ skipped entirely — when any of the following hold:
 - `CREW_AUTOUPDATE_LOG=1` is set (the command is running under the
   platform scheduler).
 - The command itself is `self-update` or `version`.
+- `--dry-run` was passed. The 24h check writes `version-check.json`, so
+  leaving it enabled would make every preview write to `~/.crew/` no
+  matter how carefully the command itself avoids writing — breaking the
+  "a dry run changes nothing" guarantee from outside that command's own
+  code.
 
 ## 11. State
 
@@ -1905,6 +1936,9 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-16 | §7.4 | When two agents share a `dest` (e.g. `codex` + `gemini-cli` both at `~/.agents/skills/<name>/`), `crew uninstall --agent codex <name>` removes `codex` from the marker's `agents` list but leaves the bytes on disk; `gemini-cli` continues to work. |
 | C-UNINST-17 | §7.4 | After `crew uninstall --agent codex <name>` in a path-shared install, the marker at `dest` contains every remaining owning adapter and no others. |
 | C-UNINST-18 | §7.4 | `crew uninstall <tap>/<skill>` accepts a tap-qualified selector for an installed skill and removes the matching state entry. |
+| C-UNINST-19 | §7.4 | `crew uninstall --dry-run <selector>` reports what would be removed (including `--prune` orphans) but leaves every install directory, marker, and `state.json` untouched; `--json` output carries `dry_run: true`. |
+| C-UNINST-19a | §7.4 | `crew uninstall --dry-run` against a `CREW_HOME` with no `state.json` does not create it (the state lock is not taken), and writes nothing else under `~/.crew/` — including `version-check.json`, which §10.4's dry-run suppression keeps untouched even on a TTY. |
+| C-UNINST-19b | §7.4 | Both the preview and the real run name every retained agent — human output lists each, and `--json` carries them in `remainingAgents`. An agent is retained when an `--agent` filter excludes it OR when its removal aborts on a safety check, since its bytes remain either way. |
 | C-SHARE-01 | §7.2, §7.3 | When `codex` and `gemini-cli` are both active, `crew install <name>` writes bytes to `~/.agents/skills/<name>/` exactly once, and the per-agent summary reports both adapter names as installed. |
 | C-SHARE-02 | §7.5 | The `agents` field in `.crew.json` is non-empty, alphabetically sorted, and lists every agent currently owning the install. |
 | C-SHARE-03 | §7.3 | Installing into a path already owned by agent X with agent Y active (and not X) results in a marker whose `agents` contains both X and Y, preserving X's ownership. |

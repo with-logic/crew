@@ -4,6 +4,10 @@
  * One block per skill the user asked to remove, each with a ✓-per-target
  * section, then a separate "Pruned dependencies" section listing any
  * orphans pulled along by `--prune`. Dim totals line at the bottom.
+ *
+ * Per §7.4 a block reports three things separately: the agents that
+ * would be removed, the agents an `--agent` filter retains (named, not
+ * merely counted), and any safety check that would abort.
  */
 
 import { plural } from "../../util/format.ts";
@@ -16,44 +20,52 @@ const FAIL_REMEDIES: Record<string, string> = {
   not_installed_here: "wasn't installed here (pass --force to ignore)",
 };
 
-export function renderUninstall(records: readonly UninstallRecord[], style: Styler): string[] {
+export function renderUninstall(
+  records: readonly UninstallRecord[],
+  dryRun: boolean,
+  style: Styler,
+): string[] {
   const direct = records.filter((r) => !r.pruned);
   const pruned = records.filter((r) => r.pruned);
 
   const lines: string[] = [];
+  const dryTag = dryRun ? style.dim(" (dry run)") : "";
 
   if (direct.length > 0) {
     const subjects = direct.map((r) => r.name);
     const header =
       subjects.length === 1
-        ? `Uninstalling ${subjects[0]}`
-        : `Uninstalling ${plural(subjects.length, "skill")}`;
+        ? `Uninstalling ${subjects[0]}${dryTag}`
+        : `Uninstalling ${plural(subjects.length, "skill")}${dryTag}`;
     lines.push(style.bold(header));
     for (const r of direct) {
       lines.push("");
-      lines.push(...renderRecord(r, style));
+      lines.push(...renderRecord(r, dryRun, style));
     }
   }
 
   if (pruned.length > 0) {
     if (lines.length > 0) lines.push("");
-    lines.push(style.bold(`Pruned ${plural(pruned.length, "dependency", "dependencies")}`));
+    // Past tense would claim work that a dry run didn't do. The verb
+    // carries the tense, so the redundant "(dry run)" tag is dropped here.
+    const verb = dryRun ? "Would prune" : "Pruned";
+    lines.push(style.bold(`${verb} ${plural(pruned.length, "dependency", "dependencies")}`));
     for (const r of pruned) {
       lines.push("");
-      lines.push(...renderRecord(r, style));
+      lines.push(...renderRecord(r, dryRun, style));
     }
   }
 
   const totals = tally(records);
   if (totals.removals > 0 || totals.failures > 0) {
     lines.push("");
-    lines.push(style.dim(formatTotals(totals)));
+    lines.push(style.dim(formatTotals(totals, dryRun)));
   }
 
   return lines;
 }
 
-function renderRecord(r: UninstallRecord, style: Styler): string[] {
+function renderRecord(r: UninstallRecord, dryRun: boolean, style: Styler): string[] {
   const lines: string[] = [];
   const tag = r.partial ? style.dim("(kept elsewhere)") : "";
   const header = [style.bold(r.name), tag].filter((s) => s.length > 0).join(" ");
@@ -63,6 +75,18 @@ function renderRecord(r: UninstallRecord, style: Styler): string[] {
   }
   for (const agent of r.absentFrom) {
     lines.push(`    ${style.symbol("muted")} ${agent} ${style.dim("(wasn't there)")}`);
+  }
+  // §7.4 makes retained agents their own output obligation: naming
+  // them tells the user where the skill still lives, which the
+  // "(kept elsewhere)" tag alone never did. An agent whose removal
+  // aborted is retained too, but its failure line below already says
+  // so with the reason attached — listing it twice would only add
+  // noise, so it is reported there rather than here.
+  const failed = new Set(r.failures.map((f) => f.agent));
+  for (const agent of r.remainingAgents ?? []) {
+    if (failed.has(agent)) continue;
+    const verb = dryRun ? "would keep" : "kept";
+    lines.push(`    ${style.symbol("muted")} ${agent} ${style.dim(`(${verb})`)}`);
   }
   for (const fail of r.failures) {
     const remedy = FAIL_REMEDIES[fail.error.code] ?? fail.error.code.replace(/_/g, " ");
@@ -90,13 +114,14 @@ function tally(records: readonly UninstallRecord[]): Totals {
   return t;
 }
 
-function formatTotals(totals: Totals): string {
+function formatTotals(totals: Totals, dryRun: boolean): string {
   const parts: string[] = [];
   if (totals.removals > 0) {
-    parts.push(`removed from ${plural(totals.removals, "agent")}`);
+    parts.push(`${dryRun ? "would remove" : "removed"} from ${plural(totals.removals, "agent")}`);
   }
   if (totals.pruned > 0) {
-    parts.push(`pruned ${plural(totals.pruned, "dependency", "dependencies")}`);
+    const verb = dryRun ? "would prune" : "pruned";
+    parts.push(`${verb} ${plural(totals.pruned, "dependency", "dependencies")}`);
   }
   if (totals.failures > 0) {
     parts.push(plural(totals.failures, "failure"));

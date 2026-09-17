@@ -31,6 +31,13 @@ export interface NoticeContext {
   readonly streams: OutputStreams;
   /** Whether stderr is a TTY (we suppress when it isn't). */
   readonly stderrIsTty: boolean;
+  /**
+   * Whether the invocation was a `--dry-run`. The stale path writes
+   * `version-check.json`, so leaving it enabled would break every
+   * command's "a preview writes nothing" promise from outside that
+   * command's own code (§10.4).
+   */
+  readonly dryRun: boolean;
   /** Override for tests; defaults to new Date(). */
   readonly now?: Date;
 }
@@ -70,6 +77,11 @@ function isSuppressed(ctx: NoticeContext): boolean {
   if (!ctx.stderrIsTty) return true;
   if (ctx.json) return true;
   if (ctx.quiet) return true;
+  // A preview must not write. The stale branch below fetches and calls
+  // `writeVersionCheck`, so without this every `--dry-run` command
+  // would touch the crew home no matter how careful the command itself
+  // is about its own writes.
+  if (ctx.dryRun) return true;
   if (ctx.command === "self-update" || ctx.command === "version") return true;
   if (process.env["CREW_NO_UPDATE_CHECK"] === "1") return true;
   if (process.env["CREW_AUTOUPDATE_LOG"] === "1") return true;
