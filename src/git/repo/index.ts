@@ -16,6 +16,7 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
+import { displayText, displayUrl } from "../../refs/display-url.ts";
 import { exists, isDirectory } from "../../util/fs.ts";
 import { type GitProcessError, runGit } from "../exec.ts";
 
@@ -28,10 +29,12 @@ export function cloneRepo(url: string, dest: string, full: boolean = false): voi
     // `runGit` only ever throws `GitProcessError`, so this narrow is
     // safe. Translate to the user-facing error category.
     const ge = err as GitProcessError;
+    // Git's stderr repeats the remote verbatim, so it needs `displayText`
+    // (prose with a URL inside) as much as the interpolation needs `displayUrl`.
     throw new CrewError(
       "source_unreachable",
-      `couldn't clone \`${url}\` — ${ge.result.stderr.trim()}`,
-      { url },
+      `couldn't clone \`${displayUrl(url)}\` — ${displayText(ge.result.stderr.trim())}`,
+      { url: displayUrl(url) },
     );
   }
 }
@@ -73,7 +76,7 @@ export function fetchAndCheckout(dest: string): void {
     const ge = err as GitProcessError;
     throw new CrewError(
       "source_unreachable",
-      `git fetch failed for the clone at \`${dest}\` — ${ge.result.stderr.trim()}`,
+      `git fetch failed for the clone at \`${dest}\` — ${displayText(ge.result.stderr.trim())}`,
       { dest },
     );
   }

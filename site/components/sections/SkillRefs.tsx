@@ -28,13 +28,15 @@ const CARDS: readonly {
       <>
         Any reachable git URL. No tap setup required. <code>@owner/repo</code> is GitHub shorthand;
         full <code>https://</code> and <code>git@</code> URLs work for anywhere else. Append{" "}
-        <code>@ref</code> to pin, <code>{"//subpath"}</code> to scope.
+        <code>@ref</code> to pin, <code>{"//subpath"}</code> to scope. Or just paste the link from
+        your browser.
       </>
     ),
     examples: [
       "crew install @acme/skills",
       "crew install @acme/skills@v1.2.0",
       "crew install @acme/skills//engineers/founding",
+      "crew install https://github.com/acme/skills/tree/main/engineers/founding",
     ],
   },
   {

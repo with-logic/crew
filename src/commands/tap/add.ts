@@ -14,16 +14,15 @@
 
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import { tapPath } from "../../core/paths.ts";
 import type { Config, TapConfig } from "../../core/types.ts";
-import { ensureClone } from "../../git/repo/index.ts";
 import { rewriteTapMarkers } from "../../install/rewrite-tap-markers.ts";
-import { deriveAutoTapName } from "../../install/tap-naming.ts";
+import { displayText } from "../../refs/display-url.ts";
 import { NAME_PATTERN } from "../../refs/parse.ts";
 import { readState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
-import { exists, isDirectory, rmrf } from "../../util/fs.ts";
+import { isDirectory } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
+import { cloneNewTap, deriveName, newTapOf } from "./new-tap.ts";
 import { promoteExistingTap } from "./promote.ts";
 import { renderTapAdd, type TapAddOutcome } from "./render/add.ts";
 import { displayTarget, parseTapAddTarget, sameTap, type TapAddTarget } from "./target.ts";
@@ -110,7 +109,9 @@ function planAdd(config: Config, input: TapAddInput): TapAddPlan {
   if (sameName) {
     throw new CrewError(
       "usage_error",
-      `tap \`${name}\` is already configured at \`${displayTarget(sameName)}\` — to add this one under a different name, run \`crew tap add ${rawArg} <tap-name>\``,
+      // `rawArg` is echoed back as a runnable command, so it must be redacted
+      // too: otherwise the remedy itself publishes the user's credentials.
+      `tap \`${name}\` is already configured at \`${displayTarget(sameName)}\` — to add this one under a different name, run \`crew tap add ${displayText(rawArg)} <tap-name>\``,
       { name, existing: displayTarget(sameName), incoming: displayTarget(target) },
     );
   }
@@ -168,32 +169,4 @@ function applyAdd(ctx: CommandContext, config: Config, plan: TapAddPlan, input: 
   plan satisfies Extract<TapAddPlan, { outcome: "added" }>;
   if (target.kind === "git") cloneNewTap(name, target.url, ctx.home);
   writeConfig({ ...config, taps: [...config.taps, newTapOf(name, target, recursive)] }, ctx.home);
-}
-
-function deriveName(target: TapAddTarget): string {
-  if (target.kind === "git") return deriveAutoTapName(target.url, target.subpath);
-  return target.path.split("/").filter(Boolean).pop() ?? "local";
-}
-
-/** Clone a new git tap; a failed clone leaves no partial directory (§16.3). */
-function cloneNewTap(name: string, url: string, home: string): void {
-  const cloneDir = tapPath(name, home);
-  try {
-    ensureClone(url, cloneDir);
-  } catch (err) {
-    if (exists(cloneDir)) rmrf(cloneDir);
-    throw err;
-  }
-}
-
-function newTapOf(name: string, target: TapAddTarget, recursive: boolean): TapConfig {
-  return {
-    name,
-    kind: target.kind,
-    registered: true,
-    url: target.url,
-    subpath: target.subpath,
-    path: target.path,
-    ...(recursive ? { discovery: "recursive" } : {}),
-  };
 }
