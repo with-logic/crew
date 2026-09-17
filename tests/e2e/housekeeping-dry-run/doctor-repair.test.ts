@@ -10,7 +10,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { setLaunchctlRunner } from "../../../src/autoupdate/launchd.ts";
+import { setLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig } from "../../../src/config/load.ts";
 import { paths } from "../../../src/core/paths.ts";
@@ -41,23 +41,31 @@ describe("C-STATE-12a doctor --repair reports only real repairs", () => {
     expect(c.stdout()).toContain("1 finding left for you");
   });
 
-  test("C-STATE-12b autoupdate drift is reported, not claimed as repaired", () => {
+  test("C-STATE-12b autoupdate drift is reconciled, not merely reported", () => {
     const home = makeCrewHome();
     // Config defaults to autoupdate disabled, but the scheduler says
-    // loaded — drift this branch reports and does not reconcile.
-    setLaunchctlRunner(() => true);
+    // loaded. This branch reconciles that drift (§11.2 check 7), so the
+    // finding IS addressed and the follow-up check comes back clean.
+    let loaded = true;
+    setLaunchctlRunner((args) => {
+      if (args[0] === "list") return loaded;
+      if (args[0] === "bootout") {
+        loaded = false;
+        return true;
+      }
+      return true;
+    });
     const c = captureStreams();
     const code = runCli(["doctor", "--repair"], { home, streams: c.streams });
 
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("0 findings addressed");
-    expect(c.stdout()).toContain("1 finding left for you");
+    expect(c.stdout()).toContain("1 finding addressed");
+    expect(c.stdout()).toContain("unloaded the background updater");
 
-    // And the drift genuinely survives: a follow-up check still sees it.
     const after = captureStreams();
     runCli(["doctor", "--json"], { home, streams: after.streams });
     const codes = JSON.parse(after.stdout()).findings.map((f: { code: string }) => f.code);
-    expect(codes).toEqual(["autoupdate_unexpectedly_loaded"]);
+    expect(codes).toEqual([]);
   });
 
   test("C-STATE-12c a missing project root keeps its state entry", () => {

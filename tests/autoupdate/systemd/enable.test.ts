@@ -1,15 +1,19 @@
 /**
- * Linux systemd autoupdate coverage (§10.2, C-AUTO).
+ * Linux systemd autoupdate coverage (§10.2, C-AUTO): enable, status, unit
+ * contents, and platform dispatch.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-import { resetAutoupdatePlatform, setAutoupdatePlatform } from "../../src/autoupdate/scheduler.ts";
-import { resetSystemctlRunner, setSystemctlRunner } from "../../src/autoupdate/systemd.ts";
-import { runCli } from "../../src/cli/main.ts";
-import { readConfig, writeConfig } from "../../src/config/load.ts";
-import { paths } from "../../src/core/paths.ts";
-import { captureStreams, makeCrewHome } from "../helpers/env.ts";
+import {
+  resetAutoupdatePlatform,
+  setAutoupdatePlatform,
+} from "../../../src/autoupdate/scheduler.ts";
+import { resetSystemctlRunner, setSystemctlRunner } from "../../../src/autoupdate/systemd.ts";
+import { runCli } from "../../../src/cli/main.ts";
+import { readConfig, writeConfig } from "../../../src/config/load.ts";
+import { paths } from "../../../src/core/paths.ts";
+import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 
 const ok = { ok: true, stderr: "" };
 const failed = (stderr: string = "systemctl failed") => ({ ok: false, stderr });
@@ -46,78 +50,6 @@ describe("systemd autoupdate commands", () => {
     expect(readConfig(home).autoupdate.interval_seconds).toBe(1800);
     expect(calls).toContainEqual(["daemon-reload"]);
     expect(calls).toContainEqual(["enable", "--now", "sh.crew.autoupdate.timer"]);
-  });
-
-  test("C-AUTO-04 disable removes units and reloads", () => {
-    const home = makeCrewHome();
-    const calls: string[][] = [];
-    setSystemctlRunner((args) => {
-      calls.push([...args]);
-      return ok;
-    });
-    runCli(["autoupdate", "enable"], { home, streams: captureStreams().streams });
-    calls.length = 0;
-    const code = runCli(["autoupdate", "disable"], {
-      home,
-      streams: captureStreams().streams,
-    });
-    expect(code).toBe(0);
-    expect(existsSync(paths(home).autoupdateSystemdService)).toBe(false);
-    expect(existsSync(paths(home).autoupdateSystemdTimer)).toBe(false);
-    expect(calls).toContainEqual(["disable", "--now", "sh.crew.autoupdate.timer"]);
-    expect(calls).toContainEqual(["daemon-reload"]);
-    expect(readConfig(home).autoupdate.enabled).toBe(false);
-  });
-
-  test("disable without units is a no-op", () => {
-    const home = makeCrewHome();
-    setSystemctlRunner(() => {
-      throw new Error("should not call systemctl");
-    });
-    const code = runCli(["autoupdate", "disable"], {
-      home,
-      streams: captureStreams().streams,
-    });
-    expect(code).toBe(0);
-  });
-
-  test("disable reports post-removal daemon-reload failure", () => {
-    const home = makeCrewHome();
-    setSystemctlRunner(() => ok);
-    runCli(["autoupdate", "enable"], { home, streams: captureStreams().streams });
-    setSystemctlRunner((args) => (args[0] === "daemon-reload" ? failed("reload failed") : ok));
-    const c = captureStreams();
-    const code = runCli(["autoupdate", "disable"], {
-      home,
-      streams: c.streams,
-    });
-    expect(code).toBe(8);
-    expect(c.stderr()).toContain("reload failed");
-    expect(readConfig(home).autoupdate.enabled).toBe(true);
-    expect(existsSync(paths(home).autoupdateSystemdService)).toBe(false);
-    expect(existsSync(paths(home).autoupdateSystemdTimer)).toBe(false);
-  });
-
-  test("failed disable leaves units for a retry", () => {
-    const home = makeCrewHome();
-    const calls: string[][] = [];
-    setSystemctlRunner(() => ok);
-    runCli(["autoupdate", "enable"], { home, streams: captureStreams().streams });
-    setSystemctlRunner((args) => {
-      calls.push([...args]);
-      return args[0] === "disable" && calls.length === 1 ? failed("unit busy") : ok;
-    });
-    const c = captureStreams();
-    const code = runCli(["autoupdate", "disable"], { home, streams: c.streams });
-    expect(code).toBe(8);
-    expect(c.stderr()).toContain("unit busy");
-    expect(readConfig(home).autoupdate.enabled).toBe(true);
-    expect(existsSync(paths(home).autoupdateSystemdService)).toBe(true);
-    const retry = runCli(["autoupdate", "disable"], { home, streams: captureStreams().streams });
-    expect(retry).toBe(0);
-    expect(calls.filter((a) => a[0] === "disable")).toHaveLength(2);
-    expect(existsSync(paths(home).autoupdateSystemdService)).toBe(false);
-    expect(existsSync(paths(home).autoupdateSystemdTimer)).toBe(false);
   });
 
   test("C-AUTO-06 enable reports autoupdate_failure when systemctl fails", () => {

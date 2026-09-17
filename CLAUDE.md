@@ -215,7 +215,7 @@ real skill (leading dot), then `renameSync` onto `dest` after removing
 the old `dest`. A crash mid-install never leaves a half-copied install.
 
 **5. Testable subprocess boundary.** `src/git/exec.ts`,
-`src/autoupdate/launchd.ts`, and `src/autoupdate/systemd.ts` each expose a
+`src/autoupdate/launchctl.ts`, and `src/autoupdate/systemd.ts` each expose a
 `setXRunner` seam. Real runner is the default; tests install a stub via
 `setGitRunner` / `setLaunchctlRunner` / `setSystemctlRunner` and call
 `resetXRunner` in `afterEach`. Prefer this pattern over global mocking.
@@ -261,7 +261,7 @@ Mocks are confined to exactly three boundaries:
 - `src/git/exec.ts` — for corner cases like "what if `git` returns
   exit code 42 with throwOnError=false"; real `git` is used for 95%
   of tests.
-- `src/autoupdate/launchd.ts` — because macOS CI environments don't
+- `src/autoupdate/launchctl.ts` — because macOS CI environments don't
   have a user session launchd to talk to.
 - `src/autoupdate/systemd.ts` — because Linux CI environments don't
   have a systemd `--user` session to talk to.
