@@ -18,7 +18,7 @@
 import type { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { ensureRepo } from "../../git/repo.ts";
+import { ensureRepo } from "../../git/repo/index.ts";
 
 /** Fields every refresh row carries, whatever its outcome. */
 interface TapRefreshBase {

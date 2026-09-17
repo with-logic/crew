@@ -21,7 +21,7 @@
 import { join, relative } from "node:path";
 import { tapPath } from "../core/paths.ts";
 import type { TapConfig } from "../core/types.ts";
-import { ensureClone } from "../git/repo.ts";
+import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";

@@ -1,5 +1,5 @@
 /**
- * Coverage close-out for git/repo error translation, classifyRef, and the git exec seam.
+ * Coverage close-out for git/repo (index + refs) error translation, classifyRef, and the git exec seam.
  *
  * Branches the happy-path e2e suites do not reach; each test names the
  * file and line it keeps covered so a regression traces back here.
@@ -13,7 +13,8 @@ import { codexAdapter } from "../../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../../src/agents/gemini-cli.ts";
 import { CrewError } from "../../../src/core/errors.ts";
 import { resetGitRunner, runGit, setGitRunner } from "../../../src/git/exec.ts";
-import { classifyRef, ensureRepo, initRepo, resolveRef } from "../../../src/git/repo.ts";
+import { ensureRepo } from "../../../src/git/repo/index.ts";
+import { classifyRef, initRepo, resolveRef } from "../../../src/git/repo/refs.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { commitAll, makeGitRepo, makeTempDir } from "../../helpers/fixtures.ts";
 
@@ -112,7 +113,7 @@ describe("git/repo — error translation", () => {
     makeGitRepo(repo);
     commitAll(repo, "init");
     const { checkoutSha } =
-      require("../../../src/git/repo.ts") as typeof import("../../../src/git/repo.ts");
+      require("../../../src/git/repo/refs.ts") as typeof import("../../../src/git/repo/refs.ts");
     expect(() => checkoutSha(repo, "0".repeat(40))).toThrow(CrewError);
   });
 });
@@ -163,7 +164,7 @@ describe("git classifyRef", () => {
 describe("git/classifyRef — abbreviated SHA (repo.ts:91-92)", () => {
   test("abbreviated hex SHA classifies as sha", () => {
     const { classifyRef } =
-      require("../../../src/git/repo.ts") as typeof import("../../../src/git/repo.ts");
+      require("../../../src/git/repo/refs.ts") as typeof import("../../../src/git/repo/refs.ts");
     const repo = makeTempDir();
     makeGitRepo(repo);
     commitAll(repo, "init");
