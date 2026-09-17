@@ -1,23 +1,24 @@
 /**
- * Error-path tests for install-resolve, update-outcomes, and CLI edges.
+ * Install error paths (§13): bad path sources, conflicting dependencies, unknown
+ * targets, git-URL dependency refs, name-conflict cleanup, and file sources.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
-import { codexAdapter } from "../../src/agents/codex.ts";
-import { geminiCliAdapter } from "../../src/agents/gemini-cli.ts";
-import { runCli } from "../../src/cli/main.ts";
-import { readState, writeState } from "../../src/state/load.ts";
-import { captureStreams, makeCrewHome } from "../helpers/env.ts";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../../src/agents/gemini-cli.ts";
+import { runCli } from "../../../src/cli/main.ts";
+import { readState, writeState } from "../../../src/state/load.ts";
+import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import {
   commitAll,
   makeGitRepo,
   makeSkill,
   makeTempDir,
   skillFrontmatter,
-} from "../helpers/fixtures.ts";
+} from "../../helpers/fixtures.ts";
 
 let restore: (() => void) | null = null;
 let ccRoot: string;
@@ -111,68 +112,6 @@ describe("install: conflicting_dependencies", () => {
     const code = runCli(["install", `file://${repo}`], { home, streams: capture.streams });
     expect(code).toBe(4);
     expect(capture.stderr()).toContain("different sources");
-  });
-});
-
-describe("update: source_unreachable is a soft warning", () => {
-  test("upstream repo gone → tap-refresh warns; per-skill update reads from local clone", () => {
-    // Under tap unification, read-only operations read from the local
-    // tap clone. Even if the upstream URL becomes unreachable, the
-    // installed skill is still present locally, so update succeeds
-    // with `up-to-date`. The tap-refresh phase emits a warning.
-    const home = makeCrewHome();
-    const repo = makeTempDir();
-    makeGitRepo(repo);
-    makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
-    commitAll(repo, "init");
-    runCli(["install", `file://${repo}//demo`], { home, streams: captureStreams().streams });
-    rmSync(repo, { recursive: true, force: true });
-    const c = captureStreams();
-    const code = runCli(["update"], { home, streams: c.streams });
-    expect(code).toBe(0);
-    expect(c.stdout()).toContain("couldn't refresh tap");
-  });
-});
-
-describe("update: missing skill at new revision", () => {
-  test("C-UPD-11 SKILL.md deleted upstream → source_gone soft outcome", () => {
-    const home = makeCrewHome();
-    const repo = makeTempDir();
-    makeGitRepo(repo);
-    makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
-    commitAll(repo, "init");
-    runCli(["install", `file://${repo}//demo`], { home, streams: captureStreams().streams });
-    // Delete the subpath upstream — acquireGit's `no_skills_found`
-    // maps to `source_gone` under §10.1's upstream-deletion rule.
-    rmSync(join(repo, "demo"), { recursive: true });
-    commitAll(repo, "delete");
-    const c = captureStreams();
-    const code = runCli(["update"], { home, streams: c.streams });
-    // C-UPD-12: exit 0 (soft outcome) — the local install is preserved.
-    expect(code).toBe(0);
-    expect(c.stdout()).toContain("removed upstream");
-    // C-UPD-13: the state entry is preserved untouched.
-    const { readState } =
-      require("../../src/state/load.ts") as typeof import("../../src/state/load.ts");
-    const state = readState(home);
-    expect(state.installations.find((e) => e.name === "demo")).toBeDefined();
-  });
-});
-
-describe("update: reconstructSource for path entry", () => {
-  test("path-installed skill's update no-ops", () => {
-    const home = makeCrewHome();
-    const src = makeTempDir();
-    makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", join(src, "demo")], { home, streams: captureStreams().streams });
-    // Path sources have resolved_sha=null so update sees "up-to-date" immediately.
-    // ... but our update logic actually calls acquireSource which for a path
-    // returns resolvedSha=null. Then `newSha === entry.resolved_sha` is
-    // null === null → up-to-date.
-    const c = captureStreams();
-    const code = runCli(["update"], { home, streams: c.streams });
-    expect(code).toBe(0);
-    expect(c.stdout()).toContain("up to date");
   });
 });
 
