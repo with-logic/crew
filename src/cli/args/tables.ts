@@ -27,6 +27,9 @@ export const STRING_SUB: Readonly<Record<string, readonly string[]>> = {
   autoupdate: ["interval"],
   // `--from-git <url>` is an explicit git source (§5.3); only install takes it.
   install: ["from-git"],
+  // `--tap <name>` scopes a search to one configured tap (§16.6). Distinct
+  // from install's presence-only `--tap`; the tables are per-command.
+  search: ["tap"],
   // `--version <tag>` pins a specific release (e.g. `v0.4.0`).
   "self-update": ["version"],
 };

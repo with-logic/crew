@@ -105,7 +105,8 @@ crew upgrade [<selector>...]      Alias for `crew update`.
 crew list                         List installed skills.
 crew skills                       Alias for `crew list`.
 crew ls                           Alias for `crew list`.
-crew search <query>               Search across configured taps.
+crew search [--tap <name>] [<query>]
+                                   Search across configured taps (or one tap).
 crew info <ref-or-selector>       Show details for an installed or searchable skill.
 
 crew tap add [--recursive] <url-or-path> [<name>]
@@ -1628,7 +1629,7 @@ Auto taps are functionally indistinguishable from registered taps for `crew upda
 
 ### 16.6 Search and network policy
 
-`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured git-kind tap (registered or auto). Path-kind taps are searched too if their root is reachable. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. Namespaced skills render as `<namespace>/<name>` in the name column. Each row is prefixed by `✓` only when local state contains the same skill name from the same tap name and same tap-relative path (installed at user or project scope). A same-name skill installed from another tap or path MUST NOT be marked with `✓`; implementations SHOULD make that distinction visible in human output so users are not told the displayed tap skill is installed when only a conflicting same-name skill is installed elsewhere. `--json` emits a structured `{ hits, known_hits, warnings }` object; each configured-tap hit has fields `{ tap, name, namespace, description, installed, same_name_installed }` where `namespace` is `string | null`, `installed` is `boolean`, and `same_name_installed` is `true` only when another state entry has the same skill name but the displayed tap/path is not installed.
+`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured git-kind tap (registered or auto). Path-kind taps are searched too if their root is reachable. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. Namespaced skills render as `<namespace>/<name>` in the name column. Each row is prefixed by `✓` only when local state contains the same skill name from the same tap name and same tap-relative path (installed at user or project scope). A same-name skill installed from another tap or path MUST NOT be marked with `✓`; implementations SHOULD make that distinction visible in human output so users are not told the displayed tap skill is installed when only a conflicting same-name skill is installed elsewhere. `--json` emits a structured `{ tap, hits, known_hits, warnings }` object, where `tap` is the `--tap <name>` filter's tap name and is `null` whenever the flag was not given; each configured-tap hit has fields `{ tap, name, namespace, description, installed, same_name_installed }` where `namespace` is `string | null`, `installed` is `boolean`, and `same_name_installed` is `true` only when another state entry has the same skill name but the displayed tap/path is not installed.
 
 For non-empty `<query>` values, `crew search` also consults the known-tap registry (§16.2.1) without cloning, fetching, or mutating config. Human output lists configured-tap matches first, then presents matching known-but-untapped entries in a separate "Trusted taps you can add" section with a `crew tap add <source-ref> <name>` command for each matching tap, where `<source-ref>` follows the display rule in §16.2.1. These rows are suggestions only: they do not appear in `crew tap list`, are not marked installed, and are not installable by bare skill name until the user adds the tap. If a known tap is already configured by matching name or matching `(url, subpath)`, it is omitted from the known-tap suggestions; tap names and URLs compare case-insensitively, while subpaths compare exactly. JSON output includes suggestions in `known_hits`; each known hit has fields `{ tap, url, subpath, trust, name, namespace, description }`.
 
@@ -1653,6 +1654,15 @@ Add a tap first, then install a suggested skill by qualified name.
 ```
 
 `crew search` (no query) lists every skill in every configured tap — the exhaustive catalog. It does not list the known-tap registry. Output and JSON shape are identical to the query form; the installed marker appears the same way and `known_hits` is empty.
+
+**`--tap <name>`.** `crew search --tap <name> [<query>]` scopes the search
+(or the no-query catalog) to the single configured tap `<name>`. Only that
+tap is walked; every other configured tap is skipped, and known-tap registry
+suggestions are omitted because the user asked about one tap they already
+have. `<name>` must match a configured tap (registered or auto); anything
+else is a `usage_error` that names the value and points at `crew tap list`.
+The JSON payload gains a top-level `tap` field: the tap name when `--tap`
+was given, `null` otherwise.
 
 **Network policy.** Read-only commands (`crew search`, `crew info`, `crew list`, `crew install <bare-name>` and `<tap>/<skill>` forms, tap re-expansion during `crew update` for unrelated taps) MUST NOT contact the network. They read from local tap clones as-of the last `crew update` / `crew tap update`. A tap that has never been cloned is materialized on demand on first use; if that initial clone fails (offline, bad URL), the command warns on stderr and skips that tap — it does not fail the whole run.
 
@@ -1920,7 +1930,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-05 | §16.2 | The default tap named `core` is present on first run. |
 | C-TAP-06 | §16.2 | `crew tap remove core` is refused without `--force`. |
 | C-TAP-07 | §16.6 | `crew search <skill>` matches case-insensitively against `name` and `description` across every tap. |
-| C-TAP-08 | §16.6 | `crew search --json` emits a structured array of matches. Each hit includes `installed: boolean`, `same_name_installed: boolean`, and `namespace: string \| null` fields. |
+| C-TAP-08 | §16.6 | `crew search --json` emits a structured object `{ tap, hits, known_hits, warnings }`. `tap` is the `--tap <name>` filter's tap name, or `null` when the flag was absent. Each hit in `hits` includes `installed: boolean`, `same_name_installed: boolean`, and `namespace: string \| null` fields. |
 | C-TAP-08b | §16.6 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
 | C-TAP-08c | §16.6 | A same-name skill from a different tap/path is not marked installed in `crew search`; JSON reports `installed: false` and `same_name_installed: true`. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
@@ -1940,6 +1950,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-22 | §16.5 | Running `crew tap add <url>` against a URL that already backs an auto tap promotes it (`registered` flips to `true`) without re-cloning, and applies any user-supplied `<name>` argument. |
 | C-TAP-22b | §16.3 / §16.6 | `crew tap add --recursive <url-or-path> <name>` persists recursive discovery for that tap; later `crew search` and `crew install <name>/<skill>` can find skills only reachable through bounded recursive fallback. |
 | C-TAP-23 | §16.2.1 / §16.6 | `crew search <query>` surfaces matching known-tap registry entries that are not already configured as suggestions after configured-tap hits, without cloning, fetching, mutating config, or listing them for `crew search` with no query. Suggestions include the canonical `crew tap add <source-ref> <name>` command. JSON includes those suggestions in `known_hits`. |
+| C-TAP-23a | §16.6 | `crew search --tap <name> [<query>]` walks only the named configured tap: hits from other taps are absent, known-tap suggestions are omitted, and JSON reports `tap: <name>`. An unknown `<name>` is a `usage_error` naming it and pointing at `crew tap list`. Without `--tap`, JSON reports `tap: null`. |
 | C-TAP-24 | §9 / §16.2.1 | `crew install <tap-source>` that cannot resolve from configured taps surfaces exact known-tap registry matches in the `invalid_ref` error, including canonical `crew tap add` and follow-up install commands, without cloning, fetching, mutating config, or installing from the known tap. JSON errors include `known_tap_suggestions`. |
 
 #### C-STATE: State and markers (§11)
@@ -2027,6 +2038,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
 | C-CLI-08a | §5.2 | A non-repeatable flag passed more than once is a `usage_error` (exit 4) naming the flag — boolean (`--json --json`) as well as value (`--scope user --scope project`); the repeatable `--agent` collects every occurrence. |
+| C-CLI-08c | §5.2, §13 | A parse-stage failure honors the requested output mode: with `--json`, the error is the structured `{ error: { name, message, details } }` payload on stdout, not human text on stderr. |
 | C-CLI-09 | §5.5 | Bare `crew` is equivalent to `crew help` — same output, exit 0 (no "usage error"). |
 | C-CLI-10 | §5.5 | `crew help <unknown>` falls back to the overview and exits 0. |
 | C-CLI-11 | §5.5 | The overview contains a one-sentence description of crew, a getting-started section with at least three example invocations, and a command list covering every command from §5.1. |
