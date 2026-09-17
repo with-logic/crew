@@ -266,7 +266,7 @@ Mocks are confined to exactly three boundaries:
 **Adapter redirection.** Tests redirect `claudeCodeAdapter.userPath` /
 `.detect` / `.projectPath` at the top of the file via direct property
 reassignment, and restore in `afterEach`. See
-`tests/e2e/install.test.ts` for the template. This is ugly but
+`tests/e2e/install/local-path.test.ts` for the template. This is ugly but
 explicit; don't hide it inside a fixture helper.
 
 **Coverage is a hard requirement.** `bunfig.toml` sets
