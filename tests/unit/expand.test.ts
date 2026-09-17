@@ -1,7 +1,7 @@
 /**
  * Unit tests for `expandSkills` (§9 step 5).
  *
- * The e2e tests in tests/e2e/install.test.ts cover the happy paths by
+ * The e2e tests in tests/e2e/install/ cover the happy paths by
  * running the full install flow. These tests exercise `expandSkills`
  * directly to hit each branch of the three-case decision tree —
  * especially the `skills/`-subdir branch and its zero-children error
