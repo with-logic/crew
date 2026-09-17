@@ -19,7 +19,7 @@ export const BOOLEAN_SUB: Readonly<Record<string, readonly string[]>> = {
   doctor: ["verify", "repair"],
   install: ["tap", "bundle", "skill", "recursive"],
   tap: ["recursive"],
-  uninstall: ["prune"],
+  uninstall: ["prune", "all"],
   "self-update": ["check"],
 };
 /** Subcommand-specific string flags. */

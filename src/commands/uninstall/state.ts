@@ -2,9 +2,9 @@
  * State mutations for `crew uninstall` (§7.4).
  *
  * - `reduceEntryAgents` — partial removal: entry stays but loses some agents.
- * - `dropInstallLocation` — full removal of ONE install location
- *    (name, scope, project root); also scrubs the removed name from the
- *    `required_by` of surviving entries at that same location.
+ * - `dropScopedEntriesAndUpdateRequiredBy` — full removal of a batch of
+ *    entries (name, scope, project root); also scrubs the removed names
+ *    from every surviving same-location `required_by`.
  * - `findOrphan` — identifies a skill that `--prune` should autoremove.
  */
 
@@ -30,20 +30,46 @@ export function reduceEntryAgents(
   };
 }
 
+/** Location key for an entry: scope plus project root (§11.1). */
+function locationKey(e: StateEntry): string {
+  return JSON.stringify([e.scope, e.project_root ?? ""]);
+}
+
 /**
- * Drop ONE install location — the `(name, scope, project_root)` entry
- * `target` names — and scrub its name from the `required_by` of
- * surviving entries at that SAME location only. A `foo -> bar` edge in
- * project A must survive uninstalling `foo` in project B, where A's
- * `foo` is still installed; scrubbing globally would orphan A's `bar`
- * and let a later `--prune` delete a dependency A still requires.
+ * Drop every entry in `targets` and scrub their names from the
+ * `required_by` of surviving entries at the SAME location, in a single
+ * pass over state.
+ *
+ * Same-location only: a `foo -> bar` edge in project A must survive
+ * uninstalling `foo` in project B, where A's `foo` is still installed;
+ * scrubbing globally would orphan A's `bar` and let a later `--prune`
+ * delete a dependency A still requires.
+ *
+ * Batched because removing a whole tap previously rebuilt the entire
+ * installations array once per skill — quadratic in the number of
+ * installed skills, all of it under the state lock.
  */
-export function dropInstallLocation(state: StateFile, target: StateEntry): StateFile {
+export function dropScopedEntriesAndUpdateRequiredBy(
+  state: StateFile,
+  targets: readonly StateEntry[],
+): StateFile {
+  if (targets.length === 0) return state;
+  const dropped = new Set<string>();
+  const namesByLocation = new Map<string, Set<string>>();
+  for (const t of targets) {
+    const loc = locationKey(t);
+    dropped.add(entryKey(t));
+    const names = namesByLocation.get(loc);
+    if (names) names.add(t.name);
+    else namesByLocation.set(loc, new Set([t.name]));
+  }
   const installations: StateEntry[] = [];
   for (const e of state.installations) {
-    if (sameEntry(e, target)) continue;
-    if (sameLocation(e, target)) {
-      installations.push({ ...e, required_by: e.required_by.filter((n) => n !== target.name) });
+    const loc = locationKey(e);
+    if (dropped.has(entryKey(e))) continue;
+    const names = namesByLocation.get(loc);
+    if (names) {
+      installations.push({ ...e, required_by: e.required_by.filter((n) => !names.has(n)) });
     } else {
       installations.push(e);
     }
@@ -75,6 +101,9 @@ export function findOrphan(
       e.required_by.length === 0 &&
       e.scope === scope &&
       roots.has(e.project_root ?? null) &&
+      // Skipping already-attempted entries is what bounds the prune
+      // sweep: an orphan whose removal aborts keeps its state entry, so
+      // termination cannot depend on the entry disappearing.
       !attempted.has(entryKey(e)),
   );
 }
