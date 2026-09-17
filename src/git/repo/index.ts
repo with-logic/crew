@@ -13,6 +13,10 @@
  * `crew install <git-url>` fetch upstream; they combine `ensureClone`
  * with `fetchAndCheckout` (or use the `ensureRepo` wrapper that bundles
  * both).
+ *
+ * `fetchRefs` is the variant that updates refs WITHOUT moving the
+ * working tree: a ref-pinned acquisition needs the new objects but must
+ * leave the shared clone where concurrent readers expect it (§9 step 3).
  */
 
 import { CrewError } from "../../core/errors.ts";
@@ -67,16 +71,7 @@ export function ensureClone(url: string, dest: string): boolean {
  * a valid clone — callers pair this with `ensureClone`.
  */
 export function fetchAndCheckout(dest: string): void {
-  try {
-    runGit(["fetch", "--tags", "--prune", "origin"], { cwd: dest });
-  } catch (err) {
-    const ge = err as GitProcessError;
-    throw new CrewError(
-      "source_unreachable",
-      `git fetch failed for the clone at \`${dest}\` — ${ge.result.stderr.trim()}`,
-      { dest },
-    );
-  }
+  fetchRefs(dest);
   // Fast-forward the working tree to origin/HEAD. Failures here are
   // non-fatal — the fetched refs are still usable by `acquireSource`,
   // which resolves specific SHAs directly.
@@ -89,6 +84,34 @@ export function fetchAndCheckout(dest: string): void {
     if (/^[0-9a-f]{40}$/.test(sha)) {
       runGit(["checkout", "--quiet", "--detach", sha], { cwd: dest, throwOnError: false });
     }
+  }
+}
+
+/**
+ * Fetch upstream refs into `dest` WITHOUT touching its working tree.
+ *
+ * Ref-pinned acquisition needs this: it reads the requested commit out
+ * of the object database, so moving the checkout would serve no purpose
+ * and would corrupt the view of any concurrent `crew search` or install
+ * reading the same shared clone.
+ */
+export function fetchRefs(dest: string): void {
+  try {
+    // `--force` so a tag that moved upstream moves here too; plain
+    // `--tags` refuses to update a tag that already exists locally,
+    // which would hide the "tag moved" case §10.1 step 3b describes.
+    // `--prune-tags` so a tag DELETED upstream stops resolving here:
+    // `--prune` alone only prunes remote-tracking branches, leaving a
+    // vanished tag locally resolvable and letting `crew update` report
+    // an entry up to date against a ref that no longer exists.
+    runGit(["fetch", "--tags", "--force", "--prune", "--prune-tags", "origin"], { cwd: dest });
+  } catch (err) {
+    const ge = err as GitProcessError;
+    throw new CrewError(
+      "source_unreachable",
+      `git fetch failed for the clone at \`${dest}\` — ${ge.result.stderr.trim()}`,
+      { dest },
+    );
   }
 }
 

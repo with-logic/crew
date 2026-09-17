@@ -102,8 +102,8 @@ skill can list as a dependency. Three shapes:
 
 | Kind | Example | What it is |
 |---|---|---|
-| **Tap source** | `crew install founding-engineer` | A skill, namespace, or tap known to a configured tap. Bare names search every tap, including the default `core` tap. Qualify with `tap/skill`, `tap/namespace/skill`, or `namespace/skill`. Pin with `@v1.0`. If a miss exactly matches a known-but-untapped source, Homecrew suggests the `crew tap add` command. |
-| **Git source** | `crew install @acme/skills@v1.2.0//engineers/founding` | Any reachable git URL. `@owner/repo` is GitHub shorthand; full `https://` and `git@` URLs work too. Append `@ref` to pin, `//subpath` to scope. |
+| **Tap source** | `crew install founding-engineer` | A skill, namespace, or tap known to a configured tap. Bare names search every tap, including the default `core` tap. Qualify with `tap/skill`, `tap/namespace/skill`, or `namespace/skill`. Pin with `@v1.0` or a SHA; `@main` follows a branch. If a miss exactly matches a known-but-untapped source, Homecrew suggests the `crew tap add` command. |
+| **Git source** | `crew install @acme/skills@v1.2.0//engineers/founding` | Any reachable git URL. `@owner/repo` is GitHub shorthand; full `https://` and `git@` URLs work too. Append `@<tag>` or `@<sha>` to pin, `@<branch>` to follow a branch, `//subpath` to scope. |
 | **Local path** | `crew install ./my-skill` | A directory on your machine. Detected by a leading `./`, `../`, `/`, or `~`. |
 
 Run `crew help install` for the full grammar.
@@ -338,8 +338,11 @@ ones. Delete code aggressively. Write the boring version first.
 - **`homepage`** — shown by `crew info` so people can find your docs.
 - **`dependencies`** — other skills to pull in (by name, git URL, or path).
   Walked transitively.
-- **versions** — every install pins to a git commit SHA. Pin to a tag with
-  `@v1.0`.
+- **versions** — every install records the git commit SHA it resolved to.
+  `@v1.0` or `@<sha>` pins that commit, so `crew update` leaves it alone
+  without `--force`. `@main` tracks a branch instead: the install records
+  the branch's current commit, and `crew update` advances it as the
+  branch moves.
 
 ## Agents
 

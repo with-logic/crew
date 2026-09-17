@@ -63,9 +63,15 @@ export function tapRoot(tap: TapConfig, home: string): string {
 /**
  * Build a shallow index of a tap. Returns empty maps only for a tap
  * that turns out to have no valid skills.
+ *
+ * `rootOverride` points the index at an already-materialized directory
+ * instead of the live clone. A ref-carrying reference needs this: the
+ * skill it names may have been deleted at HEAD, so indexing the clone
+ * would fail to find something that exists perfectly well at the
+ * requested commit (§9 step 3).
  */
-export function indexTap(tap: TapConfig, home: string): TapIndex {
-  const root = tapRoot(tap, home);
+export function indexTap(tap: TapConfig, home: string, rootOverride?: string): TapIndex {
+  const root = rootOverride ?? tapRoot(tap, home);
   const skills = new Map<string, SkillLocation[]>();
   const namespaces = new Map<string, SkillLocation[]>();
 

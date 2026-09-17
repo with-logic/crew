@@ -6,23 +6,22 @@
  *   - report `skipped` if the entry is pinned and not forced;
  *   - re-stage and re-install if the SHA moved.
  *
- * Tap re-expansion (additions / source_gone) lives in `tap-reexpand.ts`;
+ * Tap re-expansion (additions / source_gone) lives in `tap-reexpand/index.ts`;
  * this module handles only the per-existing-entry update.
  */
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
-import { installSkillIntoAgents } from "../../agents/install.ts";
-import { agentByName } from "../../agents/registry.ts";
+import { cwdForEntry } from "../../agents/adapter.ts";
 import { CrewError } from "../../core/errors.ts";
-import type { Config, StateEntry, StateFile } from "../../core/types.ts";
+import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
-import { acquireTap } from "../../sources/acquire/index.ts";
+import { type AcquiredTap, withAcquiredSkillDir } from "../../sources/acquire/index.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { nowIso } from "../../util/time.ts";
-import type { InternalOutcome, PerAgentUpdate, UpdateRow } from "./types.ts";
+import { peekResolvedSha } from "./peek.ts";
+import { reinstallIntoAgents } from "./reinstall.ts";
+import type { InternalOutcome, UpdateRow } from "./types.ts";
 
 export function updateOneEntry(
   entry: StateEntry,
@@ -63,14 +62,18 @@ export function updateOneEntry(
         bumpHardFailure: false,
       };
     }
-    const hard = ["source_unreachable", "ref_not_found", "invalid_skill"].includes(ce.code);
+    // Anything that isn't a recognised soft outcome is a hard failure.
+    // Listing the hard codes instead would exit 0 on any error this
+    // module has not enumerated — including a raw `node:fs` error that
+    // never reached a §13 code — reporting `failed` in the rows while
+    // the run claims success (§10.1, C-UPD-09).
     return {
       row: rowFor(entry, {
         kind: "failed",
         error: { code: ce.code ?? "usage_error", message: ce.message },
       }),
       updatedState: state,
-      bumpHardFailure: hard,
+      bumpHardFailure: true,
     };
   }
 }
@@ -114,15 +117,44 @@ function updateOne(
       { tap: entry.source.tap },
     );
   }
-  const acquired = acquireTap(tap, home);
+  // §10.1 step 3c: re-resolve the entry's own ref. An entry installed at
+  // a branch follows that branch (a branch is not pinned), and a forced
+  // tag update installs the tag's current commit — neither is the
+  // clone's `origin/HEAD`.
+  //
+  // Resolution happens before materialization: an up-to-date tap needs
+  // only its SHA, and exporting a large tree just to discard it is the
+  // common case on a routine `crew update`.
+  // `--force` reinstalls a pinned entry even at an unchanged SHA, so it
+  // still needs the bytes.
+  const peeked = peekResolvedSha(tap, entry.ref, home);
+  if (peeked !== null && peeked === entry.resolved_sha && !(force && entry.pinned)) {
+    return { kind: "up_to_date" };
+  }
+  // Only this entry's own subtree is read, so only it is exported —
+  // otherwise every entry sharing a whole-repo tap materializes the
+  // whole repository again (§10.1).
+  return withAcquiredSkillDir(tap, entry.ref, entry.source.path, home, (acquired, skillDir) =>
+    applyUpdate(entry, acquired, skillDir, tap, home, force, entryCwd),
+  );
+}
+
+/** Stage and reinstall one entry from an already-acquired tree. */
+function applyUpdate(
+  entry: StateEntry,
+  acquired: AcquiredTap,
+  // Tap re-expansion has already marked missing children `source_gone`.
+  skillDir: string,
+  tap: TapConfig,
+  home: string,
+  force: boolean,
+  entryCwd: string,
+): InternalOutcome {
   const newSha = acquired.resolvedSha;
 
   if (entry.pinned && !force && newSha !== null && newSha !== entry.resolved_sha) {
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
-
-  // Tap re-expansion has already marked missing children `source_gone`.
-  const skillDir = join(acquired.rootDir, entry.source.path);
 
   if (newSha === entry.resolved_sha) {
     if (newSha !== null) return { kind: "up_to_date" };
@@ -132,48 +164,15 @@ function updateOne(
 
   const loaded = loadSkill(skillDir);
   const staged = stageIntoStore(loaded.path, entry.name, newSha, home);
-  const perTarget: PerAgentUpdate[] = [];
-  // Group by resolved install path (§7.2 path sharing) so shared-path
-  // targets install once but every adapter reports its own outcome.
-  const groups = new Map<string, AgentAdapter[]>();
-  for (const targetName of entry.agents) {
-    const adapter = agentByName(targetName);
-    if (!adapter) continue;
-    const base = baseFor(adapter, entry.scope, entryCwd);
-    if (base === "") continue;
-    const dest = `${base}/${entry.name}`;
-    const existing = groups.get(dest);
-    if (existing) existing.push(adapter);
-    else groups.set(dest, [adapter]);
-  }
-  for (const group of groups.values()) {
-    try {
-      const res = installSkillIntoAgents({
-        agents: group,
-        scope: entry.scope,
-        cwd: entryCwd,
-        storePath: staged.storePath,
-        skillName: entry.name,
-        tap,
-        tapRelativePath: entry.source.path,
-        ref: entry.ref,
-        resolvedSha: newSha,
-        contentHash: staged.contentHash,
-        force,
-      });
-      for (const a of group) {
-        perTarget.push({
-          agent: a.name,
-          kind: res.kind === "installed" ? "installed" : "up_to_date",
-        });
-      }
-    } catch (err) {
-      const ce = err as CrewError;
-      for (const a of group) {
-        perTarget.push({ agent: a.name, kind: "skipped", reason: ce.code });
-      }
-    }
-  }
+  const perTarget = reinstallIntoAgents({
+    entry,
+    tap,
+    storePath: staged.storePath,
+    contentHash: staged.contentHash,
+    newSha,
+    force,
+    entryCwd,
+  });
   return {
     kind: "updated",
     new_sha: newSha,
