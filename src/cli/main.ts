@@ -10,6 +10,7 @@ import type { CommandContext } from "../commands/types.ts";
 import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
 import { maybeEmitUpdateNotice } from "../self-update/notice.ts";
+import { setProgressSink } from "../util/progress.ts";
 import { colorEnabled, makeStyler, type Styler, terminalWidth } from "../util/term.ts";
 import { nowIso } from "../util/time.ts";
 import { canonicalCommand } from "./aliases.ts";
@@ -95,6 +96,16 @@ function runCliWithHome(
     promptChoice,
   };
 
+  // §5.2 `--verbose`: progress lines go to stderr, so they never mix
+  // with a `--json` stdout payload. Every invocation installs a sink —
+  // the writer when verbose, an explicit null otherwise — and restores
+  // its predecessor below, so a nested `runCli` (reachable through a
+  // `prompt` or stream callback) can neither write into this run's
+  // stderr nor silence it on the way out.
+  const previousSink = setProgressSink(
+    parsed.flags.verbose ? (line) => streams.stderr(`crew: ${line}\n`) : null,
+  );
+
   let exitCode: number;
   try {
     const output = dispatch(parsed.command, ctx);
@@ -119,6 +130,8 @@ function runCliWithHome(
       );
       exitCode = 4;
     }
+  } finally {
+    setProgressSink(previousSink);
   }
   // §10.2: scheduled updates append one status line before exit. Keeping
   // this at the CLI boundary covers both normal `update` exits and crashes.

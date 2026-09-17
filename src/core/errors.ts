@@ -7,6 +7,8 @@
  * maps it to the right exit code and formatted output.
  */
 
+import { sanitizeBlock, sanitizeLine } from "../util/redact.ts";
+
 export type CrewErrorName =
   | "invalid_ref"
   | "invalid_skill"
@@ -64,6 +66,13 @@ export const EXIT_CODES: Record<CrewErrorName, number> = {
  * Raised at any layer of the stack to signal a user-visible error.
  * The CLI entry point catches this and formats it according to the
  * current output mode (human or JSON).
+ *
+ * Messages interpolate user-controlled values — paths, refs, tap names,
+ * and git's own stderr. A newline in one of those would otherwise open
+ * its own terminal line and forge what reads as a second crew error, so
+ * the constructor escapes control characters (§5.2). The handful of
+ * errors that are genuinely multi-line compose their layout from
+ * trusted literals and pass `multiline: true` to keep those breaks.
  */
 export class CrewError extends Error {
   override readonly name: "CrewError" = "CrewError";
@@ -77,8 +86,9 @@ export class CrewError extends Error {
     message: string,
     details: Record<string, unknown> = {},
     remedy?: string | null,
+    multiline: boolean = false,
   ) {
-    super(message);
+    super(multiline ? sanitizeBlock(message) : sanitizeLine(message));
     this.code = code;
     this.details = details;
     this.remedy = remedy;

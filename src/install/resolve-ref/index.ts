@@ -17,11 +17,13 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
-import type { Config, TapConfig, TapSource } from "../../core/types.ts";
+import type { Config, TapSource } from "../../core/types.ts";
+import { safePath } from "../../util/redact.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 import { enumerateCandidates } from "../attribute-bare-name.ts";
-import { indexTap, type TapIndex } from "../tap-index.ts";
+import { indexTap } from "../tap-index.ts";
 import { ambiguityError, flagFor } from "./errors.ts";
+import { lookupInTap, safeIndex } from "./lookup.ts";
 
 /** Force-one-kind hint from a `--tap` / `--bundle` / `--skill` flag. */
 export type SpecificKindHint = "tap" | "namespace" | "skill";
@@ -139,7 +141,7 @@ function resolveBare(
   if (kindHint === "non-tap") {
     const filtered = all.filter((c): c is NonTapNameCandidate => c.kind !== "tap");
     if (filtered.length === 0) {
-      const tapNames = config.taps.map((t) => t.name).join(", ");
+      const tapNames = config.taps.map((t) => safePath(t.name)).join(", ");
       throw new CrewError(
         "invalid_ref",
         `\`${name}\` isn't a skill or namespace in any configured tap (searched: ${tapNames || "<none>"})`,
@@ -164,7 +166,10 @@ function resolveBare(
   }
 
   if (all.length === 0) {
-    const tapNames = config.taps.map((t) => t.name).join(", ");
+    // Tap names are any non-empty string (§6.1), and a remedy hint is NOT
+    // sanitized by `CrewError` the way a message is — it is passed through
+    // to the renderer verbatim. Escape the names as they are joined.
+    const tapNames = config.taps.map((t) => safePath(t.name)).join(", ");
     throw new CrewError(
       "invalid_ref",
       `\`${name}\` was not found in any configured tap.`,
@@ -174,24 +179,4 @@ function resolveBare(
   }
   if (all.length === 1) return all[0]!;
   throw ambiguityError(name, all);
-}
-
-function lookupInTap(tap: TapConfig, home: string, name: string): NonTapNameCandidate | null {
-  const idx = safeIndex(tap, home);
-  if (!idx) return null;
-  const locs = idx.skills.get(name);
-  if (!locs || locs.length === 0) return null;
-  // Prefer unnamespaced. If the same name lives in multiple
-  // namespaces, a 2-segment ref is ambiguous within the tap; we pick
-  // deterministically and rely on 3-segment for true disambiguation.
-  const unnamespaced = locs.find((l) => l.namespace === null);
-  return { kind: "skill", tap, location: unnamespaced ?? locs[0]! };
-}
-
-function safeIndex(tap: TapConfig, home: string): TapIndex | null {
-  try {
-    return indexTap(tap, home);
-  } catch {
-    return null;
-  }
 }

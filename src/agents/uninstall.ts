@@ -11,6 +11,8 @@ import { CrewError } from "../core/errors.ts";
 import type { Marker, Scope } from "../core/types.ts";
 import { rmrf } from "../util/fs.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
+import { progress } from "../util/progress.ts";
+import { safePath } from "../util/redact.ts";
 import { type AgentAdapter, baseFor } from "./adapter.ts";
 
 /** Input to uninstall from one `dest` shared by a group of agents. */
@@ -62,6 +64,7 @@ function untrackedInstall(input: UninstallInput, dest: string): UninstallOutcome
       `\`${dest}\` exists but isn't crew-managed (no .crew.json) — refusing to remove`,
       { dest },
     );
+  progressRemoving(input, dest);
   rmrf(dest);
   return { kind: "removed" };
 }
@@ -73,8 +76,18 @@ function inconsistentMarker(input: UninstallInput, marker: Marker, dest: string)
       `\`${dest}\` has a crew marker for \`${marker.name}\`, not \`${input.skillName}\` — investigate before forcing`,
       { dest, markerName: marker.name, incomingName: input.skillName },
     );
+  progressRemoving(input, dest);
   rmrf(dest);
   return { kind: "removed" };
+}
+
+/** One progress line, emitted immediately before a real mutation (§5.2). */
+function progressRemoving(input: UninstallInput, dest: string): void {
+  progress(
+    `removing ${safePath(input.skillName)} from ${safePath(dest)} (${input.agents
+      .map((a) => a.name)
+      .join(", ")})`,
+  );
 }
 
 function removeAdapterOwnership(
@@ -84,6 +97,7 @@ function removeAdapterOwnership(
 ): UninstallOutcome {
   const leaving = new Set(input.agents.map((a) => a.name));
   const remaining = (marker.agents ?? []).filter((a) => !leaving.has(a));
+  progressRemoving(input, dest);
   if (remaining.length === 0) {
     rmrf(dest);
     return { kind: "removed" };
