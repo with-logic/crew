@@ -5,7 +5,7 @@
 import { Container } from "../primitives/Container";
 import { Section } from "../primitives/Section";
 import { SectionHead } from "../primitives/SectionHead";
-import { GROUPS } from "./Commands.data";
+import { GROUPS } from "./Commands.data/index";
 import styles from "./Commands.module.css";
 
 export function Commands() {
