@@ -1,12 +1,9 @@
 /**
  * Subject selection for `crew uninstall` (§5.3.1, §7.4).
  *
- * Turns the command line into the list of targets `./index.ts` removes:
- *
- *   - positionals → collection selectors (installed skill, tap, or
- *     namespace) narrowed to the targeted scope;
- *   - `--all` → every installed entry at the targeted scope, one target
- *     per skill name.
+ * Turns the positional selectors into the list of targets `./index.ts`
+ * removes: each names an installed skill, a tap, or a namespace, narrowed
+ * to the targeted scope. The `--all` shape lives in `./all.ts`.
  *
  * Two invariants matter here. A collection selector consults two states:
  * *which* collection a bare name means is decided among entries this
@@ -20,12 +17,10 @@
  * fail trying to remove it again.
  */
 
-import { CrewError } from "../../core/errors.ts";
-import type { Config, Scope, StateEntry, StateFile } from "../../core/types.ts";
+import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import { type CollectionKind, resolveCollectionSubjects } from "../../state/collections.ts";
 import { entryKey } from "../../state/identity.ts";
 import { namespaceForEntry, type StateSubject } from "../../state/subjects.ts";
-import { plural, shortenHome } from "../../util/format.ts";
 import type { CommandContext } from "../types.ts";
 import { entriesAtScope, narrowSubjectToScope } from "./scope.ts";
 
@@ -100,39 +95,6 @@ export function selectedTargets(
 }
 
 /**
- * Every installed skill at the target scope, one target per name. Throws
- * when there is nothing to do; confirmation is the caller's job, since it
- * must happen before the state lock is taken.
- */
-export function allTargets(ctx: CommandContext, state: StateFile): readonly UninstallTarget[] {
-  const entries = entriesAtScope(state.installations, ctx.flags.scope, ctx.cwd);
-  if (entries.length === 0) {
-    throw new CrewError(
-      "not_installed_here",
-      `nothing is installed at ${describeScope(ctx.flags.scope, ctx.cwd)} — nothing to remove`,
-      { scope: ctx.flags.scope },
-    );
-  }
-  return groupByName(entries).map((subject) => ({ kind: "skill", subject }) as const);
-}
-
-/**
- * Reject `--all` combined with positionals, then count what it would
- * remove so the caller can confirm before locking. Returns the number of
- * distinct skills, or throws when nothing is installed at this scope.
- */
-export function countAllTargets(ctx: CommandContext, state: StateFile): number {
-  if (ctx.positional.length > 0) {
-    throw new CrewError(
-      "usage_error",
-      "`crew uninstall --all` takes no skill names — it removes everything at the target scope",
-      { positional: [...ctx.positional] },
-    );
-  }
-  return allTargets(ctx, state).length;
-}
-
-/**
  * Drop targets whose entries a previous target already covers. Selectors
  * may overlap (`crew uninstall acme alpha`, where `alpha` is in `acme`);
  * without this the second removal finds the directory already gone and
@@ -172,31 +134,11 @@ function entriesForCollection(
 }
 
 /** One subject per distinct skill name, preserving state order. */
-function groupByName(entries: readonly StateEntry[]): StateSubject[] {
+export function groupByName(entries: readonly StateEntry[]): StateSubject[] {
   const byName = new Map<string, StateEntry[]>();
   for (const entry of entries) {
     if (!byName.has(entry.name)) byName.set(entry.name, []);
     byName.get(entry.name)!.push(entry);
   }
   return [...byName.entries()].map(([name, group]) => ({ raw: name, name, entries: group }));
-}
-
-/** Gate `--all` behind `--yes` or an interactive confirmation. */
-export function confirmAll(ctx: CommandContext, count: number): void {
-  if (ctx.flags.yes) return;
-  const scope = describeScope(ctx.flags.scope, ctx.cwd);
-  const answer = ctx.prompt(`Remove ${plural(count, "skill")} from ${scope}? [y/N]: `);
-  if (answer === "yes") return;
-  if (answer === "no") {
-    throw new CrewError("usage_error", "Aborted — nothing was removed", { scope: ctx.flags.scope });
-  }
-  throw new CrewError(
-    "usage_error",
-    "`crew uninstall --all` needs confirmation, but stdin isn't a terminal — pass `--yes` to confirm",
-    { scope: ctx.flags.scope },
-  );
-}
-
-function describeScope(scope: Scope, cwd: string): string {
-  return scope === "user" ? "user scope" : `project scope in ${shortenHome(cwd)}`;
 }

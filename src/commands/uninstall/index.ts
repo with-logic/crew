@@ -35,9 +35,10 @@ import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
+import { allTargets, confirmAll, countAllTargets } from "./all.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
-import { allowsEmpty, allTargets, confirmAll, countAllTargets, selectedTargets } from "./select.ts";
+import { allowsEmpty, selectedTargets } from "./select.ts";
 import { findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
