@@ -73,7 +73,7 @@ describe("top-level aliases", () => {
     expect(runCli(["list", "--json"], { home, streams: list.streams })).toBe(0);
     expect(runCli(["ls", "--json"], { home, streams: ls.streams })).toBe(0);
     expect(ls.stdout()).toBe(list.stdout());
-    expect(JSON.parse(ls.stdout())).toEqual({ installations: [] });
+    expect(JSON.parse(ls.stdout()).installations).toEqual([]);
   });
 
   test("C-CLI-01b crew upgrade is an alias for crew update", () => {

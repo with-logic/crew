@@ -141,6 +141,17 @@ stored skill name (`pdf`) or a tap-qualified selector (`<tap>/<skill>` or
 User-facing help may describe these values as skill names rather than
 selectors; the distinction is spec terminology, not product language.
 
+**`crew list` scope filter.** With no `--scope`, `crew list` shows every
+installation at both scopes, grouping a skill's project-scope rows under a
+single identity row for that skill — the user-scope installation when one
+exists, and otherwise a neutral row carrying the skill's name and source, so
+a skill installed only in projects still groups correctly. With `--scope user`
+it shows only user-scope installations; with `--scope project` it shows only
+project-scope installations, one row per project root. `--json` filters `installations` the same way and reports the
+filter in a `scope` field (`"user"`, `"project"`, or `null` when unfiltered).
+When the filter leaves nothing, the human output says so for that scope
+rather than printing the first-run getting-started hint.
+
 ### 5.2 Global flags
 
 Accepted on any command where they apply:
@@ -1997,6 +2008,9 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-06 | §11.2 | `crew doctor --repair` reconstructs `state.json` from markers if `state.json` is deleted. |
 | C-STATE-07 | §11.2 | `crew doctor --verify` recomputes content hashes and reports mismatches. |
 | C-STATE-08 | §11.2 | `crew doctor --repair` never modifies files outside `~/.crew/` and the managed skill directories. |
+| C-LIST-01 | §5.1 | `crew list` with no `--scope` shows user- and project-scope installations together; `--json` has `scope: null`. |
+| C-LIST-02 | §5.1 | `crew list --scope user` shows only user-scope installations and `crew list --scope project` shows only project-scope installations (one row per project root); `--json` filters `installations` identically and sets `scope` to the filter. |
+| C-LIST-03 | §5.1 | When a `--scope` filter matches nothing, `crew list` prints a scope-specific empty message (not the getting-started hint) and `--json` returns an empty `installations` array. |
 | C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same install location (`(scope, project_root)`). |
 | C-STATE-11 | §11.2 | `crew doctor` reports `missing_project_root` for any project-scope entry whose `project_root` directory no longer exists. |
 | C-STATE-12 | §11.2 | `crew doctor --repair --dry-run` reports the findings a repair would address and changes nothing: state, config, and the store are byte-identical afterward. |
