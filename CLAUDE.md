@@ -138,7 +138,10 @@ src/
 
 These are load-bearing. Please keep them.
 
-**1. Hard file-size cap: < 200 lines per file.** Counted by `wc -l`. A
+**1. Hard file-size cap: < 200 lines per file.** Counted by `wc -l`,
+and enforced: `bun run lint` runs `scripts/check-file-size.ts`, which
+fails on any file at 200 lines or more under `src/`, `tests/`,
+`scripts/`, and the site's `app/`, `components/`, and `lib/`. A
 file at 205 lines is a file to split, not an exception. This is a
 navigability rule, not a stylistic preference — big files hide
 structure, and every grep hit becomes a scroll. Split before the file
