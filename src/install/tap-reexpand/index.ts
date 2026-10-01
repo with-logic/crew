@@ -44,8 +44,8 @@ export type { InstallNewChild, TapReexpandResult, TapReexpandRow } from "./types
  * naming one namespace pulls in its group, but the group spans the
  * whole tap, so without this bound a user who asked to update
  * `acme/alpha` would silently acquire a skill newly added to
- * `acme/beta` (§10.1.1). `null` means unbounded: no namespace selector
- * was involved, so every discovered child is in scope.
+ * `acme/beta` (§10.1.1). `null` means unbounded: a skill or tap selector
+ * was supplied. Additions are bounded only for namespace-only runs.
  */
 export interface ReexpandSelection {
   readonly memberIdentities: ReadonlySet<string>;
