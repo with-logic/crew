@@ -463,7 +463,7 @@ With `--json`, help MUST emit a structured payload:
 ├── state.json           # installed-skills ledger (see §11.1)
 ├── state.json.lock      # file lock for state mutations (see §14)
 ├── repos/               # cloned tap repositories, one per repository
-│   └── <host>-<owner>-<repo>-<hash8>/
+│   └── <readable-prefix>-<sha256>/
 ├── cache/               # ephemeral git clones of ad-hoc git sources
 │   └── git/<host>/<owner>/<repo>@<ref>/
 ├── locks/               # per-repository clone locks (see §14)
@@ -488,8 +488,10 @@ by tap name, so that repository is cloned once and every tap row over it
 reads from the same working tree. Two URLs address the same repository
 when they match after dropping a trailing `.git`, dropping trailing
 slashes, and lowercasing the scheme and host. The directory name carries
-a readable `<host>-<owner>-<repo>` prefix for humans plus a hash of the
-canonical URL, which is what actually guarantees uniqueness. Userinfo and path case are preserved; the readable prefix MUST exclude userinfo, query strings, and fragments.
+a readable `<host>-<owner>-<repo>` prefix for humans, truncated to 160
+ASCII characters, plus the full 64-character lowercase hexadecimal SHA-256
+digest of the canonical URL. The full digest distinguishes repository
+identities; a shortened digest MUST NOT be used. Userinfo and path case are preserved; the readable prefix MUST exclude userinfo, query strings, and fragments.
 
 Consequences an implementation MUST honor:
 

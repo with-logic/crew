@@ -11,9 +11,9 @@
  * A tap row keeps its own identity (name, url, subpath, registered,
  * discovery). Only the bytes are shared.
  *
- * Directory name is `<host>-<owner>-<repo>-<hash8>`: the readable part
+ * Directory name is `<readable-prefix>-<sha256>`: the readable part
  * is for humans poking around `~/.crew/repos/`, and the hash of the
- * canonical URL is what actually guarantees uniqueness.
+ * canonical URL distinguishes repository identities.
  */
 
 import { createHash } from "node:crypto";
@@ -61,8 +61,8 @@ function readablePrefix(canonical: string): string {
 /** Directory name for a repository's shared clone. */
 export function repoDirName(url: string): string {
   const canonical = canonicalRepoUrl(url);
-  const hash = createHash("sha256").update(canonical).digest("hex").slice(0, 8);
-  return `${readablePrefix(canonical)}-${hash}`;
+  const hash = createHash("sha256").update(canonical).digest("hex");
+  return `${readablePrefix(canonical).slice(0, 160)}-${hash}`;
 }
 
 /** Absolute path to a repository's shared clone. */

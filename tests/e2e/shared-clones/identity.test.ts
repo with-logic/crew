@@ -26,10 +26,16 @@ test("C-TAP-28 readable clone prefixes exclude credentials and query secrets", (
   const name = repoDirName(
     "https://SecretUser:SecretPassword@EXAMPLE.COM/team/repo.git?token=QuerySecret#FragmentSecret",
   );
-  expect(name).toMatch(/^example-com-team-repo-git-[a-f0-9]{8}$/);
+  expect(name).toMatch(/^example-com-team-repo-git-[a-f0-9]{64}$/);
   for (const secret of ["secretuser", "secretpassword", "querysecret", "fragmentsecret"]) {
     expect(name).not.toContain(secret);
   }
-  expect(repoDirName("ssh://SecretUser@example.com")).toMatch(/^example-com-[a-f0-9]{8}$/);
-  expect(repoDirName("")).toMatch(/^repo-[a-f0-9]{8}$/);
+  expect(repoDirName("ssh://SecretUser@example.com")).toMatch(/^example-com-[a-f0-9]{64}$/);
+  expect(repoDirName("")).toMatch(/^repo-[a-f0-9]{64}$/);
+});
+
+test("C-TAP-28 long readable prefixes fit within a filesystem component", () => {
+  const name = repoDirName(`https://example.com/${"a".repeat(200)}/${"b".repeat(200)}`);
+  expect(name).toHaveLength(225);
+  expect(name).toMatch(/^[a-z0-9-]{160}-[a-f0-9]{64}$/);
 });
