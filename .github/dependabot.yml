@@ -7,8 +7,9 @@
 #   2. Bun in `site/` — the Next.js landing site.
 #   3. github-actions — the workflows under `.github/workflows/`.
 #
-# Security advisories on any of these come in via Dependabot security
-# updates (enabled separately on the repo) regardless of this schedule.
+# Security alerts and security updates have separate repository settings.
+# Native Bun currently supports these scheduled version updates, not automatic
+# security-update PRs.
 
 version: 2
 updates:
