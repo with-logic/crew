@@ -47,7 +47,7 @@ export function overview(): CommandOutput {
     "  CREW_NO_UPDATE_CHECK  Set to 1 to silence the new-version notice (also off on CI).",
   );
   lines.push("");
-  lines.push("Run `crew help <command>` for details and examples on any command.");
+  lines.push("Run `crew help <command>` (or `crew <command> --help`) for details and examples.");
   lines.push("About Agent Skills: https://agentskills.io/specification");
   return {
     exitCode: 0,
