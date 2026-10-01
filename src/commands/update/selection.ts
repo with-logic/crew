@@ -4,7 +4,7 @@
  * The command entry point orchestrates refresh/re-expand/update work;
  * this module owns installed-subject and dependency-closure selection
  * so the command file stays small. Subjects may be single skills or
- * collections (tap / namespace, see `state/collections.ts`); a collection
+ * collections (tap / namespace, see `state/collections/index.ts`); a collection
  * simply contributes every entry it expanded to.
  */
 
@@ -12,7 +12,11 @@ import { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import type { ReexpandSelection } from "../../install/tap-reexpand/index.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
-import { type CollectionSubject, entryIdentity } from "../../state/collections.ts";
+import {
+  type CollectionSubject,
+  entryIdentity,
+  refreshCollectionSubjects,
+} from "../../state/collections/index.ts";
 import { dependencyClosureFor, orderedEntries } from "./dep-closure.ts";
 
 /** Expanded update set + per-entry "who pulled you in" map. */
@@ -101,6 +105,31 @@ export function withTransitive(
   const parents = transitiveSources.get(row.name);
   if (!parents || parents.length === 0) return row;
   return { ...row, transitively_required_by: parents };
+}
+
+/** Keep step 2's dependency identities while adding step 2b's collection members (§10.1). */
+export function entriesAfterReexpansion(
+  state: StateFile,
+  subjects: readonly CollectionSubject[],
+  initialSelected: readonly StateEntry[],
+): readonly StateEntry[] {
+  if (subjects.length === 0) return [...state.installations];
+  const initialIdentities = new Set(initialSelected.map(entryIdentity));
+  const entries: StateEntry[] = [];
+  const seen = new Set<string>();
+  const add = (entry: StateEntry) => {
+    const key = entryIdentity(entry);
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push(entry);
+  };
+  for (const subject of refreshCollectionSubjects(state, subjects)) {
+    for (const entry of subject.entries) add(entry);
+  }
+  for (const entry of state.installations) {
+    if (initialIdentities.has(entryIdentity(entry))) add(entry);
+  }
+  return entries;
 }
 
 /**

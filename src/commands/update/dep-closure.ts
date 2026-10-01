@@ -8,7 +8,7 @@
  */
 
 import type { StateEntry, StateFile } from "../../core/types.ts";
-import { type CollectionSubject, entryIdentity } from "../../state/collections.ts";
+import { type CollectionSubject, entryIdentity } from "../../state/collections/index.ts";
 
 export interface DependencyClosure {
   readonly selectedNames: ReadonlySet<string>;
@@ -27,18 +27,18 @@ export function dependencyClosureFor(
   // entries that declare it. The previous form rescanned every
   // installation for each dequeue, which is quadratic on a large
   // collection update.
-  const dependents = new Map<string, string[]>();
+  const dependenciesByParent = new Map<string, string[]>();
   for (const candidate of state.installations) {
     for (const parent of candidate.required_by) {
-      const bucket = dependents.get(parent);
+      const bucket = dependenciesByParent.get(parent);
       if (bucket) bucket.push(candidate.name);
-      else dependents.set(parent, [candidate.name]);
+      else dependenciesByParent.set(parent, [candidate.name]);
     }
   }
   // Iterated in place rather than with `shift()`, which re-indexes the
   // whole array on every step. Appending during iteration is
   // intentional: the array iterator picks up entries pushed below, and
-  // the loop terminates because a node only enqueues its dependents on
+  // the loop terminates because a node only enqueues its dependencies on
   // its first visit, so each of the finitely many names is expanded once.
   const queue = names.map((name) => ({ name, rootedAt: name }));
   for (const { name, rootedAt } of queue) {
@@ -50,8 +50,8 @@ export function dependencyClosureFor(
       ancestors.get(name)!.add(rootedAt);
     }
     if (!firstVisit) continue;
-    for (const dependent of dependents.get(name) ?? []) {
-      queue.push({ name: dependent, rootedAt });
+    for (const dependency of dependenciesByParent.get(name) ?? []) {
+      queue.push({ name: dependency, rootedAt });
     }
   }
   const transitiveSources = new Map<string, readonly string[]>();

@@ -3,14 +3,11 @@
  * (PRD §10.1, C-UPD-26..32).
  *
  * Every tap is a real local `file://` git repo; nothing here touches the
- * network. `installRoot()` redirects the Claude Code adapter at the
- * top of each suite and returns the directory installs land in.
+ * network. Each calling suite redirects its own Claude Code adapter.
  */
 
-import { afterEach, beforeEach } from "bun:test";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import type { TapRefreshRow } from "../../../src/commands/tap/refresh.ts";
 import type { UpdateSelector } from "../../../src/commands/update/plan.ts";
@@ -49,30 +46,6 @@ export interface RunResult {
   readonly code: number;
   readonly out: string;
   json(): UpdateJson;
-}
-
-/**
- * Redirect the Claude Code adapter to a temp dir for the calling suite
- * and restore it afterwards. Returns a getter for the install root,
- * since the path changes per test.
- */
-export function installRoot(prefix: string): () => string {
-  let root = "";
-  // `beforeEach` always runs before `afterEach`, so this is assigned
-  // before it is read; no unreachable default to keep covered.
-  let restore!: () => void;
-  beforeEach(() => {
-    const originals = { user: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
-    root = makeTempDir(prefix);
-    (claudeCodeAdapter as { userPath: () => string }).userPath = () => root;
-    (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
-    restore = () => {
-      (claudeCodeAdapter as { userPath: () => string }).userPath = originals.user;
-      (claudeCodeAdapter as { detect: () => boolean }).detect = originals.detect;
-    };
-  });
-  afterEach(() => restore());
-  return () => root;
 }
 
 export function run(home: string, args: string[], cwd?: string): RunResult {

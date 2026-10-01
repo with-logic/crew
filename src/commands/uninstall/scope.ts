@@ -62,7 +62,7 @@ export function narrowSubjectToScope(
   );
 }
 
-function entriesAtScope(
+export function entriesAtScope(
   entries: readonly StateEntry[],
   scope: Scope,
   cwd: string,
