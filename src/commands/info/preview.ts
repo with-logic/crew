@@ -7,15 +7,14 @@
  * The `@<ref>` rule drives the shape: with a ref, the commit is exported
  * BEFORE resolution, because a skill present at that commit but deleted
  * at the default branch is invisible to an index of the live clone. A
- * qualified reference (`<tap>/<skill>@v1`) names its tap, so one export
- * suffices; a bare name could live in any tap, so every tap is
- * materialized at the ref before the name is matched.
+ * three-segment reference names one tap. Bare names and two-segment
+ * namespace fallback can search every tap at the requested ref.
  */
 
 import type { Config, LoadedSkill, TapConfig, TapSource } from "../../core/types.ts";
 import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
+import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
 import { loadSkill } from "../../skill/load.ts";
-import { withTapsAtRef } from "../../sources/acquire/at-ref.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import { expandSkills } from "../../sources/expand.ts";
 import type { SkillInfo } from "./render.ts";
@@ -36,14 +35,8 @@ export function tapCandidate(
     return candidateSkills(resolveTapRef(source, config, home, "non-tap"));
   }
 
-  const named = source.tap === null ? undefined : config.taps.find((t) => t.name === source.tap);
-  if (named) {
-    return withAcquiredTap(named, ref, home, (acq) =>
-      narrowAtRoots(source, config, home, { [named.name]: acq.rootDir }),
-    );
-  }
-  return withTapsAtRef(config.taps, ref, home, (roots) =>
-    narrowAtRoots(source, config, home, roots),
+  return withResolutionRoots({ ...source, ref }, config, home, (atRef, roots) =>
+    narrowAtRoots(source, atRef, home, roots),
   );
 }
 

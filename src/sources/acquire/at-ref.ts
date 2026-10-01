@@ -32,12 +32,13 @@ export function withTapsAtRef<T>(
   taps: readonly TapConfig[],
   ref: string,
   home: string,
-  fn: (roots: Record<string, string | undefined>) => T,
+  fn: (roots: Record<string, string | undefined>, unavailable: ReadonlyMap<string, unknown>) => T,
 ): T {
   const roots: Record<string, string | undefined> = {};
+  const unavailable = new Map<string, unknown>();
 
   const step = (i: number): T => {
-    if (i >= taps.length) return fn(roots);
+    if (i >= taps.length) return fn(roots, unavailable);
     const tap = taps[i]!;
     // A path tap has no commits, so a ref cannot narrow it; it keeps its
     // usual root and needs no export.
@@ -55,6 +56,7 @@ export function withTapsAtRef<T>(
     } catch (err) {
       if (reached) throw err;
       // This tap cannot supply the ref; carry on without it.
+      unavailable.set(tap.name, err);
       return step(i + 1);
     }
   };
