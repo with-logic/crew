@@ -40,6 +40,11 @@ describe("defaultPrompt", () => {
     expect(stderr()).toBe("prompt? ");
   });
 
+  test("a destructive prompt can explicitly default to no", () => {
+    expect(defaultPrompt("[y/N]: ", fakeIO("\n").io, "no")).toBe("no");
+    expect(defaultPrompt("[y/N]: ", fakeIO("y\n").io, "no")).toBe("yes");
+  });
+
   test("`y` is yes; `yes` is yes; uppercase too", () => {
     expect(defaultPrompt("", fakeIO("y\n").io)).toBe("yes");
     expect(defaultPrompt("", fakeIO("yes\n").io)).toBe("yes");
