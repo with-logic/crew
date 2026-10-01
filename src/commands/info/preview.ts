@@ -57,20 +57,10 @@ function narrowAtRoots(
   roots: Readonly<Record<string, string | undefined>>,
 ): TapPreview {
   const candidate = resolveTapRef(source, config, home, "non-tap", roots);
-  const wanted = new Set(
-    (candidate.kind === "skill" ? [candidate.location] : candidate.members).map((l) => l.name),
-  );
-  const root = roots[candidate.tap.name];
-  const all =
-    root === undefined
-      ? buildSkillInfosFromDirs(
-          candidate.kind === "skill" ? [candidate.location] : candidate.members,
-        )
-      : buildSkillInfos(root, candidate.tap);
-  return { tap: candidate.tap, skills: all.filter((sk) => wanted.has(sk.name)) };
+  return candidateSkills(candidate);
 }
 
-/** Preview a candidate resolved against the live clone (no ref given). */
+/** Preview only the selected locations while their acquisition scope is live. */
 function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
   if (candidate.kind === "skill") {
     return { tap: candidate.tap, skills: buildSkillInfosFromDirs([candidate.location]) };

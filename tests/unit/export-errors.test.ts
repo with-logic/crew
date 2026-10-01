@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
 import { runGit } from "../../src/git/exec.ts";
@@ -89,4 +89,13 @@ describe("exportTreeAt failure classification", () => {
 
     expect(Bun.file(join(dest, "demo", "SKILL.md")).size).toBeGreaterThan(0);
   });
+});
+
+test("C-INST-05d export preserves a source-authored scratch-index filename", () => {
+  const repo = makeTempDir("crew-export-index-source-");
+  writeFileSync(join(repo, ".crew-export-index"), "source bytes\n");
+  const { sha } = makeGitRepo(repo);
+  const dest = join(makeTempDir("crew-export-index-dest-"), "out");
+  exportTreeAt(repo, sha, "", dest);
+  expect(readFileSync(join(dest, ".crew-export-index"), "utf8")).toBe("source bytes\n");
 });

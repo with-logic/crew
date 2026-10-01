@@ -1,9 +1,9 @@
 /**
  * Materialize several taps at one requested ref (§9 step 3).
  *
- * A qualified reference (`<tap>/<skill>@v1`) names its tap, so a single
- * export precedes resolution. A BARE name with a ref (`<skill>@v1`)
- * names no tap at all: the skill could live in any configured tap, and
+ * Only a three-segment reference (`<tap>/<namespace>/<skill>@v1`)
+ * binds one tap. Bare names and two-segment namespace fallback can
+ * match another configured tap, so each candidate reads its commit, and
  * §9 step 3 requires resolution itself to read the requested commit —
  * a skill present at `@v1` but deleted at the default branch must still
  * resolve. That means every candidate tap has to be materialized at the

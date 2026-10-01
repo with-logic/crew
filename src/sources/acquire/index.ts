@@ -38,7 +38,7 @@ import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
-  /** Absolute directory the tap is rooted at — walk this to find skills. */
+  /** Materialized tap root, or the narrowed root returned by skill acquisition. */
   readonly rootDir: string;
   /** Full 40-char SHA for git taps; null for path taps. */
   readonly resolvedSha: string | null;

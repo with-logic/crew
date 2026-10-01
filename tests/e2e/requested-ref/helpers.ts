@@ -6,10 +6,8 @@
  * is visible in the installed bytes rather than inferred.
  */
 
-import { afterEach, beforeEach } from "bun:test";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runGit } from "../../../src/git/exec.ts";
 import {
   commitAll,
@@ -18,33 +16,6 @@ import {
   makeTempDir,
   skillFrontmatter,
 } from "../../helpers/fixtures.ts";
-
-let restore: (() => void) | null = null;
-let ccRoot = "";
-
-/** Redirect Claude Code at a temp dir for the duration of each test. */
-export function useRedirectedAdapter(): void {
-  beforeEach(() => {
-    ccRoot = makeTempDir("crew-cc-");
-    const orig = { u: claudeCodeAdapter.userPath, d: claudeCodeAdapter.detect };
-    (claudeCodeAdapter as { userPath: () => string }).userPath = () => ccRoot;
-    (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
-    restore = () => {
-      (claudeCodeAdapter as { userPath: () => string }).userPath = orig.u;
-      (claudeCodeAdapter as { detect: () => boolean }).detect = orig.d;
-    };
-  });
-
-  afterEach(() => {
-    if (restore) restore();
-    restore = null;
-  });
-}
-
-/** Where the redirected adapter installs to. */
-export function adapterRoot(): string {
-  return ccRoot;
-}
 
 export interface TwoCommitRepo {
   readonly repo: string;
@@ -96,6 +67,6 @@ export function retag(repo: string, name: string): void {
 }
 
 /** Bytes of the installed `demo` skill. */
-export function installedBody(): string {
-  return readFileSync(join(ccRoot, "demo", "SKILL.md"), "utf8");
+export function installedBody(root: string): string {
+  return readFileSync(join(root, "demo", "SKILL.md"), "utf8");
 }
