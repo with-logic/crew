@@ -1,8 +1,8 @@
 /**
- * Synchronous interactive prompts (§16.4).
+ * Synchronous interactive prompts (§5.3.1, §16.4).
  *
  * Two shapes:
- *   - `confirm(msg)` — binary Y/n prompt. Returns "yes" | "no" | "abort".
+ *   - `confirm(msg, defaultAnswer)` — binary confirmation prompt. Returns "yes" | "no" | "abort".
  *     Used by the tap-vs-skill collision prompt when exactly one other
  *     tap hosts a same-named skill.
  *   - `choice(msg, n)` — numbered-menu prompt accepting `1..n`. Returns
@@ -19,13 +19,14 @@
 import { readSync } from "node:fs";
 
 /** Outcome of a binary confirmation prompt. */
-export type ConfirmOutcome = "yes" | "no" | "abort";
+export type ConfirmAnswer = "yes" | "no";
+export type ConfirmOutcome = ConfirmAnswer | "abort";
 
 /** Outcome of a numbered-menu prompt. */
 export type ChoiceOutcome = { kind: "choice"; index: number } | "abort";
 
 /** Binary confirm: tests inject a stub that returns a fixed answer. */
-export type PromptFn = (message: string) => ConfirmOutcome;
+export type PromptFn = (message: string, defaultAnswer?: ConfirmAnswer) => ConfirmOutcome;
 
 /** Numbered menu: tests inject a stub that returns a fixed choice. */
 export type ChoicePromptFn = (message: string, choiceCount: number) => ChoiceOutcome;
@@ -60,13 +61,18 @@ export const realIO: PromptIO = {
  * Returns `"abort"` in non-TTY contexts without reading. Accepts an
  * IO-seam override for tests.
  */
-export function defaultPrompt(message: string, io: PromptIO = realIO): ConfirmOutcome {
+export function defaultPrompt(
+  message: string,
+  io: PromptIO = realIO,
+  defaultAnswer: ConfirmAnswer = "yes",
+): ConfirmOutcome {
   if (!io.isTTY()) return "abort";
   io.writeStderr(message);
   const line = readLineSync(io);
   if (line === null) return "abort";
   const trimmed = line.trim().toLowerCase();
-  if (trimmed === "" || trimmed === "y" || trimmed === "yes") return "yes";
+  if (trimmed === "") return defaultAnswer;
+  if (trimmed === "y" || trimmed === "yes") return "yes";
   if (trimmed === "n" || trimmed === "no") return "no";
   // Any other input is treated as "no" — the user deliberately typed
   // something, we don't want to guess at what they meant.

@@ -65,6 +65,7 @@ export function renderUninstall(
 function isEmptyCollection(r: UninstallRecord): boolean {
   return (
     r.collection !== undefined &&
+    (r.remainingAgents?.length ?? 0) === 0 &&
     r.removedFrom.length === 0 &&
     r.absentFrom.length === 0 &&
     r.failures.length === 0
