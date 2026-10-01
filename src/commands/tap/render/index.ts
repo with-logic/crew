@@ -51,26 +51,6 @@ function formatFetched(r: TapListRow, style: Styler): string {
   return style.dim(`fetched ${timeAgo(r.last_fetched)}`);
 }
 
-export function renderTapRemove(
-  name: string,
-  kind: "git" | "path",
-  dryRun: boolean,
-  style: Styler,
-): string[] {
-  const tag = dryRun ? style.dim(" (dry run)") : "";
-  const lines: string[] = [];
-  lines.push(
-    `${style.symbol("ok")} ${dryRun ? "Would remove" : "Removed"} tap ${style.bold(name)}${tag}`,
-  );
-  if (kind === "git") {
-    lines.push(style.dim(dryRun ? "  local clone would be deleted" : "  local clone deleted"));
-  } else {
-    const verb = dryRun ? "wouldn't be" : "wasn't";
-    lines.push(style.dim(`  (the local folder itself ${verb} touched)`));
-  }
-  return lines;
-}
-
 export function renderTapUpdate(
   rows: readonly TapRefreshRow[],
   dryRun: boolean,

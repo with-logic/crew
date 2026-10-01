@@ -127,6 +127,7 @@ interface Totals {
   upToDate: number;
   skipped: number;
   sourceGone: number;
+  tapMissing: number;
   failed: number;
   added: number;
 }
@@ -137,6 +138,7 @@ function tally(rows: readonly UpdateRow[], addedCount: number, tapErrorCount: nu
     upToDate: 0,
     skipped: 0,
     sourceGone: 0,
+    tapMissing: 0,
     // Re-expansion errors are failures too: a child that failed
     // validation was not added, and the run exits 1 for it.
     failed: tapErrorCount,
@@ -149,6 +151,7 @@ function tally(rows: readonly UpdateRow[], addedCount: number, tapErrorCount: nu
     else if (k === "up_to_date") t.upToDate++;
     else if (k === "skipped" || k === "missing_project_root") t.skipped++;
     else if (k === "source_gone") t.sourceGone++;
+    else if (k === "tap_missing") t.tapMissing++;
     else {
       // Only `failed` remains; `satisfies` turns a newly added
       // `Outcome` kind into a compile error rather than silently
@@ -166,6 +169,7 @@ function formatTotals(t: Totals, dryRun: boolean): string {
   if (t.added > 0) parts.push(`${t.added} ${dryRun ? "would add" : "new"}`);
   if (t.upToDate > 0) parts.push(`${t.upToDate} up to date`);
   if (t.skipped > 0) parts.push(`${t.skipped} skipped`);
+  if (t.tapMissing > 0) parts.push(`${t.tapMissing} with a removed tap`);
   if (t.sourceGone > 0) parts.push(`${t.sourceGone} removed upstream`);
   if (t.failed > 0) parts.push(plural(t.failed, "failure"));
   if (parts.length === 0) return "nothing changed";
