@@ -29,9 +29,10 @@ const CARDS: readonly {
     desc: (
       <>
         Any reachable git URL. No tap setup required. <code>@owner/repo</code> is GitHub shorthand;
-        full <code>https://</code> and <code>git@</code> URLs work for anywhere else. Append a tag
-        or SHA to pin, a branch to follow it, <code>{"//subpath"}</code> to scope. Or just paste the
-        link from your browser. Branch names containing <code>/</code> need an explicit tail such as{" "}
+        A scheme-less <code>github.com/owner/repo</code> works too; full <code>https://</code> and{" "}
+        <code>git@</code> URLs work for anywhere else. Append a tag or SHA to pin, a branch to
+        follow it, <code>{"//subpath"}</code> to scope. Or just paste the link from your browser.
+        Branch names containing <code>/</code> need an explicit tail such as{" "}
         <code>{"@feature/python//engineers/founding"}</code> on the repository URL.
       </>
     ),
@@ -39,6 +40,7 @@ const CARDS: readonly {
       "crew install @acme/skills",
       "crew install @acme/skills@v1.2.0",
       "crew install @acme/skills//engineers/founding",
+      "crew install github.com/acme/skills",
       "crew install https://github.com/acme/skills/tree/main/engineers/founding",
     ],
   },
