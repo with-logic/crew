@@ -7,11 +7,11 @@
  * `GitProcessError` is translated into crew's `ref_not_found` /
  * `source_unreachable` errors here, as in `./index.ts`. Git's stderr is
  * quoted into those messages and can repeat a credential-bearing
- * remote, so it passes through `redactText` first (§5.2).
+ * remote, so it passes through `displayText` first (§5.2).
  */
 
 import { CrewError } from "../../core/errors.ts";
-import { redactText } from "../../util/redact.ts";
+import { displayText } from "../../refs/display-url.ts";
 import { type GitProcessError, runGit } from "../exec.ts";
 
 /**
@@ -91,7 +91,7 @@ export function checkoutSha(repoPath: string, sha: string): void {
     const ge = err as GitProcessError;
     throw new CrewError(
       "ref_not_found",
-      `couldn't check out ${sha.slice(0, 8)} — ${redactText(ge.result.stderr.trim())}`,
+      `couldn't check out ${sha.slice(0, 8)} — ${displayText(ge.result.stderr.trim())}`,
       { sha },
     );
   }

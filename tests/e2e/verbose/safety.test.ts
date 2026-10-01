@@ -72,9 +72,10 @@ describe("--verbose credential redaction", () => {
     const secret = "tkn_QUERYPARAMSECRET";
     for (const json of [true, false]) {
       const capture = captureStreams();
-      const args = json
-        ? ["install", "--verbose", "--json", `https://127.0.0.1:1/a/b.git?token=${secret}`]
-        : ["install", "--verbose", `https://127.0.0.1:1/a/b.git?token=${secret}`];
+      // HTTP references drop queries (§8.2), so use a stored tap URL to
+      // exercise the remote that git actually receives, without parsing it.
+      tapWithUrl(home, `https://127.0.0.1:1/a/b.git?token=${secret}`);
+      const args = ["tap", "update", "creds", "--verbose", ...(json ? ["--json"] : [])];
       const code = runCli(args, { home, streams: capture.streams });
       expect(code).not.toBe(0);
       const all = capture.stdout() + capture.stderr();
