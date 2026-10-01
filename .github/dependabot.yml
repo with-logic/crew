@@ -1,10 +1,10 @@
 # Dependabot configuration.
 #
-# Weekly cadence keeps PRs manageable on a small repo. Three ecosystems:
+# Weekly cadence keeps PRs manageable on a small repo. Three update jobs:
 #
-#   1. npm at the repo root — the crew CLI's deps (typescript, biome,
-#      bun types, etc.). Bun reads npm packages via the same registry.
-#   2. npm in `site/` — the Next.js landing site.
+#   1. Bun at the repo root — the crew CLI's deps (typescript, biome,
+#      bun types, etc.). Native Bun support keeps bun.lock in sync.
+#   2. Bun in `site/` — the Next.js landing site.
 #   3. github-actions — the workflows under `.github/workflows/`.
 #
 # Security advisories on any of these come in via Dependabot security
@@ -12,7 +12,7 @@
 
 version: 2
 updates:
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -20,7 +20,7 @@ updates:
     commit-message:
       prefix: "deps"
 
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/site"
     schedule:
       interval: "weekly"

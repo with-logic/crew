@@ -1,7 +1,7 @@
 name: Dependabot — regenerate bun.lock
 
-# Dependabot only manages package.json; it has no knowledge of bun.lock.
-# This workflow runs on every dependabot PR, regenerates any stale lockfiles,
+# Native Bun Dependabot updates include bun.lock. This compatibility workflow
+# also handles older manifest-only PRs: it regenerates any stale lockfiles
 # and commits them back so that `bun install --frozen-lockfile` passes in CI.
 
 on:
