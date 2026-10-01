@@ -10,10 +10,11 @@
  * collision prompt that `./index.ts` runs first.
  */
 
-import { CrewError } from "../../core/errors.ts";
 import type { Config } from "../../core/types.ts";
 import { enumerateCandidates, type NameCandidate } from "../../install/attribute-bare-name.ts";
-import { formatCandidate, shortLabelFor } from "../../install/resolve-ref/format.ts";
+import { ambiguityError } from "../../install/resolve-ref/errors.ts";
+import { shortLabelFor } from "../../install/resolve-ref/format.ts";
+import { safePath } from "../../util/redact.ts";
 import type { CommandContext } from "../types.ts";
 
 /**
@@ -59,7 +60,7 @@ export function promptBareNameAmbiguity(
   if (ctx.flags.yes) return raw;
 
   const choiceCount = candidates.length + 1; // +1 for abort
-  const lines: string[] = [`\`${trimmed}\` is ambiguous — pick one:`];
+  const lines: string[] = [`\`${safePath(trimmed)}\` is ambiguous — pick one:`];
   for (let i = 0; i < candidates.length; i++) {
     lines.push(`  [${i + 1}] ${shortLabelFor(candidates[i]!, trimmed)}`);
   }
@@ -68,17 +69,10 @@ export function promptBareNameAmbiguity(
 
   const answer = ctx.promptChoice(lines.join("\n"), choiceCount);
   if (answer === "abort" || answer.index === choiceCount - 1) {
-    const errLines: string[] = [
-      `\`${trimmed}\` is ambiguous across taps, skills, and namespaces`,
-      "",
-      "  Rerun with one of:",
-      "",
-    ];
-    for (const c of candidates) errLines.push(`    ${formatCandidate(c, trimmed)}`);
-    throw new CrewError("ambiguous_reference", errLines.join("\n"), {
-      name: trimmed,
-      candidates: candidates.map((c) => formatCandidate(c, trimmed)),
-    });
+    // Same message the non-interactive path raises, so aborting the prompt
+    // and never being offered it read identically — and so the layout is
+    // composed in one place that knows which breaks are trusted.
+    throw ambiguityError(trimmed, candidates);
   }
 
   const chosen = candidates[answer.index]!;

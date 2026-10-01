@@ -10,7 +10,8 @@
  */
 
 import type { AgentAdapter } from "../agents/adapter.ts";
-import { ALL_AGENTS, agentByName } from "../agents/registry.ts";
+import { ALL_AGENTS } from "../agents/registry.ts";
+import { assertKnownAgents } from "../agents/validate.ts";
 import { CrewError } from "../core/errors.ts";
 import type { Config } from "../core/types.ts";
 
@@ -19,15 +20,9 @@ export function computeAgentSet(
   config: Config,
   restrictTo: readonly string[] = [],
 ): AgentAdapter[] {
-  const unknown = restrictTo.filter((n) => !agentByName(n));
-  if (unknown.length > 0) {
-    const known = ALL_AGENTS.map((a) => a.name).join(", ");
-    throw new CrewError(
-      "no_agents",
-      `unknown agent${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")} — known agents: ${known}`,
-      { unknown },
-    );
-  }
+  // `no_agents`, not `usage_error`: an unresolvable restriction here
+  // means the install has no targets at all (§13).
+  assertKnownAgents(restrictTo, "no_agents");
 
   let active: AgentAdapter[] = [];
   for (const adapter of ALL_AGENTS) {

@@ -46,6 +46,8 @@ export interface CommandContext {
 /** Global flags as parsed by the CLI. */
 export interface CommandFlags {
   readonly scope: Scope;
+  /** Distinguishes an explicit `--scope` from its default for scope-filtering commands. */
+  readonly scopeGiven: boolean;
   readonly agent: readonly string[];
   readonly dryRun: boolean;
   readonly json: boolean;

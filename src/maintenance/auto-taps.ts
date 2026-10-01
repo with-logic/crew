@@ -14,6 +14,7 @@
 import { readConfig, writeConfig } from "../config/load.ts";
 import { paths, tapPath } from "../core/paths.ts";
 import type { StateFile } from "../core/types.ts";
+import { withTapLocks } from "../sources/tap-lock.ts";
 import { rmrfInside } from "../util/fs.ts";
 
 /**
@@ -26,14 +27,16 @@ export function garbageCollectAutoTaps(state: StateFile, home: string): string[]
   const survivors = config.taps.filter((t) => t.registered || inUse.has(t.name));
   if (survivors.length === config.taps.length) return [];
   const removed = config.taps.filter((t) => !survivors.includes(t));
-  writeConfig({ ...config, taps: survivors }, home);
-  const tapsDir = paths(home).tapsDir;
-  for (const tap of removed) {
-    // A tap name reaches us from `config.yaml`, so the clone path is
-    // built from persisted text. Refuse anything that resolves outside
-    // the taps directory rather than handing it to a recursive delete.
-    if (tap.kind === "git") rmrfInside(tapsDir, tapPath(tap.name, home));
-    // Path taps own no clone dir; nothing to delete.
-  }
+  withTapLocks(removed, home, () => {
+    writeConfig({ ...config, taps: survivors }, home);
+    const tapsDir = paths(home).tapsDir;
+    for (const tap of removed) {
+      // A tap name reaches us from `config.yaml`, so the clone path is
+      // built from persisted text. Refuse anything that resolves outside
+      // the taps directory rather than handing it to a recursive delete.
+      if (tap.kind === "git") rmrfInside(tapsDir, tapPath(tap.name, home));
+      // Path taps own no clone dir; nothing to delete.
+    }
+  });
   return removed.map((t) => t.name);
 }
