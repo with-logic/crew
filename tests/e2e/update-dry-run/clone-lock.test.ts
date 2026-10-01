@@ -16,6 +16,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { runCli } from "../../../src/cli/main.ts";
+import { readConfig } from "../../../src/config/load.ts";
+import type { TapConfig } from "../../../src/core/types.ts";
 import { tapLockTarget } from "../../../src/sources/tap-lock.ts";
 import { acquireLock } from "../../../src/util/advisory-lock.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
@@ -47,7 +49,7 @@ afterEach(() => {
  * name, and the install's exit code — the caller asserts on it, since
  * Biome forbids assertions outside a test body.
  */
-function installFromTap(): { home: string; tap: string; code: number } {
+function installFromTap(): { home: string; tap: TapConfig; code: number } {
   const home = makeCrewHome();
   runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
   const repo = makeTempDir("crew-lock-");
@@ -55,10 +57,7 @@ function installFromTap(): { home: string; tap: string; code: number } {
   makeSkill(repo, "alpha", skillFrontmatter({ name: "alpha", description: "v1" }));
   commitAll(repo, "v1");
   const code = runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
-  const list = captureStreams();
-  runCli(["tap", "list", "--json"], { home, streams: list.streams });
-  const taps = (JSON.parse(list.stdout()) as { taps: { name: string }[] }).taps;
-  return { home, tap: taps[0]!.name, code };
+  return { home, tap: readConfig(home).taps[0]!, code };
 }
 
 describe("C-UPD-18d crew update locks tap clones", () => {
@@ -92,7 +91,19 @@ describe("C-UPD-18d crew update locks tap clones", () => {
   test("an unrelated tap's lock does not block the run", () => {
     const { home, code } = installFromTap();
     expect(code).toBe(0);
-    const held = acquireLock(tapLockTarget("some-other-tap", home));
+    const held = acquireLock(
+      tapLockTarget(
+        {
+          name: "other",
+          kind: "git",
+          url: "file:///unrelated",
+          subpath: "",
+          path: "",
+          registered: true,
+        },
+        home,
+      ),
+    );
     try {
       const c = captureStreams();
       expect(runCli(["update", "--dry-run"], { home, streams: c.streams })).toBe(0);

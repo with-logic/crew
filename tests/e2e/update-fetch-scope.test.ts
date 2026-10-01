@@ -10,10 +10,10 @@
 
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../src/cli/main.ts";
-import { tapPath } from "../../src/core/paths.ts";
 import { runGit } from "../../src/git/exec.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
+  cloneDirForTap,
   commitAll,
   makeGitRepo,
   makeSkill,
@@ -65,12 +65,12 @@ describe("crew update fetch scope", () => {
     makeSkill(repoB, "new-b", skillFrontmatter({ name: "new-b", description: "a new skill" }));
     commitAll(repoB, "add new-b");
 
-    const shaBBefore = headSha(tapPath("tap-b", home));
+    const shaBBefore = headSha(cloneDirForTap("tap-b", home)!);
 
     // Targeted update: alpha only. tap-a should move; tap-b must not.
     const code = runCli(["update", "alpha"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
-    expect(headSha(tapPath("tap-b", home))).toBe(shaBBefore);
+    expect(headSha(cloneDirForTap("tap-b", home)!)).toBe(shaBBefore);
   });
 
   test("C-UPD-23 `crew update` with no args still refreshes every configured tap", () => {
@@ -94,13 +94,13 @@ describe("crew update fetch scope", () => {
     makeSkill(repoB, "new-b", skillFrontmatter({ name: "new-b", description: "a new skill" }));
     commitAll(repoB, "add new-b");
 
-    const shaABefore = headSha(tapPath("tap-a", home));
-    const shaBBefore = headSha(tapPath("tap-b", home));
+    const shaABefore = headSha(cloneDirForTap("tap-a", home)!);
+    const shaBBefore = headSha(cloneDirForTap("tap-b", home)!);
 
     runCli(["update"], { home, streams: captureStreams().streams });
     // Both clones advanced.
-    expect(headSha(tapPath("tap-a", home))).not.toBe(shaABefore);
-    expect(headSha(tapPath("tap-b", home))).not.toBe(shaBBefore);
+    expect(headSha(cloneDirForTap("tap-a", home)!)).not.toBe(shaABefore);
+    expect(headSha(cloneDirForTap("tap-b", home)!)).not.toBe(shaBBefore);
   });
 
   test("C-UPD-23 targeted update fetches the tap backing a named skill", () => {
@@ -138,12 +138,12 @@ describe("crew update fetch scope", () => {
     );
     commitAll(otherRepo, "add fresh-other");
 
-    const shaNamedBefore = headSha(tapPath("named-tap", home));
-    const shaOtherBefore = headSha(tapPath("other-tap", home));
+    const shaNamedBefore = headSha(cloneDirForTap("named-tap", home)!);
+    const shaOtherBefore = headSha(cloneDirForTap("other-tap", home)!);
 
     runCli(["update", "one"], { home, streams: captureStreams().streams });
     // Targeted tap advanced; unrelated tap is unchanged.
-    expect(headSha(tapPath("named-tap", home))).not.toBe(shaNamedBefore);
-    expect(headSha(tapPath("other-tap", home))).toBe(shaOtherBefore);
+    expect(headSha(cloneDirForTap("named-tap", home)!)).not.toBe(shaNamedBefore);
+    expect(headSha(cloneDirForTap("other-tap", home)!)).toBe(shaOtherBefore);
   });
 });

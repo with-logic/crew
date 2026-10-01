@@ -5,7 +5,7 @@
  */
 
 import type { TapConfig } from "../core/types.ts";
-import { withTapLocks } from "./tap-lock.ts";
+import { tapLockTarget, withTapLocks } from "./tap-lock.ts";
 
 class DiscoveredTap {
   readonly tap: TapConfig;
@@ -20,16 +20,16 @@ export function withDiscoveredTapLocks<T>(
   home: string,
   fn: (requireTap: (tap: TapConfig) => void) => T,
 ): T {
-  const known = new Map(taps.map((tap) => [tap.name, tap]));
+  const known = new Map(taps.map((tap) => [tapLockTarget(tap, home), tap]));
   const requireTap = (tap: TapConfig): void => {
-    if (!known.has(tap.name)) throw new DiscoveredTap(tap);
+    if (!known.has(tapLockTarget(tap, home))) throw new DiscoveredTap(tap);
   };
   for (;;) {
     try {
       return withTapLocks([...known.values()], home, () => fn(requireTap));
     } catch (err) {
       if (!(err instanceof DiscoveredTap)) throw err;
-      known.set(err.tap.name, err.tap);
+      known.set(tapLockTarget(err.tap, home), err.tap);
     }
   }
 }

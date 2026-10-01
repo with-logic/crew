@@ -4,8 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
-import { deriveAutoTapName } from "../../../src/install/tap-naming.ts";
+import { repoClonePath } from "../../../src/core/repo-path.ts";
 import { tapLockTarget } from "../../../src/sources/tap-lock.ts";
 import { acquireLock } from "../../../src/util/advisory-lock.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
@@ -42,12 +41,13 @@ function setup(): { home: string; repo: string; url: string } {
 describe("install clone locking", () => {
   test("C-CONC-01 direct source acquisition locks a newly attributed tap before cloning", () => {
     const { home, url } = setup();
-    const name = deriveAutoTapName(url, "");
-    const held = acquireLock(tapLockTarget(name, home));
+    const held = acquireLock(
+      tapLockTarget({ name: "", kind: "git", url, subpath: "", path: "", registered: false }, home),
+    );
     try {
       const c = captureStreams();
       expect(runCli(["install", url], { home, streams: c.streams })).toBe(7);
-      expect(existsSync(tapPath(name, home))).toBe(false);
+      expect(existsSync(repoClonePath(url, home))).toBe(false);
     } finally {
       held.release();
     }
@@ -59,7 +59,7 @@ describe("install clone locking", () => {
     expect(
       runCli(["tap", "add", url, "example"], { home, streams: captureStreams().streams }),
     ).toBe(0);
-    const held = acquireLock(tapLockTarget("example", home));
+    const held = acquireLock(tapLockTarget(readConfig(home).taps[0]!, home));
     try {
       for (const args of [
         ["install", "example", "--tap"],
@@ -68,7 +68,7 @@ describe("install clone locking", () => {
         expect(runCli(args, { home, streams: captureStreams().streams })).toBe(7);
       }
       expect(readConfig(home).taps[0]!.name).toBe("example");
-      expect(existsSync(tapPath("example", home))).toBe(true);
+      expect(existsSync(repoClonePath(url, home))).toBe(true);
     } finally {
       held.release();
     }
@@ -83,11 +83,15 @@ describe("install clone locking", () => {
     const depUrl = `file://${dependency}`;
     makeSkill(repo, "alpha", skillFrontmatter({ name: "alpha", dependencies: [depUrl] }));
     commitAll(repo, "root");
-    const name = deriveAutoTapName(depUrl, "");
-    const held = acquireLock(tapLockTarget(name, home));
+    const held = acquireLock(
+      tapLockTarget(
+        { name: "", kind: "git", url: depUrl, subpath: "", path: "", registered: false },
+        home,
+      ),
+    );
     try {
       expect(runCli(["install", url], { home, streams: captureStreams().streams })).toBe(7);
-      expect(existsSync(tapPath(name, home))).toBe(false);
+      expect(existsSync(repoClonePath(depUrl, home))).toBe(false);
     } finally {
       held.release();
     }

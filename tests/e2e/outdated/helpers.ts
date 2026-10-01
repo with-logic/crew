@@ -7,11 +7,13 @@
  */
 
 import { afterEach, beforeEach } from "bun:test";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
+import { readConfig } from "../../../src/config/load.ts";
 import { paths } from "../../../src/core/paths.ts";
+import { tapClonePath } from "../../../src/core/repo-path.ts";
 import { runGit } from "../../../src/git/exec.ts";
 import { walk } from "../../../src/util/fs.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
@@ -108,9 +110,9 @@ export function moveUpstream(repo: string, skill: string): void {
 /** Current HEAD of every tap clone, keyed by tap name. */
 export function tapHeads(home: string): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const tap of readdirSync(paths(home).tapsDir)) {
-    out[tap] = runGit(["rev-parse", "HEAD"], {
-      cwd: join(paths(home).tapsDir, tap),
+  for (const tap of readConfig(home).taps) {
+    out[tap.name] = runGit(["rev-parse", "HEAD"], {
+      cwd: tapClonePath(tap, home),
     }).stdout.trim();
   }
   return out;
@@ -119,6 +121,6 @@ export function tapHeads(home: string): Record<string, string> {
 /** Point a tap clone's origin at a path that does not exist. */
 export function breakTapOrigin(home: string, tapName: string): void {
   runGit(["remote", "set-url", "origin", "file:///does/not/exist/crew-gone"], {
-    cwd: join(paths(home).tapsDir, tapName),
+    cwd: tapClonePath(readConfig(home).taps.find((tap) => tap.name === tapName)!, home),
   });
 }

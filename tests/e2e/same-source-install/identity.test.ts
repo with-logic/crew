@@ -10,11 +10,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
-import {
-  canonicalRepoUrl,
-  sameSourceIdentity,
-  sourceIdentityOf,
-} from "../../../src/install/source-identity.ts";
+import { canonicalRepoUrl } from "../../../src/core/repo-url.ts";
+import { sameSourceIdentity, sourceIdentityOf } from "../../../src/install/source-identity.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
@@ -152,6 +149,10 @@ describe("C-INST-13e re-expansion respects existing installs", () => {
     // same canonical location under a *different* tap row.
     makeSkill(join(repo, "skills"), "pdf", skillFrontmatter({ name: "pdf", description: "pdf" }));
     commitAll(repo, "add pdf");
+    // Every tap reads the same existing clone; refresh before reading the new subpath.
+    expect(runCli(["tap", "update", broadTap], { home, streams: captureStreams().streams })).toBe(
+      0,
+    );
     expect(install(home, `file://${repo}//skills/pdf`).code).toBe(0);
     const pdfTap = readState(home).installations.find((e) => e.name === "pdf")!.source.tap;
     expect(pdfTap).not.toBe(broadTap);

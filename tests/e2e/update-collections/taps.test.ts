@@ -2,9 +2,14 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
-import { tapPath } from "../../../src/core/paths.ts";
 import { runGit } from "../../../src/git/exec.ts";
-import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import {
+  cloneDirForTap,
+  commitAll,
+  makeSkill,
+  makeTempDir,
+  skillFrontmatter,
+} from "../../helpers/fixtures.ts";
 import { addBrokenTap, buildFlatTap, bump, freshHome, installedBody, run } from "./helpers.ts";
 
 const originalUserPath = claudeCodeAdapter.userPath;
@@ -82,13 +87,17 @@ describe("crew update <tap>", () => {
     const home = freshHome();
     const repo = buildFlatTap("upd-coll-empty-", ["alpha"]);
     expect(run(home, ["tap", "add", `file://${repo}`, "quiet"]).code).toBe(0);
-    const before = runGit(["rev-parse", "HEAD"], { cwd: tapPath("quiet", home) }).stdout.trim();
+    const before = runGit(["rev-parse", "HEAD"], {
+      cwd: cloneDirForTap("quiet", home)!,
+    }).stdout.trim();
     bump(repo, "", "alpha", "v2");
 
     const r = run(home, ["update", "quiet"]);
     expect(r.code).toBe(0);
     expect(r.out).toContain("No skills installed from tap quiet — refreshed it anyway.");
-    const after = runGit(["rev-parse", "HEAD"], { cwd: tapPath("quiet", home) }).stdout.trim();
+    const after = runGit(["rev-parse", "HEAD"], {
+      cwd: cloneDirForTap("quiet", home)!,
+    }).stdout.trim();
     expect(after).not.toBe(before);
   });
 });

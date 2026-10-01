@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
 import { paths } from "../../../src/core/paths.ts";
+import { repoClonePath } from "../../../src/core/repo-path.ts";
 import { garbageCollectAutoTaps } from "../../../src/maintenance/auto-taps.ts";
 import { isInside, rmrfInside } from "../../../src/util/fs.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
@@ -51,7 +52,7 @@ describe("C-TAP-25 deletion stays inside the managed root", () => {
   });
 
   for (const method of ["tap-remove", "auto-gc"] as const) {
-    test(`C-TAP-25 ${method} removes a valid two-dot-prefixed clone`, () => {
+    test(`C-TAP-25 ${method} removes a clone for a valid two-dot-prefixed tap`, () => {
       const home = makeCrewHome();
       const config = readConfig(home);
       writeConfig(
@@ -71,7 +72,7 @@ describe("C-TAP-25 deletion stays inside the managed root", () => {
         },
         home,
       );
-      const clone = join(paths(home).tapsDir, "..skills");
+      const clone = repoClonePath("file:///unused", home);
       mkdirSync(clone, { recursive: true });
       if (method === "tap-remove") {
         expect(

@@ -4,9 +4,10 @@
  * Every install attributes its skills to a tap (registered or auto).
  * `acquireTap` materializes that tap on disk:
  *
- *   - kind=git → `ensureClone` into `~/.crew/taps/<name>/`. No fetch
- *     by default (network policy: §16.6); the install flow that fetches
- *     does so explicitly via `refreshTaps` before calling here.
+ *   - kind=git → `ensureClone` into the repository's shared clone under
+ *     `~/.crew/repos/` (§6). No fetch by default (network policy:
+ *     §16.6); the install flow that fetches does so explicitly via
+ *     `refreshTaps` before calling here.
  *   - kind=path → just verify the directory exists.
  *
  * The result tells the caller where on disk to walk for skills, and
@@ -27,14 +28,17 @@
 
 import { join, posix } from "node:path";
 import { CrewError } from "../../core/errors.ts";
-import { crewHome, tapPath } from "../../core/paths.ts";
+import { crewHome } from "../../core/paths.ts";
+import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { withExportedTree } from "../../git/export.ts";
-import { ensureClone, fetchRefs } from "../../git/repo/index.ts";
+import { ensureClone } from "../../git/repo/index.ts";
 import { classifyRef, resolveRef } from "../../git/repo/refs.ts";
 import { displayUrl } from "../../refs/display-url.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
+import { migrateTapClone } from "../migrate-clones.ts";
+import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
@@ -67,7 +71,8 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
     return { rootDir: tap.path, resolvedSha: null, pinned: false };
   }
   // kind === "git"
-  const clonePath = tapPath(tap.name, home);
+  migrateTapClone(tap, home);
+  const clonePath = tapClonePath(tap, home);
   ensureClone(tap.url, clonePath);
   // §9 step 3: Git's `@` is checkout HEAD, even after a refs-only fetch.
   const sha = resolveRef(clonePath, "@");
@@ -101,7 +106,8 @@ export function withAcquiredTap<T>(
   if (ref === null || tap.kind === "path") {
     return fn(acquireTap(tap, home));
   }
-  const clonePath = tapPath(tap.name, home);
+  migrateTapClone(tap, home);
+  const clonePath = tapClonePath(tap, home);
   ensureClone(tap.url, clonePath);
   const sha = resolveRefFetchingIfNeeded(clonePath, ref);
   const kind = classifyRef(clonePath, ref);
@@ -134,7 +140,8 @@ export function withAcquiredSkillDir<T>(
     const acquired = acquireTap(tap, home);
     return fn(acquired, join(acquired.rootDir, skillPath));
   }
-  const clonePath = tapPath(tap.name, home);
+  migrateTapClone(tap, home);
+  const clonePath = tapClonePath(tap, home);
   ensureClone(tap.url, clonePath);
   const sha = resolveRefFetchingIfNeeded(clonePath, ref);
   const kind = classifyRef(clonePath, ref);
@@ -148,29 +155,6 @@ export function withAcquiredSkillDir<T>(
   return withExportedTree(clonePath, sha, exportPath, home, (skillDir) =>
     fn({ rootDir: skillDir, resolvedSha: sha, pinned }, skillDir),
   );
-}
-
-/**
- * Resolve `ref` in the clone, fetching once if it isn't there yet — a
- * tag published after the clone was made is the common case. A ref that
- * is still missing after the fetch is `ref_not_found` (exit 5).
- *
- * Only a genuinely missing ref triggers the retry. A repository or
- * process failure means something else is wrong, and swallowing it here
- * would report "no such ref" for a broken clone.
- *
- * The fetch updates refs WITHOUT checking anything out: the commit is
- * read from the object database, and the shared clone's working tree
- * must stay where concurrent readers expect it (§9 step 3).
- */
-function resolveRefFetchingIfNeeded(clonePath: string, ref: string): string {
-  try {
-    return resolveRef(clonePath, ref);
-  } catch (err) {
-    if (!(err instanceof CrewError && err.code === "ref_not_found")) throw err;
-    fetchRefs(clonePath);
-    return resolveRef(clonePath, ref);
-  }
 }
 
 /**

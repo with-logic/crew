@@ -16,10 +16,12 @@
  */
 
 import type { CrewError } from "../../core/errors.ts";
-import { tapPath } from "../../core/paths.ts";
+import { tapClonePath } from "../../core/repo-path.ts";
+import { canonicalRepoUrl } from "../../core/repo-url.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { ensureRepo } from "../../git/repo/index.ts";
 import { displayUrl } from "../../refs/display-url.ts";
+import { migrateTapClone } from "../../sources/migrate-clones.ts";
 import { progress } from "../../util/progress.ts";
 import { safeUrl } from "../../util/redact.ts";
 
@@ -49,6 +51,20 @@ function skippedPathRow(tap: TapConfig): TapRefreshRow {
   return { name: tap.name, url: "", kind: "skipped", reason: "path tap (no upstream to fetch)" };
 }
 
+/**
+ * Outcome for a tap whose repository was already fetched earlier in this
+ * run: it inherits that fetch's result rather than repeating it.
+ */
+function repeatRow(tap: TapConfig, failure: CrewError | null): TapRefreshRow {
+  if (failure === null) return { name: tap.name, url: displayUrl(tap.url), kind: "refreshed" };
+  return {
+    name: tap.name,
+    url: displayUrl(tap.url),
+    kind: "failed",
+    error: { code: failure.code ?? "source_unreachable", message: failure.message },
+  };
+}
+
 /** The `--dry-run` twin of `refreshTaps`: same rows, no network (§16.3). */
 export function planRefresh(taps: readonly TapConfig[]): TapRefreshRow[] {
   const rows: TapRefreshRow[] = [];
@@ -62,21 +78,41 @@ export function planRefresh(taps: readonly TapConfig[]): TapRefreshRow[] {
   return rows;
 }
 
-/** Fetch + fast-forward each git tap; skip path taps; never throws per-tap. */
+/**
+ * Fetch + fast-forward each git tap; skip path taps; never throws
+ * per-tap.
+ *
+ * Taps sharing a repository share a clone (§6), so a repo is fetched at
+ * most once per run — the second tap on the same URL reports the first
+ * fetch's outcome instead of hitting the network again.
+ */
 export function refreshTaps(taps: readonly TapConfig[], home: string): TapRefreshRow[] {
   const rows: TapRefreshRow[] = [];
+  const fetched = new Map<string, CrewError | null>();
   for (const tap of taps) {
     if (tap.kind === "path") {
       rows.push(skippedPathRow(tap));
       continue;
     }
+    const repoKey = canonicalRepoUrl(tap.url);
+    let fetchStarted = false;
     try {
+      migrateTapClone(tap, home);
+      const previous = fetched.get(repoKey);
+      if (previous !== undefined) {
+        rows.push(repeatRow(tap, previous));
+        continue;
+      }
       progress(`refreshing tap ${tap.name} from ${safeUrl(tap.url)}`);
-      ensureRepo(tap.url, tapPath(tap.name, home));
+      fetchStarted = true;
+      ensureRepo(tap.url, tapClonePath(tap, home));
+      fetched.set(repoKey, null);
       // A tap URL may carry credentials (§16.3); rows reach both human and
       // JSON output, so redact once here rather than at each renderer.
       rows.push({ name: tap.name, url: displayUrl(tap.url), kind: "refreshed" });
     } catch (err) {
+      // A migration failure belongs to this alias, not the shared repository (§6).
+      if (fetchStarted) fetched.set(repoKey, err as CrewError);
       const ce = err as CrewError;
       rows.push({
         name: tap.name,

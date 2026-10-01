@@ -2,7 +2,7 @@
  * Shared advisory-lock primitive (§14).
  *
  * `proper-lockfile` guards one target path at a time. Both the state
- * lock (`state.json`) and the per-tap clone locks (§10.1 step 1) need
+ * lock (`state.json`) and the per-repository clone locks (§10.1 step 1) need
  * the same behaviour — atomic acquire, stale reclamation, bounded
  * retry, `state_locked` on timeout — so the retry loop lives here and
  * each caller supplies the path it guards.
