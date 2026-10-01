@@ -38,11 +38,12 @@ export function formatCandidate(c: NameCandidate, bareName: string): string {
 
 /** A short one-line label for the prompt ("the `foo` tap", etc.) */
 export function shortLabelFor(c: NameCandidate, bareName: string): string {
-  if (c.kind === "tap") return `install the \`${c.tap.name}\` tap`;
+  const tapName = safePath(c.tap.name);
+  if (c.kind === "tap") return `install the \`${tapName}\` tap`;
   if (c.kind === "namespace")
-    return `install the \`${c.namespace}\` namespace from \`${c.tap.name}\` (${c.members.length} skill${c.members.length === 1 ? "" : "s"})`;
-  const tapName = c.tap.name;
-  const ns = c.location.namespace;
-  if (ns !== null) return `install skill \`${bareName}\` from \`${tapName}\`/\`${ns}\``;
-  return `install skill \`${bareName}\` from \`${tapName}\``;
+    return `install the \`${safePath(c.namespace)}\` namespace from \`${tapName}\` (${c.members.length} skill${c.members.length === 1 ? "" : "s"})`;
+  const name = safePath(bareName);
+  const ns = c.location.namespace === null ? null : safePath(c.location.namespace);
+  if (ns !== null) return `install skill \`${name}\` from \`${tapName}\`/\`${ns}\``;
+  return `install skill \`${name}\` from \`${tapName}\``;
 }

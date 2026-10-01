@@ -44,8 +44,9 @@ describe("C-CLI-06b redactUrl", () => {
     expect(safeUrl("--no-single-branch")).toBe("--no-single-branch");
   });
 
-  test("passes through an unparseable scheme-bearing token unchanged", () => {
-    expect(safeUrl("http://[not-a-url")).toBe("http://[not-a-url");
+  test("fails closed on an unparseable scheme-bearing token", () => {
+    expect(safeUrl("http://[not-a-url")).toBe("***");
+    expect(safeUrl("https://user:SECRET@127.0.0.1:99999/repo?client_secret=OTHER")).toBe("***");
   });
 });
 

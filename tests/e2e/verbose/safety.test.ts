@@ -82,4 +82,23 @@ describe("--verbose credential redaction", () => {
       expect(all).toContain("token=***");
     }
   });
+  test("C-CLI-06b malformed credential URLs fail closed in progress and clone errors", () => {
+    for (const json of [false, true]) {
+      const home = makeCrewHome();
+      const secret = "MALFORMEDSECRETVALUE";
+      tapWithUrl(home, `https://user:${secret}@127.0.0.1:99999/repo.git?client_secret=${secret}`);
+      const capture = captureStreams();
+      const code = runCli(["tap", "update", "--verbose", ...(json ? ["--json"] : []), "creds"], {
+        home,
+        streams: capture.streams,
+      });
+      expect(code).not.toBe(0);
+      const all = capture.stdout() + capture.stderr();
+      expect(all).not.toContain(secret);
+      expect(all).toContain("refreshing tap creds from ***");
+      expect(all).toContain("source_unreachable");
+      if (json)
+        expect(JSON.parse(capture.stdout()).rows[0].error.code).toBe("source_unreachable");
+    }
+  });
 });

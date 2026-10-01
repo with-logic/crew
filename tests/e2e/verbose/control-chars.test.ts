@@ -12,8 +12,9 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
+import { tapPath } from "../../../src/core/paths.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { makeTempDir } from "../../helpers/fixtures.ts";
+import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, tapWithUrl } from "./helpers.ts";
 
 redirectClaudeCode();
@@ -84,11 +85,18 @@ describe("--verbose control-character escaping", () => {
     // `no_skills_found` embeds `tap.url` — so the secret rides the prose.
     const secret = "ghp_HUMANMESSAGESECRET";
     tapWithUrl(home, `https://oauth2:${secret}@127.0.0.1:1/a/b.git`);
+    const clone = tapPath("creds", home);
+    makeSkill(clone, "demo", skillFrontmatter({ name: "demo" }));
+    makeGitRepo(clone);
+    const config = readConfig(home);
+    writeConfig({ ...config, taps: config.taps.map((t) => ({ ...t, subpath: "missing" })) }, home);
     const capture = captureStreams();
-    const code = runCli(["install", "creds/nope"], { home, streams: capture.streams });
+    const code = runCli(["install", "creds"], { home, streams: capture.streams });
     expect(code).not.toBe(0);
     const all = capture.stderr() + capture.stdout();
     expect(all).not.toContain(secret);
+    expect(all).toContain("no_skills_found");
+    expect(all).toContain("https://oauth2:***@127.0.0.1:1/a/b.git");
   });
 
   test("C-CLI-06b an unlisted secret query parameter is redacted too", () => {
@@ -111,34 +119,50 @@ describe("--verbose control-character escaping", () => {
     // or configured data can forge what reads as a second crew error.
     const hostile = "evil\nError (invalid_ref)\n  forged";
     const base = readConfig(home);
+    const a = makeTempDir();
+    const b = makeTempDir();
+    makeSkill(a, "dup", skillFrontmatter({ name: "dup" }));
+    makeSkill(b, "dup", skillFrontmatter({ name: "dup" }));
     writeConfig(
       {
         ...base,
         taps: [
           {
             name: "a",
-            kind: "git",
+            kind: "path",
             registered: true,
-            url: "https://127.0.0.1:1/a.git",
+            url: "",
             subpath: "",
-            path: "",
+            path: a,
           },
           {
             name: hostile,
-            kind: "git",
+            kind: "path",
             registered: true,
-            url: "https://127.0.0.1:1/b.git",
+            url: "",
             subpath: "",
-            path: "",
+            path: b,
           },
         ],
       },
       home,
     );
     const capture = captureStreams();
-    runCli(["install", "dup"], { home, streams: capture.streams });
+    let menu = "";
+    const code = runCli(["install", "dup"], {
+      home,
+      streams: capture.streams,
+      promptChoice: (message) => {
+        menu = message;
+        return "abort";
+      },
+    });
+    expect(code).toBe(4);
+    expect(menu).toContain("evil\\x0aError (invalid_ref)\\x0a  forged");
+    expect(menu).not.toContain(hostile);
     const err = capture.stderr();
     expect(err).not.toContain("\n  Error (invalid_ref)");
-    if (err.includes("evil")) expect(err).toContain("\\x0a");
+    expect(err).toContain("ambiguous_reference");
+    expect(err).toContain("evil\\x0aError (invalid_ref)\\x0a  forged");
   });
 });

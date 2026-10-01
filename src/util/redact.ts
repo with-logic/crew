@@ -88,8 +88,8 @@ function redactStandardUrl(token: string): string {
   try {
     url = new URL(token);
   } catch {
-    // Not parseable as a URL; nothing structured to redact.
-    return token;
+    // Malformed remotes may still carry credentials (§5.2); fail closed.
+    return REDACTED;
   }
   if (url.password.length > 0) {
     url.password = REDACTED;

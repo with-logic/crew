@@ -14,6 +14,7 @@ import type { Config } from "../../core/types.ts";
 import { enumerateCandidates, type NameCandidate } from "../../install/attribute-bare-name.ts";
 import { ambiguityError } from "../../install/resolve-ref/errors.ts";
 import { shortLabelFor } from "../../install/resolve-ref/format.ts";
+import { safePath } from "../../util/redact.ts";
 import type { CommandContext } from "../types.ts";
 
 /**
@@ -59,7 +60,7 @@ export function promptBareNameAmbiguity(
   if (ctx.flags.yes) return raw;
 
   const choiceCount = candidates.length + 1; // +1 for abort
-  const lines: string[] = [`\`${trimmed}\` is ambiguous — pick one:`];
+  const lines: string[] = [`\`${safePath(trimmed)}\` is ambiguous — pick one:`];
   for (let i = 0; i < candidates.length; i++) {
     lines.push(`  [${i + 1}] ${shortLabelFor(candidates[i]!, trimmed)}`);
   }
