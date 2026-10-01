@@ -12,7 +12,9 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
+import { readConfig, writeConfig } from "../../../src/config/load.ts";
 import { paths } from "../../../src/core/paths.ts";
+import { garbageCollectAutoTaps } from "../../../src/maintenance/auto-taps.ts";
 import { isInside, rmrfInside } from "../../../src/util/fs.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
@@ -40,12 +42,53 @@ describe("C-TAP-25 deletion stays inside the managed root", () => {
   test("C-TAP-25 isInside rejects the root itself and escapes", () => {
     const root = makeTempDir("crew-inside-");
     expect(isInside(root, join(root, "child"))).toBe(true);
+    expect(isInside(root, join(root, "..skills"))).toBe(true);
     expect(isInside(root, join(root, "a", "b"))).toBe(true);
     // The root is not "inside" itself — deleting it is never intended.
     expect(isInside(root, root)).toBe(false);
     expect(isInside(root, join(root, ".."))).toBe(false);
     expect(isInside(root, makeTempDir("crew-other-"))).toBe(false);
   });
+
+  for (const method of ["tap-remove", "auto-gc"] as const) {
+    test(`C-TAP-25 ${method} removes a valid two-dot-prefixed clone`, () => {
+      const home = makeCrewHome();
+      const config = readConfig(home);
+      writeConfig(
+        {
+          ...config,
+          taps: [
+            ...config.taps,
+            {
+              name: "..skills",
+              kind: "git",
+              registered: method === "tap-remove",
+              url: "file:///unused",
+              subpath: "",
+              path: "",
+            },
+          ],
+        },
+        home,
+      );
+      const clone = join(paths(home).tapsDir, "..skills");
+      mkdirSync(clone, { recursive: true });
+      if (method === "tap-remove") {
+        expect(
+          runCli(["tap", "remove", "..skills"], {
+            home,
+            streams: captureStreams().streams,
+          }),
+        ).toBe(0);
+      } else {
+        expect(garbageCollectAutoTaps({ schema_version: 1, installations: [] }, home)).toEqual([
+          "..skills",
+        ]);
+      }
+      expect(existsSync(clone)).toBe(false);
+      expect(readConfig(home).taps.some((tap) => tap.name === "..skills")).toBe(false);
+    });
+  }
 
   // C-TAP-25 names four shapes a tap name must not take. Each one is a
   // different way to escape the taps directory (or, for `.`, to resolve

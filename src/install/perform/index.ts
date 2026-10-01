@@ -72,9 +72,8 @@ export function performInstall(
      */
     readonly allResolved?: readonly ResolvedSkill[];
     /**
-     * Entries whose `source` must survive this install untouched. Set
-     * when re-attribution refused to narrow a whole-tap subscription but
-     * the skill is installed anyway (`--force`, or a new adapter).
+     * Entries whose attribution must survive a reinstall in both state
+     * and markers (registered tap or a broader whole-tap subscription).
      */
     readonly keepSource?: readonly KeptSource[];
   },
@@ -83,6 +82,12 @@ export function performInstall(
   let state = startingState;
 
   for (const skill of resolved) {
+    const retained = options.keepSource?.find(
+      (entry) =>
+        entry.name === skill.name &&
+        entry.scope === scope &&
+        entry.projectRoot === (scope === "project" ? cwd : null),
+    );
     const perAgent: PerAgentResult[] = [];
     const successfulAgents: string[] = [];
     const groups = groupAgentsByDest(activeAgents, skill.name, scope, cwd);
@@ -101,8 +106,8 @@ export function performInstall(
           cwd,
           storePath: skill.storePath,
           skillName: skill.name,
-          tap: skill.tap,
-          tapRelativePath: skill.tapRelativePath,
+          tap: retained?.tap ?? skill.tap,
+          tapRelativePath: retained?.source.path ?? skill.tapRelativePath,
           ref: skill.ref,
           resolvedSha: skill.resolvedSha,
           contentHash: skill.contentHash,

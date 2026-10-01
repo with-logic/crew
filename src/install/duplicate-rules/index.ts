@@ -13,7 +13,7 @@
  * A different-source install of the same name throws `name_conflict`
  * (never overridden by --force — per §13). "Same source" means the same
  * canonical location: the same repo (or directory) and the same path
- * inside it, per `./source-identity.ts`. One repo can back several taps
+ * inside it, per `../source-identity.ts`. One repo can back several taps
  * — installing `//skills/docx` and later the whole repo reaches the same
  * directory two ways — so comparing tap names would report a conflict
  * where there is none.
@@ -25,7 +25,7 @@
  */
 
 import type { ResolvedSkill, Scope, StateFile } from "../../core/types.ts";
-import { classifySource, narrowsSubscription } from "./classify.ts";
+import { classifySource } from "./classify.ts";
 import type {
   AlreadyInstalled,
   DuplicateAnalysis,
@@ -70,16 +70,20 @@ export function applyDuplicateRules(
 
     const reattribution = classifySource(existing, skill, options.taps, incomingProjectRoot);
     if (reattribution) reattributions.push(reattribution);
-    // The move was rejected as a narrowing, but the skill may still be
-    // installed (--force, or a newly active adapter). Pin the existing
-    // attribution so the install can't do by the back door what
-    // re-attribution just refused.
-    else if (narrowsSubscription(existing, skill, options.taps)) {
+    // Registered attribution and broad subscriptions survive reinstalls
+    // as well as duplicate short-circuits (§5.4, §10.1.1).
+    else if (
+      existing.source.tap !== skill.tap.name ||
+      existing.source.path !== skill.tapRelativePath
+    ) {
+      // Successful source classification already proved this tap exists.
+      const tap = options.taps.find((row) => row.name === existing.source.tap)!;
       keepSource.push({
         name: existing.name,
         scope: existing.scope,
         projectRoot: incomingProjectRoot,
         source: existing.source,
+        tap,
       });
     }
 

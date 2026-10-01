@@ -13,17 +13,9 @@ import { join } from "node:path";
 import { baseFor } from "../agents/adapter.ts";
 import { ALL_AGENTS } from "../agents/registry.ts";
 import type { Marker, Scope, StateFile, TapConfig } from "../core/types.ts";
+import { installLocationKey } from "../state/identity.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
 import type { Reattribution } from "./duplicate-rules/index.ts";
-
-/**
- * Key one move by the install location it targets. Bulk re-attribution
- * runs under the state lock, so both callers index once rather than
- * scanning the move list per entry and per marker.
- */
-function moveKey(name: string, scope: Scope, projectRoot: string | null): string {
-  return JSON.stringify([name, scope, projectRoot ?? ""]);
-}
 
 /** Marker key: a move only claims markers still naming its old tap. */
 function markerMoveKey(
@@ -40,7 +32,7 @@ function movesByLocation(
 ): ReadonlyMap<string, Reattribution> {
   const byLocation = new Map<string, Reattribution>();
   for (const r of reattributions) {
-    byLocation.set(moveKey(r.name, r.scope, r.projectRoot), r);
+    byLocation.set(installLocationKey(r.name, r.scope, r.projectRoot), r);
   }
   return byLocation;
 }
@@ -55,15 +47,13 @@ export function applyReattributions(
   return {
     schema_version: 1,
     installations: state.installations.map((entry) => {
-      const move = moves.get(moveKey(entry.name, entry.scope, entry.project_root ?? null));
+      const move = moves.get(
+        installLocationKey(entry.name, entry.scope, entry.project_root ?? null),
+      );
       if (!move) return entry;
-      // The subscription moves with the attribution. A re-attributed
-      // entry never reaches `performInstall`, so this is the only place
-      // a whole-tap install can record `tracks_tap` for it — without
-      // this, asking for the whole repo after installing one child
-      // would leave the entry subscribed to nothing and `crew update`
-      // would skip siblings added upstream (§10.1.1). One-way, like
-      // `explicit`: a narrower install never clears it.
+      // Already-installed entries can skip `performInstall`, so record
+      // whole-tap tracking here too (§10.1.1). Like `explicit`, a
+      // narrower install never clears an existing subscription.
       const tracksTap = move.tracksTap || (entry.tracks_tap ?? false);
       return {
         ...entry,

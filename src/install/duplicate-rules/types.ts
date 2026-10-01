@@ -29,26 +29,23 @@ export interface Reattribution {
   readonly toPath: string;
   /**
    * Whether the incoming install subscribed to its whole tap. Carried
-   * with the move because a re-attributed entry never reaches
-   * `performInstall`, which is the only other place `tracks_tap` is
-   * written (§10.1.1).
+   * with the move because an already-installed entry can skip
+   * `performInstall`, which otherwise records `tracks_tap` (§10.1.1).
    */
   readonly tracksTap: boolean;
 }
 
 /**
- * A skill whose install must not rewrite the existing entry's `source`.
- * Classification refused to re-attribute because the incoming tap is
- * rooted deeper in the same repo, but `--force` and new-adapter installs
- * still route the skill through `performInstall`, which would otherwise
- * overwrite the broader attribution and silently end sibling
- * re-expansion (§10.1.1).
+ * Attribution retained when a reinstall must preserve a registered tap
+ * or a broad subscription (§5.4, §10.1.1). The full descriptor keeps
+ * authoritative markers consistent with state (§11.1).
  */
 export interface KeptSource {
   readonly name: string;
   readonly scope: Scope;
   readonly projectRoot: string | null;
   readonly source: StateEntry["source"];
+  readonly tap: TapConfig;
 }
 
 export interface DuplicateAnalysis {
