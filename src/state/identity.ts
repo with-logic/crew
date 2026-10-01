@@ -15,11 +15,16 @@
  * ruling out by construction.
  */
 
-import type { StateEntry } from "../core/types.ts";
+import type { Scope, StateEntry } from "../core/types.ts";
+
+/** Comparable key for one install location (§11.1). */
+export function installLocationKey(name: string, scope: Scope, projectRoot: string | null): string {
+  return JSON.stringify([name, scope, projectRoot ?? ""]);
+}
 
 /** The `(name, scope, project_root)` triple as a comparable string. */
 export function entryKey(entry: StateEntry): string {
-  return JSON.stringify([entry.name, entry.scope, entry.project_root ?? ""]);
+  return installLocationKey(entry.name, entry.scope, entry.project_root ?? null);
 }
 
 /** True when both entries occupy the same install location (§11.1). */

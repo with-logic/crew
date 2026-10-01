@@ -83,7 +83,7 @@ metadata:
 
 **`metadata.crew.dependencies`** (list of strings, optional). Other skills to install before this one. Each entry is a skill reference in any of the forms `crew install` accepts (§8). Bare names (`general-python-style`) resolve in the precedence order defined in §9.
 
-**Versions are git commit SHAs.** Homecrew does not define a version field. Every installed skill is identified by the SHA of the commit it was resolved from. Tags and branches resolve to SHAs at install time. Users pin with `@<sha>`, `@<tag>`, or `@<branch>`.
+**Versions are git commit SHAs.** Homecrew does not define a version field. Every installed skill is identified by the SHA of the commit it was resolved from. Tags and branches resolve to SHAs at install time. Users pin with `@<sha>` or `@<tag>`; `@<branch>` selects a branch to follow, and `crew update` advances it as that branch moves (§11.1).
 
 **Multi-skill directories.** A directory containing more than one skill has no special designation. When `crew install` is pointed at a source, Homecrew looks for a `SKILL.md` at the root. If present, one skill is installed. If not, Homecrew walks the standard tap layouts (§9 step 5). Trusted non-standard repositories can opt into bounded recursive fallback discovery. A skill's install name always comes from the `name` field in its `SKILL.md`; the source directory name is only a filesystem location and need not match.
 
@@ -100,6 +100,7 @@ crew install <ref> [<ref>...]     Install one or more skills.
 crew uninstall <selector> [<selector>...] Remove installed skills from every agent.
 crew remove <selector> [<selector>...]    Alias for `crew uninstall`.
 crew rm <selector> [<selector>...]        Alias for `crew uninstall`.
+crew uninstall --all              Remove every installed skill at the target scope.
 crew update [<selector>...]       Update all installed skills, or only those selected.
 crew upgrade [<selector>...]      Alias for `crew update`.
 crew outdated [<selector>...]     Preview what `crew update` would change, without changing it.
@@ -224,6 +225,20 @@ Only flags documented as repeatable (`--agent`) may appear more than once. Passi
   remaining skill that was only installed as a transitive dependency
   (§7.4 step 5) and is no longer required by anything. Equivalent to
   running `crew uninstall` followed by an autoremove pass.
+- `--all` — remove every skill installed at the target scope. Takes no
+  positional selectors; combining the two is a `usage_error`. Tap and
+  namespace selectors (§7.4) also remove many skills at once, but each
+  names the collection it will empty; `--all` names nothing and is bounded
+  only by the scope, so it alone requires confirmation:
+  `--yes`, or an interactive `[y/N]` prompt. When stdin is not a TTY and
+  `--yes` was not given, the command aborts with a `usage_error` naming
+  `--yes` rather than removing anything. With nothing installed at the
+  target scope it reports `not_installed_here`.
+
+  The confirmation happens *before* the state lock (§14) is taken, so a
+  prompt waiting on a human never blocks other crew processes. State is
+  re-read under the lock afterwards, so the removal acts on the installs
+  as they are when it runs rather than as they were at the prompt.
 
 ### 5.4 Duplicate installs
 
@@ -231,7 +246,45 @@ Only flags documented as repeatable (`--agent`) may appear more than once. Passi
 
 - If the source and resolved SHA match, report the skill as already installed and exit 0. In human mode, implementations SHOULD surface the installed ref and/or short SHA so the user sees which version is on their machine (e.g. `foo: already installed (v1.2.0 @ a1b2c3d4)`). The literal wording is implementation choice; the JSON payload is specified in §15.
 - If the source matches but the ref differs, treat as an update (§10).
-- If the source differs, fail with a name-conflict error (§13) unless `--force` is given, in which case the previous install is removed first.
+- If the source differs, fail with a name-conflict error (§13). `--force` does **not** override this (§13, C-INST-14): uninstall the skill first, then install it from the new source.
+
+**What "the source" means.** Two installs share a source when they name
+the same **canonical location**: the same repository (or the same local
+directory) and the same path inside it. The canonical location is the
+tap's repo URL (or path) joined with the tap's `subpath` and the entry's
+tap-relative path. Repo URLs compare after normalizing the spellings
+crew itself produces: a trailing `.git`, a trailing `/`, and host casing
+are ignored, so `gh:acme/skills`, `@acme/skills`, and
+`https://github.com/acme/skills` are one repository.
+
+Only the **host** is case-folded. Userinfo and the path after it are
+compared as written, because both can be significant on the server:
+`ssh://Alice@host/acme/skills` and `ssh://alice@host/acme/skills` may be
+different accounts, and `acme/Skills` a different repository from
+`acme/skills`. Folding them would let one install silently overwrite a
+genuinely different source instead of raising `name_conflict`.
+
+Path taps follow the same rule with the directory in place of the repo:
+`crew install /src/skills/docx` and `crew install /src` reach the same
+directory, so the second is a duplicate rather than a conflict, exactly
+as for the git case above.
+
+The tap a skill is attributed to is NOT part of its source identity. One
+repository can back several taps: `crew install @acme/skills//skills/docx`
+records a tap with `subpath: skills/docx` and an entry path of `""`,
+while `crew install @acme/skills` records a tap with no subpath and an
+entry path of `skills/docx`. Both reach the same directory in the same
+repo at the same commit, so the second install is a duplicate, not a
+name conflict.
+
+**Re-attribution.** When the two installs agree on canonical location
+but the existing entry is attributed to an **auto** tap (§16.5) while the
+incoming install comes through a tap that also covers that location, the
+entry is re-attributed: `state.source` and the install-site markers are
+rewritten to the incoming tap, and the installed bytes are left alone.
+Implementations SHOULD say so in human output. An entry attributed to a
+**registered** tap is never re-attributed — the user named that tap
+deliberately — and is simply reported as already installed.
 
 ### 5.5 Help output
 
@@ -580,6 +633,39 @@ Tap-qualified selectors are accepted even though `state.json` stores the skill
 under its unqualified name. If no installed state entry matches the selector,
 the command reports `not_installed_here` for the selector the user typed.
 
+**Collection selectors.** Mirroring `crew install <tap>` (§16.4), a selector
+may also name a collection of installed skills. Resolution order per argument:
+
+1. An installed skill (bare name or tap-qualified) — today's meaning, and it
+   always wins when a skill of that name is installed.
+2. Otherwise, a configured tap name (registered or auto) → every state entry
+   attributed to that tap at the targeted scope. A configured tap with nothing
+   installed from it is not an error: the command reports that and exits 0.
+3. Otherwise, a namespace: `<tap>/<namespace>` selects the installed entries
+   whose tap-relative path is `skills/<namespace>/<skill>` in that tap; a bare
+   `<namespace>` selects the same set when exactly one tap has installed
+   entries under that namespace. A bare word that is both a tap name and a
+   namespace with installed entries in another tap, or a namespace with
+   installed entries in more than one tap, is `ambiguous_reference` naming
+   each qualified form.
+4. Otherwise `not_installed_here`, as for any unmatched selector.
+
+Collection membership — and therefore the ambiguity decision in step 3 — is
+evaluated only among entries at the targeted scope, using the same narrowing
+(including the lone-project fallback) that a skill selector gets. A namespace
+present in two taps at different scopes is unambiguous when only one of them is
+in scope.
+
+A collection expands to one removal per distinct skill name, each following
+the normal uninstall algorithm below; `--agent` and `--prune` compose with the
+expansion unchanged. `--json` records carry `collection: { kind, name }` on
+each record that came from a collection selector.
+
+Selectors in one run may overlap — `crew uninstall <tap> <skill-in-that-tap>`
+is legal. Each installed entry is removed at most once; a later selector that
+covers an already-removed entry contributes nothing rather than failing on the
+missing install directory.
+
 **Scope.** `--scope` (§5.2) selects which installed entry a selector
 refers to; it never widens to every scope. Without `--scope`, or with
 `--scope user`, only the user-scope entry is a candidate. With
@@ -890,6 +976,12 @@ Rules:
 
 The resolved location inside the repo is either the repo root or the subpath. Behavior at the resolved location matches §9 step 5 (single skill if `SKILL.md` present, walk one level otherwise).
 
+When a ref is given, the skill's **content is read at that commit** — not
+at the repo's default branch. The bytes installed, the content hash, and
+the `resolved_sha` recorded in state and markers all come from the
+commit the ref resolves to (§9 step 3). A ref that does not exist in the
+repo is `ref_not_found` (§13).
+
 Git sources are ad-hoc. They are never promoted to taps and do not appear in `crew search` results.
 
 ### 8.3 Tap source
@@ -1064,7 +1156,19 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Path reference (`./foo`, `/abs/foo`): if any configured tap already points at the same path, use it; otherwise create a path-kind auto tap and use it.
    In all cases, the resolved `state.installations[i].source` is `{ tap: <tap-name>, path: <skill-relative-path-inside-tap> }`. The URL/path of the tap itself lives in `config.yaml`.
    - If a tap-source reference cannot be resolved from configured taps, Homecrew consults the known-tap registry (§16.2.1) before returning `invalid_ref`. Exact known-tap matches are suggestions only: Homecrew MUST NOT clone, fetch, add a tap to config, or install anything from a known tap until the user explicitly runs the suggested `crew tap add <source-ref> <name>` command (or a future interactive flow confirms that same action). The error MUST include the tap-add command and the follow-up `crew install <tap>/<skill>` or `crew install <tap>` command. A two-segment reference `<owner>/<repo>` also matches a known tap whose URL is `https://github.com/<owner>/<repo>` — the user typed the repository, not a tap name — and the error suggests that tap the same way (§8.5 "Two-segment misses").
-3. **Resolve refs to SHAs.** For git sources and tap sources, the ref (tag, branch, or `HEAD`) is resolved to a full commit SHA. This SHA is what's recorded in state and markers, even if the user specified a tag or branch.
+3. **Resolve refs to SHAs.** For git sources and tap sources, the ref (tag, branch, or `HEAD`) is resolved to a full commit SHA. This SHA is what's recorded in state and markers, even if the user specified a tag or branch. If the ref is not present in the local clone, crew fetches once and re-resolves; a ref that is still unknown is `ref_not_found` (§13, exit 5).
+
+   Every subsequent step — validation (step 4), expansion (step 5), and staging (step 8) — reads the source **as of the resolved SHA**, so an `@<tag|branch|sha>` reference installs that commit's bytes. Implementations MUST NOT let a requested ref fall back to whatever revision the local clone happens to have checked out. Because a tap's clone is shared by `crew search`, tap re-expansion, and other installs, an implementation that materializes the commit MUST do so without leaving the shared clone on a different revision — including when a missing ref prompts a fetch, which MUST NOT move the shared checkout.
+
+   **Resolution reads the same commit.** Deciding *which* skill or namespace a reference names is itself a read of the source, so it too happens as of the resolved SHA. A skill present at `@<ref>` but deleted at the default branch MUST still resolve, install, and preview.
+
+   **A fetch reflects upstream deletions.** Refreshing a clone MUST bring local tags into line with upstream, deletions included. A tag removed upstream MUST stop resolving locally, so an entry pinned to it reports `ref_not_found` rather than appearing up to date against a ref the source no longer has.
+
+   **Failing to materialize is not the same as finding nothing.** When the commit resolves and its tree is readable but the reference's subpath is absent at that commit, the result is `no_skills_found` — a reference the user can correct. When the source cannot be materialized at all (an unreadable object, an unreadable repository, a scratch location that cannot be written), the result is `source_unreachable`: nothing was read, so nothing can be concluded about what the source contains.
+
+   **Dependencies inherit their parent's commit.** A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records the same ref and pinning. Recording the parent's SHA over content read from another revision would make state describe a provenance the bytes do not have.
+
+   **The materialized tree is a boundary.** The resolved location MUST be reached without traversing a symlink. A repository can commit a symlink at the very path a reference names; following it would read content from outside the requested commit — potentially from anywhere on the host filesystem.
 4. **Validate each candidate skill** against the Agent Skills specification:
    - `SKILL.md` exists at the expected location.
    - Frontmatter parses as YAML.
@@ -1234,8 +1338,8 @@ between resolution and targeting:
    (per the upstream-deletion rule above) and left in place.
 3. For each skill:
    a. Skip if the skill is pinned to an exact SHA, unless `--force`.
-   b. If pinned to a tag, re-resolve the tag: if the tag moved and `--force` is given, proceed; otherwise skip.
-   c. Otherwise (tap source, branch, or default branch), re-resolve the ref to a SHA.
+   b. If pinned to a tag, re-resolve the tag: if the tag moved and `--force` is given, proceed with the tag's new commit — the content installed is that commit's, not the default branch's; otherwise skip.
+   c. Otherwise (tap source, branch, or default branch), re-resolve the ref to a SHA. The entry's own recorded `ref` is what gets re-resolved: an entry installed from `@<branch>` follows that branch, not the tap's default branch. An entry with no ref follows the tap's default branch as before.
    d. If the new SHA equals the installed `resolved_sha`, the skill is up-to-date; record as such and continue.
    e. Otherwise, stage the new commit into the store and run the install algorithm (§7.3) for every (agent, scope) pair this skill is recorded against. Pre-flight safety checks apply as always: a customized install is skipped (not overwritten) unless `--force`.
 4. Garbage-collect the store: any `store/<name>@<short-sha>/` entry no longer referenced by any `state.json` entry or marker is deleted.
@@ -1271,11 +1375,26 @@ are flagged `tracks_tap: true` and new siblings appear on the next
 **not** pulled in — the user asked for one thing, not the whole tap.
 
 On every `crew update` run, for each group of state entries sharing
-(tap, scope, project_root) where **at least one member** has
+(tap, scope, project_root, `ref`) where **at least one member** has
 `tracks_tap: true`, crew:
 
-1. Expands the tap's resolved root using the tap's configured discovery
-   mode (§9 step 5) and builds the current child set. If the current
+1. Expands the tap **at the group's `ref`** using the tap's configured
+   discovery mode (§9 step 5) and builds the current child set. The
+   group's own `ref` is what gets materialized, exactly as in §9 step 3:
+   a whole-tap install at `@<tag|branch|sha>` MUST be re-expanded
+   against that revision, not the tap's default branch. Otherwise
+   re-expansion would discover children that do not exist at the
+   revision the group tracks.
+
+   `ref` is part of the grouping key for the same reason: two groups of
+   the same tap at different refs see different child sets and MUST be
+   re-expanded independently.
+
+   A child added by this step inherits the group's `ref` and its
+   `pinned` value (§11.1) — it was read from that revision, so recording
+   it as an unpinned no-ref install would misattribute its bytes.
+
+   If the current
    child set contains the same declared `name` at more than one
    tap-relative source path, re-expansion records
    `conflicting_dependencies` for that name, leaves existing state
@@ -1829,13 +1948,13 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `ambiguous_reference` | 4 | A reference has more than one valid resolution across taps, skills, and namespaces, and the user is non-interactive or the prompt was aborted. |
 | `ambiguous_dependency` | 4 | A dependency's bare name is ambiguous across taps. |
 | `conflicting_dependencies` | 4 | Two skills in one install set have the same name but different source paths or resolved SHAs; also emitted by `crew update` when tap re-expansion finds multiple current children declaring the same `name`. |
-| `name_conflict` | 4 | Trying to install a skill whose name is already held by a different source, without `--force`. |
+| `name_conflict` | 4 | Trying to install a skill whose name is already held by a different source, with or without `--force`. "Different source" means a different canonical location per §5.4 — the same repo reached through a different tap is NOT a conflict. |
 | `untracked_directory` | 6 | Destination exists without a crew marker. |
 | `customized` | 6 | Destination has a marker but content hash differs. |
 | `inconsistent_marker` | 6 | Marker exists with an unexpected `name`. |
 | `not_installed_here` | 6 | Uninstall agent has no marker. |
 | `no_agents` | 4 | No agent tools detected or all disabled. |
-| `config_invalid` | 4 | `config.yaml` did not parse. |
+| `config_invalid` | 4 | `config.yaml` did not parse, or a tap name is not a single directory component (contains `/`, `\`, or is `.`/`..`). |
 | `state_locked` | 7 | Could not acquire a coordination lock within the timeout — either the state lock (`state.json.lock`) or a per-tap clone lock (§14). |
 | `autoupdate_failure` | 8 | Autoupdate enable/disable couldn't load/unload the platform scheduler. |
 | `self_update_unavailable` | 5 | `crew self-update` couldn't reach the release feed, the asset is missing for the current arch, or the named `--version` doesn't exist. |
@@ -2080,8 +2199,12 @@ When `crew install` is given a reference that resolves to a source not currently
 Auto taps are functionally indistinguishable from registered taps for `crew update`, `crew tap update`, `crew search`, and `crew install <tap-name>` purposes. The only differences are:
 
 - They appear with `kind: auto` in `crew tap list`.
-- They are garbage-collected by `crew uninstall` when their last associated state entry is removed: the tap row is dropped from `config.yaml` and the local clone is deleted. (Registered taps are not garbage-collected.)
+- They are garbage-collected when their last associated state entry goes away: the tap row is dropped from `config.yaml` and the local clone is deleted. This happens when `crew uninstall` removes the last entry, and when `crew install` re-attributes the last entry to a broader tap covering the same canonical location (§5.4). (Registered taps are not garbage-collected.)
 - A user can convert an auto tap to registered by running `crew tap add <url-or-path>` against the same source — this idempotent promotion preserves the existing clone and installed skills.
+
+Because auto-tap names are crew's bookkeeping rather than something the
+user chose, re-attributing an entry away from one is not user-visible
+state loss: the skill, its bytes, and its install sites are unchanged.
 
 ### 16.6 Search and network policy
 
@@ -2253,6 +2376,13 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-03 | §9, §7.3 | After install, `SKILL.md` and every other file in the source appear under `{base}/<name>/`, preserving relative paths. |
 | C-INST-04 | §7.5 | A `.crew.json` marker is written into the installed skill directory with the fields listed in §7.5. |
 | C-INST-05 | §9 | `crew install gh:owner/repo//sub/path` installs only the skill at that subpath. |
+| C-INST-05b | §8.2, §9 step 3 | `crew install <url>@<tag>` installs the bytes as of the tag's commit, not the default branch's, and records that commit as `resolved_sha`. The same holds for `@<sha>` and for a tap-source `<tap>/<skill>@<tag>`. |
+| C-INST-05c | §9 step 3 | A reference whose `@<ref>` does not exist in the repo fails with `ref_not_found`, exit 5. |
+| C-INST-05d | §9 step 3 | Installing at a ref leaves the tap's shared clone on its previous revision and leaves no scratch directories behind. |
+| C-INST-05e | §9 step 3 | Reference resolution reads the requested commit: `crew install <tap>/<skill>@<ref>` and `crew info <tap>/<skill>@<ref>` succeed for a skill present at that commit even when it has been deleted at the default branch. |
+| C-INST-05f | §9 step 3, §9 step 6 | A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records that ref. |
+| C-INST-05g | §9 step 3 | A reference whose resolved location is reached through a symlink is rejected; content outside the requested commit is never read or installed. |
+| C-INST-05h | §9 step 3, §13 | A subpath absent at an otherwise-readable commit is `no_skills_found`; a commit that cannot be materialized at all (unreadable object or repository, unwritable scratch location) is `source_unreachable`. |
 | C-INST-06 | §9 | `crew install gh:owner/repo` pointed at a repo with a root `SKILL.md` installs one skill. |
 | C-INST-07 | §9 step 5 | `crew install gh:owner/repo` pointed at a repo with no root `SKILL.md` but skill subdirectories installs every valid child one level deep. |
 | C-INST-08 | §9 step 5 | Nested skills more than one level deep are NOT installed by directory expansion. |
@@ -2263,6 +2393,17 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-11 | §9 | Installing an already-installed skill at the same SHA prints "already installed" and exits 0. |
 | C-INST-12 | §5.4 | Installing an already-installed skill from the same source at a different ref performs an update. |
 | C-INST-13 | §5.4 | Installing a skill with the same `name` from a different source produces `name_conflict`, exit 4, without `--force`. |
+| C-INST-13a | §5.4 | Installing a repo subpath (`<url>//skills/foo`) and then the whole repo (`<url>`) does NOT produce `name_conflict`: both reach the same canonical location, so `foo` is reported as already installed. |
+| C-INST-13b | §5.4, §16.5 | In that case the entry is re-attributed to the broader tap — `state.source` and the markers name it — and the emptied auto tap plus its clone are garbage-collected. |
+| C-INST-13c | §5.4 | An entry attributed to a **registered** tap is not re-attributed; the install reports it as already installed and leaves `state.source` alone. |
+| C-INST-13d | §5.4 | Canonical URL comparison ignores a trailing `.git`, a trailing `/`, and host casing, so those spellings of one repo are the same source. |
+| C-INST-13e | §10.1.1, §5.4 | Tap re-expansion does not "add" a child that is already installed at the same scope from the same canonical location through another tap. |
+| C-INST-13f | §5.4, §16.5 | A re-attribution in one project rewrites only that project's marker; a sibling project's install of the same skill is left alone. |
+| C-INST-13g | §5.4, §11.1 | Re-attribution writes the destination tap's discovery mode into the marker rather than inheriting the old tap's, so a marker-only rebuild lands on the destination. |
+| C-INST-13h | §5.4, §10.1.1 | An entry subscribed to a whole tap is NOT re-attributed onto a tap rooted strictly deeper in the same source, which would lose the sibling subscription. |
+| C-INST-13i | §5.4 | Canonical URL comparison folds host case only. Userinfo and the path are compared as written, so `ssh://Alice@host/a/B` and `ssh://alice@host/a/b` are different sources. |
+| C-INST-13j | §5.4 | Path taps use the same rule with the directory in place of the repo: installing `/src/skills/foo` and then `/src` reaches one canonical location, so the second install is a duplicate, not a `name_conflict`. |
+| C-INST-13k | §10.1.1, §5.4 | When two tap rows cover one source, a child installed while re-expanding the first is not installed again by the second in the same run. |
 | C-INST-14 | §5.4 | `--force` on a `name_conflict` is NOT honored (the spec forbids `--force` overriding name conflicts). |
 | C-INST-15 | §9 | `--dry-run` on install produces a summary of what would happen and writes no files. |
 | C-INST-16 | §9 | `--agent <skill>` restricts the operation to the named agent(s). |
@@ -2337,6 +2478,9 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-02 | §10.1 | A skill whose `resolved_sha` equals the newly resolved SHA is reported as up-to-date and NOT re-copied. |
 | C-UPD-03 | §10.1 | A skill pinned to an exact SHA is skipped by `crew update` without `--force`. |
 | C-UPD-04 | §10.1 | A skill pinned to a tag: if the tag has not moved, reports up-to-date; if moved, skipped without `--force`. |
+| C-UPD-04b | §10.1 step 3b | `crew update --force` on a skill pinned to a tag that moved installs the tag's new commit's content. |
+| C-UPD-04c | §10.1 step 3c | A skill installed from `@<branch>` is updated from that branch, not from the tap's default branch. |
+| C-UPD-04d | §9 step 3, §10.1 | A skill pinned to a tag deleted upstream fails with `ref_not_found` (exit 1 for the run) rather than reporting up-to-date, and its installed bytes and state entry are preserved. |
 | C-UPD-05 | §10.1 | `crew update <skill>` restricts processing to the named skill(s). |
 | C-UPD-06 | §10.1 | A network failure on one skill does NOT stop processing of others. |
 | C-UPD-07 | §10.1 | A customized install on one skill does NOT stop processing of others. |
@@ -2349,6 +2493,8 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-14 | §16.5 | `crew install <git-url>` against a source with no matching configured tap creates an auto tap (`registered: false`) in `config.yaml`. Every resulting state entry's `source.tap` names that tap. |
 | C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). |
 | C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
+| C-UPD-16b | §10.1.1 | A whole-tap install at an explicit `@<ref>` is re-expanded against that ref: a child added to the tap's default branch but absent at the ref is NOT installed, and a child present at the ref is installed carrying that ref and the group's `pinned` value. |
+| C-UPD-16c | §10.1, §13 | A `crew update` run in which any skill failed for a reason outside the soft set (`source_gone` / `no_skills_found` / `invalid_ref`) exits 1. A failure crew cannot classify MUST NOT be reported as a `failed` row on a run that exits 0. |
 | C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`, its clone deleted. Registered taps are NOT garbage-collected by uninstall. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps — the one thing it does change — then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, store entries, and state are byte-identical before and after; `--json` carries `dry_run: true`. |
 | C-UPD-18a | §10.1.1, §14 | `crew update --dry-run` against a home with no `state.json` leaves it absent: the state lock is never acquired, so neither the state file nor its lock is created. |
@@ -2416,6 +2562,14 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-19 | §7.4 | `crew uninstall --dry-run <selector>` reports what would be removed (including `--prune` orphans) but leaves every install directory, marker, and `state.json` untouched; `--json` output carries `dry_run: true`. |
 | C-UNINST-19a | §7.4 | `crew uninstall --dry-run` against a `CREW_HOME` with no `state.json` does not create it (the state lock is not taken), and writes nothing else under `~/.crew/` — including `version-check.json`, which §10.4's dry-run suppression keeps untouched even on a TTY. |
 | C-UNINST-19b | §7.4 | Both the preview and the real run name every retained agent — human output lists each, and `--json` carries them in `remainingAgents`. An agent is retained when an `--agent` filter excludes it OR when its removal aborts on a safety check, since its bytes remain either way. |
+| C-UNINST-20 | §7.4 | `crew uninstall <tap>` removes every skill installed from that tap at the target scope and leaves skills from other taps installed. `--agent` composes with the expansion. |
+| C-UNINST-21 | §7.4 | `crew uninstall <tap>/<namespace>`, and a bare `<namespace>` unique across taps, removes only the installed entries under `skills/<namespace>/`; sibling namespaces are untouched. |
+| C-UNINST-22 | §7.4 | An installed skill name wins over a same-named tap or namespace: only that skill is removed. |
+| C-UNINST-23 | §7.4 | A selector that is both a configured tap and a namespace with installed entries elsewhere (or a namespace present in several taps) is `ambiguous_reference`, exit 4, naming each qualified form; nothing is removed. |
+| C-UNINST-24 | §7.4 | `crew uninstall <tap>` for a configured tap with nothing installed from it reports that and exits 0. |
+| C-UNINST-25 | §5.3.1 | `crew uninstall --all` removes every skill at the target scope after confirmation (`--yes` or an interactive `[y/N]`); declining removes nothing, a non-TTY run without `--yes` is a `usage_error` naming `--yes`, combining `--all` with a selector is a `usage_error`, and nothing installed at that scope is `not_installed_here`. |
+| C-UNINST-26 | §7.4 | Overlapping selectors (`crew uninstall <tap> <skill-in-that-tap>`) remove each installed entry exactly once and exit 0; no entry is reported as a failure for already having been removed by an earlier selector in the same run. |
+| C-UNINST-27 | §7.4 | A collection selector narrows to the target scope exactly as a skill selector does, including the lone-project fallback, and collection ambiguity is decided only among entries at that scope. |
 | C-SHARE-01 | §7.2, §7.3 | When `codex` and `gemini-cli` are both active, `crew install <name>` writes bytes to `~/.agents/skills/<name>/` exactly once, and the per-agent summary reports both adapter names as installed. |
 | C-SHARE-02 | §7.5 | The `agents` field in `.crew.json` is non-empty, alphabetically sorted, and lists every agent currently owning the install. |
 | C-SHARE-03 | §7.3 | Installing into a path already owned by agent X with agent Y active (and not X) results in a marker whose `agents` contains both X and Y, preserving X's ownership. |
@@ -2459,6 +2613,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-24f | §16.3 | `crew tap add <owner>/<repo>@<ref>` keeps the ref in the suggested correction: `crew tap add @<owner>/<repo>@<ref>`. |
 | C-TAP-24g | §16.2.1 | When an argument matches both a skill inside a known tap and the GitHub repository that tap lives at, both suggestions are offered; neither interpretation suppresses the other. |
 | C-TAP-24d | §8.5 / §9 | `crew install <owner>/<repo>@<ref>` and `crew info <owner>/<repo>@<ref>` preserve `@<ref>` in every suggested command and in the echoed reference. |
+| C-TAP-25 | §6.1 / §16.5 | A tap name in `config.yaml` that is not a single directory component (contains `/` or `\`, or is `.`/`..`) is rejected with `config_invalid`, and no clone-directory deletion ever targets a path resolving outside `~/.crew/taps/`. |
 
 #### C-STATE: State and markers (§11)
 
@@ -2468,6 +2623,7 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-02 | §11.1 | Every installed skill has exactly one entry per (skill, scope, project_root) triple. User-scope entries carry no `project_root`, so a skill has at most one user-scope entry; project-scope entries with different `project_root` values are independent installs. |
 | C-STATE-03 | §7.5 | Every crew-installed skill directory contains a `.crew.json` marker with matching `name` and `resolved_sha`. |
 | C-STATE-04 | §11.1 | `pinned: true` in state iff the ref was a SHA or a tag at install time. |
+| C-STATE-04b | §9 step 3, §11.1 | `resolved_sha` equals the commit the requested ref resolves to, and the entry's `content_hash` is the hash of that commit's bytes. |
 | C-STATE-05 | §11.2 | `crew doctor` detects state-vs-marker drift and reports every inconsistency. |
 | C-STATE-06 | §11.2 | `crew doctor --repair` reconstructs `state.json` from markers if `state.json` is deleted. |
 | C-STATE-07 | §11.2 | `crew doctor --verify` recomputes content hashes and reports mismatches. |

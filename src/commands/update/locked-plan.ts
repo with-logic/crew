@@ -12,7 +12,7 @@ import { installNewTapChild } from "../../install/install-new-tap-child.ts";
 import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import { updateOneEntry } from "../../install/update/entry.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
-import { type CollectionSubject, entryIdentity } from "../../state/collections.ts";
+import { type CollectionSubject, entryIdentity } from "../../state/collections/index.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { refreshTaps } from "../tap/refresh.ts";
 import type { CommandContext } from "../types.ts";

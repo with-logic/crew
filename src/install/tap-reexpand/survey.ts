@@ -9,7 +9,7 @@
  */
 
 import type { StateEntry, TapConfig } from "../../core/types.ts";
-import { entryIdentity } from "../../state/collections.ts";
+import { entryIdentity } from "../../state/collections/index.ts";
 import type { CurrentTapChild } from "../tap-children.ts";
 import type { TapReexpandRow } from "./index.ts";
 

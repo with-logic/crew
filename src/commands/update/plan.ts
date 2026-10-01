@@ -18,7 +18,7 @@ import type { Config, StateFile } from "../../core/types.ts";
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
 import { withTapLocks } from "../../sources/tap-lock.ts";
-import { type CollectionKind, resolveCollectionSubjects } from "../../state/collections.ts";
+import { resolveCollectionSubjects, type SubjectKind } from "../../state/collections/index.ts";
 import { readState } from "../../state/load.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
 import type { CommandContext } from "../types.ts";
@@ -29,7 +29,7 @@ import { chooseEntries, tapsToRefreshFor } from "./selection.ts";
 /** One resolved positional, echoed in `--json` so callers see how it was read. */
 export interface UpdateSelector {
   readonly raw: string;
-  readonly kind: CollectionKind;
+  readonly kind: SubjectKind;
   readonly name: string;
 }
 
