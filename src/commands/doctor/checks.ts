@@ -12,6 +12,7 @@ import { isAutoupdateLoaded } from "../../autoupdate/scheduler.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import { hashDirectory } from "../../hash/content.ts";
 import { orphanStoreEntries } from "../../maintenance/gc.ts";
+import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
 import type { MarkerEntry } from "./markers.ts";
 
@@ -37,6 +38,7 @@ export function checkStateMarkerDrift(
         (m) =>
           m.record.marker.name === entry.name &&
           m.record.scope === entry.scope &&
+          (m.projectRoot ?? null) === (entry.project_root ?? null) &&
           m.record.marker.agents.includes(targetName),
       );
       if (!match) {
@@ -52,7 +54,10 @@ export function checkStateMarkerDrift(
     const ownedByAny = m.record.marker.agents.some((a) =>
       stateEntries.some(
         (e) =>
-          e.name === m.record.marker.name && e.scope === m.record.scope && e.agents.includes(a),
+          e.name === m.record.marker.name &&
+          e.scope === m.record.scope &&
+          (e.project_root ?? null) === (m.projectRoot ?? null) &&
+          e.agents.includes(a),
       ),
     );
     if (!ownedByAny) {
@@ -138,15 +143,15 @@ export function checkOrphanStoreEntries(state: StateFile, home: string): Finding
 export function checkProjectRoots(stateEntries: readonly StateEntry[]): Finding[] {
   const findings: Finding[] = [];
   for (const entry of stateEntries) {
-    if (entry.scope !== "project" || !entry.project_root) continue;
+    if (entry.scope !== "project") continue;
     // A path replaced by a regular file is as unusable as a missing
     // one — nothing can be read beneath it — and repair applies the
     // same test, so the two must not disagree.
-    if (!isDirectory(entry.project_root)) {
+    if (!(hasUsableProjectRoot(entry) && isDirectory(entry.project_root))) {
       findings.push({
         level: "warn",
         code: "missing_project_root",
-        message: `${entry.name}@project was installed under \`${entry.project_root}\` but that directory no longer exists`,
+        message: `${entry.name}@project was installed under \`${entry.project_root}\` but that root is unusable or its directory no longer exists`,
       });
     }
   }

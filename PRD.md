@@ -510,6 +510,12 @@ scope. The field is deliberately not named `installed_at`, which means
 an ISO 8601 timestamp everywhere else in the state (§11.1) and marker
 (§7.5) contracts.
 
+Before removing any bytes, resolve and scope-check every selector. A missing
+selector without `--force`, or an unusable selected project root, aborts the
+command without removing any of the requested installs. A project root must
+be a nonempty absolute path; an unusable root produces `usage_error` even
+with `--force`, because the install location cannot be safely determined.
+
 **Agent set.** The default is to remove the skill from every agent
 it's recorded against in state. `--agent <name>` (repeatable,
 §5.2) restricts removal to the named agents only — other agents
@@ -550,7 +556,8 @@ For each `(dest, agents_in_group)`:
    further orphans. Continue until a full pass finds none. Orphans that
    abort on a safety check (`customized`, `untracked_directory`) are
    skipped and reported, not forced; the user can rerun with
-   `--force --prune` to override. A skipped orphan keeps its state entry
+   `--force --prune` to override. Any reported removal failure, including a
+   skipped orphan, makes the command exit with code 1. A skipped orphan keeps its state entry
    per step 4, so an implementation MUST NOT rely on the entry
    disappearing to terminate this walk: track the entries already
    attempted in this run and never revisit one.
@@ -843,7 +850,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
       explicitly wants a skill, we keep remembering).
     - `required_by` for each skill is recomputed from the direct
       dependency graph built during steps 1–6: entry `X.required_by`
-      contains every installed `Y` at the same scope whose
+      contains every installed `Y` at the same install location (`(scope, project_root)`) whose
       `metadata.crew.dependencies` directly names `X`. Transitive
       relationships are not stored — they are derivable by walking the
       graph. `required_by` is symmetric to `dependencies` at one hop.
@@ -1310,6 +1317,11 @@ directory (or by the autoupdate background scheduler from its
 scheduler-assigned cwd) still updates each project-scope install at its
 original location.
 
+A missing, empty, relative, or otherwise malformed `project_root` is retained
+in state, reported by doctor as `missing_project_root`, and never used as an
+install location. Repair preserves these entries until the user corrects the
+recorded path; it must not guess the location from the current directory.
+
 A stale `project_root` (directory no longer exists, was moved,
 permissions changed) is reported by `crew doctor` as a
 `missing_project_root` finding and is a clean skip on `crew update` —
@@ -1354,7 +1366,7 @@ off.
 - Every entry in `state.json` should correspond to a `.crew.json` marker in every listed agent. `crew doctor` detects and reports drift.
 - Every entry's `source.tap` MUST name a tap currently configured in `config.yaml`. `crew doctor --repair` recovers a missing tap by recreating it as an auto-tap from marker contents.
 - `pinned` is true if the ref was an exact SHA or a tag. Otherwise false.
-- Every name appearing in any entry's `required_by` is itself an installed skill at the same scope. `crew doctor` detects and reports dangling `required_by` names.
+- Every name appearing in any entry's `required_by` is itself an installed skill at the same install location (`(scope, project_root)`). `crew doctor` detects and reports dangling `required_by` names.
 - `project_root` is present iff `scope === "project"`. User-scope entries MUST NOT carry a `project_root`; project-scope entries MUST.
 
 ### 11.2 `crew doctor`

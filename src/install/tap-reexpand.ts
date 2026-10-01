@@ -20,6 +20,7 @@
 import type { CrewError } from "../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
 import { acquireTap } from "../sources/acquire/index.ts";
+import { hasUsableProjectRoot } from "../state/validation.ts";
 import { isDirectory } from "../util/fs.ts";
 import { currentTapChildren, groupChildrenByName } from "./tap-children.ts";
 
@@ -102,7 +103,11 @@ export function reexpandTaps(
 
     // Project-scoped group whose project_root is gone: skip.
     const projectRoot = first.project_root ?? null;
-    if (first.scope === "project" && projectRoot && !isDirectory(projectRoot)) continue;
+    if (
+      first.scope === "project" &&
+      !(hasUsableProjectRoot(first) && isDirectory(first.project_root))
+    )
+      continue;
 
     let acquired: { rootDir: string; resolvedSha: string | null };
     try {

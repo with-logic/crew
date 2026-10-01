@@ -21,7 +21,7 @@ export const MANAGING: CommandGroup = {
       name: "uninstall",
       signature: <>crew uninstall [--scope {"{user,project}"}] &lt;name&gt;…</>,
       description:
-        "Remove installed skills from every agent. Bare and tap-qualified names work. One scope at a time: your system-wide install by default, or this project's with --scope project.",
+        "Remove installed skills from every agent. Bare and tap-qualified names work. One scope at a time: your system-wide install by default, or this project's with --scope project. A skill installed in exactly one project can be removed from any directory.",
     },
     {
       name: "remove",

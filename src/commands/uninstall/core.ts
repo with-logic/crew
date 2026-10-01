@@ -35,8 +35,8 @@ export interface UninstallRecord {
  */
 export interface RemovalMeta {
   /**
-   * Project roots of the entries this call FULLY removed (project scope
-   * only). Empty when nothing was removed, or when every entry survived
+   * Locations this call FULLY removed: project roots, or null for user
+   * scope. Empty when nothing was removed, or when every entry survived
    * a partial `--agent` removal — `--prune` keys off exactly that.
    */
   fullyRemovedRoots: (string | null)[];

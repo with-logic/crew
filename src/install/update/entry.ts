@@ -3,11 +3,8 @@
  *
  * Given one state entry, look up its tap, acquire it, and either:
  *   - report `up_to_date` if the resolved SHA / content hash hasn't moved;
- *   - report `skipped` if the entry is pinned and not forced;
  *   - re-stage and re-install if the SHA moved.
- *
- * Tap re-expansion (additions / source_gone) lives in `tap-reexpand.ts`;
- * this module handles only the per-existing-entry update.
+ * Tap re-expansion lives in `tap-reexpand.ts`.
  */
 
 import { existsSync } from "node:fs";
@@ -21,6 +18,7 @@ import { loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
+import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { nowIso } from "../../util/time.ts";
 import type { InternalOutcome, PerAgentUpdate, UpdateRow } from "./types.ts";
 
@@ -96,10 +94,13 @@ function updateOne(
   force: boolean,
   fallbackCwd: string,
 ): InternalOutcome {
-  const entryCwd = cwdForEntry(entry, fallbackCwd);
-  if (entry.scope === "project" && entry.project_root && !existsSync(entry.project_root)) {
-    return { kind: "missing_project_root", root: entry.project_root };
+  if (
+    entry.scope === "project" &&
+    !(hasUsableProjectRoot(entry) && existsSync(entry.project_root))
+  ) {
+    return { kind: "missing_project_root", root: String(entry.project_root ?? "(unknown)") };
   }
+  const entryCwd = cwdForEntry(entry, fallbackCwd);
 
   if (entry.pinned && entry.ref !== null && /^[0-9a-f]{40}$/i.test(entry.ref) && !force) {
     return { kind: "skipped", reason: "pinned to exact SHA" };

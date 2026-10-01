@@ -48,24 +48,32 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
   const agentFilter = validateAgentFilter(ctx.flags.agent);
 
   const records: UninstallRecord[] = [];
-  let exitCode = 0;
 
   withStateLock(() => {
     let state = readState(ctx.home);
     const removedRoots: (string | null)[] = [];
-    for (const raw of ctx.positional) {
+    const subjects = ctx.positional.map((raw) => {
       // §7.4 "Scope": a selector only ever targets one scope.
-      const subject = narrowSubjectToScope(
+      return narrowSubjectToScope(
         resolveStateSubject(state, raw),
         ctx.flags.scope,
         ctx.cwd,
         ctx.flags.force,
       );
+    });
+    for (const planned of subjects) {
+      // Earlier selectors can change ownership or remove an aliased entry.
+      const subject = {
+        ...planned,
+        entries: state.installations.filter((e) =>
+          planned.entries.some((p) => entryKey(p) === entryKey(e)),
+        ),
+      };
+      if (subject.entries.length === 0 && planned.entries.length > 0) continue;
       const { updatedState, rec, meta } = removeOne(state, subject, ctx, false, agentFilter);
       state = updatedState;
       records.push(rec);
       removedRoots.push(...meta.fullyRemovedRoots);
-      if (rec.failures.length > 0) exitCode = 1;
     }
     // §7.4 step 5: pruning is a consequence of a full removal. A forced
     // miss or a surviving partial `--agent` removal frees nothing, so
@@ -79,6 +87,7 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
     gcAutoTaps(state, ctx.home);
   }, ctx.home);
 
+  const exitCode = records.some((rec) => rec.failures.length > 0) ? 1 : 0;
   return { exitCode, human: renderUninstall(records, ctx.style), json: { records } };
 }
 
