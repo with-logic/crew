@@ -77,13 +77,7 @@ export interface TapReexpandResult {
   readonly added: readonly StateEntry[];
   readonly updated: readonly StateEntry[];
   readonly hardFailure: boolean;
-  /**
-   * Entries whose upstream directory vanished, keyed by full identity
-   * (§11.1) rather than name. The same skill name can be installed from
-   * two taps or at two scopes; a name-keyed set would report a still-
-   * present install as `source_gone` because its namesake disappeared
-   * from an unrelated group.
-   */
+  /** Vanished sources, keyed by full install identity (§11.1), never name alone. */
   readonly sourceGone: ReadonlySet<string>;
   readonly rows: readonly TapReexpandRow[];
 }
@@ -144,7 +138,11 @@ export function reexpandTaps(
 
     // Project-scoped group whose project_root is gone: skip.
     const projectRoot = first.project_root ?? null;
-    if (first.scope === "project" && !(hasUsableProjectRoot(first) && isDirectory(first.project_root))) continue;
+    if (
+      first.scope === "project" &&
+      !(hasUsableProjectRoot(first) && isDirectory(first.project_root))
+    )
+      continue;
 
     let acquired: AcquiredTapScan;
     try {
