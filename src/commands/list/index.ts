@@ -36,5 +36,5 @@ export function listCommand(ctx: CommandContext): CommandOutput {
 function compareEntries(a: StateEntry, b: StateEntry): number {
   if (a.name !== b.name) return a.name.localeCompare(b.name);
   if (a.scope !== b.scope) return a.scope.localeCompare(b.scope);
-  return (a.project_root ?? "").localeCompare(b.project_root ?? "");
+  return String(a.project_root ?? "").localeCompare(String(b.project_root ?? ""));
 }

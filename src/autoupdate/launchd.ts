@@ -10,6 +10,8 @@ import { dirname } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { crewHome, paths } from "../core/paths.ts";
 import { ensureDir, exists, rmrf, writeText } from "../util/fs.ts";
+import { progress } from "../util/progress.ts";
+import { safeArgs } from "../util/redact.ts";
 import { BUNDLE_IDENTIFIER, writeAttributionBundle } from "./bundle.ts";
 import type { EnableInput } from "./types.ts";
 
@@ -129,5 +131,6 @@ export function resetLaunchctlRunner(): void {
 }
 
 function runLaunchctl(args: string[]): boolean {
+  progress(`$ launchctl ${safeArgs(args)}`);
   return launchctlRunner(args);
 }

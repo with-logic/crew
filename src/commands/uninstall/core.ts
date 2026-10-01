@@ -10,43 +10,52 @@
 import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { uninstallSkillFromAgents } from "../../agents/uninstall.ts";
-import { CrewError } from "../../core/errors.ts";
+import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
 import { dropInstallLocation, reduceEntryAgents } from "./state.ts";
 
-export interface UninstallRecord {
+/** What a removal reports regardless of outcome. */
+interface UninstallRecordBase {
   name: string;
   removedFrom: string[];
   absentFrom: string[];
   failures: { agent: string; error: { code: string; message: string } }[];
   /** True if the removal was driven by `--prune`, not by a direct command-line arg. */
   pruned?: boolean;
-  /** True if the state entry still survives after this call (partial --agent removal). */
-  partial?: boolean;
 }
 
 /**
- * Internal routing data about one `removeOne` call. Kept out of
- * `UninstallRecord` because that type is serialized verbatim into
- * `--json`, and these absolute paths are an implementation detail of
- * prune routing rather than part of the command's output contract.
+ * A record for a removal that left the skill installed somewhere: an
+ * `--agent` filter kept agents back, or a safety check aborted and the
+ * bytes remain.
+ *
+ * `partial` and `remainingAgents` are declared together rather than as
+ * two independent optionals. §7.4 makes "would be retained" an output
+ * obligation, so a record asserting a partial removal without naming
+ * who kept the skill would satisfy the type while breaking the
+ * contract. Both stay top-level: `remainingAgents` is the field name
+ * §7.4 and C-UNINST-19b pin for `--json`.
  */
+export type UninstallRecord = UninstallRecordBase &
+  (
+    | { partial?: undefined; remainingAgents?: undefined }
+    | {
+        partial: true;
+        remainingAgents: string[];
+      }
+  );
+
+/** Locations fully removed by one call; null denotes user scope (§7.4). */
 export interface RemovalMeta {
-  /**
-   * Project roots of the entries this call FULLY removed (project scope
-   * only). Empty when nothing was removed, or when every entry survived
-   * a partial `--agent` removal — `--prune` keys off exactly that.
-   */
   fullyRemovedRoots: (string | null)[];
 }
 
 /**
- * Remove the entries a resolved subject names (already narrowed to the
- * target scope by the caller). If `agentFilter` is null, removes from
- * every agent the skill is on (full uninstall). If non-null, removes
- * only from the named agents; the state entry survives with a reduced
+ * Remove one named skill. If `agentFilter` is null, removes from every
+ * agent the skill is on (full uninstall). If non-null, removes only
+ * from the named agents; the state entry survives with a reduced
  * `agents` list if any remain.
  */
 export function removeOne(
@@ -56,7 +65,7 @@ export function removeOne(
   pruned: boolean,
   agentFilter: readonly string[] | null,
 ): { updatedState: StateFile; rec: UninstallRecord; meta: RemovalMeta } {
-  const { name, entries, raw: errorName } = subject;
+  const { name, entries } = subject;
   const rec: UninstallRecord = {
     name,
     removedFrom: [],
@@ -66,47 +75,36 @@ export function removeOne(
   };
   const meta: RemovalMeta = { fullyRemovedRoots: [] };
   if (entries.length === 0) {
-    if (!(ctx.flags.force || pruned)) {
-      throw new CrewError(
-        "not_installed_here",
-        `\`${errorName}\` isn't in Homecrew's state — nothing to remove`,
-        { name: errorName },
-      );
-    }
+    // Selection was prevalidated; only forced empty subjects reach removal.
     return { updatedState: state, rec, meta };
   }
   // Per-entry processing: each (skill, scope) pair potentially touches
   // a different subset of agents.
   let nextState = state;
-  let anySurvives = false;
+  const retained = new Set<string>();
   for (const entry of entries) {
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
       : entry.agents;
-    const failedBefore = rec.failures.length;
-    removeFromAgents(entry, agentsToRemove, name, ctx, rec);
-    // Agents whose removal aborted on a safety check keep their bytes on
-    // disk, so they keep their state ownership too (§7.4 step 5). That
-    // retention is what excludes an abort from `fullyRemovedRoots`
-    // below: the entry survives, so the full-removal branch never runs.
-    const abortedAgents = rec.failures.slice(failedBefore).map((f) => f.agent);
-    const remainingAgents = entry.agents.filter(
-      (t) => !agentsToRemove.includes(t) || abortedAgents.includes(t),
-    );
+    const detached = removeFromAgents(entry, agentsToRemove, name, ctx, rec);
+    // Retention follows the per-agent OUTCOME, not the request: an
+    // agent whose removal aborted on a safety check still has the
+    // skill's bytes on disk, so §7.4 obliges us to report it as
+    // retained even though the user asked for it to go.
+    const remainingAgents = entry.agents.filter((t) => !detached.has(t));
     if (remainingAgents.length > 0) {
       nextState = reduceEntryAgents(nextState, entry, remainingAgents);
-      // A partial `--agent` removal leaves a live install; an aborted
-      // one leaves protected bytes. Either way the entry survives, so
-      // `partial` only marks the former (see `rec.failures` for the latter).
-      if (abortedAgents.length === 0) anySurvives = true;
+      // Entries at different scopes can retain different agents; the
+      // record reports the union, deduplicated.
+      for (const a of remainingAgents) retained.add(a);
     } else {
-      // Only a FULL removal frees this location's dependencies (§7.4
-      // step 5); a surviving partial `--agent` removal still needs them.
       meta.fullyRemovedRoots.push(entry.project_root ?? null);
       nextState = dropInstallLocation(nextState, entry);
     }
   }
-  if (anySurvives) rec.partial = true;
+  if (retained.size > 0) {
+    Object.assign(rec, { partial: true, remainingAgents: [...retained].sort() });
+  }
   return { updatedState: nextState, rec, meta };
 }
 
@@ -115,6 +113,9 @@ export function removeOne(
  * entry. Adapters are grouped by resolved install path (path sharing,
  * §7.2): one call per `dest`, detaching every adapter in the group at
  * once. The per-adapter outcome is derived from the group outcome.
+ *
+ * Returns the agents whose ownership actually came off — the caller
+ * needs the outcome, not the request, to decide what is retained.
  */
 function removeFromAgents(
   entry: StateEntry,
@@ -122,7 +123,7 @@ function removeFromAgents(
   name: string,
   ctx: CommandContext,
   rec: UninstallRecord,
-) {
+): ReadonlySet<string> {
   // For project-scope entries, the authoritative install location is
   // the entry's recorded `project_root` — NOT `ctx.cwd`.
   const entryCwd = cwdForEntry(entry, ctx.cwd);
@@ -142,6 +143,7 @@ function removeFromAgents(
     if (existing) existing.push(adapter);
     else groups.set(dest, [adapter]);
   }
+  const detached = new Set<string>();
   for (const group of groups.values()) {
     try {
       const outcome = uninstallSkillFromAgents({
@@ -150,6 +152,7 @@ function removeFromAgents(
         cwd: entryCwd,
         skillName: name,
         force: ctx.flags.force,
+        dryRun: ctx.flags.dryRun,
       });
       if (outcome.kind === "absent") {
         for (const a of group) rec.absentFrom.push(a.name);
@@ -159,6 +162,8 @@ function removeFromAgents(
         // the skill is no longer installed for that target.
         for (const a of group) rec.removedFrom.push(a.name);
       }
+      // Absent and removed alike leave no bytes owned by this agent.
+      for (const a of group) detached.add(a.name);
     } catch (err) {
       const ce = err as CrewError;
       for (const a of group) {
@@ -169,4 +174,5 @@ function removeFromAgents(
       }
     }
   }
+  return detached;
 }
