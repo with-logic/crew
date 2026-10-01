@@ -135,18 +135,16 @@ describe("conventional flag edge cases", () => {
   test("C-CLI-17a a repeated `--json` is rejected identically in rewritten forms", () => {
     // §5.2: only `--agent` repeats. The rewrite must not launder a repeated
     // `--json` into one effective value the canonical command would reject.
-    const canonical = run(["help", "--json", "--json=false"]);
-    expect(canonical.code).toBe(4);
-    expect(canonical.err).toContain("`--json` was given more than once");
-    for (const argv of [
-      ["--help", "--json", "--json=false"],
-      ["--help", "--json=false", "--json"],
-      ["--version", "--json", "--json"],
-    ]) {
-      const rewritten = run(argv);
-      expect(rewritten.code).toBe(4);
-      expect(rewritten.out).toBe("");
-      expect(rewritten.err).toBe(canonical.err);
+    for (const [command, flag, json] of [
+      ["help", "--help", ["--json", "--json=false"]],
+      ["help", "--help", ["--json=false", "--json"]],
+      ["version", "--version", ["--json", "--json"]],
+    ] as const) {
+      const canonical = run([command, ...json]);
+      const rewritten = run([flag, ...json]);
+      expect(canonical.code).toBe(4);
+      expect(canonical.out + canonical.err).toContain("`--json` was given more than once");
+      expect(rewritten).toEqual(canonical);
     }
   });
 

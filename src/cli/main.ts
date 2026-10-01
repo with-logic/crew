@@ -80,11 +80,11 @@ function runCliWithHome(
   try {
     parsed = parseArgs(argv);
   } catch (err) {
-    // `parseArgs` only raises `CrewError`.
+    // `parseArgs` only raises `CrewError`. There is no `ParsedArgs` yet, so
+    // the requested output mode comes from raw argv — a `--json` caller gets
+    // the structured payload even when the failure is the parse itself
+    // (§5.2, C-CLI-08c).
     const ce = err as CrewError;
-    // There is no `ParsedArgs` to consult here, but the user's requested
-    // output mode still has to be honored (§5.2, C-CLI-08c): a script
-    // piping stdout must get the structured error, not human text.
     writeError(ce, wantsJsonOutput(argv), streams, style);
     return ce.exitCode;
   }

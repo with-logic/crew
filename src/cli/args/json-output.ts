@@ -1,8 +1,9 @@
 /**
- * Reading the `--json` output mode straight off raw argv (§5.2, C-CLI-08c).
+ * Detecting `--json` from the RAW argv tokens (§5.2, C-CLI-08c).
  *
- * Separate from `./index.ts` because it answers before a parse exists:
- * the error path needs the mode for argv that yargs rejected.
+ * Separate from `./index.ts` because it answers for argv that yargs
+ * cannot represent: a parse failure leaves no `ParsedArgs` at all, yet
+ * the user's requested output mode still has to be honored.
  */
 
 /**

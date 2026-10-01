@@ -31,6 +31,9 @@ export const STRING_SUB: Readonly<Record<string, readonly string[]>> = {
   // `--tap <name>` narrows `crew list` to one tap (a value flag here;
   // install's `--tap` is a presence flag — the tables are per-command).
   list: ["tap"],
+  // `--tap <name>` scopes a search to one configured tap (§16.6). Distinct
+  // from install's presence-only `--tap`; the tables are per-command.
+  search: ["tap"],
   // `--version <tag>` pins a specific release (e.g. `v0.4.0`).
   "self-update": ["version"],
 };
