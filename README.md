@@ -134,9 +134,9 @@ $ crew install @acme/skills@v1.2.0//engineers/founding
 # See what's installed.
 $ crew list
 Installed skills (3)
-  founding-engineer   core         a1b2c3d   5 agents
-  code-review         core         d4e5f6a   5 agents
-  platform-engineer   acme@v1.2.0  9c8b7a6   5 agents
+  founding-engineer   core                              a1b2c3d   5 agents
+  code-review         core                              d4e5f6a   5 agents
+  platform-engineer   @acme/skills//engineers/founding   9c8b7a6   5 agents
 
 # Pull the latest versions of everything.
 $ crew update

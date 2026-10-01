@@ -9,13 +9,19 @@
 import { assertKnownAgents } from "../../agents/validate.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import type { Scope, StateEntry } from "../../core/types.ts";
+import type { Config, Scope, StateEntry } from "../../core/types.ts";
 import type { CommandContext } from "../types.ts";
 
 export interface ListFilters {
   readonly scope: Scope | null;
   readonly agent: readonly string[];
   readonly tap: string | null;
+  /**
+   * The config `--tap` validation already parsed, or null when no `--tap`
+   * was given. Carried so human rendering can reuse it instead of reading
+   * and parsing `config.yaml` a second time.
+   */
+  readonly config: Config | null;
 }
 
 /** Read and validate the filters from the parsed flags. */
@@ -24,8 +30,9 @@ export function readListFilters(ctx: CommandContext): ListFilters {
   assertKnownAgents(ctx.flags.agent);
   const agent = ctx.flags.agent;
   const rawTap = ctx.flags.extras["tap"];
-  const tap = typeof rawTap === "string" ? validateTap(rawTap, ctx.home) : null;
-  return { scope, agent, tap };
+  if (typeof rawTap !== "string") return { scope, agent, tap: null, config: null };
+  const config = readConfig(ctx.home);
+  return { scope, agent, tap: validateTap(rawTap, config), config };
 }
 
 /** Keep only entries that satisfy every active filter. */
@@ -48,8 +55,7 @@ export function hasAgentOrTapFilter(filters: ListFilters): boolean {
   return filters.agent.length > 0 || filters.tap !== null;
 }
 
-function validateTap(name: string, home: string): string {
-  const config = readConfig(home);
+function validateTap(name: string, config: Config): string {
   if (config.taps.some((t) => t.name === name)) return name;
   throw new CrewError(
     "usage_error",
