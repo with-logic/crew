@@ -4,6 +4,10 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
+import { readConfig } from "../../../src/config/load.ts";
+import { tapPath } from "../../../src/core/paths.ts";
+import { runGit } from "../../../src/git/exec.ts";
+import { updateOneEntry } from "../../../src/install/update/entry.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import {
@@ -13,7 +17,7 @@ import {
   makeTempDir,
   skillFrontmatter,
 } from "../../helpers/fixtures.ts";
-import { tag, twoCommitRepo } from "./helpers.ts";
+import { retag, tag, twoCommitRepo } from "./helpers.ts";
 
 let agentRoot = "";
 let original: { userPath: () => string; detect: () => boolean };
@@ -107,4 +111,29 @@ test("C-INST-05e qualified preview includes only the selected namespace member",
     runCli(["install", "acme/marketing/email@v1"], { home, streams: captureStreams().streams }),
   ).toBe(0);
   expect(readFileSync(join(agentRoot, "email", "SKILL.md"), "utf8")).toContain("MARKETING");
+});
+
+test("C-UPD-04b acquiring a missing cached ref still skips a moved pinned tag without force", () => {
+  const home = makeCrewHome();
+  const { repo, shaA, shaB } = twoCommitRepo();
+  expect(
+    runCli(["install", `file://${repo}@v1//demo`], { home, streams: captureStreams().streams }),
+  ).toBe(0);
+  const state = readState(home);
+  const entry = state.installations[0]!;
+  const config = readConfig(home);
+  const clone = tapPath(entry.source.tap, home);
+  const before = readFileSync(join(agentRoot, "demo", "SKILL.md"));
+  expect(entry.resolved_sha).toBe(shaA);
+  retag(repo, "v1");
+  runGit(["tag", "-d", "v1"], { cwd: clone });
+
+  // A ref missing from the cache is fetched by acquisition after the cheap peek misses.
+  const result = updateOneEntry(entry, state, config, home, false, home);
+  expect(result.row.outcome).toEqual({ kind: "skipped", reason: "pinned to tag; upstream moved" });
+  expect(result.bumpHardFailure).toBe(false);
+  expect(result.updatedState).toEqual(state);
+  expect(readState(home)).toEqual(state);
+  expect(readFileSync(join(agentRoot, "demo", "SKILL.md"))).toEqual(before);
+  expect(runGit(["rev-parse", "v1"], { cwd: clone }).stdout.trim()).toBe(shaB);
 });
