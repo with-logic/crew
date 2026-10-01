@@ -1,7 +1,15 @@
 /** Live/dead process ownership during synchronous lock work (§14, C-CONC-01). */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { acquireLock } from "../../src/util/advisory-lock.ts";
 import { lockOwnerFs } from "../../src/util/lock-owner.ts";
@@ -79,11 +87,33 @@ catch (err) { process.exit(err.code === "state_locked" ? 0 : 2); }`,
     expect(readFileSync(`${lockPath}.owner`, "utf8")).toContain(String(process.pid));
   });
 
-  test("owner-record I/O failures propagate and a failed record releases the lock", () => {
+  test("an owner-record write failure releases the acquired lock and preserves the error", () => {
+    const target = join(makeTempDir(), "target");
+    const ownerPath = `${target}.lock.owner`;
+    // The library can read this sidecar while probing the new lock directory,
+    // then record() fails only after lockSync has returned ownership.
+    writeFileSync(ownerPath, "readable but unwritable");
+    chmodSync(ownerPath, 0o444);
+    try {
+      let thrown: unknown;
+      try {
+        acquireLock(target);
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      expect(thrown).toMatchObject({ code: "EACCES" });
+      expect(existsSync(`${target}.lock`)).toBe(false);
+    } finally {
+      chmodSync(ownerPath, 0o644);
+    }
+    acquireLock(target).release();
+  });
+
+  test("owner-record read failures propagate during acquisition", () => {
     const target = join(makeTempDir(), "target");
     mkdirSync(`${target}.lock.owner`);
     expect(() => acquireLock(target)).toThrow();
-    // lockSync succeeded before the owner record failed; it must be released.
     expect(() => statSync(`${target}.lock`)).toThrow();
     mkdirSync(`${target}.lock`);
     ancient(`${target}.lock`);
