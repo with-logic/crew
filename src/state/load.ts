@@ -17,6 +17,8 @@
 import { crewHome, paths } from "../core/paths.ts";
 import type { StateEntry, StateFile } from "../core/types.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
+import { entryKey } from "./identity.ts";
+import { isStateEntry } from "./validation.ts";
 
 /** Read state.json or return an empty state file. */
 export function readState(home: string = crewHome()): StateFile {
@@ -30,21 +32,8 @@ export function readState(home: string = crewHome()): StateFile {
   if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.installations)) {
     return { schema_version: 1, installations: [] };
   }
-  const installations = (parsed.installations as StateEntry[]).filter(hasUsableLocation);
+  const installations = parsed.installations.filter(isStateEntry);
   return { schema_version: 1, installations };
-}
-
-/**
- * §11.1 requires a project-scope entry to carry the `project_root` it
- * was installed under: that path is the authoritative install location,
- * and commands paste it into user-facing remedies. `state.json` is
- * user-editable and may predate the field, so an entry missing it is
- * dropped here rather than allowed to reach a caller that would render
- * an empty path (`cd ''`) or resolve against the wrong directory.
- * `doctor --repair` rebuilds such entries from their markers.
- */
-function hasUsableLocation(entry: StateEntry): boolean {
-  return entry.scope !== "project" || typeof entry.project_root === "string";
 }
 
 /** Write state.json, replacing whatever was there. */
@@ -76,10 +65,10 @@ export function removeByName(state: StateFile, name: string): StateFile {
   return { schema_version: 1, installations: state.installations.filter((e) => e.name !== name) };
 }
 
-/** Remove a specific (name, scope) entry. */
-export function removeEntry(state: StateFile, name: string, scope: StateEntry["scope"]): StateFile {
+/** Remove one complete install identity (§11.1). */
+export function removeEntry(state: StateFile, entry: StateEntry): StateFile {
   return {
     schema_version: 1,
-    installations: state.installations.filter((e) => !(e.name === name && e.scope === scope)),
+    installations: state.installations.filter((e) => entryKey(e) !== entryKey(entry)),
   };
 }

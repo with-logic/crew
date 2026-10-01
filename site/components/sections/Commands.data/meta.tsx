@@ -10,8 +10,13 @@ export const META: CommandGroup = {
     {
       name: "help",
       signature: <>crew help [&lt;command&gt;]</>,
-      description: "Overview or per-command help, with realistic examples.",
+      description:
+        "Overview or per-command help, with realistic examples. `crew <command> --help` and `-h` work too.",
     },
-    { name: "version", signature: <>crew version</>, description: "Print the version string." },
+    {
+      name: "version",
+      signature: <>crew version</>,
+      description: "Print the version string. `crew --version`, `-v`, and `-V` work too.",
+    },
   ],
 };

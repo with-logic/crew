@@ -117,7 +117,7 @@ function groupByName(entries: readonly StateEntry[]): Map<string, StateEntry[]> 
 }
 
 function formatLocation(e: StateEntry, style: Styler): string {
-  return style.dim(`in ${shortenHome(e.project_root ?? "")}`);
+  return style.dim(`in ${shortenHome(String(e.project_root ?? ""))}`);
 }
 
 function formatSource(e: StateEntry, taps: TapsByName): string {
