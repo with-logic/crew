@@ -17,6 +17,7 @@ import { existsSync } from "node:fs";
 import { listInstalledForAgent } from "../../agents/list.ts";
 import { ALL_AGENTS } from "../../agents/registry.ts";
 import type { StateEntry } from "../../core/types.ts";
+import { hasUsableProjectRoot } from "../../state/validation.ts";
 
 export interface MarkerEntry {
   record: ReturnType<typeof listInstalledForAgent>[number];
@@ -30,7 +31,7 @@ export function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: strin
   const seen = new Set<string>();
   const projectRoots = new Set<string>([cwd]);
   for (const e of stateEntries) {
-    if (e.scope === "project" && e.project_root) projectRoots.add(e.project_root);
+    if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
   for (const adapter of ALL_AGENTS) {
     for (const rec of listInstalledForAgent(adapter, "user", cwd)) {

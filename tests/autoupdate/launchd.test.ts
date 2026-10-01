@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
-import {
-  isAutoupdateLoaded,
-  plistXml,
-  resetLaunchctlRunner,
-} from "../../src/autoupdate/launchd.ts";
+import { resetLaunchctlRunner } from "../../src/autoupdate/launchctl.ts";
+import { isAutoupdateLoaded, plistXml } from "../../src/autoupdate/launchd.ts";
 import { readAutoupdateLogTail } from "../../src/autoupdate/log.ts";
 import { parseDuration } from "../../src/commands/autoupdate/duration.ts";
 import { CrewError } from "../../src/core/errors.ts";

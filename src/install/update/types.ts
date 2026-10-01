@@ -16,6 +16,13 @@ export interface PerAgentUpdate {
 export type Outcome =
   | { kind: "up_to_date" }
   | { kind: "updated"; new_sha: string | null; per_target: PerAgentUpdate[] }
+  /**
+   * `--dry-run` preview of an `updated` outcome (§10.1.1). For a
+   * git-kind tap the clone was refreshed to learn this; a path-kind tap
+   * has no clone and is compared by content hash. Either way no
+   * installed skill, marker, store entry, or `state.json` was written.
+   */
+  | { kind: "would_update"; new_sha: string | null }
   | { kind: "skipped"; reason: string }
   | { kind: "source_gone" }
   /** §10.1: the entry's tap is no longer in config. Soft; install is kept. */

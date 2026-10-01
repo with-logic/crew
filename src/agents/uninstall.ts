@@ -11,6 +11,8 @@ import { CrewError } from "../core/errors.ts";
 import type { Marker, Scope } from "../core/types.ts";
 import { rmrf } from "../util/fs.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
+import { progress } from "../util/progress.ts";
+import { safePath } from "../util/redact.ts";
 import { type AgentAdapter, baseFor } from "./adapter.ts";
 
 /** Input to uninstall from one `dest` shared by a group of agents. */
@@ -22,22 +24,31 @@ export interface UninstallInput {
   readonly skillName: string;
   readonly force: boolean;
   /**
-   * Preview mode: run every check and report the outcome that would
-   * apply, but never delete bytes or rewrite a marker (§5.2).
+   * Run every check but write nothing (§7.4 `--dry-run`). Required, not
+   * optional: omitting it would silently select the destructive path.
    */
-  readonly dryRun?: boolean;
+  readonly dryRun: boolean;
 }
 
-/** Outcome of one uninstall operation on a physical dest. */
+/**
+ * Outcome of one uninstall operation on a physical dest.
+ *
+ * Under `dryRun` these describe what WOULD happen: the checks have all
+ * run and the decision is final, but no bytes were touched. Callers
+ * that render outcomes are responsible for the tense.
+ */
 export type UninstallOutcome =
-  /** Bytes removed; this was the last adapter owning the dest. */
+  /** Bytes removed (or, dry, would be); this was the last adapter owning the dest. */
   | { kind: "removed" }
-  /** Ownership removed from the marker; bytes stay because other adapters still own them. */
+  /** Marker ownership dropped (or would be); bytes stay, other adapters still own them. */
   | { kind: "detached"; remaining: readonly string[] }
   /** No marker existed; nothing to do. */
   | { kind: "absent" };
 
-/** Remove adapter ownership from a physical dest. Throws on abort. */
+/**
+ * Remove adapter ownership from a physical dest, or under `dryRun`
+ * decide what removal would do without writing. Throws on abort.
+ */
 export function uninstallSkillFromAgents(input: UninstallInput): UninstallOutcome {
   const base = baseFor(input.agents[0]!, input.scope, input.cwd);
   const dest = join(base, input.skillName);
@@ -67,6 +78,7 @@ function untrackedInstall(input: UninstallInput, dest: string): UninstallOutcome
       `\`${dest}\` exists but isn't crew-managed (no .crew.json) — refusing to remove`,
       { dest },
     );
+  progressRemoving(input, dest);
   if (!input.dryRun) rmrf(dest);
   return { kind: "removed" };
 }
@@ -78,8 +90,19 @@ function inconsistentMarker(input: UninstallInput, marker: Marker, dest: string)
       `\`${dest}\` has a crew marker for \`${marker.name}\`, not \`${input.skillName}\` — investigate before forcing`,
       { dest, markerName: marker.name, incomingName: input.skillName },
     );
+  progressRemoving(input, dest);
   if (!input.dryRun) rmrf(dest);
   return { kind: "removed" };
+}
+
+/** One progress line, emitted immediately before a real mutation (§5.2). */
+function progressRemoving(input: UninstallInput, dest: string): void {
+  if (input.dryRun) return;
+  progress(
+    `removing ${safePath(input.skillName)} from ${safePath(dest)} (${input.agents
+      .map((a) => a.name)
+      .join(", ")})`,
+  );
 }
 
 function removeAdapterOwnership(
@@ -89,6 +112,7 @@ function removeAdapterOwnership(
 ): UninstallOutcome {
   const leaving = new Set(input.agents.map((a) => a.name));
   const remaining = (marker.agents ?? []).filter((a) => !leaving.has(a));
+  progressRemoving(input, dest);
   if (remaining.length === 0) {
     if (!input.dryRun) rmrf(dest);
     return { kind: "removed" };

@@ -1,6 +1,8 @@
 /**
- * `crew uninstall <name> [<name>...]` (§7.4).
+ * `crew uninstall <selector>... | --all` (§7.4).
  *
+ * Selectors name installed skills, taps, or namespaces; `--all` selects
+ * every skill at the target scope behind a confirmation.
  * Removes each skill from every agent listed in state, then updates
  * state.json. Fails with `not_installed_here` if no state entry exists,
  * unless `--force`.
@@ -17,45 +19,51 @@
  * alive does NOT trigger pruning — the skill is still installed, so
  * its dependencies are still required.
  *
- * With `--dry-run`, the whole command is read-only: `planUninstall`
- * computes what would happen without taking the state lock, and
- * neither `state.json` nor the auto-tap GC runs. Locking would itself
- * create `state.json` on a fresh home, and GC would delete the very
- * clone the preview says it is keeping.
+ * With `--dry-run` (§7.4), every selector, filter, and safety check
+ * runs exactly as it would for real, but nothing is written: the
+ * per-agent step reports instead of removing, the command skips the
+ * state write and auto-tap GC, and it never takes the state lock —
+ * acquiring the lock would itself create `state.json` (§14 reserves
+ * the lock for commands that write).
  *
  * Per-skill removal and state mutation live in sibling modules
  * (`./core.ts`, `./state.ts`).
  */
 
 import { ALL_AGENTS, agentByName } from "../../agents/registry.ts";
-import { readConfig, writeConfig } from "../../config/load.ts";
+import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import { tapPath } from "../../core/paths.ts";
-import type { Config, StateFile } from "../../core/types.ts";
+import type { StateFile } from "../../core/types.ts";
+import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
-import { resolveStateSubject } from "../../state/subjects.ts";
-import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
+import { allTargets, confirmAll, countAllTargets } from "./all.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
+import { gcAutoTaps } from "./gc.ts";
 import { renderUninstall } from "./render.ts";
-import { entryKey, findOrphan } from "./state.ts";
+import { selectedTargets } from "./select.ts";
+import { findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
-  if (ctx.positional.length === 0) {
+  const all = Boolean(ctx.flags.extras["all"]);
+  if (ctx.positional.length === 0 && !all) {
     throw new CrewError(
       "usage_error",
-      "`crew uninstall` needs at least one skill name — run `crew list` to see what's installed",
+      "`crew uninstall` needs at least one skill name — run `crew list` to see what's installed, or pass `--all` to remove everything",
     );
   }
   const prune = Boolean(ctx.flags.extras["prune"]);
   const agentFilter = validateAgentFilter(ctx.flags.agent);
 
+  // §14: confirmation precedes the lock; execution re-reads state.
+  if (all) confirmAll(ctx, countAllTargets(ctx, readState(ctx.home)));
+
   // A dry run reads state and reports; it never locks, writes, or GCs.
   const { records, exitCode } = ctx.flags.dryRun
-    ? planUninstall(ctx, prune, agentFilter)
+    ? runUninstall(ctx, prune, agentFilter)
     : withStateLock(() => {
-        const plan = planUninstall(ctx, prune, agentFilter);
+        const plan = runUninstall(ctx, prune, agentFilter);
         writeState(plan.state, ctx.home);
         // Auto-tap GC: any auto tap with no remaining state entries is
         // dropped from config and its clone deleted. Registered taps stay.
@@ -71,7 +79,7 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
 }
 
 /** Outcome of walking the selectors: the state that would result, plus per-skill records. */
-interface UninstallPlan {
+interface UninstallResult {
   readonly state: StateFile;
   readonly records: readonly UninstallRecord[];
   readonly exitCode: number;
@@ -83,24 +91,29 @@ interface UninstallPlan {
  * inside `removeOne`, so this one function drives both the preview and
  * the real removal — they can never disagree about what happens.
  */
-function planUninstall(
+function runUninstall(
   ctx: CommandContext,
   prune: boolean,
   agentFilter: readonly string[] | null,
-): UninstallPlan {
+): UninstallResult {
   const records: UninstallRecord[] = [];
-  let exitCode = 0;
   let state = readState(ctx.home);
-  for (const raw of ctx.positional) {
-    const subject = resolveStateSubject(state, raw);
-    const { updatedState, rec } = removeOne(state, subject, ctx, false, agentFilter);
+  const removedRoots: (string | null)[] = [];
+  const targets = ctx.flags.extras["all"]
+    ? allTargets(ctx, state)
+    : selectedTargets(ctx, state, readConfig(ctx.home));
+  for (const target of targets) {
+    const subject = target.subject;
+    const { updatedState, rec, meta } = removeOne(state, subject, ctx, false, agentFilter);
+    if (target.kind === "collection") rec.collection = target.collection;
     state = updatedState;
     records.push(rec);
-    if (rec.failures.length > 0) exitCode = 1;
+    removedRoots.push(...meta.fullyRemovedRoots);
   }
-  if (prune) {
-    state = pruneOrphans(state, ctx, records);
+  if (prune && removedRoots.length > 0) {
+    state = pruneOrphans(state, ctx, records, new Set(removedRoots));
   }
+  const exitCode = records.some((rec) => rec.failures.length > 0) ? 1 : 0;
   return { state, records, exitCode };
 }
 
@@ -126,45 +139,33 @@ function validateAgentFilter(agents: readonly string[]): readonly string[] | nul
 
 /**
  * Recursively remove any skill that is now an autoremovable orphan:
- * `explicit: false` AND empty `required_by`. Runs until a full pass
- * finds no new orphans. Prune never respects `--agent` filters —
- * when we auto-remove a dep, we remove it fully.
+ * `explicit: false` AND empty `required_by`, restricted to the scope and
+ * project roots this run fully removed from (§7.4 step 5). Prune never
+ * respects `--agent` filters — when we auto-remove a dep, we remove it
+ * fully.
+ *
+ * TERMINATION: every candidate is recorded in `attempted` BEFORE it is
+ * removed, and `findOrphan` skips those keys. The loop therefore runs at
+ * most once per entry in state and cannot depend on the entry vanishing —
+ * which matters because an orphan whose removal aborts on a safety check
+ * deliberately keeps its state entry.
  */
 function pruneOrphans(
   state: StateFile,
   ctx: CommandContext,
   records: UninstallRecord[],
+  roots: ReadonlySet<string | null>,
 ): StateFile {
   let current = state;
-  // Recorded BEFORE the removal, so an entry that aborts and keeps its
-  // ownership is still marked visited. Every entry is attempted at most
-  // once per sweep, which is what makes this loop terminate at all.
   const attempted = new Set<string>();
-  let orphan = findOrphan(current, attempted);
+  let orphan = findOrphan(current, ctx.flags.scope, roots, attempted);
   while (orphan) {
     attempted.add(entryKey(orphan));
-    const { updatedState, rec } = removeOne(current, orphan.name, ctx, true, null);
+    const subject = { raw: orphan.name, name: orphan.name, entries: [orphan] };
+    const { updatedState, rec } = removeOne(current, subject, ctx, true, null);
     records.push(rec);
     current = updatedState;
-    orphan = findOrphan(current, attempted);
+    orphan = findOrphan(current, ctx.flags.scope, roots, attempted);
   }
   return current;
-}
-
-/**
- * Drop auto taps (registered: false) that no longer back any state
- * entry. Their on-disk clone is deleted. Registered taps are NEVER
- * gc'd by this — only the user's `crew tap remove` removes them.
- */
-function gcAutoTaps(state: StateFile, home: string): void {
-  const config: Config = readConfig(home);
-  const inUse = new Set(state.installations.map((e) => e.source.tap));
-  const survivors = config.taps.filter((t) => t.registered || inUse.has(t.name));
-  if (survivors.length === config.taps.length) return; // nothing to gc
-  const removed = config.taps.filter((t) => !survivors.includes(t));
-  writeConfig({ ...config, taps: survivors }, home);
-  for (const tap of removed) {
-    if (tap.kind === "git") rmrf(tapPath(tap.name, home));
-    // Path taps own no clone dir; nothing to delete.
-  }
 }

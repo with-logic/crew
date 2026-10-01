@@ -15,17 +15,15 @@
 
 import { CrewError } from "../../core/errors.ts";
 import { crewHome } from "../../core/paths.ts";
-import type { Config, ResolvedSkill } from "../../core/types.ts";
-import { parseRef } from "../../refs/parse.ts";
-import { acquireTap } from "../../sources/acquire/index.ts";
+import type { Config, ResolvedSkill, TapConfig } from "../../core/types.ts";
+import { withDiscoveredTapLocks } from "../../sources/discovered-tap-locks.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
-import { attributeRef } from "../tap-attribution.ts";
 import { topoSort } from "../topo.ts";
 import { enqueueDep } from "./dep.ts";
-import { enqueueTapRef, type PendingItem } from "./enqueue.ts";
-import { expandSkillsAsItems, sourcePinned, sourceRequestedRef } from "./expand-items.ts";
+import type { PendingItem } from "./enqueue.ts";
+import { enqueueRoot } from "./root.ts";
 
 /** Options for resolution. */
 export interface ResolveOptions {
@@ -66,6 +64,18 @@ export function resolveInstallSet(
   startingConfig: Config,
   options: Partial<ResolveOptions> = {},
 ): ResolveResult {
+  const home = options.home ?? crewHome();
+  return withDiscoveredTapLocks(startingConfig.taps, home, (requireTap) =>
+    resolveLockedInstallSet(refs, startingConfig, options, requireTap),
+  );
+}
+
+function resolveLockedInstallSet(
+  refs: readonly string[],
+  startingConfig: Config,
+  options: Partial<ResolveOptions>,
+  requireTap: (tap: TapConfig) => void,
+): ResolveResult {
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
   const kindHint: KindHint = options.kindHint ?? null;
@@ -79,7 +89,7 @@ export function resolveInstallSet(
 
   // Step 1–5: resolve every root reference.
   for (const raw of refs) {
-    const enqueued = enqueueRoot(raw, config, cwd, home, kindHint, recursive);
+    const enqueued = enqueueRoot(raw, config, cwd, home, kindHint, recursive, requireTap);
     config = enqueued.config;
     pending.push(...enqueued.items);
     skipped.push(...enqueued.skipped);
@@ -133,7 +143,7 @@ export function resolveInstallSet(
     // Enqueue dependencies (if any).
     const deps = item.loaded.frontmatter.metadata?.crew?.dependencies ?? [];
     for (const depRef of deps) {
-      const enqueued = enqueueDep(depRef, item, config, cwd, home);
+      const enqueued = enqueueDep(depRef, item, config, cwd, home, requireTap);
       config = enqueued.config;
       skipped.push(...enqueued.skipped);
       for (const depItem of enqueued.items) {
@@ -146,40 +156,6 @@ export function resolveInstallSet(
   }
 
   return { skills: topoSort(byName, requiredBy), requiredBy, config, skipped };
-}
-
-/** Resolve and enqueue the items produced by a single root reference. */
-function enqueueRoot(
-  raw: string,
-  config: Config,
-  cwd: string,
-  home: string,
-  kindHint: KindHint,
-  recursive: boolean,
-): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
-  const source = parseRef(raw, cwd);
-
-  // Bare-name (`<skill>`) and qualified (`<tap>/<skill>`, `<tap>/<ns>/<skill>`) tap refs.
-  if (source.type === "tap") {
-    return enqueueTapRef(source, config, home, true, kindHint);
-  }
-
-  // Git URL or path: find or create the tap. This is always a
-  // whole-tap install — the user pointed at a folder (or repo) and
-  // said "install this". Future additions should follow.
-  const attrib = attributeRef(source, config, recursive ? "recursive" : undefined);
-  const acquired = acquireTap(attrib.tap, home);
-  const expansion = expandSkillsAsItems(
-    acquired.rootDir,
-    attrib.tap,
-    "",
-    acquired.resolvedSha,
-    sourceRequestedRef(source),
-    sourcePinned(source, acquired.resolvedSha),
-    true,
-    true,
-  );
-  return { items: expansion.items, config: attrib.config, skipped: expansion.skipped };
 }
 
 function sameInstallSetSource(existing: ResolvedSkill, incoming: PendingItem): boolean {

@@ -85,7 +85,9 @@ describe("resolveStateSubject", () => {
 describe("chooseEntries", () => {
   test("unknown state selectors use the raw user input in the error", () => {
     expect(() =>
-      chooseEntries(state, [{ raw: "anthropic/missing", name: "anthropic/missing", entries: [] }]),
+      chooseEntries(state, [
+        { raw: "anthropic/missing", name: "anthropic/missing", kind: "skill", entries: [] },
+      ]),
     ).toThrow("anthropic/missing");
   });
 
@@ -94,7 +96,7 @@ describe("chooseEntries", () => {
     const dep = stateEntry("bar", "core", "bar", ["foo"]);
     const nested = stateEntry("baz", "core", "baz", ["bar"]);
     const selected = chooseEntries({ schema_version: 1, installations: [dep, root, nested] }, [
-      { raw: "foo", name: "foo", entries: [root] },
+      { raw: "foo", name: "foo", kind: "skill", entries: [root] },
     ]);
     expect(selected.entries.map((entry) => entry.name)).toEqual(["foo", "bar", "baz"]);
     expect(selected.transitiveSources.get("bar")).toEqual(["foo"]);
