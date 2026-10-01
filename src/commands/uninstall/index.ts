@@ -17,6 +17,13 @@
  * alive does NOT trigger pruning — the skill is still installed, so
  * its dependencies are still required.
  *
+ * With `--dry-run` (§7.4), every selector, filter, and safety check
+ * runs exactly as it would for real, but nothing is written: the
+ * per-agent step reports instead of removing, the command skips the
+ * state write and auto-tap GC, and it never takes the state lock —
+ * acquiring the lock would itself create `state.json` (§14 reserves
+ * the lock for commands that write).
+ *
  * Per-skill removal and state mutation live in sibling modules
  * (`./core.ts`, `./state.ts`).
  */
@@ -47,48 +54,72 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
   const prune = Boolean(ctx.flags.extras["prune"]);
   const agentFilter = validateAgentFilter(ctx.flags.agent);
 
+  // A dry run reads state and reports; it never locks, writes, or GCs.
+  const { records, exitCode } = ctx.flags.dryRun
+    ? runUninstall(ctx, prune, agentFilter)
+    : withStateLock(() => {
+        const plan = runUninstall(ctx, prune, agentFilter);
+        writeState(plan.state, ctx.home);
+        // Auto-tap GC: any auto tap with no remaining state entries is
+        // dropped from config and its clone deleted. Registered taps stay.
+        gcAutoTaps(plan.state, ctx.home);
+        return plan;
+      }, ctx.home);
+
+  return {
+    exitCode,
+    human: renderUninstall(records, ctx.flags.dryRun, ctx.style),
+    json: { records, dry_run: ctx.flags.dryRun },
+  };
+}
+
+/** Outcome of walking the selectors: the state that would result, plus per-skill records. */
+interface UninstallResult {
+  readonly state: StateFile;
+  readonly records: readonly UninstallRecord[];
+  readonly exitCode: number;
+}
+
+/**
+ * Walk every selector (and the `--prune` pass), returning what state
+ * would look like afterwards. The per-agent work honours `--dry-run`
+ * inside `removeOne`, so this one function drives both the preview and
+ * the real removal — they can never disagree about what happens.
+ */
+function runUninstall(
+  ctx: CommandContext,
+  prune: boolean,
+  agentFilter: readonly string[] | null,
+): UninstallResult {
   const records: UninstallRecord[] = [];
-
-  withStateLock(() => {
-    let state = readState(ctx.home);
-    const removedRoots: (string | null)[] = [];
-    const subjects = ctx.positional.map((raw) => {
-      // §7.4 "Scope": a selector only ever targets one scope.
-      return narrowSubjectToScope(
-        resolveStateSubject(state, raw),
-        ctx.flags.scope,
-        ctx.cwd,
-        ctx.flags.force,
-      );
-    });
-    for (const planned of subjects) {
-      // Earlier selectors can change ownership or remove an aliased entry.
-      const subject = {
-        ...planned,
-        entries: state.installations.filter((e) =>
-          planned.entries.some((p) => entryKey(p) === entryKey(e)),
-        ),
-      };
-      if (subject.entries.length === 0 && planned.entries.length > 0) continue;
-      const { updatedState, rec, meta } = removeOne(state, subject, ctx, false, agentFilter);
-      state = updatedState;
-      records.push(rec);
-      removedRoots.push(...meta.fullyRemovedRoots);
-    }
-    // §7.4 step 5: pruning is a consequence of a full removal. A forced
-    // miss or a surviving partial `--agent` removal frees nothing, so
-    // there is nothing to sweep and no root to sweep it in.
-    if (prune && removedRoots.length > 0) {
-      state = pruneOrphans(state, ctx, records, new Set(removedRoots));
-    }
-    writeState(state, ctx.home);
-    // Auto-tap GC: any auto tap with no remaining state entries is
-    // dropped from config and its clone deleted. Registered taps stay.
-    gcAutoTaps(state, ctx.home);
-  }, ctx.home);
-
+  let state = readState(ctx.home);
+  const removedRoots: (string | null)[] = [];
+  const subjects = ctx.positional.map((raw) =>
+    narrowSubjectToScope(
+      resolveStateSubject(state, raw),
+      ctx.flags.scope,
+      ctx.cwd,
+      ctx.flags.force,
+    ),
+  );
+  for (const planned of subjects) {
+    const subject = {
+      ...planned,
+      entries: state.installations.filter((e) =>
+        planned.entries.some((p) => entryKey(p) === entryKey(e)),
+      ),
+    };
+    if (subject.entries.length === 0 && planned.entries.length > 0) continue;
+    const { updatedState, rec, meta } = removeOne(state, subject, ctx, false, agentFilter);
+    state = updatedState;
+    records.push(rec);
+    removedRoots.push(...meta.fullyRemovedRoots);
+  }
+  if (prune && removedRoots.length > 0) {
+    state = pruneOrphans(state, ctx, records, new Set(removedRoots));
+  }
   const exitCode = records.some((rec) => rec.failures.length > 0) ? 1 : 0;
-  return { exitCode, human: renderUninstall(records, ctx.style), json: { records } };
+  return { state, records, exitCode };
 }
 
 /**
