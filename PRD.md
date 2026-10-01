@@ -1970,7 +1970,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 | `ambiguous_reference` | 4 | A reference has more than one valid resolution across taps, skills, and namespaces, and the user is non-interactive or the prompt was aborted. |
 | `ambiguous_dependency` | 4 | A dependency's bare name is ambiguous across taps. |
 | `conflicting_dependencies` | 4 | Two skills in one install set have the same name but different source paths or resolved SHAs; also emitted by `crew update` when tap re-expansion finds multiple current children declaring the same `name`. |
-| `name_conflict` | 4 | Trying to install a skill whose name is already held by a different source, without `--force`. "Different source" means a different canonical location per §5.4 — the same repo reached through a different tap is NOT a conflict. |
+| `name_conflict` | 4 | Trying to install a skill whose name is already held by a different source, with or without `--force`. "Different source" means a different canonical location per §5.4 — the same repo reached through a different tap is NOT a conflict. |
 | `untracked_directory` | 6 | Destination exists without a crew marker. |
 | `customized` | 6 | Destination has a marker but content hash differs. |
 | `inconsistent_marker` | 6 | Marker exists with an unexpected `name`. |

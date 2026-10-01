@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import {
   canonicalRepoUrl,
@@ -17,15 +18,20 @@ import {
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { type AdapterRedirect, buildRepo, install, redirectClaudeCode } from "./helpers.ts";
+import { buildRepo, install } from "./helpers.ts";
 
-let cc: AdapterRedirect;
+let cc: { root: string };
+let ccOriginal: { userPath: () => string; detect: () => boolean };
 
 beforeEach(() => {
-  cc = redirectClaudeCode();
+  cc = { root: makeTempDir("crew-cc-") };
+  ccOriginal = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
+  claudeCodeAdapter.userPath = () => cc.root;
+  claudeCodeAdapter.detect = () => true;
 });
 afterEach(() => {
-  cc.restore();
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
 });
 
 describe("C-INST-13d canonical URL comparison", () => {

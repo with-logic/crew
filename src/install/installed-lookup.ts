@@ -10,6 +10,7 @@
  */
 
 import type { Config, Scope, StateFile, TapConfig } from "../core/types.ts";
+import { installLocationKey } from "../state/identity.ts";
 import { type SourceIdentity, sameSourceIdentity, sourceIdentityOf } from "./source-identity.ts";
 
 /**
@@ -30,11 +31,6 @@ export interface InstalledSourceIndex {
   readonly byLocation: Map<string, SourceIdentity[]>;
 }
 
-/** Bucket key: one install location. */
-function locationKey(name: string, scope: Scope, projectRoot: string | null): string {
-  return JSON.stringify([name, scope, projectRoot ?? ""]);
-}
-
 /** Build the index for one re-expansion run. */
 export function buildInstalledSourceIndex(state: StateFile, config: Config): InstalledSourceIndex {
   const byLocation = new Map<string, SourceIdentity[]>();
@@ -42,7 +38,7 @@ export function buildInstalledSourceIndex(state: StateFile, config: Config): Ins
   for (const entry of state.installations) {
     const tap = tapsByName.get(entry.source.tap);
     if (!tap) continue;
-    const key = locationKey(entry.name, entry.scope, entry.project_root ?? null);
+    const key = installLocationKey(entry.name, entry.scope, entry.project_root ?? null);
     const identity = sourceIdentityOf(tap, entry.source.path);
     const bucket = byLocation.get(key);
     if (bucket) bucket.push(identity);
@@ -65,7 +61,9 @@ interface LookupArgs {
  * from the same canonical source, through any tap row.
  */
 export function indexHasSameSource(index: InstalledSourceIndex, args: LookupArgs): boolean {
-  const candidates = index.byLocation.get(locationKey(args.name, args.scope, args.projectRoot));
+  const candidates = index.byLocation.get(
+    installLocationKey(args.name, args.scope, args.projectRoot),
+  );
   if (!candidates) return false;
   const incoming = sourceIdentityOf(args.tap, args.tapRelativePath);
   return candidates.some((identity) => sameSourceIdentity(identity, incoming));
@@ -81,7 +79,7 @@ export function indexHasSameSource(index: InstalledSourceIndex, args: LookupArgs
  * the state entry attributed to different taps.
  */
 export function noteInstalled(index: InstalledSourceIndex, args: LookupArgs): void {
-  const key = locationKey(args.name, args.scope, args.projectRoot);
+  const key = installLocationKey(args.name, args.scope, args.projectRoot);
   const identity = sourceIdentityOf(args.tap, args.tapRelativePath);
   const bucket = index.byLocation.get(key);
   if (bucket) bucket.push(identity);

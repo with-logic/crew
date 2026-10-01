@@ -15,24 +15,6 @@ import { isTapRootNarrowerThan } from "../tap-breadth.ts";
 import type { Reattribution } from "./types.ts";
 
 /**
- * True when installing `skill` over `existing` would trade a whole-tap
- * subscription for a tap rooted deeper in the same repo. Mirrors the
- * guard in `classifySource`; kept separate because that function returns
- * null for several unrelated reasons.
- */
-export function narrowsSubscription(
-  existing: StateEntry,
-  skill: ResolvedSkill,
-  taps: readonly TapConfig[],
-): boolean {
-  if (existing.tracks_tap !== true) return false;
-  if (existing.source.tap === skill.tap.name) return false;
-  const existingTap = taps.find((t) => t.name === existing.source.tap);
-  if (!existingTap) return false;
-  return isTapRootNarrowerThan(skill.tap, existingTap);
-}
-
-/**
  * Decide whether `skill` may land on top of `existing`. Throws
  * `name_conflict` when the two name genuinely different sources.
  * Returns a `Reattribution` when the entry should move to the incoming
