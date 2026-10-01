@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { bundlePath } from "../../src/autoupdate/bundle.ts";
-import { resetLaunchctlRunner, setLaunchctlRunner } from "../../src/autoupdate/launchd.ts";
+import { resetLaunchctlRunner, setLaunchctlRunner } from "../../src/autoupdate/launchctl.ts";
 import { resetAutoupdatePlatform, setAutoupdatePlatform } from "../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { readConfig } from "../../src/config/load.ts";

@@ -9,6 +9,7 @@
 
 import { plural } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
+import type { AutoupdateRepair } from "./autoupdate.ts";
 import type { Finding } from "./checks.ts";
 import { isRepairable, isRepairableCode, repairableCount } from "./repairable.ts";
 
@@ -42,25 +43,17 @@ export function renderDoctor(
   findings: readonly Finding[],
   opts: { repair: boolean; verify: boolean; dryRun: boolean; applied: boolean },
   style: Styler,
+  repairs: readonly AutoupdateRepair[] = [],
 ): string[] {
+  if (opts.applied && (findings.length > 0 || repairs.length > 0)) {
+    return renderRepaired(findings, repairs, style);
+  }
   if (findings.length === 0) {
     return [
       `${style.symbol("ok")} ${style.bold("Everything looks good.")}`,
       ...(opts.verify
         ? []
         : [style.dim("  Run `crew doctor --verify` for a thorough check (slower).")]),
-    ];
-  }
-
-  if (opts.applied) {
-    const addressed = repairableCount(findings);
-    const remaining = findings.length - addressed;
-    return [
-      `${style.symbol("ok")} ${style.bold("Repaired what was fixable.")}`,
-      style.dim(`  ${plural(addressed, "finding")} addressed`),
-      ...(remaining > 0
-        ? [style.dim(`  ${plural(remaining, "finding")} left for you — rerun \`crew doctor\``)]
-        : []),
     ];
   }
 
@@ -123,6 +116,45 @@ export function renderDoctor(
     lines.push(style.dim("These need your attention — `--repair` can't fix them."));
   } else {
     lines.push(style.dim("These are heads-ups, not errors — crew keeps working."));
+  }
+  return lines;
+}
+
+/**
+ * Post-repair summary. Scheduler reconciliations (§11.2 check 7) get
+ * their own lines because, unlike the state rebuild, they can fail
+ * independently and the user needs to know which direction was taken.
+ *
+ * "Addressed" counts only the repairable classes: a run that leaves
+ * `customized` or `missing_project_root` behind must say so rather
+ * than implying it fixed everything it found.
+ */
+function renderRepaired(
+  findings: readonly Finding[],
+  repairs: readonly AutoupdateRepair[],
+  style: Styler,
+): string[] {
+  const failed = repairs.filter((r) => r.level === "error");
+  const headline =
+    failed.length === 0
+      ? `${style.symbol("ok")} ${style.bold("Repaired what was fixable.")}`
+      : `${style.symbol("warn")} ${style.bold(`Repaired what was fixable; ${plural(failed.length, "repair")} failed.`)}`;
+  // A failed scheduler repair means its drift finding was not resolved
+  // after all, so it doesn't count as addressed.
+  const schedulerFindings = findings.filter(
+    (f) => f.code === "autoupdate_not_loaded" || f.code === "autoupdate_unexpectedly_loaded",
+  ).length;
+  // The locked recheck can discover drift absent from the initial snapshot (§11.2).
+  const freshFindings = Math.max(0, repairs.length - schedulerFindings);
+  const addressed = repairableCount(findings) + freshFindings - failed.length;
+  const remaining = findings.length + freshFindings - addressed;
+  const lines = [headline, style.dim(`  ${plural(addressed, "finding")} addressed`)];
+  if (remaining > 0) {
+    lines.push(style.dim(`  ${plural(remaining, "finding")} left for you — rerun \`crew doctor\``));
+  }
+  for (const r of repairs) {
+    const sym = r.level === "error" ? style.symbol("fail") : style.symbol("ok");
+    lines.push(`  ${sym} ${r.level === "error" ? style.red(r.message) : style.dim(r.message)}`);
   }
   return lines;
 }
