@@ -45,6 +45,9 @@ export function renderDoctor(
   style: Styler,
   repairs: readonly AutoupdateRepair[] = [],
 ): string[] {
+  if (opts.applied && (findings.length > 0 || repairs.length > 0)) {
+    return renderRepaired(findings, repairs, style);
+  }
   if (findings.length === 0) {
     return [
       `${style.symbol("ok")} ${style.bold("Everything looks good.")}`,
@@ -53,8 +56,6 @@ export function renderDoctor(
         : [style.dim("  Run `crew doctor --verify` for a thorough check (slower).")]),
     ];
   }
-
-  if (opts.applied) return renderRepaired(findings, repairs, style);
 
   const errors = findings.filter((f) => f.level === "error").length;
   const warns = findings.filter((f) => f.level === "warn").length;
@@ -140,8 +141,13 @@ function renderRepaired(
       : `${style.symbol("warn")} ${style.bold(`Repaired what was fixable; ${plural(failed.length, "repair")} failed.`)}`;
   // A failed scheduler repair means its drift finding was not resolved
   // after all, so it doesn't count as addressed.
-  const addressed = repairableCount(findings) - failed.length;
-  const remaining = findings.length - addressed;
+  const schedulerFindings = findings.filter(
+    (f) => f.code === "autoupdate_not_loaded" || f.code === "autoupdate_unexpectedly_loaded",
+  ).length;
+  // The locked recheck can discover drift absent from the initial snapshot (§11.2).
+  const freshFindings = Math.max(0, repairs.length - schedulerFindings);
+  const addressed = repairableCount(findings) + freshFindings - failed.length;
+  const remaining = findings.length + freshFindings - addressed;
   const lines = [headline, style.dim(`  ${plural(addressed, "finding")} addressed`)];
   if (remaining > 0) {
     lines.push(style.dim(`  ${plural(remaining, "finding")} left for you — rerun \`crew doctor\``));

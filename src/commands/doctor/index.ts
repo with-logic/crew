@@ -10,6 +10,7 @@
 import { readConfig } from "../../config/load.ts";
 import { crewHome } from "../../core/paths.ts";
 import { readState } from "../../state/load.ts";
+import { redactText, sanitizeLine } from "../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import type { AutoupdateRepair } from "./autoupdate.ts";
 import {
@@ -78,6 +79,9 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   return {
     exitCode,
     human,
+    ...(ctx.flags.quiet
+      ? { stderr: failedRepairs.map((r) => sanitizeLine(redactText(r.message))) }
+      : {}),
     // §11.2: `repairs` describes what a repair did, so it appears on
     // every `--repair` response — including one where an unparseable
     // config meant nothing could be applied. Omitting it there would

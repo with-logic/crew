@@ -45,7 +45,7 @@ export const doctorHelp: CommandHelp = {
     },
   ],
   notes: [
-    "`--repair` is conservative — it won't touch skills you've edited, or anything outside Homecrew's own install folders.",
+    "`--repair` is conservative — it won't touch skills you've edited, and only changes Homecrew's own state, install folders, and scheduler files.",
   ],
   seeAlso: ["cache", "list"],
 };

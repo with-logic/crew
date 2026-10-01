@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach } from "bun:test";
-import { resetLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
+import { type LaunchctlRunner, resetLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
 import { resetAutoupdatePlatform } from "../../../src/autoupdate/scheduler.ts";
 import { resetSystemctlRunner } from "../../../src/autoupdate/systemd.ts";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
@@ -47,14 +47,16 @@ export function setEnabled(home: string, enabled: boolean, intervalSeconds = 900
  * real state after acting, so a constant stub would describe a load
  * that silently failed.
  */
-export function statefulLaunchctl(
-  startLoaded: boolean,
-  calls: string[][],
-): (args: string[]) => boolean {
+export function statefulLaunchctl(startLoaded: boolean, calls: string[][]): LaunchctlRunner {
   let loaded = startLoaded;
   return (args: string[]) => {
     calls.push([...args]);
-    if (args[0] === "list") return loaded;
+    if (args[0] === "list") {
+      return {
+        ok: loaded,
+        stderr: loaded ? "" : 'Could not find service "sh.crew.autoupdate" in domain for port',
+      };
+    }
     if (args[0] === "bootstrap") {
       loaded = true;
       return true;

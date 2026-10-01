@@ -137,14 +137,14 @@ export function isAutoupdateLoaded(): boolean {
 
 /**
  * Ask launchd whether the agent is loaded, distinguishing "no" from
- * "couldn't ask" (§11.2). `launchctl list <label>` exits non-zero with
- * no diagnostic when the job simply isn't registered — that is a real
- * answer. Any stderr means the query itself failed (launchctl
- * unreachable, no user session, spawn error), which answers nothing.
+ * "couldn't ask" (§11.2). An absent job produces a specific missing-service
+ * diagnostic; it is an answer, unlike unreachable-launchd or spawn errors.
  */
 export function probeAutoupdate(): SchedulerProbe {
   const r = runLaunchctl(["list", "sh.crew.autoupdate"]);
   if (r.ok) return { state: "loaded", detail: "" };
+  const absent = 'Could not find service "sh.crew.autoupdate" in domain for port';
+  if (r.stderr === absent) return { state: "not-loaded", detail: "" };
   if (r.stderr.length > 0) return { state: "indeterminate", detail: r.stderr };
   return { state: "not-loaded", detail: "" };
 }
