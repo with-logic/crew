@@ -14,7 +14,8 @@
 
 import type { CommandOutput } from "../commands/types.ts";
 import type { CrewError, CrewErrorName } from "../core/errors.ts";
-import { redactDetails, redactText, sanitizeLine } from "../util/redact.ts";
+import { displayDetails, displayText } from "../refs/display-url.ts";
+import { sanitizeLine } from "../util/redact.ts";
 import type { Styler } from "../util/term.ts";
 
 /** Writable stream shape used by `writeOutput` — lets tests pass buffers. */
@@ -70,8 +71,8 @@ export function writeError(
         {
           error: {
             name: err.code,
-            message: redactText(err.message),
-            details: redactDetails(err.details ?? {}),
+            message: displayText(err.message),
+            details: displayDetails(err.details ?? {}),
           },
         },
         null,
@@ -89,20 +90,18 @@ export function writeError(
   }
 }
 
+/**
+ * The single sink every human-readable error message and remedy hint passes
+ * through, so redaction here covers present and future errors rather than
+ * relying on each construction site to remember.
+ *
+ * A message is prose that may have a URL interpolated into it (see
+ * `acquireTap`'s `no_skills_found`, which embeds `tap.url`), and that URL can
+ * carry userinfo or a credential-bearing query parameter. `displayText` scans
+ * for URL-shaped substrings, which a whole-string URL parse cannot do.
+ */
 function writeMessageBlock(message: string, streams: OutputStreams): void {
-  // This is the single funnel for every human-readable error message and
-  // remedy hint, so credential redaction belongs here rather than at each
-  // message site. A message can interpolate a source URL — see
-  // `acquireTap`'s `no_skills_found`, which embeds `tap.url` — and that URL
-  // can carry userinfo or a secret query parameter. `redactText` scans the
-  // prose for URL-shaped substrings, which a whole-string URL parser can't
-  // do. The `--json` path redacts at its own boundary; this is the same
-  // guarantee for stderr.
-  //
-  // Newlines reaching here are layout: `CrewError` has already escaped
-  // control characters in untrusted data at construction, and the handful of
-  // genuinely multi-line errors compose their breaks from trusted literals.
-  for (const line of redactText(message).split("\n")) {
+  for (const line of displayText(message).split("\n")) {
     const safe = sanitizeLine(line);
     streams.stderr(safe.length === 0 ? "\n" : `  ${safe}\n`);
   }

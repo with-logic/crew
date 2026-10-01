@@ -7,7 +7,7 @@
  * `source_unreachable` / `ref_not_found` errors with appropriate exit
  * codes, so callers just catch `CrewError` and report. Git's stderr is
  * quoted into those messages and can repeat a credential-bearing
- * remote, so it passes through `redactText` first (§5.2).
+ * remote, so it passes through `displayText` first (§5.2).
  *
  * Network policy (§16.4): read-only commands (`crew search`, bare-name
  * `crew install`) call `ensureClone` — clones a missing tap the first
@@ -18,8 +18,8 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
+import { displayText, displayUrl } from "../../refs/display-url.ts";
 import { exists, isDirectory } from "../../util/fs.ts";
-import { redactText, safeUrl } from "../../util/redact.ts";
 import { type GitProcessError, runGit } from "../exec.ts";
 
 /** Clone a repo into `dest`. Shallow unless `full` is true. */
@@ -31,14 +31,12 @@ export function cloneRepo(url: string, dest: string, full: boolean = false): voi
     // `runGit` only ever throws `GitProcessError`, so this narrow is
     // safe. Translate to the user-facing error category.
     const ge = err as GitProcessError;
-    // The URL can carry credentials, and it escapes through three
-    // channels: our own message, git's stderr (which repeats the remote
-    // verbatim), and the structured `details` the JSON payload prints.
-    // All three are redacted (`util/redact.ts`).
+    // Git's stderr repeats the remote verbatim, so it needs `displayText`
+    // (prose with a URL inside) as much as the interpolation needs `displayUrl`.
     throw new CrewError(
       "source_unreachable",
-      `couldn't clone \`${safeUrl(url)}\` — ${redactText(ge.result.stderr.trim())}`,
-      { url: safeUrl(url) },
+      `couldn't clone \`${displayUrl(url)}\` — ${displayText(ge.result.stderr.trim())}`,
+      { url: displayUrl(url) },
     );
   }
 }
@@ -81,7 +79,7 @@ export function fetchAndCheckout(dest: string): void {
     // Fetch stderr names the remote, so it can carry credentials too.
     throw new CrewError(
       "source_unreachable",
-      `git fetch failed for the clone at \`${dest}\` — ${redactText(ge.result.stderr.trim())}`,
+      `git fetch failed for the clone at \`${dest}\` — ${displayText(ge.result.stderr.trim())}`,
       { dest },
     );
   }
