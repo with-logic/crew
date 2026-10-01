@@ -2,8 +2,8 @@
  * Suggested commands are instructions, so what crew prints must survive
  * a paste (§13 "human-mode error quality").
  *
- * A skill reference can carry an `@<ref>` tail, and §8.4 constrains a
- * git-ref only to "no whitespace, no slash" — `$(…)`, backticks, `;`,
+ * A tap reference can carry an `@<ref>` tail, and §8.4 constrains a
+ * tap-ref to "no whitespace, no slash" — `$(…)`, backticks, `;`,
  * and `&&` are all legal. Interpolated unquoted into a copy-pasteable
  * `crew install …`, that ref is whatever the shell makes of it. These
  * tests pin that every printed command quotes the reference, on both

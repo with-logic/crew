@@ -6,7 +6,7 @@ import { CrewError } from "../../core/errors.ts";
 import type { Source, TapConfig, TapSource } from "../../core/types.ts";
 import { displayText, displayUrl } from "../../refs/display-url.ts";
 import { parseRef } from "../../refs/parse.ts";
-import { shellQuote } from "../../util/shell.ts";
+import { shellQuote } from "../../util/format.ts";
 
 /** Parsed source of a `tap add` argument: git or path. */
 export interface TapAddTarget {

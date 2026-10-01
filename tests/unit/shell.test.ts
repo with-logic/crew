@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { shellQuote } from "../../src/util/shell.ts";
+import { shellQuote } from "../../src/util/format.ts";
 
 describe("shellQuote", () => {
   test("leaves ordinary references alone", () => {

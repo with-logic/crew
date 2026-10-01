@@ -15,7 +15,7 @@ import { knownTapSource } from "../../../known-taps/format.ts";
 import { getKnownTaps } from "../../../known-taps/registry.ts";
 import type { KnownTap, KnownTapTrust } from "../../../known-taps/types.ts";
 import { parseRef } from "../../../refs/parse.ts";
-import { shellQuote } from "../../../util/shell.ts";
+import { shellQuote } from "../../../util/format.ts";
 import { type KnownInstallSuggestion, knownMatchesForTap } from "./match.ts";
 
 interface KnownInstallSuggestionJson {

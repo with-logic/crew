@@ -104,7 +104,7 @@ describe("scheme-less authority (§8.2)", () => {
     }
   });
 
-  test("C-REF-32c a valid port is still accepted", () => {
+  test("C-REF-32b a valid port is still accepted", () => {
     expect(parseRef("git.example.com:8443/acme/skills")).toMatchObject({
       type: "git",
       url: "https://git.example.com:8443/acme/skills",

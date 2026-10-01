@@ -3,8 +3,8 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
+import { shellQuote } from "../../util/format.ts";
 import { safePath } from "../../util/redact.ts";
-import { shellQuote } from "../../util/shell.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 import { formatCandidate } from "./format.ts";
 
