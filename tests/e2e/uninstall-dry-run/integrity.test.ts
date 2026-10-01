@@ -1,10 +1,8 @@
 /**
  * `crew uninstall --dry-run` writes nothing (§7.4, C-UNINST-19/19a).
  *
- * Every physical artefact a real uninstall would touch is captured as
- * raw bytes before the run and compared after: both agents' install
- * directories and markers, `state.json`, `config.yaml`, and the
- * backing auto-tap clone.
+ * Install files, markers, state, and config are compared as raw bytes.
+ * The backing auto-tap clone is checked separately for survival.
  */
 
 import { describe, expect, test } from "bun:test";

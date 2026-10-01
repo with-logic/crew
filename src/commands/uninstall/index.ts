@@ -54,9 +54,9 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
 
   // A dry run reads state and reports; it never locks, writes, or GCs.
   const { records, exitCode } = ctx.flags.dryRun
-    ? planUninstall(ctx, prune, agentFilter)
+    ? runUninstall(ctx, prune, agentFilter)
     : withStateLock(() => {
-        const plan = planUninstall(ctx, prune, agentFilter);
+        const plan = runUninstall(ctx, prune, agentFilter);
         writeState(plan.state, ctx.home);
         // Auto-tap GC: any auto tap with no remaining state entries is
         // dropped from config and its clone deleted. Registered taps stay.
@@ -72,7 +72,7 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
 }
 
 /** Outcome of walking the selectors: the state that would result, plus per-skill records. */
-interface UninstallPlan {
+interface UninstallResult {
   readonly state: StateFile;
   readonly records: readonly UninstallRecord[];
   readonly exitCode: number;
@@ -84,11 +84,11 @@ interface UninstallPlan {
  * inside `removeOne`, so this one function drives both the preview and
  * the real removal — they can never disagree about what happens.
  */
-function planUninstall(
+function runUninstall(
   ctx: CommandContext,
   prune: boolean,
   agentFilter: readonly string[] | null,
-): UninstallPlan {
+): UninstallResult {
   const records: UninstallRecord[] = [];
   let exitCode = 0;
   let state = readState(ctx.home);
@@ -97,10 +97,12 @@ function planUninstall(
     const { updatedState, rec } = removeOne(state, subject, ctx, false, agentFilter);
     state = updatedState;
     records.push(rec);
-    if (rec.failures.length > 0) exitCode = 1;
   }
   if (prune) {
     state = pruneOrphans(state, ctx, records);
+  }
+  for (const rec of records) {
+    if (rec.failures.length > 0) exitCode = 1;
   }
   return { state, records, exitCode };
 }
@@ -137,12 +139,15 @@ function pruneOrphans(
   records: UninstallRecord[],
 ): StateFile {
   let current = state;
-  let orphan = findOrphan(current);
+  const attempted = new Set<string>();
+  let orphan = findOrphan(current, attempted);
   while (orphan) {
+    // A failed safety check retains the orphan; never retry it in this run.
+    attempted.add(orphan.name);
     const { updatedState, rec } = removeOne(current, orphan.name, ctx, true, null);
     records.push(rec);
     current = updatedState;
-    orphan = findOrphan(current);
+    orphan = findOrphan(current, attempted);
   }
   return current;
 }
