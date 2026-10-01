@@ -9,6 +9,7 @@
  * they got.
  */
 
+import { readConfig } from "../../config/load.ts";
 import type { StateEntry } from "../../core/types.ts";
 import { readState } from "../../state/load.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
@@ -20,16 +21,24 @@ export function listCommand(ctx: CommandContext): CommandOutput {
   const state = readState(ctx.home);
   const sorted = applyListFilters(state.installations, filters).sort(compareEntries);
 
+  // Human lines are discarded under `--json`, and building them costs a
+  // `config.yaml` read and parse purely to resolve display labels. Skip
+  // that work rather than doing it for nothing; when `--tap` was given,
+  // reuse the config its validation already parsed.
+  const json = {
+    scope: filters.scope,
+    agent: filters.agent,
+    tap: filters.tap,
+    installations: sorted,
+  };
+  if (ctx.flags.json) return { exitCode: 0, json };
+
   const human =
     sorted.length === 0
       ? renderEmpty(filters.scope, hasAgentOrTapFilter(filters), ctx.style)
-      : renderList(sorted, filters.scope, ctx.style);
+      : renderList(sorted, filters.scope, filters.config ?? readConfig(ctx.home), ctx.style);
 
-  return {
-    exitCode: 0,
-    human,
-    json: { scope: filters.scope, agent: filters.agent, tap: filters.tap, installations: sorted },
-  };
+  return { exitCode: 0, human, json };
 }
 
 /** Name, then scope ("project" before "user"), then project root. */

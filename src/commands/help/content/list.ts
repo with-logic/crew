@@ -6,6 +6,7 @@ export const listHelp: CommandHelp = {
   summary: [
     "Show everything you have installed.",
     "For each skill you'll see where it came from, which agents it's in, which version you're on, and whether you pinned it or it came along as a dependency.",
+    "The source column shows a collection you added by name, or — for a one-off install from a repo — the reference it came from. It is built for reading, not for pasting: a URL carrying credentials has them masked out, so re-type the original reference rather than the label.",
   ],
   flags: [
     { flag: "--json", description: "Machine-readable output, handy for scripts." },
