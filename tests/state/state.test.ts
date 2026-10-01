@@ -1,3 +1,5 @@
+/** State persistence, identity and locking conformance (§6, §11.1). */
+
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { CrewError } from "../../src/core/errors.ts";
@@ -61,10 +63,18 @@ describe("state load/write", () => {
     expect(s.installations).toHaveLength(0);
   });
 
+  test("removeEntry preserves other project roots", () => {
+    const first: StateEntry = { ...sample, scope: "project", project_root: "/first" };
+    const second: StateEntry = { ...first, project_root: "/second" };
+    expect(
+      removeEntry({ schema_version: 1, installations: [first, second] }, first).installations,
+    ).toEqual([second]);
+  });
+
   test("removeEntry removes one scope", () => {
     const other: StateEntry = { ...sample, scope: "project" };
     const base = { schema_version: 1 as const, installations: [sample, other] };
-    const s = removeEntry(base, "foo", "user");
+    const s = removeEntry(base, sample);
     expect(s.installations).toHaveLength(1);
     expect(s.installations[0]!.scope).toBe("project");
   });
