@@ -40,6 +40,15 @@ function bareHome(): string {
 }
 
 describe("suggested command safety", () => {
+  test("C-TAP-24e owner/repo correction quotes a shell-metacharacter ref", () => {
+    const home = bareHome();
+    for (const command of ["install", "info"]) {
+      const c = captureStreams();
+      expect(runCli([command, "someone/else@$(id)"], { home, streams: c.streams })).toBe(4);
+      expect(c.stderr()).toContain("use `'@someone/else@$(id)'` instead");
+    }
+  });
+
   test("C-TAP-24e a shell-metacharacter ref is quoted in the printed command", () => {
     const home = bareHome();
     const c = captureStreams();

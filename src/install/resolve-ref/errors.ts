@@ -4,6 +4,7 @@
 
 import { CrewError } from "../../core/errors.ts";
 import { safePath } from "../../util/redact.ts";
+import { shellQuote } from "../../util/shell.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 import { formatCandidate } from "./format.ts";
 
@@ -29,11 +30,12 @@ export function twoSegmentMissError(
   ref: string | null = null,
 ): CrewError {
   const tail = ref === null ? "" : `@${ref}`;
+  const suggestion = shellQuote(`@${first}/${second}${tail}`);
   return new CrewError(
     "invalid_ref",
     `\`${first}/${second}${tail}\` does not match any configured tap or namespace.\nNo tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
     { first, second, ...(ref === null ? {} : { ref }) },
-    `If you meant the GitHub repository ${first}/${second}, use \`@${first}/${second}${tail}\` instead. Otherwise run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
+    `If you meant the GitHub repository ${first}/${second}, use \`${suggestion}\` instead. Otherwise run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
   );
 }
 
