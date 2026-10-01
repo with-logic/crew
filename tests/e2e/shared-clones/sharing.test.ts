@@ -10,6 +10,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import { readConfig } from "../../../src/config/load.ts";
+import { setGitRunner } from "../../../src/git/exec.ts";
 import { cloneDirForTap, cloneDirs } from "../../helpers/fixtures.ts";
 import { bareHome, run, twoSubpathRepo } from "./helpers.ts";
 
@@ -79,7 +80,18 @@ describe("one clone per repository", () => {
     run(home, ["install", `file://${repo}//alpha`, "--yes"]);
     run(home, ["tap", "add", `file://${repo}//beta`, "beta-tap"]);
 
-    const r = run(home, ["update", "--json"]);
+    let fetches = 0;
+    const previous = setGitRunner((args, options) => {
+      if (args[0] === "fetch") fetches++;
+      return previous(args, options);
+    });
+    let r: ReturnType<typeof run>;
+    try {
+      r = run(home, ["update", "--json"]);
+    } finally {
+      setGitRunner(previous);
+    }
+    expect(fetches).toBe(1);
     expect(r.code).toBe(0);
     const parsed = JSON.parse(r.stdout) as { tap_rows: { name: string; kind: string }[] };
     // Every tap still gets a row; the second reports the first's result.

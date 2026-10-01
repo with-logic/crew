@@ -11,7 +11,7 @@ import { legacyTapPath, paths } from "../../../src/core/paths.ts";
 import { migrateTapClone } from "../../../src/sources/migrate-clones.ts";
 import { withTapLocks } from "../../../src/sources/tap-lock.ts";
 import { ensureDir } from "../../../src/util/fs.ts";
-import { cloneDirForTap, cloneDirs, makeTempDir } from "../../helpers/fixtures.ts";
+import { cloneDirForTap, cloneDirs, makeTempDir, tagRepo } from "../../helpers/fixtures.ts";
 import { bareHome, run, twoSubpathRepo } from "./helpers.ts";
 
 describe("migration from the per-tap-name clone layout", () => {
@@ -72,4 +72,21 @@ test("C-TAP-29 migration cannot relocate or delete an external directory", () =>
   expect(() => withTapLocks([tap], home, () => migrateTapClone(tap, home))).toThrow("symlink");
   expect(readFileSync(join(outside, "keep.txt"), "utf8")).toBe("keep");
   expect(existsSync(cloneDirForTap("alpha-tap", home)!)).toBe(true);
+});
+
+test("C-TAP-29 a requested-ref preview migrates the shared clone before exporting", () => {
+  const home = bareHome();
+  const repo = twoSubpathRepo();
+  tagRepo(repo, "v1");
+  expect(run(home, ["tap", "add", `file://${repo}//alpha`, "alpha-tap"]).code).toBe(0);
+  const shared = cloneDirForTap("alpha-tap", home)!;
+  const legacy = legacyTapPath("alpha-tap", home);
+  ensureDir(paths(home).tapsDir);
+  renameSync(shared, legacy);
+  const result = run(home, ["info", "alpha-tap@v1", "--json"]);
+  expect(result.code).toBe(0);
+  expect(result.stdout).toContain("alpha");
+  expect(existsSync(shared)).toBe(true);
+  expect(existsSync(legacy)).toBe(false);
+  expect(cloneDirs(home)).toHaveLength(1);
 });
