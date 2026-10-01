@@ -14,7 +14,7 @@ import { cloneDirForTap, cloneDirs } from "../../helpers/fixtures.ts";
 import { bareHome, run, twoSubpathRepo } from "./helpers.ts";
 
 describe("one clone per repository", () => {
-  test("C-TAP-17 two subpath taps on one repo share a single clone", () => {
+  test("C-TAP-26 two subpath taps on one repo share a single clone", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
 
@@ -43,7 +43,7 @@ describe("one clone per repository", () => {
     expect(cloneDirs(home)).toHaveLength(1);
   });
 
-  test("C-TAP-17b removing one tap keeps the clone the other still needs", () => {
+  test("C-TAP-26b removing one tap keeps the clone the other still needs", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     run(home, ["tap", "add", `file://${repo}//alpha`, "alpha-tap"]);
@@ -60,7 +60,7 @@ describe("one clone per repository", () => {
     expect(parsed.hits.some((h) => h.name === "beta")).toBe(true);
   });
 
-  test("C-TAP-17b removing the last tap on a repo deletes the clone", () => {
+  test("C-TAP-26b removing the last tap on a repo deletes the clone", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     run(home, ["tap", "add", `file://${repo}//alpha`, "alpha-tap"]);
@@ -73,7 +73,7 @@ describe("one clone per repository", () => {
     expect(existsSync(shared)).toBe(false);
   });
 
-  test("C-TAP-17c `crew update` fetches a shared repository once, not once per tap", () => {
+  test("C-TAP-26c `crew update` fetches a shared repository once, not once per tap", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     run(home, ["install", `file://${repo}//alpha`, "--yes"]);
@@ -90,7 +90,7 @@ describe("one clone per repository", () => {
     expect(cloneDirs(home)).toHaveLength(1);
   });
 
-  test("C-TAP-17c a failed fetch is reported for every tap on that repository", () => {
+  test("C-TAP-26c a failed fetch is reported for every tap on that repository", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     run(home, ["tap", "add", `file://${repo}//alpha`, "alpha-tap"]);
@@ -110,7 +110,7 @@ describe("one clone per repository", () => {
     expect(failed.every((row) => row.error?.code === "source_unreachable")).toBe(true);
   });
 
-  test("C-TAP-17b auto-tap GC keeps a clone a registered tap still uses", () => {
+  test("C-TAP-26b auto-tap GC keeps a clone a registered tap still uses", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     // An install creates an auto tap; a registered tap over the same
@@ -132,7 +132,7 @@ describe("one clone per repository", () => {
     expect(parsed.hits.some((h) => h.name === "beta")).toBe(true);
   });
 
-  test("C-TAP-17b `tap remove --uninstall` keeps a clone another tap shares", () => {
+  test("C-TAP-26b `tap remove --uninstall` keeps a clone another tap shares", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     run(home, ["tap", "add", `file://${repo}//alpha`, "alpha-tap"]);
@@ -151,7 +151,7 @@ describe("one clone per repository", () => {
     expect(parsed.hits.some((h) => h.name === "beta")).toBe(true);
   });
 
-  test("C-TAP-17b auto-tap GC deletes a clone nothing else references", () => {
+  test("C-TAP-26b auto-tap GC deletes a clone nothing else references", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     expect(run(home, ["install", `file://${repo}//alpha`, "--yes"]).code).toBe(0);
@@ -166,7 +166,7 @@ describe("one clone per repository", () => {
     expect(existsSync(clone)).toBe(false);
   });
 
-  test("C-TAP-17 differing `.git` spellings of one repo resolve to one clone", () => {
+  test("C-TAP-26 differing `.git` spellings of one repo resolve to one clone", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     run(home, ["tap", "add", `file://${repo}//alpha`, "plain"]);

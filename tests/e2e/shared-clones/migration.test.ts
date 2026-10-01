@@ -1,6 +1,6 @@
 /**
  * The one-time move from the pre-0.11 per-tap-name clone layout to the
- * shared `repos/` layout (§6, C-TAP-18).
+ * shared `repos/` layout (§6, C-TAP-27).
  */
 
 import { describe, expect, test } from "bun:test";
@@ -12,7 +12,7 @@ import { cloneDirForTap, cloneDirs } from "../../helpers/fixtures.ts";
 import { bareHome, run, twoSubpathRepo } from "./helpers.ts";
 
 describe("migration from the per-tap-name clone layout", () => {
-  test("C-TAP-18 an old-layout clone is moved on the next command and still works", () => {
+  test("C-TAP-27 an old-layout clone is moved on the next command and still works", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     run(home, ["tap", "add", `file://${repo}//alpha`, "alpha-tap"]);
@@ -33,7 +33,7 @@ describe("migration from the per-tap-name clone layout", () => {
     expect(existsSync(legacy)).toBe(false);
   });
 
-  test("C-TAP-18 a redundant old clone is dropped when the shared one already exists", () => {
+  test("C-TAP-27 a redundant old clone is dropped when the shared one already exists", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     run(home, ["tap", "add", `file://${repo}//alpha`, "alpha-tap"]);

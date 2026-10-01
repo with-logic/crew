@@ -23,14 +23,17 @@
 
 import { readConfig, writeConfig } from "../../../config/load.ts";
 import { CrewError } from "../../../core/errors.ts";
+import { paths } from "../../../core/paths.ts";
 import { cloneStillReferenced, tapClonePath } from "../../../core/repo-path.ts";
 import type { StateEntry, TapConfig } from "../../../core/types.ts";
+import { withTapLocks } from "../../../sources/tap-lock.ts";
 import { readState, writeState } from "../../../state/load.ts";
 import { withStateLock } from "../../../state/lock.ts";
-import { rmrf } from "../../../util/fs.ts";
+import { rmrfInside } from "../../../util/fs.ts";
+import { assertNoSymlinkEscape } from "../../../util/symlink-containment.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
 import { removeOne, type UninstallRecord } from "../../uninstall/core.ts";
-import { dropEntriesAndUpdateRequiredBy } from "../../uninstall/state.ts";
+import { dropScopedEntriesAndUpdateRequiredBy } from "../../uninstall/state.ts";
 import { describe, planRemove, type RemovePlan } from "./plan.ts";
 import { renderTapRemove } from "./render.ts";
 
@@ -76,13 +79,17 @@ function runPlan(ctx: CommandContext, plan: RemovePlan, dryRun: boolean): Comman
  * once no surviving tap row points at the same repo.
  */
 function dropTap(home: string, tap: TapConfig): void {
-  const config = readConfig(home);
-  const survivors = config.taps.filter((t) => t.name !== tap.name);
-  writeConfig({ ...config, taps: survivors }, home);
-  // Path taps don't own their directory; never delete it.
-  if (tap.kind !== "git") return;
-  if (cloneStillReferenced(tap, survivors)) return;
-  rmrf(tapClonePath(tap, home));
+  withTapLocks([tap], home, () => {
+    const config = readConfig(home);
+    const survivors = config.taps.filter((t) => t.name !== tap.name);
+    writeConfig({ ...config, taps: survivors }, home);
+    // Path taps don't own their directory; never delete it.
+    if (tap.kind === "git" && !cloneStillReferenced(tap, survivors)) {
+      const clone = tapClonePath(tap, home);
+      assertNoSymlinkEscape(home, clone, "shared tap clone");
+      rmrfInside(paths(home).reposDir, clone);
+    }
+  });
 }
 
 /** `--force` (or nothing attached): remove the tap, keep any installs. */
@@ -92,11 +99,13 @@ function removeTapOnly(
   kept: readonly StateEntry[],
   dryRun: boolean,
 ): CommandOutput {
+  const cloneShared = cloneStillReferenced(tap, readConfig(ctx.home).taps);
   if (!dryRun) dropTap(ctx.home, tap);
   const keptLabels = describe(kept);
   return {
     exitCode: 0,
     human: renderTapRemove({
+      cloneShared,
       name: tap.name,
       kind: tap.kind,
       dryRun,
@@ -114,6 +123,7 @@ function removeTapOnly(
 
 /** `--uninstall`: run the §7.4 removal for each attached entry, then drop the tap. */
 function removeWithSkills(ctx: CommandContext, plan: RemovePlan, dryRun: boolean): CommandOutput {
+  const cloneShared = cloneStillReferenced(plan.tap, readConfig(ctx.home).taps);
   const records: UninstallRecord[] = [];
   let state = readState(ctx.home);
   // Group this tap's entries by skill name so each name is removed once,
@@ -137,13 +147,19 @@ function removeWithSkills(ctx: CommandContext, plan: RemovePlan, dryRun: boolean
   // claiming bytes that are gone and blocking the tap forever.
   const cleanlyRemoved: StateEntry[] = [];
   for (const [name, entries] of byName) {
-    const { rec, outcomes } = removeOne(state, { raw: name, name, entries }, ctx, false, null);
+    const { rec, updatedState, fullyRemoved } = removeOne(
+      state,
+      { raw: name, name, entries },
+      ctx,
+      false,
+      null,
+      true,
+    );
+    state = updatedState;
     records.push(rec);
-    for (const o of outcomes) {
-      if (o.fullyRemoved) cleanlyRemoved.push(o.entry);
-    }
+    cleanlyRemoved.push(...fullyRemoved);
   }
-  state = dropEntriesAndUpdateRequiredBy(state, cleanlyRemoved);
+  state = dropScopedEntriesAndUpdateRequiredBy(state, cleanlyRemoved);
 
   const failed = records.some((r) => r.failures.length > 0);
   if (!dryRun) {
@@ -155,6 +171,7 @@ function removeWithSkills(ctx: CommandContext, plan: RemovePlan, dryRun: boolean
   return {
     exitCode: failed ? 1 : 0,
     human: renderTapRemove({
+      cloneShared,
       name: plan.tap.name,
       kind: plan.tap.kind,
       dryRun,

@@ -19,37 +19,8 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { crewHome, paths } from "./paths.ts";
+import { canonicalRepoUrl } from "./repo-url.ts";
 import type { TapConfig } from "./types.ts";
-
-/**
- * Normalize a clone URL so spellings of the same repository agree: drop
- * a trailing `.git` and any trailing slashes, and lowercase the scheme
- * and host. The path keeps its case — forges such as GitHub preserve it
- * and some hosts are case-sensitive.
- *
- * This is deliberately conservative: it only folds differences that
- * cannot change which repository is addressed.
- */
-export function canonicalRepoUrl(url: string): string {
-  let out = url.trim();
-  const schemeEnd = out.indexOf("://");
-  if (schemeEnd >= 0) {
-    const scheme = out.slice(0, schemeEnd).toLowerCase();
-    const rest = out.slice(schemeEnd + 3);
-    const slash = rest.indexOf("/");
-    // Authority is everything up to the first path separator.
-    const authority = (slash >= 0 ? rest.slice(0, slash) : rest).toLowerCase();
-    const path = slash >= 0 ? rest.slice(slash) : "";
-    out = `${scheme}://${authority}${path}`;
-  } else {
-    // scp-style `git@host:owner/repo` — lowercase up to the colon.
-    const colon = out.indexOf(":");
-    if (colon >= 0) out = out.slice(0, colon).toLowerCase() + out.slice(colon);
-  }
-  out = out.replace(/\/+$/, "");
-  if (out.endsWith(".git")) out = out.slice(0, -4);
-  return out.replace(/\/+$/, "");
-}
 
 /** True when both URLs address the same repository (§16.3). */
 export function sameRepoUrl(a: string, b: string): boolean {
@@ -69,8 +40,16 @@ function slugSegment(raw: string): string {
  * path-ish segments of the URL (typically host, owner, repo).
  */
 function readablePrefix(canonical: string): string {
-  const withoutScheme = canonical.replace(/^[a-z0-9+.-]+:\/\//i, "");
-  const segments = withoutScheme
+  // The hash keeps full identity, but directory names must never publish secrets.
+  const address = canonical.split(/[?#]/, 1)[0]!;
+  const withoutScheme = address.replace(/^[a-z0-9+.-]+:\/\//i, "");
+  const authorityEnd = address.includes("://")
+    ? withoutScheme.indexOf("/")
+    : withoutScheme.indexOf(":");
+  const authority = authorityEnd < 0 ? withoutScheme : withoutScheme.slice(0, authorityEnd);
+  const host = authority.slice(authority.lastIndexOf("@") + 1);
+  const safe = host + (authorityEnd < 0 ? "" : withoutScheme.slice(authorityEnd));
+  const segments = safe
     .split(/[/:]/)
     .filter((s) => s.length > 0)
     .map(slugSegment)

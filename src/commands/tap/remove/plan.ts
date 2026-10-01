@@ -9,6 +9,7 @@
 import { DEFAULT_TAP_NAME } from "../../../config/defaults.ts";
 import { CrewError } from "../../../core/errors.ts";
 import type { StateEntry, StateFile, TapConfig } from "../../../core/types.ts";
+import { hasUsableProjectRoot } from "../../../state/validation.ts";
 
 /** What one `tap remove` run decided to do, computed from a consistent snapshot. */
 export interface RemovePlan {
@@ -32,6 +33,17 @@ export function planRemove(args: {
   // `--uninstall` wins over `--force`: nothing is left to keep.
   if (attached.length > 0 && !(args.uninstall || args.force))
     throw attachedError(args.name, attached);
+  if (args.uninstall) {
+    for (const e of attached) {
+      if (e.scope === "project" && !hasUsableProjectRoot(e)) {
+        throw new CrewError(
+          "usage_error",
+          `project root for \`${e.name}\` is not a nonempty absolute path — correct state.json before uninstalling`,
+          { name: e.name, project_root: e.project_root ?? null },
+        );
+      }
+    }
+  }
   return { tap, attached, uninstall: args.uninstall && attached.length > 0 };
 }
 

@@ -92,9 +92,11 @@ still describe the thing accurately.
   - [`proper-lockfile`](https://github.com/moxystudio/node-proper-lockfile)
     — cross-process advisory locking. Used by `src/state/lock.ts`.
   - [`yargs`](https://github.com/yargs/yargs) — argv parser. Used by
-    `src/cli/args/index.ts`, configured as a pure parser (no auto-help, no
-    auto-exit). The rest of the CLI machinery (dispatch, output
-    formatting, error mapping) is still our own.
+    `src/cli/args/`, configured as a pure parser (no auto-help, no
+    auto-exit) in `src/cli/args/tables.ts`, which also owns the flag
+    tables so the `--help`/`--version` rewrite and the real parse can't
+    disagree about what is a flag value. The rest of the CLI machinery
+    (dispatch, output formatting, error mapping) is still our own.
 
   Things we **don't** pull in as libraries and why:
   - **SHA-256 / content hash** — Node's `crypto.createHash` is in stdlib,
@@ -215,7 +217,7 @@ real skill (leading dot), then `renameSync` onto `dest` after removing
 the old `dest`. A crash mid-install never leaves a half-copied install.
 
 **5. Testable subprocess boundary.** `src/git/exec.ts`,
-`src/autoupdate/launchd.ts`, and `src/autoupdate/systemd.ts` each expose a
+`src/autoupdate/launchctl.ts`, and `src/autoupdate/systemd.ts` each expose a
 `setXRunner` seam. Real runner is the default; tests install a stub via
 `setGitRunner` / `setLaunchctlRunner` / `setSystemctlRunner` and call
 `resetXRunner` in `afterEach`. Prefer this pattern over global mocking.
@@ -256,12 +258,38 @@ is crew-owned; a source-authored marker would poison the install.
 - real `git` subprocesses against local `file://` repos;
 - the real YAML parser against real SKILL.md bytes.
 
+**Tests never contact the network.** Real local `git`, yes; remote
+hosts, no. A test that clones from a remote makes CI depend on a third
+party being reachable and fast, and hangs on an offline runner. Use a
+local `file://` repo (`makeGitRepo`) when the clone should succeed, and
+a nonexistent local path when it should fail — that fails instantly and
+offline.
+
+This is easy to violate by accident, because `crew install` materializes
+configured taps on demand: a fixture carrying a remote URL turns a
+local-looking assertion into a live clone. Two things enforce it:
+
+- `tests/helpers/no-network.ts` wraps the git seam and rejects any
+  `clone`/`fetch`/`ls-remote`/`push`/`pull` whose remote isn't a
+  `file://` URL or a local path. It's an assertion about remotes, not a
+  git mock, so real local git still runs normally. A test that
+  genuinely needs a remote must opt in via `allowRemoteGit()`.
+- `makeCrewHome()` seeds a `config.yaml` whose default `core` tap points
+  at an unreachable local path. The real default is a GitHub URL, and
+  any command that resolves a bare name or refreshes taps would
+  otherwise clone it.
+
+Because crew deliberately soft-fails an unreachable tap (PRD §16.6),
+several call sites swallow the tripwire's error. A global `afterEach` in
+the preload therefore fails any test that recorded a violation, so a
+swallowed one can't pass silently.
+
 Mocks are confined to exactly three boundaries:
 
 - `src/git/exec.ts` — for corner cases like "what if `git` returns
   exit code 42 with throwOnError=false"; real `git` is used for 95%
   of tests.
-- `src/autoupdate/launchd.ts` — because macOS CI environments don't
+- `src/autoupdate/launchctl.ts` — because macOS CI environments don't
   have a user session launchd to talk to.
 - `src/autoupdate/systemd.ts` — because Linux CI environments don't
   have a systemd `--user` session to talk to.
@@ -566,7 +594,8 @@ start.
 | Want to… | Touch… |
 |---|---|
 | Add a new command | `src/commands/<name>.ts` (or `src/commands/<name>/` for multi-file commands); register in `src/cli/dispatch.ts`; add help entry at `src/commands/help/content/<name>.ts` and register in `src/commands/help/content/index.ts` |
-| Add a new global flag | `src/cli/args/tables.ts` (BOOLEAN_GLOBALS / STRING_GLOBALS); thread through `CommandFlags` in `src/commands/types.ts` |
+| Add a new global flag | `src/cli/args/tables.ts` (BOOLEAN_GLOBALS / STRING_GLOBALS / ARRAY_GLOBALS); thread through `CommandFlags` in `src/commands/types.ts` |
+| Add a new command-scoped flag | `src/cli/args/tables.ts` (BOOLEAN_SUB / STRING_SUB), keyed by command name; read it from `ctx.flags.extras` |
 | Add a new agent adapter | new file in `src/agents/`; register in `src/agents/registry.ts` |
 | Add a new error type | `src/core/errors.ts` (both `CrewErrorName` and `EXIT_CODES`); update PRD §13/§15 |
 | Change skill validation | `src/skill/validate.ts`; update PRD §9 step 4 and §18 C-SPEC |
@@ -619,6 +648,13 @@ on `$PATH`.
 - **Don't mock `git`** at the `Bun.spawnSync` level. Use the
   `setGitRunner` seam or build a real local repo with
   `makeGitRepo` + `commitAll`.
+- **Don't let a test reach the network.** No remote URLs in fixtures;
+  use `file://` repos, or a nonexistent local path when the clone is
+  meant to fail. Protocol-specific credential tests may substitute a
+  local source through the git runner seam while retaining the original
+  CLI input and real local git diagnostics. The preload tripwire fails
+  any actual remote transport attempt — see
+  "Tests never contact the network" above.
 - **Don't write to `~/.claude/skills/`, `~/.codex/skills/`, or
   `~/.gemini/skills/` from tests.** Redirect the adapter's `userPath`.
 - **Don't introduce a new dependency without a strong reason.** We

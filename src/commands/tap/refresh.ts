@@ -16,10 +16,14 @@
  */
 
 import type { CrewError } from "../../core/errors.ts";
-import { canonicalRepoUrl, tapClonePath } from "../../core/repo-path.ts";
+import { tapClonePath } from "../../core/repo-path.ts";
+import { canonicalRepoUrl } from "../../core/repo-url.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { ensureRepo } from "../../git/repo/index.ts";
+import { displayUrl } from "../../refs/display-url.ts";
 import { migrateTapClone } from "../../sources/migrate-clones.ts";
+import { progress } from "../../util/progress.ts";
+import { safeUrl } from "../../util/redact.ts";
 
 /** Fields every refresh row carries, whatever its outcome. */
 interface TapRefreshBase {
@@ -52,10 +56,10 @@ function skippedPathRow(tap: TapConfig): TapRefreshRow {
  * run: it inherits that fetch's result rather than repeating it.
  */
 function repeatRow(tap: TapConfig, failure: CrewError | null): TapRefreshRow {
-  if (failure === null) return { name: tap.name, url: tap.url, kind: "refreshed" };
+  if (failure === null) return { name: tap.name, url: displayUrl(tap.url), kind: "refreshed" };
   return {
     name: tap.name,
-    url: tap.url,
+    url: displayUrl(tap.url),
     kind: "failed",
     error: { code: failure.code ?? "source_unreachable", message: failure.message },
   };
@@ -69,7 +73,7 @@ export function planRefresh(taps: readonly TapConfig[]): TapRefreshRow[] {
       rows.push(skippedPathRow(tap));
       continue;
     }
-    rows.push({ name: tap.name, url: tap.url, kind: "pending" });
+    rows.push({ name: tap.name, url: displayUrl(tap.url), kind: "pending" });
   }
   return rows;
 }
@@ -90,7 +94,6 @@ export function refreshTaps(taps: readonly TapConfig[], home: string): TapRefres
       rows.push(skippedPathRow(tap));
       continue;
     }
-    migrateTapClone(tap, home);
     const repoKey = canonicalRepoUrl(tap.url);
     const previous = fetched.get(repoKey);
     if (previous !== undefined) {
@@ -98,15 +101,19 @@ export function refreshTaps(taps: readonly TapConfig[], home: string): TapRefres
       continue;
     }
     try {
+      migrateTapClone(tap, home);
+      progress(`refreshing tap ${tap.name} from ${safeUrl(tap.url)}`);
       ensureRepo(tap.url, tapClonePath(tap, home));
       fetched.set(repoKey, null);
-      rows.push({ name: tap.name, url: tap.url, kind: "refreshed" });
+      // A tap URL may carry credentials (§16.3); rows reach both human and
+      // JSON output, so redact once here rather than at each renderer.
+      rows.push({ name: tap.name, url: displayUrl(tap.url), kind: "refreshed" });
     } catch (err) {
       fetched.set(repoKey, err as CrewError);
       const ce = err as CrewError;
       rows.push({
         name: tap.name,
-        url: tap.url,
+        url: displayUrl(tap.url),
         kind: "failed",
         error: { code: ce.code ?? "source_unreachable", message: ce.message },
       });

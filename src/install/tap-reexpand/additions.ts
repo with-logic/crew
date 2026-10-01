@@ -1,0 +1,125 @@
+/**
+ * Newly-added tap children during re-expansion (§10.1.1 step 1).
+ *
+ * Split out of `./index.ts` (200-line cap): given the children a
+ * tap currently exposes and the names already in state, decide which
+ * are new, validate each in full, and either report the addition
+ * (`--dry-run`) or install it.
+ */
+
+import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
+import {
+  type InstalledSourceIndex,
+  indexHasSameSource,
+  noteInstalled,
+} from "../installed-lookup.ts";
+import type { CurrentTapChild } from "../tap-children.ts";
+import type { InstallNewChild, TapReexpandRow } from "./index.ts";
+import type { TapScanCache } from "./scan-cache.ts";
+
+export interface AdditionsInput {
+  readonly children: readonly CurrentTapChild[];
+  readonly conflictedNames: ReadonlySet<string>;
+  readonly memberNames: ReadonlySet<string>;
+  readonly scope: Scope;
+  readonly tap: TapConfig;
+  readonly agents: readonly string[];
+  readonly resolvedSha: string | null;
+  readonly projectRoot: string | null;
+  readonly dryRun: boolean;
+  readonly ref: string | null;
+  readonly pinned: boolean;
+  readonly installOne: InstallNewChild;
+  readonly cache: TapScanCache;
+  readonly installedIndex: InstalledSourceIndex;
+  /**
+   * When a namespace selector drove this run, the namespaces it named.
+   * Children outside them are skipped: the group spans the whole tap,
+   * but the user asked about one namespace (§10.1.1). `null` is
+   * unbounded.
+   */
+  readonly namespaces: ReadonlySet<string> | null;
+}
+
+/** The namespace a child lives under (`skills/<ns>/<name>`), or null. */
+function namespaceForChild(child: CurrentTapChild): string | null {
+  const parts = child.tapRelativePath.split("/");
+  if (parts.length === 3 && parts[0] === "skills") return parts[1]!;
+  return null;
+}
+
+export interface AdditionsResult {
+  readonly added: readonly StateEntry[];
+  readonly rows: readonly TapReexpandRow[];
+  readonly hardFailure: boolean;
+}
+
+export function collectAdditions(input: AdditionsInput): AdditionsResult {
+  const added: StateEntry[] = [];
+  const rows: TapReexpandRow[] = [];
+  let hardFailure = false;
+
+  for (const child of input.children) {
+    if (input.conflictedNames.has(child.name)) continue;
+    if (input.memberNames.has(child.name)) continue;
+    if (input.namespaces !== null) {
+      const ns = namespaceForChild(child);
+      if (ns === null || !input.namespaces.has(ns)) continue;
+    }
+
+    const lookup = {
+      name: child.name,
+      scope: input.scope,
+      projectRoot: input.projectRoot,
+      tap: input.tap,
+      tapRelativePath: child.tapRelativePath,
+    };
+    if (indexHasSameSource(input.installedIndex, lookup)) continue;
+
+    // §9 step 4: discovery only validated the declared name, so a child
+    // can reach here with (say) no `description`. Validate in full
+    // before reporting or installing, so the preview and the real run
+    // agree and an invalid child never lands on disk.
+    const invalid = input.cache.validate(child.path);
+    if (invalid) {
+      hardFailure = true;
+      rows.push({
+        name: child.name,
+        scope: input.scope,
+        tap: input.tap.name,
+        kind: "tap_error",
+        error: { code: invalid.code ?? "invalid_skill", message: invalid.message },
+      });
+      continue;
+    }
+    if (input.dryRun) {
+      noteInstalled(input.installedIndex, lookup);
+      rows.push({
+        name: child.name,
+        scope: input.scope,
+        tap: input.tap.name,
+        kind: "would_add",
+      });
+      continue;
+    }
+    const entry = input.installOne({
+      skillDir: child.path,
+      skillName: child.name,
+      tapRelativePath: child.tapRelativePath,
+      scope: input.scope,
+      tap: input.tap,
+      agents: input.agents,
+      resolvedSha: input.resolvedSha,
+      projectRoot: input.projectRoot,
+      ref: input.ref,
+      pinned: input.pinned,
+    });
+    if (entry) {
+      added.push(entry);
+      noteInstalled(input.installedIndex, lookup);
+      rows.push({ name: child.name, scope: input.scope, tap: input.tap.name, kind: "added" });
+    }
+  }
+
+  return { added, rows, hardFailure };
+}

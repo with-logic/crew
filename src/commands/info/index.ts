@@ -6,6 +6,9 @@
  *   - Installed bare name → gather from state + local install site.
  *   - Anything else → resolve through tap-attribution (no auto-tap
  *     side effects), walk the source, and render.
+ *
+ * This file owns the command shape and the installed-entry path; source
+ * preview (including `@<ref>` handling) lives in `./preview.ts`.
  */
 
 import { join } from "node:path";
@@ -13,17 +16,17 @@ import { baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import type { LoadedSkill, StateEntry, TapConfig } from "../../core/types.ts";
-import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
+import type { Config, StateEntry } from "../../core/types.ts";
 import { attributeRef } from "../../install/tap-attribution.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { hasSkillMd, loadSkill } from "../../skill/load.ts";
-import { acquireTap } from "../../sources/acquire/index.ts";
-import { expandSkills } from "../../sources/expand.ts";
+import { withDiscoveredTapLocks } from "../../sources/discovered-tap-locks.ts";
 import { readState } from "../../state/load.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
+import { isAutoTapSource, sourceLabel, tapIndex } from "../source-label/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
-import type { InstalledInfo, SkillInfo } from "./render.ts";
+import { skillsAtRef, tapCandidate } from "./preview.ts";
+import type { InstalledInfo } from "./render.ts";
 import { renderInstalled, renderSkills } from "./render.ts";
 
 export function infoCommand(ctx: CommandContext): CommandOutput {
@@ -36,9 +39,10 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   const arg = ctx.positional[0]!;
 
   const state = readState(ctx.home);
+  const config = readConfig(ctx.home);
   const subject = resolveStateSubject(state, arg);
   if (subject.entries.length > 0) {
-    const installed = buildInstalledInfo(subject.entries, ctx.cwd);
+    const installed = buildInstalledInfo(subject.entries, config, ctx.cwd);
     return {
       exitCode: 0,
       human: renderInstalled(installed, ctx.style, ctx.width),
@@ -46,23 +50,24 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
         installed: installed.primary,
         entries: subject.entries,
         description: installed.description,
+        source_label: installed.sourceLabel,
       },
     };
   }
 
-  const config = readConfig(ctx.home);
   const source = parseRef(arg, ctx.cwd);
-  const { tap, skills } = (() => {
+  // An `@ref` tail previews that commit's content, not the clone's HEAD (§9.1).
+  const ref = source.type === "path" ? null : source.ref;
+  const { tap, skills } = withDiscoveredTapLocks(config.taps, ctx.home, (requireTap) => {
     if (source.type === "tap" && source.tap === null) {
       const namedTap = config.taps.find((t) => t.name === source.name);
       if (namedTap) {
-        const acq = acquireTap(namedTap, ctx.home);
-        return { tap: namedTap, skills: buildSkillInfos(acq.rootDir, namedTap) };
+        return { tap: namedTap, skills: skillsAtRef(namedTap, ref, ctx.home) };
       }
-      return candidateSkills(resolveTapRef(source, config, ctx.home, "non-tap"));
+      return tapCandidate(source, config, ref, ctx.home);
     }
     if (source.type === "tap") {
-      return candidateSkills(resolveTapRef(source, config, ctx.home, "non-tap"));
+      return tapCandidate(source, config, ref, ctx.home);
     }
     const matched = config.taps.find((t) => {
       if (source.type === "git")
@@ -70,13 +75,12 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
       return t.kind === "path" && t.path === source.path;
     });
     if (matched) {
-      const acq = acquireTap(matched, ctx.home);
-      return { tap: matched, skills: buildSkillInfos(acq.rootDir, matched) };
+      return { tap: matched, skills: skillsAtRef(matched, ref, ctx.home) };
     }
     const attrib = attributeRef(source, config);
-    const acq = acquireTap(attrib.tap, ctx.home);
-    return { tap: attrib.tap, skills: buildSkillInfos(acq.rootDir, attrib.tap) };
-  })();
+    requireTap(attrib.tap);
+    return { tap: attrib.tap, skills: skillsAtRef(attrib.tap, ref, ctx.home) };
+  });
 
   return {
     exitCode: 0,
@@ -85,20 +89,16 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   };
 }
 
-function candidateSkills(candidate: NonTapNameCandidate): {
-  tap: TapConfig;
-  skills: SkillInfo[];
-} {
-  if (candidate.kind === "skill") {
-    return { tap: candidate.tap, skills: buildSkillInfosFromDirs([candidate.location]) };
-  }
-  return { tap: candidate.tap, skills: buildSkillInfosFromDirs(candidate.members) };
-}
-
-function buildInstalledInfo(entries: readonly StateEntry[], fallbackCwd: string): InstalledInfo {
+function buildInstalledInfo(
+  entries: readonly StateEntry[],
+  config: Config,
+  fallbackCwd: string,
+): InstalledInfo {
   const primary = entries.find((e) => e.scope === "user") ?? entries[0]!;
   const description = loadDescriptionFromAny(entries, fallbackCwd);
-  return { primary, entries, description };
+  const taps = tapIndex(config);
+  const tapName = isAutoTapSource(primary, taps) ? primary.source.tap : null;
+  return { primary, entries, description, sourceLabel: sourceLabel(primary, taps), tapName };
 }
 
 function loadDescriptionFromAny(
@@ -122,24 +122,4 @@ function loadDescriptionFromAny(
     }
   }
   return null;
-}
-
-function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
-  const { valid } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
-  return valid.map(skillInfoOf);
-}
-
-function buildSkillInfosFromDirs(dirs: readonly { readonly path: string }[]): SkillInfo[] {
-  return dirs.map((dir) => skillInfoOf(loadSkill(dir.path)));
-}
-
-function skillInfoOf(s: LoadedSkill): SkillInfo {
-  return {
-    name: s.frontmatter.name,
-    description: s.frontmatter.description,
-    license: s.frontmatter.license ?? null,
-    compatibility: s.frontmatter.compatibility ?? null,
-    homepage: s.frontmatter.metadata?.crew?.homepage ?? null,
-    dependencies: s.frontmatter.metadata?.crew?.dependencies ?? [],
-  };
 }

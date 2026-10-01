@@ -2,14 +2,14 @@
  * Direct tests for the batched state mutation behind
  * `crew tap remove --uninstall` (§7.4, §11.1).
  *
- * `dropEntriesAndUpdateRequiredBy` drops a whole removal set in one
+ * `dropScopedEntriesAndUpdateRequiredBy` drops a whole removal set in one
  * traversal. The subtle part is which `required_by` edges it scrubs: only
  * names removed at the SAME §11.1 location may come off, and every other
  * edge on that same survivor has to be preserved.
  */
 
 import { describe, expect, test } from "bun:test";
-import { dropEntriesAndUpdateRequiredBy } from "../../src/commands/uninstall/state.ts";
+import { dropScopedEntriesAndUpdateRequiredBy } from "../../src/commands/uninstall/state.ts";
 import type { StateEntry, StateFile } from "../../src/core/types.ts";
 
 function entry(over: Partial<StateEntry>): StateEntry {
@@ -33,10 +33,10 @@ function stateOf(installations: StateEntry[]): StateFile {
   return { schema_version: 1, installations };
 }
 
-describe("dropEntriesAndUpdateRequiredBy", () => {
+describe("dropScopedEntriesAndUpdateRequiredBy", () => {
   test("returns the same state when there is nothing to drop", () => {
     const state = stateOf([entry({ name: "alpha" })]);
-    expect(dropEntriesAndUpdateRequiredBy(state, [])).toBe(state);
+    expect(dropScopedEntriesAndUpdateRequiredBy(state, [])).toBe(state);
   });
 
   test("scrubs removed names from a survivor but keeps its other edges", () => {
@@ -47,7 +47,7 @@ describe("dropEntriesAndUpdateRequiredBy", () => {
     const dep = entry({ name: "dep", explicit: false, required_by: ["alpha", "beta"] });
     const beta = entry({ name: "beta" });
 
-    const next = dropEntriesAndUpdateRequiredBy(stateOf([alpha, dep, beta]), [alpha]);
+    const next = dropScopedEntriesAndUpdateRequiredBy(stateOf([alpha, dep, beta]), [alpha]);
 
     expect(next.installations.map((e) => e.name)).toEqual(["dep", "beta"]);
     expect(next.installations[0]!.required_by).toEqual(["beta"]);
@@ -59,7 +59,7 @@ describe("dropEntriesAndUpdateRequiredBy", () => {
     const alpha = entry({ name: "alpha" });
     const dep = entry({ name: "dep", explicit: false, required_by: ["beta"] });
 
-    const next = dropEntriesAndUpdateRequiredBy(stateOf([alpha, dep]), [alpha]);
+    const next = dropScopedEntriesAndUpdateRequiredBy(stateOf([alpha, dep]), [alpha]);
 
     expect(next.installations).toHaveLength(1);
     expect(next.installations[0]).toBe(dep);
@@ -78,7 +78,7 @@ describe("dropEntriesAndUpdateRequiredBy", () => {
       required_by: ["alpha"],
     });
 
-    const next = dropEntriesAndUpdateRequiredBy(stateOf([userAlpha, projDep]), [userAlpha]);
+    const next = dropScopedEntriesAndUpdateRequiredBy(stateOf([userAlpha, projDep]), [userAlpha]);
 
     expect(next.installations).toHaveLength(1);
     expect(next.installations[0]!.required_by).toEqual(["alpha"]);
@@ -89,7 +89,7 @@ describe("dropEntriesAndUpdateRequiredBy", () => {
     const b = entry({ name: "b" });
     const keep = entry({ name: "keep" });
 
-    const next = dropEntriesAndUpdateRequiredBy(stateOf([a, b, keep]), [a, b]);
+    const next = dropScopedEntriesAndUpdateRequiredBy(stateOf([a, b, keep]), [a, b]);
 
     expect(next.installations.map((e) => e.name)).toEqual(["keep"]);
   });

@@ -141,11 +141,23 @@ describe("crew tap", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo();
     const c = captureStreams();
-    const code = runCli(["tap", "add", `file://${repo}@main`, "mytap"], {
+    const code = runCli(["tap", "add", `file://${repo}@v1.0`, "mytap"], {
       home,
       streams: c.streams,
     });
     expect(code).toBe(4);
     expect(c.stderr()).toContain("taps track the default branch");
+  });
+
+  test("C-REF-27 a @main tail names the default branch and is dropped", () => {
+    const home = makeCrewHome();
+    const repo = buildTapRepo();
+    const c = captureStreams();
+    const code = runCli(["tap", "add", `file://${repo}@main`, "mytap", "--json"], {
+      home,
+      streams: c.streams,
+    });
+    expect(code).toBe(0);
+    expect(JSON.parse(c.stdout()).url).toBe(`file://${repo}`);
   });
 });

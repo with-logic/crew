@@ -124,6 +124,13 @@ describe("yaml edge cases", () => {
     const y = "items:\n  - a\n  - b";
     expect(parseYaml(y)).toEqual({ items: ["a", "b"] });
   });
+  test("parseYaml treats whitespace-only input as an empty document", () => {
+    // A file of only blank lines is empty, not malformed — `load` would
+    // return undefined for it, so the trim guard normalizes to null.
+    expect(parseYaml("")).toBeNull();
+    expect(parseYaml("   ")).toBeNull();
+    expect(parseYaml("\n\n  \t\n")).toBeNull();
+  });
   test("parseYaml reserved scalars", () => {
     expect(parseYaml("x: ~")).toEqual({ x: null });
     expect(parseYaml("x: Null")).toEqual({ x: null });

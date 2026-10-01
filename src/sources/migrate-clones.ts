@@ -18,12 +18,14 @@
 
 import { renameSync } from "node:fs";
 import { dirname } from "node:path";
-import { legacyTapPath } from "../core/paths.ts";
+import { legacyTapPath, paths } from "../core/paths.ts";
 import { repoClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
-import { ensureDir, isDirectory, rmrf } from "../util/fs.ts";
+import { ensureDir, isDirectory, isInside, rmrfInside } from "../util/fs.ts";
+import { assertNoSymlinkEscape } from "../util/symlink-containment.ts";
 
 /**
+ * Caller holds the physical clone lock for migration and subsequent reads.
  * Move one tap's legacy clone to its shared location. Returns true when
  * a directory was relocated or reclaimed, false when there was nothing
  * to do.
@@ -31,12 +33,15 @@ import { ensureDir, isDirectory, rmrf } from "../util/fs.ts";
 export function migrateTapClone(tap: TapConfig, home: string): boolean {
   if (tap.kind !== "git") return false;
   const old = legacyTapPath(tap.name, home);
+  if (!isInside(paths(home).tapsDir, old)) return false;
+  assertNoSymlinkEscape(home, old, "legacy tap clone");
   if (!isDirectory(old)) return false;
   const shared = repoClonePath(tap.url, home);
+  assertNoSymlinkEscape(home, shared, "shared tap clone");
   if (isDirectory(shared)) {
     // Another tap on this repo already claimed the shared clone; this
     // copy is redundant.
-    rmrf(old);
+    rmrfInside(paths(home).tapsDir, old);
     return true;
   }
   // Both paths live under the crew home, so this is always a

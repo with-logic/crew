@@ -14,6 +14,8 @@
 
 import type { CommandOutput } from "../commands/types.ts";
 import type { CrewError, CrewErrorName } from "../core/errors.ts";
+import { displayDetails, displayText } from "../refs/display-url.ts";
+import { sanitizeLine } from "../util/redact.ts";
 import type { Styler } from "../util/term.ts";
 
 /** Writable stream shape used by `writeOutput` — lets tests pass buffers. */
@@ -61,13 +63,16 @@ export function writeError(
   style: Styler,
 ): void {
   if (json) {
+    // `details` is a stable machine contract (§13), so keys are kept —
+    // but a value can be a credential-bearing URL, and the JSON payload
+    // is exactly what gets pasted into a CI log or an issue.
     streams.stdout(
       `${JSON.stringify(
         {
           error: {
             name: err.code,
-            message: err.message,
-            details: err.details ?? {},
+            message: displayText(err.message),
+            details: displayDetails(err.details ?? {}),
           },
         },
         null,
@@ -85,9 +90,20 @@ export function writeError(
   }
 }
 
+/**
+ * The single sink every human-readable error message and remedy hint passes
+ * through, so redaction here covers present and future errors rather than
+ * relying on each construction site to remember.
+ *
+ * A message is prose that may have a URL interpolated into it (see
+ * `acquireTap`'s `no_skills_found`, which embeds `tap.url`), and that URL can
+ * carry userinfo or a credential-bearing query parameter. `displayText` scans
+ * for URL-shaped substrings, which a whole-string URL parse cannot do.
+ */
 function writeMessageBlock(message: string, streams: OutputStreams): void {
-  for (const line of message.split("\n")) {
-    streams.stderr(line.length === 0 ? "\n" : `  ${line}\n`);
+  for (const line of displayText(message).split("\n")) {
+    const safe = sanitizeLine(line);
+    streams.stderr(safe.length === 0 ? "\n" : `  ${safe}\n`);
   }
 }
 

@@ -17,6 +17,7 @@ import { CrewError } from "../../core/errors.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
+import { withTapLocks } from "../../sources/tap-lock.ts";
 import { showCommandHelp } from "../help/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { tapAdd } from "./add.ts";
@@ -73,7 +74,9 @@ function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput 
   const selected: readonly TapConfig[] =
     args.length === 0 ? config.taps : tapsMatching(config.taps, args);
   const dryRun = ctx.flags.dryRun;
-  const rows: TapRefreshRow[] = dryRun ? planRefresh(selected) : refreshTaps(selected, ctx.home);
+  const rows: TapRefreshRow[] = dryRun
+    ? planRefresh(selected)
+    : withTapLocks(selected, ctx.home, () => refreshTaps(selected, ctx.home));
   const anyFailed = rows.some((r) => r.kind === "failed");
   return {
     exitCode: anyFailed ? 1 : 0,

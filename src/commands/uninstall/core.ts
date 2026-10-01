@@ -10,32 +10,48 @@
 import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { uninstallSkillFromAgents } from "../../agents/uninstall.ts";
-import { CrewError } from "../../core/errors.ts";
+import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
+import type { CollectionKind } from "../../state/collections/index.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
-import { dropScopedEntryAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
+import { dropScopedEntriesAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
 
-export interface UninstallRecord {
+/** What a removal reports regardless of outcome. */
+interface UninstallRecordBase {
   name: string;
   removedFrom: string[];
   absentFrom: string[];
   failures: { agent: string; error: { code: string; message: string } }[];
   /** True if the removal was driven by `--prune`, not by a direct command-line arg. */
   pruned?: boolean;
-  /** True if the state entry still survives after this call (partial --agent removal). */
-  partial?: boolean;
+  collection?: { readonly kind: CollectionKind; readonly name: string };
 }
 
-/** Per-entry result of one `removeOne` call, keyed by §11.1's (name, scope, root). */
-export interface EntryOutcome {
-  readonly entry: StateEntry;
-  /**
-   * True when every agent asked to give up this entry did so, leaving no
-   * ownership behind. Only these entries may be dropped from state — an
-   * entry with retained ownership still has bytes on disk.
-   */
-  readonly fullyRemoved: boolean;
+/**
+ * A record for a removal that left the skill installed somewhere: an
+ * `--agent` filter kept agents back, or a safety check aborted and the
+ * bytes remain.
+ *
+ * `partial` and `remainingAgents` are declared together rather than as
+ * two independent optionals. §7.4 makes "would be retained" an output
+ * obligation, so a record asserting a partial removal without naming
+ * who kept the skill would satisfy the type while breaking the
+ * contract. Both stay top-level: `remainingAgents` is the field name
+ * §7.4 and C-UNINST-19b pin for `--json`.
+ */
+export type UninstallRecord = UninstallRecordBase &
+  (
+    | { partial?: undefined; remainingAgents?: undefined }
+    | {
+        partial: true;
+        remainingAgents: string[];
+      }
+  );
+
+/** Locations fully removed by one call; null denotes user scope (§7.4). */
+export interface RemovalMeta {
+  fullyRemovedRoots: (string | null)[];
 }
 
 /**
@@ -46,17 +62,18 @@ export interface EntryOutcome {
  */
 export function removeOne(
   state: StateFile,
-  subject: string | StateSubject,
+  subject: StateSubject,
   ctx: CommandContext,
   pruned: boolean,
   agentFilter: readonly string[] | null,
-): { updatedState: StateFile; rec: UninstallRecord; outcomes: readonly EntryOutcome[] } {
-  const name = typeof subject === "string" ? subject : subject.name;
-  const entries =
-    typeof subject === "string"
-      ? state.installations.filter((e) => e.name === name)
-      : subject.entries;
-  const errorName = typeof subject === "string" ? subject : subject.raw;
+  deferFullRemoval: boolean = false,
+): {
+  updatedState: StateFile;
+  rec: UninstallRecord;
+  meta: RemovalMeta;
+  fullyRemoved: readonly StateEntry[];
+} {
+  const { name, entries } = subject;
   const rec: UninstallRecord = {
     name,
     removedFrom: [],
@@ -64,46 +81,42 @@ export function removeOne(
     failures: [],
     ...(pruned ? { pruned: true } : {}),
   };
+  const meta: RemovalMeta = { fullyRemovedRoots: [] };
   if (entries.length === 0) {
-    if (!(ctx.flags.force || pruned)) {
-      throw new CrewError(
-        "not_installed_here",
-        `\`${errorName}\` isn't in Homecrew's state — nothing to remove`,
-        { name: errorName },
-      );
-    }
-    return { updatedState: state, rec, outcomes: [] };
+    // Selection was prevalidated; only forced empty subjects reach removal.
+    return { updatedState: state, rec, meta, fullyRemoved: [] };
   }
-  // Per-entry processing: each (skill, scope, project_root) entry
-  // potentially touches a different subset of agents.
+  // Per-entry processing: each (skill, scope) pair potentially touches
+  // a different subset of agents.
   let nextState = state;
-  let anySurvives = false;
-  const outcomes: EntryOutcome[] = [];
+  const retained = new Set<string>();
+  const fullyRemoved: StateEntry[] = [];
   for (const entry of entries) {
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
       : entry.agents;
-    const before = rec.failures.length;
-    removeFromAgents(entry, agentsToRemove, name, ctx, rec);
-    // An agent that aborted on a safety check still owns its bytes, so
-    // its ownership must stay in state. Dropping the entry anyway would
-    // hide the install from every later attachment check — a retry would
-    // then delete the tap and orphan it.
-    const failedAgents = rec.failures.slice(before).map((f) => f.agent);
-    const remainingAgents = entry.agents.filter(
-      (t) => !agentsToRemove.includes(t) || failedAgents.includes(t),
-    );
+    const detached = removeFromAgents(entry, agentsToRemove, name, ctx, rec);
+    // Retention follows the per-agent OUTCOME, not the request: an
+    // agent whose removal aborted on a safety check still has the
+    // skill's bytes on disk, so §7.4 obliges us to report it as
+    // retained even though the user asked for it to go.
+    const remainingAgents = entry.agents.filter((t) => !detached.has(t));
     if (remainingAgents.length > 0) {
       nextState = reduceEntryAgents(nextState, entry, remainingAgents);
-      anySurvives = true;
-      outcomes.push({ entry, fullyRemoved: false });
+      // Entries at different scopes can retain different agents; the
+      // record reports the union, deduplicated.
+      for (const a of remainingAgents) retained.add(a);
     } else {
-      nextState = dropScopedEntryAndUpdateRequiredBy(nextState, entry);
-      outcomes.push({ entry, fullyRemoved: true });
+      meta.fullyRemovedRoots.push(entry.project_root ?? null);
+      fullyRemoved.push(entry);
     }
   }
-  if (anySurvives) rec.partial = true;
-  return { updatedState: nextState, rec, outcomes };
+  // Tap removal batches full drops across names while retaining failed ownership immediately.
+  if (!deferFullRemoval) nextState = dropScopedEntriesAndUpdateRequiredBy(nextState, fullyRemoved);
+  if (retained.size > 0) {
+    Object.assign(rec, { partial: true, remainingAgents: [...retained].sort() });
+  }
+  return { updatedState: nextState, rec, meta, fullyRemoved };
 }
 
 /**
@@ -111,6 +124,9 @@ export function removeOne(
  * entry. Adapters are grouped by resolved install path (path sharing,
  * §7.2): one call per `dest`, detaching every adapter in the group at
  * once. The per-adapter outcome is derived from the group outcome.
+ *
+ * Returns the agents whose ownership actually came off — the caller
+ * needs the outcome, not the request, to decide what is retained.
  */
 function removeFromAgents(
   entry: StateEntry,
@@ -118,20 +134,13 @@ function removeFromAgents(
   name: string,
   ctx: CommandContext,
   rec: UninstallRecord,
-) {
+): ReadonlySet<string> {
   // For project-scope entries, the authoritative install location is
   // the entry's recorded `project_root` — NOT `ctx.cwd`.
   const entryCwd = cwdForEntry(entry, ctx.cwd);
   const groups = new Map<string, AgentAdapter[]>();
   for (const targetName of agentsToRemove) {
-    // A target name in state with no adapter in this build — state
-    // written by a future crew, or an adapter since removed. We cannot
-    // reach its install directory, so its bytes stay on disk. Record a
-    // failure so the entry keeps that ownership: dropping it would hide
-    // a real install from every later attachment check, letting
-    // `tap remove --uninstall` delete the tap and orphan it.
-    // Adapters that don't support the entry's scope (empty base) never
-    // appear in `state.agents`, so they need no branch here.
+    // Unknown owners retain their bytes and prevent tap removal (§16.3).
     const adapter = agentByName(targetName);
     if (!adapter) {
       rec.failures.push({
@@ -149,6 +158,7 @@ function removeFromAgents(
     if (existing) existing.push(adapter);
     else groups.set(dest, [adapter]);
   }
+  const detached = new Set<string>();
   for (const group of groups.values()) {
     try {
       const outcome = uninstallSkillFromAgents({
@@ -167,6 +177,8 @@ function removeFromAgents(
         // the skill is no longer installed for that target.
         for (const a of group) rec.removedFrom.push(a.name);
       }
+      // Absent and removed alike leave no bytes owned by this agent.
+      for (const a of group) detached.add(a.name);
     } catch (err) {
       const ce = err as CrewError;
       for (const a of group) {
@@ -177,4 +189,5 @@ function removeFromAgents(
       }
     }
   }
+  return detached;
 }

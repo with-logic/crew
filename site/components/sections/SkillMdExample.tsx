@@ -66,7 +66,8 @@ export function SkillMdExample() {
           <div>
             <Eyebrow>versions</Eyebrow>
             <p className={styles.cText}>
-              Every install pins to a git commit SHA. Pin to a tag with <code>@v1.0</code>.
+              Every install records the commit SHA it resolved to. <code>@v1.0</code> or a SHA pins
+              it; <code>@main</code> follows a branch, and <code>crew update</code> advances it.
             </p>
           </div>
         </div>

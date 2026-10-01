@@ -9,11 +9,12 @@ export const DISCOVERY: CommandGroup = {
   commands: [
     {
       name: "search",
-      signature: <>crew search [&lt;query&gt;]</>,
+      signature: <>crew search [--tap &lt;name&gt;] [&lt;query&gt;]</>,
       description: (
         <>
-          Case-insensitive substring match across every configured tap. With no query, lists every
-          installable skill — installed ones are marked <code>✓</code>. With a query, also suggests
+          Case-insensitive substring match across every configured tap, or just one with{" "}
+          <code>--tap</code>. With no query, lists every installable skill in those taps — installed
+          ones are marked <code>✓</code>. With a query and without <code>--tap</code>, also suggests
           matching trusted taps to add.
         </>
       ),
@@ -32,7 +33,7 @@ export const DISCOVERY: CommandGroup = {
       name: "tap-remove",
       signature: <>crew tap remove [--uninstall] [--force] &lt;name&gt;</>,
       description: [
-        "Delete a local tap clone and drop it from config. If skills are still installed from the tap, the command stops and asks which you meant: ",
+        "Drop a tap from config and delete its shared clone when no other tap uses that repository. If skills are still installed from the tap, the command stops and asks which you meant: ",
         <code key="crew-tap-remove-uninstall">--uninstall</code>,
         " removes those skills too, while ",
         <code key="crew-tap-remove-force">--force</code>,

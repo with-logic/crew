@@ -40,6 +40,10 @@ export const installHelp: CommandHelp = {
         "Install from a git source, no guessing. Handy when a bare `owner/repo` would otherwise be read as a tap name — `--from-git acme/skills` means GitHub.",
     },
     { flag: "--json", description: "Machine-readable output." },
+    {
+      flag: "--verbose",
+      description: "Show each git command, store step, and install path on stderr as it happens.",
+    },
   ],
   examples: [
     {
@@ -105,6 +109,12 @@ export const installHelp: CommandHelp = {
             "  ssh://git@host/owner/repo.git",
             "  file:///abs/path/to/local.git      Local clone; great for testing.",
             "",
+            "Pasted from your browser (GitHub, GitLab, Bitbucket)",
+            "  https://github.com/acme/skills/tree/main/python/testing",
+            "  https://github.com/acme/skills/blob/main/python/testing/SKILL.md",
+            "  https://github.com/acme/skills/releases/tag/v1.2.0",
+            "  https://gitlab.com/acme/skills/-/tree/main/python/testing",
+            "",
             "Shorthand for the big hosts",
             "  gh:acme/skills                     → GitHub.",
             "  gl:acme/skills                     → GitLab.",
@@ -112,7 +122,7 @@ export const installHelp: CommandHelp = {
             "  @acme/skills                       → Same as gh: — a handy GitHub alias.",
           ],
         },
-        "Any git reference can pin a version with `@<tag>`, `@<branch>`, or `@<sha>`, and can point at a subfolder with `//<path>`. You can combine them — version first:",
+        "Any git reference can pin a version with `@<tag>` or `@<sha>`, follow a branch with `@<branch>`, and point at a subfolder with `//<path>`. You can combine them — version first:",
         {
           literal: true,
           lines: [
@@ -132,6 +142,8 @@ export const installHelp: CommandHelp = {
     "Pinning keeps a skill put. Anything with `@<tag>` or `@<sha>` is treated as pinned — `crew update` leaves it alone unless you ask for `--force`.",
     "Known-tap suggestions are local hints. Homecrew won't clone or add the suggested tap until you run the shown `crew tap add` command.",
     "How Homecrew tells names apart: a plain word is a skill name. Paths start with `./`, `../`, `/`, or `~`. Git URLs start with `https://`, `git@`, `ssh://`, `file://`, `gh:`, `gl:`, `bb:`, or `@<owner>/<repo>`. Anything containing `//` is always treated as a git reference (that's the subfolder syntax).",
+    "Browser links: a `/tree/<branch>/<folder>` link becomes `@<branch>//<folder>`, and a `/blob/.../SKILL.md` link points at the skill's folder. The first segment after `tree/` is taken as the branch, so for a branch name with a `/` in it use the explicit form instead — `crew install https://github.com/acme/skills@feature/new-api//python` installs the `python` folder from the `feature/new-api` branch.",
+    "Private repos: a URL with credentials in it (`https://<user>:<token>@host/...`) works, and Homecrew never prints the token back at you — it's masked in every message and in `--json` output.",
   ],
   seeAlso: ["uninstall", "update", "info", "search"],
 };
