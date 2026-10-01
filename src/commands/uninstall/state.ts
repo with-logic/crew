@@ -45,9 +45,8 @@ function locationKey(e: StateEntry): string {
  * scrubbing globally would orphan A's `bar` and let a later `--prune`
  * delete a dependency A still requires.
  *
- * Batched because removing a whole tap previously rebuilt the entire
- * installations array once per skill — quadratic in the number of
- * installed skills, all of it under the state lock.
+ * Batch the entries covered by one subject so removing the same skill
+ * at several locations rebuilds the installations array only once.
  */
 export function dropScopedEntriesAndUpdateRequiredBy(
   state: StateFile,

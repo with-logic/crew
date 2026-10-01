@@ -18,7 +18,7 @@
  */
 
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
-import { type CollectionKind, resolveCollectionSubjects } from "../../state/collections.ts";
+import { type CollectionKind, resolveCollectionSubjects } from "../../state/collections/index.ts";
 import { entryKey } from "../../state/identity.ts";
 import { namespaceForEntry, type StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
@@ -42,11 +42,6 @@ export type UninstallTarget =
       readonly subject: StateSubject;
       readonly collection: { readonly kind: CollectionKind; readonly name: string };
     };
-
-/** True when an empty entry set is reportable rather than an error. */
-export function allowsEmpty(target: UninstallTarget): boolean {
-  return target.kind === "collection";
-}
 
 /** Resolve the positional selectors, each narrowed to the target scope. */
 export function selectedTargets(
@@ -85,8 +80,12 @@ export function selectedTargets(
       kind: subject.kind,
       name: subject.name,
     };
-    const groups = groupByName(entriesForCollection(collection, state, ctx));
-    for (const group of groups) targets.push({ kind: "collection", subject: group, collection });
+    const taps = new Set(subject.entries.map((e) => e.source.tap));
+    const groups = groupByName(entriesForCollection(collection, state, ctx, taps));
+    for (const group of groups) {
+      const narrowed = narrowSubjectToScope(group, ctx.flags.scope, ctx.cwd, ctx.flags.force);
+      targets.push({ kind: "collection", subject: narrowed, collection });
+    }
     if (groups.length === 0) {
       targets.push({ kind: "collection", subject: { ...subject, entries: [] }, collection });
     }
@@ -126,9 +125,12 @@ function entriesForCollection(
   subject: { readonly kind: CollectionKind; readonly name: string },
   state: StateFile,
   ctx: CommandContext,
+  taps: ReadonlySet<string>,
 ): readonly StateEntry[] {
   const all = state.installations.filter((e) =>
-    subject.kind === "tap" ? e.source.tap === subject.name : namespaceForEntry(e) === subject.name,
+    subject.kind === "tap"
+      ? e.source.tap === subject.name
+      : taps.has(e.source.tap) && namespaceForEntry(e) === subject.name,
   );
   return entriesAtScope(all, ctx.flags.scope, ctx.cwd);
 }

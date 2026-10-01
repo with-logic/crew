@@ -1,7 +1,7 @@
 /**
  * `crew uninstall` collection-selector resolution (§7.4).
  *
- * Covers C-UNINST-19..23: which installed entries a tap or namespace name
+ * Covers C-UNINST-20..23: which installed entries a tap or namespace name
  * resolves to, that an installed skill name wins over both, and that a
  * genuinely ambiguous word is reported rather than guessed.
  */
@@ -14,7 +14,7 @@ import { addTap, buildTap, install, installed, quiet, useClaudeCodeAdapter } fro
 useClaudeCodeAdapter();
 
 describe("collection selector resolution", () => {
-  test("C-UNINST-19 a tap name removes every skill installed from that tap", () => {
+  test("C-UNINST-20 a tap name removes every skill installed from that tap", () => {
     const home = makeCrewHome();
     expect(addTap(home, buildTap("crew-acme-", { ".": ["alpha", "beta"] }), "acme")).toBe(0);
     expect(addTap(home, buildTap("crew-other-", { ".": ["gamma"] }), "other")).toBe(0);
@@ -29,7 +29,7 @@ describe("collection selector resolution", () => {
     expect(cap.stdout()).toContain("Uninstalling tap acme");
   });
 
-  test("C-UNINST-20 a namespace selector removes only that namespace", () => {
+  test("C-UNINST-21 a namespace selector removes only that namespace", () => {
     const home = makeCrewHome();
     expect(
       addTap(
@@ -46,7 +46,7 @@ describe("collection selector resolution", () => {
     expect(installed(home)).toEqual(["testing"]);
   });
 
-  test("C-UNINST-20 a bare namespace unique across taps resolves", () => {
+  test("C-UNINST-21 a bare namespace unique across taps resolves", () => {
     const home = makeCrewHome();
     expect(
       addTap(
@@ -61,7 +61,7 @@ describe("collection selector resolution", () => {
     expect(installed(home)).toEqual(["testing"]);
   });
 
-  test("C-UNINST-21 an installed skill name wins over a same-named tap", () => {
+  test("C-UNINST-22 an installed skill name wins over a same-named tap", () => {
     const home = makeCrewHome();
     // Tap `alpha` holds a skill also called `alpha`, plus a sibling.
     expect(addTap(home, buildTap("crew-alpha-", { ".": ["alpha", "beta"] }), "alpha")).toBe(0);
@@ -73,7 +73,7 @@ describe("collection selector resolution", () => {
     expect(installed(home)).toEqual(["beta"]);
   });
 
-  test("C-UNINST-21 an installed skill name wins over a same-named namespace", () => {
+  test("C-UNINST-22 an installed skill name wins over a same-named namespace", () => {
     const home = makeCrewHome();
     // Tap `acme` has a `marketing` namespace; a second tap ships a
     // top-level skill that is also called `marketing`. Skill-first
@@ -88,7 +88,7 @@ describe("collection selector resolution", () => {
     expect(installed(home)).toEqual(["guides"]);
   });
 
-  test("C-UNINST-22 a name that is both a tap and a namespace is ambiguous", () => {
+  test("C-UNINST-23 a name that is both a tap and a namespace is ambiguous", () => {
     const home = makeCrewHome();
     // Tap named `marketing`; a different tap has a `marketing` namespace.
     expect(addTap(home, buildTap("crew-mk-", { ".": ["brand-voice"] }), "marketing")).toBe(0);
@@ -108,7 +108,7 @@ describe("collection selector resolution", () => {
     expect(installed(home)).toEqual(["brand-voice", "email-outreach"]);
   });
 
-  test("C-UNINST-22 a bare namespace installed from two taps is ambiguous", () => {
+  test("C-UNINST-23 a bare namespace installed from two taps is ambiguous", () => {
     const home = makeCrewHome();
     // The same namespace name exists, with installed entries, in two taps.
     expect(addTap(home, buildTap("crew-two-a-", { marketing: ["email-outreach"] }), "acme")).toBe(
@@ -126,7 +126,7 @@ describe("collection selector resolution", () => {
     expect(installed(home)).toEqual(["brand-voice", "email-outreach"]);
   });
 
-  test("C-UNINST-23 a configured tap with nothing installed is reported, not an error", () => {
+  test("C-UNINST-24 a configured tap with nothing installed is reported, not an error", () => {
     const home = makeCrewHome();
     expect(addTap(home, buildTap("crew-empty-", { ".": ["alpha"] }), "acme")).toBe(0);
 

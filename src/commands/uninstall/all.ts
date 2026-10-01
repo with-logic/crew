@@ -10,7 +10,7 @@ import { CrewError } from "../../core/errors.ts";
 import type { Scope, StateFile } from "../../core/types.ts";
 import { plural, shortenHome } from "../../util/format.ts";
 import type { CommandContext } from "../types.ts";
-import { entriesAtScope } from "./scope.ts";
+import { entriesAtScope, narrowSubjectToScope } from "./scope.ts";
 import { groupByName, type UninstallTarget } from "./select.ts";
 
 /**
@@ -27,7 +27,13 @@ export function allTargets(ctx: CommandContext, state: StateFile): readonly Unin
       { scope: ctx.flags.scope },
     );
   }
-  return groupByName(entries).map((subject) => ({ kind: "skill", subject }) as const);
+  return groupByName(entries).map(
+    (subject) =>
+      ({
+        kind: "skill",
+        subject: narrowSubjectToScope(subject, ctx.flags.scope, ctx.cwd, ctx.flags.force),
+      }) as const,
+  );
 }
 
 /**

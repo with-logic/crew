@@ -162,7 +162,7 @@ describe("--prune requires an actual removal", () => {
     expect(installedNames(home)).toEqual(["bar"]);
   });
 
-  test("a partial --agent removal that leaves the entry alive does not prune", () => {
+  test("an absent --agent removal does not prune", () => {
     const home = makeCrewHome();
     const project = makeTempDir("crew-proj-");
     expect(installSkill(home, "solo", "user", project)).toBe(0);

@@ -6,7 +6,7 @@
  * §11.1. Using these helpers everywhere keeps the on-disk format stable.
  */
 
-import { readText, writeTextAtomic } from "./fs.ts";
+import { readText, writeText } from "./fs.ts";
 
 /** Read a JSON file and parse it as `T`. Throws if absent or malformed. */
 export function readJson<T>(path: string): T {
@@ -28,10 +28,10 @@ export function tryReadJson<T>(path: string): T | null {
 /**
  * Write a value as pretty JSON with a trailing newline, replacing the
  * destination atomically so an unlocked concurrent reader never observes
- * a truncated file (see `writeTextAtomic`).
+ * a truncated file (see `writeText`).
  */
 export function writeJson(path: string, value: unknown): void {
-  writeTextAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
+  writeText(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function isEnoent(err: unknown): boolean {

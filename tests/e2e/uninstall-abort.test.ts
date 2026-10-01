@@ -88,7 +88,7 @@ describe("uninstall aborts on a safety check", () => {
 
     const code = runCli(["uninstall", "--prune", "foo"], { home, cwd, streams: quiet() });
 
-    expect(code).toBe(0);
+    expect(code).toBe(1);
     expect(installedNames(home)).toEqual(["bar", "baz"]);
   });
 });

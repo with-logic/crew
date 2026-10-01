@@ -3,7 +3,7 @@
  *
  * Covers the flags and shapes that layer on top of resolution: `--agent`
  * and `--prune`, the `--json` collection contract, overlapping selectors
- * (C-UNINST-25), and scope narrowing (C-UNINST-26).
+ * (C-UNINST-26), and scope narrowing (C-UNINST-27).
  */
 
 import { describe, expect, test } from "bun:test";
@@ -17,7 +17,7 @@ import { addTap, buildTap, install, installed, quiet, useClaudeCodeAdapter } fro
 useClaudeCodeAdapter();
 
 describe("collection selector composition", () => {
-  test("C-UNINST-19 collection removal composes with --agent", () => {
+  test("C-UNINST-20 collection removal composes with --agent", () => {
     const home = makeCrewHome();
     expect(addTap(home, buildTap("crew-ag-", { ".": ["alpha", "beta"] }), "acme")).toBe(0);
     expect(install(home, ["acme"])).toBe(0);
@@ -30,7 +30,7 @@ describe("collection selector composition", () => {
     expect(installed(home)).toEqual([]);
   });
 
-  test("C-UNINST-19 --json records carry the collection they came from", () => {
+  test("C-UNINST-20 --json records carry the collection they came from", () => {
     const home = makeCrewHome();
     expect(
       addTap(
@@ -53,7 +53,7 @@ describe("collection selector composition", () => {
     expect(payload.records[0]!.collection).toEqual({ kind: "namespace", name: "marketing" });
   });
 
-  test("C-UNINST-19 a skill selector's --json record carries no collection", () => {
+  test("C-UNINST-20 a skill selector's --json record carries no collection", () => {
     const home = makeCrewHome();
     expect(addTap(home, buildTap("crew-json2-", { ".": ["alpha"] }), "acme")).toBe(0);
     expect(install(home, ["alpha"])).toBe(0);
@@ -66,7 +66,7 @@ describe("collection selector composition", () => {
     expect(payload.records[0]!.collection).toBeUndefined();
   });
 
-  test("C-UNINST-25 overlapping selectors remove each skill exactly once", () => {
+  test("C-UNINST-26 overlapping selectors remove each skill exactly once", () => {
     const home = makeCrewHome();
     expect(addTap(home, buildTap("crew-dedupe-", { ".": ["alpha", "beta"] }), "acme")).toBe(0);
     expect(install(home, ["acme"])).toBe(0);
@@ -79,7 +79,7 @@ describe("collection selector composition", () => {
     expect(cap.stdout()).not.toContain("wasn't installed here");
   });
 
-  test("C-UNINST-26 a tap selector reaches a lone project install from any cwd", () => {
+  test("C-UNINST-27 a tap selector reaches a lone project install from any cwd", () => {
     const home = makeCrewHome();
     const project = makeTempDir("crew-proj-");
     expect(addTap(home, buildTap("crew-lone-", { ".": ["alpha"] }), "acme")).toBe(0);
@@ -98,7 +98,7 @@ describe("collection selector composition", () => {
     expect(installed(home)).toEqual([]);
   });
 
-  test("C-UNINST-26 an unrelated project install does not hide a lone collection install", () => {
+  test("C-UNINST-27 an unrelated project install does not hide a lone collection install", () => {
     const home = makeCrewHome();
     const acmeProject = makeTempDir("crew-proj-acme-");
     const otherProject = makeTempDir("crew-proj-other-");
@@ -122,7 +122,7 @@ describe("collection selector composition", () => {
     expect(installed(home)).toEqual(["beta"]);
   });
 
-  test("C-UNINST-19 collection removal composes with --prune", () => {
+  test("C-UNINST-20 collection removal composes with --prune", () => {
     const home = makeCrewHome();
     const src = makeTempDir("crew-dep-");
     makeSkill(src, "bar", skillFrontmatter({ name: "bar" }));
@@ -137,7 +137,7 @@ describe("collection selector composition", () => {
     expect(installed(home)).toEqual([]);
   });
 
-  test("C-UNINST-26 a namespace is not ambiguous when the collision is out of scope", () => {
+  test("C-UNINST-27 a namespace is not ambiguous when the collision is out of scope", () => {
     const home = makeCrewHome();
     const project = makeTempDir("crew-proj2-");
     expect(addTap(home, buildTap("crew-sc-a-", { marketing: ["email-outreach"] }), "acme")).toBe(0);

@@ -15,6 +15,7 @@
 import { CrewError } from "../../core/errors.ts";
 import type { Scope, StateEntry } from "../../core/types.ts";
 import type { StateSubject } from "../../state/subjects.ts";
+import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { shellQuote, shortenHome } from "../../util/format.ts";
 
 /** Narrow `subject.entries` to the ones the requested scope targets. */
@@ -25,6 +26,22 @@ export function narrowSubjectToScope(
   force: boolean,
 ): StateSubject {
   const entries = entriesAtScope(subject.entries, scope, cwd);
+  for (const entry of entries) {
+    if (entry.scope === "project" && !hasUsableProjectRoot(entry)) {
+      throw new CrewError(
+        "usage_error",
+        `project root for \`${subject.raw}\` is not a nonempty absolute path — correct state.json before uninstalling`,
+        { name: subject.raw, project_root: entry.project_root ?? null },
+      );
+    }
+  }
+  if (subject.entries.length === 0 && !force) {
+    throw new CrewError(
+      "not_installed_here",
+      `\`${subject.raw}\` isn't in Homecrew's state — nothing to remove`,
+      { name: subject.raw },
+    );
+  }
   if (entries.length > 0 || subject.entries.length === 0 || force) {
     return { ...subject, entries };
   }
@@ -45,12 +62,6 @@ export function narrowSubjectToScope(
   );
 }
 
-/**
- * The entries a scope targets: user-scope, or this project root's —
- * falling back to a lone project install so the command works from any
- * cwd. Shared with `./select.ts` so collection selectors narrow exactly
- * the way skill selectors do.
- */
 export function entriesAtScope(
   entries: readonly StateEntry[],
   scope: Scope,
@@ -76,11 +87,7 @@ function remedyFor(subject: StateSubject, scope: Scope): string {
       lines.push(`installed at user scope${flag}: crew uninstall ${subject.raw}`);
       continue;
     }
-    // `readState` drops project entries without a root (§11.1), so this
-    // is defence in depth: a remedy is advertised as copyable, and
-    // `cd ''` would silently run the uninstall from the user's home.
-    // Skip the line rather than emit a command that does the wrong thing.
-    if (e.project_root === undefined) continue;
+    if (!hasUsableProjectRoot(e)) continue;
     // Two renderings of one path: `display` is for reading (`~/...`),
     // `target` is pasted into a shell and so must survive spaces and
     // metacharacters. Shortening and quoting are deliberately not mixed.
