@@ -2,43 +2,16 @@
  * Shared fixtures for the `crew uninstall` collection-selector suites
  * (§5.3.1, §7.4).
  *
- * `installAdapters` redirects Claude Code at a temp root for the length of
- * each test; every install here names its agents explicitly so a test's
- * expectations never depend on which adapters the host happens to have.
+ * Every install names its agents explicitly so expectations never depend
+ * on which adapters the host happens to have. Suites redirect adapters directly.
  */
 
-import { afterEach, beforeEach } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams } from "../../helpers/env.ts";
 import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
-
-let ccUser: string;
-let originals: { user: () => string; project: (c: string) => string; detect: () => boolean };
-
-/** Point Claude Code at a fresh temp root for each test in the file. */
-export function useClaudeCodeAdapter(): void {
-  beforeEach(() => {
-    ccUser = makeTempDir("crew-cc-");
-    originals = {
-      user: claudeCodeAdapter.userPath,
-      project: claudeCodeAdapter.projectPath,
-      detect: claudeCodeAdapter.detect,
-    };
-    (claudeCodeAdapter as { userPath: () => string }).userPath = () => ccUser;
-    (claudeCodeAdapter as { projectPath: (c: string) => string }).projectPath = (c) =>
-      join(c, ".claude", "skills");
-    (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
-  });
-  afterEach(() => {
-    (claudeCodeAdapter as { userPath: () => string }).userPath = originals.user;
-    (claudeCodeAdapter as { projectPath: (c: string) => string }).projectPath = originals.project;
-    (claudeCodeAdapter as { detect: () => boolean }).detect = originals.detect;
-  });
-}
 
 export const quiet = () => captureStreams().streams;
 

@@ -6,15 +6,33 @@
  * (C-UNINST-26), and scope narrowing (C-UNINST-27).
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { addTap, buildTap, install, installed, quiet, useClaudeCodeAdapter } from "./helpers.ts";
+import { addTap, buildTap, install, installed, quiet } from "./helpers.ts";
 
-useClaudeCodeAdapter();
+let originals: { user: () => string; project: (c: string) => string; detect: () => boolean };
+beforeEach(() => {
+  const root = makeTempDir("crew-cc-");
+  originals = {
+    user: claudeCodeAdapter.userPath,
+    project: claudeCodeAdapter.projectPath,
+    detect: claudeCodeAdapter.detect,
+  };
+  (claudeCodeAdapter as { userPath: () => string }).userPath = () => root;
+  (claudeCodeAdapter as { projectPath: (c: string) => string }).projectPath = (c) =>
+    join(c, ".claude", "skills");
+  (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
+});
+afterEach(() => {
+  (claudeCodeAdapter as { userPath: () => string }).userPath = originals.user;
+  (claudeCodeAdapter as { projectPath: (c: string) => string }).projectPath = originals.project;
+  (claudeCodeAdapter as { detect: () => boolean }).detect = originals.detect;
+});
 
 describe("collection selector composition", () => {
   test("C-UNINST-20 collection removal composes with --agent", () => {
