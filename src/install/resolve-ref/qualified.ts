@@ -15,7 +15,7 @@
 
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapSource } from "../../core/types.ts";
-import { ambiguityError } from "./errors.ts";
+import { ambiguityError, twoSegmentMissError } from "./errors.ts";
 import { indexTapAt, lookupInTap, safeIndex } from "./tap-index-lookup.ts";
 import type { NonTapNameCandidate, TapRoots } from "./types.ts";
 
@@ -87,10 +87,5 @@ export function resolveTwoSegment(
       `\`${first}/${second}\` is a namespaced skill in multiple taps`,
     );
   }
-  throw new CrewError(
-    "invalid_ref",
-    `\`${first}/${second}\` does not match any configured tap or namespace.\nNo tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
-    { first, second },
-    `Run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
-  );
+  throw twoSegmentMissError(first, second, source.ref);
 }
