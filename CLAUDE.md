@@ -650,7 +650,10 @@ on `$PATH`.
   `makeGitRepo` + `commitAll`.
 - **Don't let a test reach the network.** No remote URLs in fixtures;
   use `file://` repos, or a nonexistent local path when the clone is
-  meant to fail. The preload tripwire fails the run if you do — see
+  meant to fail. Protocol-specific credential tests may substitute a
+  local source through the git runner seam while retaining the original
+  CLI input and real local git diagnostics. The preload tripwire fails
+  any actual remote transport attempt — see
   "Tests never contact the network" above.
 - **Don't write to `~/.claude/skills/`, `~/.codex/skills/`, or
   `~/.gemini/skills/` from tests.** Redirect the adapter's `userPath`.

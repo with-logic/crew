@@ -7,7 +7,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { runGit } from "../../src/git/exec.ts";
+import { resetGitRunner, runGit, setGitRunner } from "../../src/git/exec.ts";
 import {
   allowRemoteGit,
   clearRemoteGitViolations,
@@ -22,6 +22,16 @@ afterEach(() => {
 });
 
 describe("network tripwire", () => {
+  test("resetGitRunner restores the suite guard after a temporary stub", () => {
+    setGitRunner(() => ({ stdout: "stub", stderr: "", exitCode: 0 }));
+    expect(runGit(["--version"]).stdout).toBe("stub");
+    resetGitRunner();
+    expect(() => runGit(["ls-remote", "https://example.com/reset-guard.git"])).toThrow(
+      /Test tried to reach the network/,
+    );
+    expect(remoteGitViolations()).toContain("git ls-remote https://example.com/reset-guard.git");
+  });
+
   test("rejects a remote clone and records the violation", () => {
     expect(() => runGit(["clone", "https://github.com/example/nope.git", "/tmp/x"])).toThrow(
       /Test tried to reach the network/,

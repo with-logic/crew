@@ -29,7 +29,7 @@ let allowRemotes = false;
  * crew deliberately soft-fails an unreachable tap (PRD §16.6), so
  * `attribute-bare-name.ts` and `search` swallow the error and the run
  * would go green with the network still contacted. Tests assert on
- * this list via `expectNoRemoteGit()`.
+ * this list via `takeRemoteGitFailure()` in the preload.
  */
 const violations: string[] = [];
 
