@@ -52,7 +52,7 @@ describe("crew search --tap empty results", () => {
     const out = c.stdout();
     expect(out).toContain('No skills match "python" in `empty-tap`.');
     expect(out).not.toContain("crew tap add");
-    expect(out).toContain("crew search python");
+    expect(out).toContain("Run `crew search` to look across every tap you've added.");
   });
 
   test("C-TAP-23a an unscoped empty catalog still suggests adding a tap", () => {

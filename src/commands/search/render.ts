@@ -46,7 +46,7 @@ export function formatSearchResults(input: SearchRender): string[] {
       : [
           style.dim(`No skills match "${query}" in \`${tap}\`.`),
           "",
-          style.dim(`Run \`crew search ${query}\` to look across every tap you've added.`),
+          style.dim("Run `crew search` to look across every tap you've added."),
         ];
   }
   if (query === "") {
