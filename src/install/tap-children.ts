@@ -28,7 +28,11 @@ export function currentTapChildren(
     pushLoaded(children, rootDir, "");
     return children;
   }
-  const index = indexTap(tap, home);
+  // `rootDir` is the caller's already-materialized root — the scratch
+  // export of the group's ref, when it tracks one. Indexing the live
+  // clone instead would discover children that don't exist at that
+  // revision (§10.1.1).
+  const index = indexTap(tap, home, rootDir);
   for (const locs of index.skills.values()) {
     for (const loc of locs) {
       children.push({ name: loc.name, path: loc.path, tapRelativePath: loc.tapRelativePath });

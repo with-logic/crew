@@ -30,12 +30,12 @@ const CARDS: readonly {
       <>
         Any reachable git URL. No tap setup required. <code>@owner/repo</code> is GitHub shorthand;
         A scheme-less <code>github.com/owner/repo</code> works too; full <code>https://</code> and{" "}
-        <code>git@</code> URLs work for anywhere else. Append <code>@ref</code> to pin,{" "}
-        <code>{"//subpath"}</code> to scope. A slash-free ref can also follow the subpath:{" "}
-        <code>{"//engineers/founding@v1.2.0"}</code>. Put the ref first for branches containing{" "}
-        <code>/</code> (<code>{"@feature/python//engineers/founding"}</code>) or a final folder
-        containing a literal <code>@</code> (<code>{"@main//skills/foo@bar"}</code>). Or just paste
-        the link from your browser.
+        <code>git@</code> URLs work for anywhere else. Append a tag or SHA to pin, a branch to
+        follow it, <code>{"//subpath"}</code> to scope. A slash-free ref can also follow the
+        subpath: <code>{"//engineers/founding@v1.2.0"}</code>. Put the ref first for branches
+        containing <code>/</code> (<code>{"@feature/python//engineers/founding"}</code>) or a final
+        folder containing a literal <code>@</code> (<code>{"@main//skills/foo@bar"}</code>). Or just
+        paste the link from your browser.
       </>
     ),
     examples: [

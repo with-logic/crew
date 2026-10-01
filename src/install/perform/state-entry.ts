@@ -9,6 +9,7 @@
 
 import type { ResolvedSkill, Scope, StateEntry, StateFile } from "../../core/types.ts";
 import { nowIso } from "../../util/time.ts";
+import type { KeptSource } from "../duplicate-rules/index.ts";
 import type { RequiredByMap } from "../resolve/index.ts";
 
 /**
@@ -22,7 +23,7 @@ export function buildStateEntry(
   scope: Scope,
   successfulAgents: string[],
   state: StateFile,
-  options: { readonly requiredBy: RequiredByMap },
+  options: { readonly requiredBy: RequiredByMap; readonly keepSource?: readonly KeptSource[] },
   cwd: string,
 ): StateEntry {
   const incomingProjectRoot = scope === "project" ? cwd : null;
@@ -46,9 +47,14 @@ export function buildStateEntry(
   const mergedAgents = [
     ...new Set<string>([...(existing?.agents ?? []), ...successfulAgents]),
   ].sort();
+  // A refused attribution move stays refused on the write path too
+  // (§5.4, §10.1.1).
+  const retainedSource = options.keepSource?.find(
+    (k) => k.name === skill.name && k.scope === scope && k.projectRoot === incomingProjectRoot,
+  );
   return {
     name: skill.name,
-    source: { tap: skill.tap.name, path: skill.tapRelativePath },
+    source: retainedSource?.source ?? { tap: skill.tap.name, path: skill.tapRelativePath },
     ref: skill.ref,
     resolved_sha: skill.resolvedSha,
     content_hash: skill.contentHash,

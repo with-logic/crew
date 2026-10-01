@@ -23,6 +23,7 @@ import {
   defaultChoicePrompt,
   defaultPrompt,
   type PromptFn,
+  realIO,
 } from "./prompt.ts";
 
 /** Options for `runCli` (useful to tests). */
@@ -71,7 +72,8 @@ function runCliWithHome(
   // color codes in captured buffers are almost never what you want.
   const style = options.style ?? makeStyler(options.streams === undefined && colorEnabled());
   const width = options.width ?? terminalWidth();
-  const prompt = options.prompt ?? defaultPrompt;
+  const prompt: PromptFn =
+    options.prompt ?? ((message, defaultAnswer) => defaultPrompt(message, realIO, defaultAnswer));
   const promptChoice = options.promptChoice ?? defaultChoicePrompt;
   const stderrIsTty =
     options.stderrIsTty ?? (options.streams === undefined ? Boolean(process.stderr.isTTY) : false);

@@ -4,6 +4,7 @@
 
 import type { Source, TapConfig } from "../../core/types.ts";
 import { expandSkills, type SkippedSkill } from "../../sources/expand.ts";
+import { stageIntoStore } from "../../sources/store.ts";
 import type { PendingItem } from "./enqueue.ts";
 
 interface ExpansionItems {
@@ -11,7 +12,14 @@ interface ExpansionItems {
   readonly skipped: readonly SkippedSkill[];
 }
 
-/** Walk `dir` and produce one PendingItem per skill found. */
+/**
+ * Walk `dir` and produce one PendingItem per skill found.
+ *
+ * Each skill is staged into the store here rather than later in the
+ * resolver loop: when the reference carried an `@ref`, `dir` is a
+ * scratch export that is deleted as soon as acquisition scope ends
+ * (§9 step 3), so the bytes must be captured while it still exists.
+ */
 export function expandSkillsAsItems(
   dir: string,
   tap: TapConfig,
@@ -21,6 +29,7 @@ export function expandSkillsAsItems(
   pinned: boolean,
   explicit: boolean,
   tracksTap: boolean,
+  home: string,
 ): ExpansionItems {
   const { valid, skipped } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
   const items: PendingItem[] = [];
@@ -31,8 +40,10 @@ export function expandSkillsAsItems(
         ? `${baseTapPath}/${subSegment}`
         : baseTapPath
       : subSegment;
+    const staged = stageIntoStore(l.path, l.frontmatter.name, resolvedSha, home);
     items.push({
       loaded: l,
+      staged,
       tap,
       tapRelativePath,
       resolvedSha,
@@ -49,12 +60,4 @@ export function sourceRequestedRef(source: Source): string | null {
   if (source.type === "git") return source.ref;
   if (source.type === "tap") return source.ref;
   return null;
-}
-
-export function sourcePinned(source: Source, resolvedSha: string | null): boolean {
-  if (source.type !== "git") return false;
-  if (source.ref === null) return false;
-  // Classification happens in acquireTap; any explicit git ref is pinned here.
-  void resolvedSha;
-  return true;
 }
