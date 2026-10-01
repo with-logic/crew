@@ -15,7 +15,8 @@
 
 import { CrewError } from "../../core/errors.ts";
 import { crewHome } from "../../core/paths.ts";
-import type { Config, ResolvedSkill } from "../../core/types.ts";
+import type { Config, ResolvedSkill, TapConfig } from "../../core/types.ts";
+import { withDiscoveredTapLocks } from "../../sources/discovered-tap-locks.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
 import { topoSort } from "../topo.ts";
@@ -62,6 +63,18 @@ export function resolveInstallSet(
   startingConfig: Config,
   options: Partial<ResolveOptions> = {},
 ): ResolveResult {
+  const home = options.home ?? crewHome();
+  return withDiscoveredTapLocks(startingConfig.taps, home, (requireTap) =>
+    resolveLockedInstallSet(refs, startingConfig, options, requireTap),
+  );
+}
+
+function resolveLockedInstallSet(
+  refs: readonly string[],
+  startingConfig: Config,
+  options: Partial<ResolveOptions>,
+  requireTap: (tap: TapConfig) => void,
+): ResolveResult {
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
   const kindHint: KindHint = options.kindHint ?? null;
@@ -75,7 +88,7 @@ export function resolveInstallSet(
 
   // Step 1–5: resolve every root reference.
   for (const raw of refs) {
-    const enqueued = enqueueRoot(raw, config, cwd, home, kindHint, recursive);
+    const enqueued = enqueueRoot(raw, config, cwd, home, kindHint, recursive, requireTap);
     config = enqueued.config;
     pending.push(...enqueued.items);
     skipped.push(...enqueued.skipped);
@@ -130,7 +143,7 @@ export function resolveInstallSet(
     // commit is exported once for all of them, not once per edge.
     const deps = item.loaded.frontmatter.metadata?.crew?.dependencies ?? [];
     if (deps.length > 0) {
-      const enqueued = enqueueDeps(deps, item, config, cwd, home);
+      const enqueued = enqueueDeps(deps, item, config, cwd, home, requireTap);
       config = enqueued.config;
       skipped.push(...enqueued.skipped);
       for (const depItem of enqueued.items) {

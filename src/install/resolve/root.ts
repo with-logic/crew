@@ -11,7 +11,7 @@
  * the recorded SHA both come from the requested commit (§9 step 3).
  */
 
-import type { Config, ResolvedSkill } from "../../core/types.ts";
+import type { Config, ResolvedSkill, TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
@@ -28,6 +28,7 @@ export function enqueueRoot(
   home: string,
   kindHint: KindHint,
   recursive: boolean,
+  requireTap: (tap: TapConfig) => void,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const source = parseRef(raw, cwd);
 
@@ -40,6 +41,7 @@ export function enqueueRoot(
   // whole-tap install — the user pointed at a folder (or repo) and
   // said "install this". Future additions should follow.
   const attrib = attributeRef(source, config, recursive ? "recursive" : undefined);
+  requireTap(attrib.tap);
   const requestedRef = sourceRequestedRef(source);
   const expansion = withAcquiredTap(attrib.tap, requestedRef, home, (acquired) =>
     expandSkillsAsItems(

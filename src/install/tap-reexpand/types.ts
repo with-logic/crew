@@ -1,9 +1,4 @@
-/**
- * Shared types for tap re-expansion (§10.1.1).
- *
- * Split out so the orchestration in `./index.ts` and the per-group walk
- * in `./group.ts` can both reach them without either importing the other.
- */
+/** Types shared by tap re-expansion passes (§10.1.1). */
 
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 
@@ -11,7 +6,7 @@ import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 export interface TapReexpandRow {
   readonly name: string;
   readonly scope: Scope;
-  readonly kind: "added" | "source_gone" | "tap_error";
+  readonly kind: "added" | "would_add" | "source_gone" | "tap_error";
   readonly tap: string;
   readonly error?: { readonly code: string; readonly message: string };
 }
@@ -26,7 +21,6 @@ export type InstallNewChild = (args: {
   readonly agents: readonly string[];
   readonly resolvedSha: string | null;
   readonly projectRoot: string | null;
-  /** The ref the group tracks, and whether it is immutable (§11.1). */
   readonly ref: string | null;
   readonly pinned: boolean;
 }) => StateEntry | null;
@@ -35,15 +29,7 @@ export interface TapReexpandResult {
   readonly added: readonly StateEntry[];
   readonly updated: readonly StateEntry[];
   readonly hardFailure: boolean;
+  /** Vanished sources, keyed by full install identity (§11.1), never name alone. */
   readonly sourceGone: ReadonlySet<string>;
   readonly rows: readonly TapReexpandRow[];
-}
-
-/** Mutable accumulator threaded through the per-group walk. */
-export interface ReexpandAccumulator {
-  readonly added: StateEntry[];
-  readonly updated: StateEntry[];
-  readonly sourceGone: Set<string>;
-  readonly rows: TapReexpandRow[];
-  hardFailure: boolean;
 }

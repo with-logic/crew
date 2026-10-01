@@ -14,13 +14,15 @@ import { existsSync } from "node:fs";
 import { cwdForEntry } from "../../agents/adapter.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
+import { hashDirectory } from "../../hash/content.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { type AcquiredTap, withAcquiredSkillDir } from "../../sources/acquire/index.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
-import { nowIso } from "../../util/time.ts";
+import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { peekResolvedSha } from "./peek.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
+import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
 export function updateOneEntry(
@@ -30,9 +32,10 @@ export function updateOneEntry(
   home: string,
   force: boolean,
   fallbackCwd: string,
+  dryRun: boolean = false,
 ): { row: UpdateRow; updatedState: StateFile; bumpHardFailure: boolean } {
   try {
-    const outcome = updateOne(entry, config, home, force, fallbackCwd);
+    const outcome = updateOne(entry, config, home, force, fallbackCwd, dryRun);
     let next = state;
     if (outcome.kind === "updated") {
       const successfulTargets = outcome.per_target
@@ -87,7 +90,9 @@ function rowFor(entry: StateEntry, outcome: InternalOutcome): UpdateRow {
   return {
     name: entry.name,
     scope: entry.scope,
-    ...(entry.project_root === undefined ? {} : { project_root: entry.project_root }),
+    ...(entry.project_root === undefined
+      ? {}
+      : { project_root: String(entry.project_root ?? "(unknown)") }),
     outcome: publicOutcome,
   };
 }
@@ -98,12 +103,16 @@ function updateOne(
   home: string,
   force: boolean,
   fallbackCwd: string,
+  dryRun: boolean,
 ): InternalOutcome {
-  const entryCwd = cwdForEntry(entry, fallbackCwd);
-  if (entry.scope === "project" && entry.project_root && !existsSync(entry.project_root)) {
-    return { kind: "missing_project_root", root: entry.project_root };
+  if (
+    entry.scope === "project" &&
+    !(hasUsableProjectRoot(entry) && existsSync(entry.project_root))
+  ) {
+    return { kind: "missing_project_root", root: String(entry.project_root ?? "(unknown)") };
   }
 
+  const entryCwd = cwdForEntry(entry, fallbackCwd);
   if (entry.pinned && entry.ref !== null && /^[0-9a-f]{40}$/i.test(entry.ref) && !force) {
     return { kind: "skipped", reason: "pinned to exact SHA" };
   }
@@ -135,7 +144,7 @@ function updateOne(
   // otherwise every entry sharing a whole-repo tap materializes the
   // whole repository again (§10.1).
   return withAcquiredSkillDir(tap, entry.ref, entry.source.path, home, (acquired, skillDir) =>
-    applyUpdate(entry, acquired, skillDir, tap, home, force, entryCwd),
+    applyUpdate(entry, acquired, skillDir, tap, home, force, entryCwd, dryRun),
   );
 }
 
@@ -149,6 +158,7 @@ function applyUpdate(
   home: string,
   force: boolean,
   entryCwd: string,
+  dryRun: boolean,
 ): InternalOutcome {
   const newSha = acquired.resolvedSha;
 
@@ -156,14 +166,15 @@ function applyUpdate(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
-  if (newSha === entry.resolved_sha) {
+  const sourceHash = newSha === null ? hashDirectory(skillDir) : undefined;
+  if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
     if (newSha !== null) return { kind: "up_to_date" };
-    const tentative = stageIntoStore(skillDir, entry.name, null, home);
-    if (tentative.contentHash === entry.content_hash) return { kind: "up_to_date" };
+    if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
   }
 
   const loaded = loadSkill(skillDir);
-  const staged = stageIntoStore(loaded.path, entry.name, newSha, home);
+  if (dryRun) return { kind: "would_update", new_sha: newSha };
+  const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash);
   const perTarget = reinstallIntoAgents({
     entry,
     tap,
@@ -178,20 +189,5 @@ function applyUpdate(
     new_sha: newSha,
     content_hash: staged.contentHash,
     per_target: perTarget,
-  };
-}
-
-function rebuildStateEntry(
-  entry: StateEntry,
-  newSha: string | null,
-  contentHash: string,
-  successfulTargets: string[],
-): StateEntry {
-  return {
-    ...entry,
-    resolved_sha: newSha,
-    content_hash: contentHash,
-    agents: successfulTargets.length > 0 ? successfulTargets : entry.agents,
-    installed_at: nowIso(),
   };
 }

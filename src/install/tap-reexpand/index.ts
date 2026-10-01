@@ -2,10 +2,12 @@
  * Tap re-expansion for `crew update` (§10.1.1).
  *
  * For every git-kind tap with at least one state entry attributed to it
- * (filtered by `restrictNames`), walk the tap one level deep and:
+ * (filtered by `ReexpandSelection`), walk the tap one level deep and:
  *
- *   1. ADDITIONS — children present upstream but not in state: install
- *      via the caller-provided `installNewChild` callback.
+ *   1. ADDITIONS — children present upstream but not in state: validate
+ *      in full (§9 step 4) and install via the caller-provided
+ *      `installNewChild` callback. A child that fails validation is
+ *      reported as a `tap_error` and never installed.
  *   2. SOURCE_GONE — entries in state attributed to this tap whose
  *      directory is no longer present upstream: report; preserve local
  *      install.
@@ -16,101 +18,126 @@
  * Path-kind taps follow the same algorithm; they just don't fetch and
  * their `resolvedSha` is null.
  *
- * This file owns grouping and filtering; the per-group walk — which
- * materializes the group's ref — lives in `./group.ts`.
+ * With `dryRun` (§10.1.1) additions are reported as `would_add` and the
+ * install callback is never invoked.
  */
 
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
+import { entryIdentity } from "../../state/collections.ts";
+import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
+import { buildInstalledSourceIndex } from "../installed-lookup.ts";
 import { reexpandGroup } from "./group.ts";
-import type { InstallNewChild, ReexpandAccumulator, TapReexpandResult } from "./types.ts";
+import { makeTapScanCache } from "./scan-cache.ts";
+import type { InstallNewChild, TapReexpandResult, TapReexpandRow } from "./types.ts";
 
-export type {
-  InstallNewChild,
-  TapReexpandResult,
-  TapReexpandRow,
-} from "./types.ts";
+export type { InstallNewChild, TapReexpandResult, TapReexpandRow } from "./types.ts";
+
+/**
+ * Which groups a restricted run should re-expand. `memberIdentities`
+ * holds entry identities (§11.1) rather than names, so a same-named
+ * skill from another tap or scope can't pull its group in; `tapNames`
+ * covers selectors that named a tap outright. `null` means no
+ * positionals — every group.
+ *
+ * `namespaces` bounds which NEW children may be installed. A selector
+ * naming one namespace pulls in its group, but the group spans the
+ * whole tap, so without this bound a user who asked to update
+ * `acme/alpha` would silently acquire a skill newly added to
+ * `acme/beta` (§10.1.1). `null` means unbounded: no namespace selector
+ * was involved, so every discovered child is in scope.
+ */
+export interface ReexpandSelection {
+  readonly memberIdentities: ReadonlySet<string>;
+  readonly tapNames: ReadonlySet<string>;
+  readonly namespaces: ReadonlySet<string> | null;
+}
 
 export function reexpandTaps(
   state: StateFile,
   config: Config,
   home: string,
-  restrictNames: readonly string[],
+  selection: ReexpandSelection | null,
   installOne: InstallNewChild,
+  dryRun: boolean = false,
 ): TapReexpandResult {
-  const acc: ReexpandAccumulator = {
-    added: [],
-    updated: [],
-    sourceGone: new Set<string>(),
-    rows: [],
-    hardFailure: false,
-  };
+  const added: StateEntry[] = [];
+  const updated: StateEntry[] = [];
+  const sourceGone = new Set<string>();
+  const rows: TapReexpandRow[] = [];
+  let hardFailure = false;
+  // One tap backs several (scope, project_root) groups; acquire, walk
+  // and validate it once per run rather than once per group.
+  const cache = makeTapScanCache();
+  const installedIndex = buildInstalledSourceIndex(state, config);
 
-  for (const members of groupEntries(state).values()) {
+  // Group state entries by (tap-name, scope, project_root). Entries
+  // sharing all three are managed together: same tap clone, same
+  // install location, same target set (typically).
+  const byKey = new Map<string, StateEntry[]>();
+  for (const entry of state.installations) {
+    const key = JSON.stringify([
+      entry.source.tap,
+      entry.scope,
+      entry.project_root ?? "",
+      entry.ref,
+    ]);
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key)!.push(entry);
+  }
+
+  for (const members of byKey.values()) {
     const first = members[0]!;
     const tap = config.taps.find((t) => t.name === first.source.tap);
-    // Tap was removed from config but state still references it.
-    // doctor --repair will rebuild it from markers; here we just skip.
-    if (!tap) continue;
+    if (!tap) {
+      // Tap was removed from config but state still references it.
+      // doctor --repair will rebuild it from markers; here we just skip.
+      continue;
+    }
 
     // Whole-tap tracking: only groups whose members asked for the
     // whole tap (either by URL or by tap name) get re-expanded. A
     // user who installed an individual skill from the tap doesn't
     // suddenly acquire every sibling on update.
-    if (!members.some((m) => m.tracks_tap === true)) continue;
+    const tracksTap = members.some((m) => m.tracks_tap === true);
+    if (!tracksTap) continue;
 
-    if (!namedByFilter(members, tap.name, restrictNames)) continue;
+    // Restrict by selection — re-expand only if the user selected a
+    // member of THIS group, or named the tap itself. Membership is
+    // tested by full entry identity, not by name: a same-named skill
+    // in another tap or at another scope is a different install and
+    // must not drag this group into the run (§10.1).
+    if (selection !== null) {
+      const touchesMember = members.some((m) => selection.memberIdentities.has(entryIdentity(m)));
+      const tapNamed = selection.tapNames.has(tap.name);
+      if (!(touchesMember || tapNamed)) continue;
+    }
 
     // Project-scoped group whose project_root is gone: skip.
     const projectRoot = first.project_root ?? null;
-    if (first.scope === "project" && projectRoot && !isDirectory(projectRoot)) continue;
+    if (
+      first.scope === "project" &&
+      !(hasUsableProjectRoot(first) && isDirectory(first.project_root))
+    )
+      continue;
 
-    reexpandGroup(members, tap, home, projectRoot, acc, installOne);
+    const result = reexpandGroup({
+      members,
+      tap,
+      home,
+      projectRoot,
+      cache,
+      installedIndex,
+      installOne,
+      dryRun,
+      namespaces: selection?.namespaces ?? null,
+    });
+    rows.push(...result.rows);
+    updated.push(...result.updated);
+    added.push(...result.added);
+    for (const id of result.sourceGone) sourceGone.add(id);
+    if (result.hardFailure) hardFailure = true;
   }
 
-  return {
-    added: acc.added,
-    updated: acc.updated,
-    hardFailure: acc.hardFailure,
-    sourceGone: acc.sourceGone,
-    rows: acc.rows,
-  };
-}
-
-/**
- * Group state entries by (tap-name, scope, project_root, ref). Entries
- * sharing all four are managed together: same tap clone, same install
- * location, same target set (typically), same revision.
- *
- * `ref` is part of the key because it decides which commit gets walked.
- * A group installed at `@v1` and one installed at the default branch see
- * different child sets, and merging them would re-expand one of them
- * against a revision it never asked for (§10.1.1).
- */
-function groupEntries(state: StateFile): Map<string, StateEntry[]> {
-  const byKey = new Map<string, StateEntry[]>();
-  for (const entry of state.installations) {
-    const key = [entry.source.tap, entry.scope, entry.project_root ?? "", entry.ref ?? ""].join(
-      "::",
-    );
-    const group = byKey.get(key);
-    if (group) group.push(entry);
-    else byKey.set(key, [entry]);
-  }
-  return byKey;
-}
-
-/**
- * Re-expand only if the user named a member of this group, or named the
- * tap itself. An empty filter means "every group".
- */
-function namedByFilter(
-  members: readonly StateEntry[],
-  tapName: string,
-  restrictNames: readonly string[],
-): boolean {
-  if (restrictNames.length === 0) return true;
-  if (restrictNames.includes(tapName)) return true;
-  const memberNames = new Set(members.map((m) => m.name));
-  return restrictNames.some((n) => memberNames.has(n));
+  return { added, updated, hardFailure, sourceGone, rows };
 }

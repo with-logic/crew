@@ -32,6 +32,7 @@ import type { TapConfig } from "../../core/types.ts";
 import { withExportedTree } from "../../git/export.ts";
 import { ensureClone, fetchRefs } from "../../git/repo/index.ts";
 import { classifyRef, resolveRef } from "../../git/repo/refs.ts";
+import { displayUrl } from "../../refs/display-url.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 
@@ -74,7 +75,7 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
   if (!isDirectory(rootDir)) {
     throw new CrewError(
       "no_skills_found",
-      `tap \`${tap.name}\` subpath \`${tap.subpath}\` doesn't exist in ${tap.url} at ${sha.slice(0, 8)}`,
+      `tap \`${tap.name}\` subpath \`${tap.subpath}\` doesn't exist in ${displayUrl(tap.url)} at ${sha.slice(0, 8)}`,
       { tap: tap.name, subpath: tap.subpath, sha },
     );
   }

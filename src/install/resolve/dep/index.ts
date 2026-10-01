@@ -6,7 +6,7 @@
  * `./parent-tree.ts`.
  */
 
-import type { Config, TapSource } from "../../../core/types.ts";
+import type { Config, TapConfig, TapSource } from "../../../core/types.ts";
 import { parseRef } from "../../../refs/parse.ts";
 import { withAcquiredTap } from "../../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
@@ -37,6 +37,7 @@ export function enqueueDeps(
   config: Config,
   cwd: string,
   home: string,
+  requireTap: (tap: TapConfig) => void,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const items: PendingItem[] = [];
   const skipped: SkippedSkill[] = [];
@@ -83,7 +84,7 @@ export function enqueueDeps(
   }
 
   for (const depRef of [...unresolved, ...others]) {
-    const enqueued = enqueueDep(depRef, parent, current, cwd, home);
+    const enqueued = enqueueDep(depRef, parent, current, cwd, home, requireTap);
     current = enqueued.config;
     items.push(...enqueued.items);
     skipped.push(...enqueued.skipped);
@@ -99,6 +100,7 @@ export function enqueueDep(
   config: Config,
   cwd: string,
   home: string,
+  requireTap: (tap: TapConfig) => void,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const source = parseRef(depRef, cwd);
 
@@ -126,6 +128,7 @@ export function enqueueDep(
   // Git or path dep ref. Dep edges don't subscribe the user to every
   // sibling of the dep's source.
   const attrib = attributeRef(source, config);
+  requireTap(attrib.tap);
   const requestedRef = sourceRequestedRef(source);
   const expansion = withAcquiredTap(attrib.tap, requestedRef, home, (acquired) =>
     expandSkillsAsItems(

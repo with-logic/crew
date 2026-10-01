@@ -1,125 +1,86 @@
-/**
- * Per-group tap re-expansion (§10.1.1 steps 1–3).
- *
- * One group is a set of state entries sharing tap, scope, project_root
- * and ref. This module walks that group's tap AT THE GROUP'S REF and
- * records additions, path moves, and `source_gone` outcomes into the
- * caller's accumulator.
- *
- * The ref matters: a group installed at `@v1` must be re-expanded
- * against v1's tree. Walking the default branch instead would discover
- * children that do not exist at the revision the group tracks and record
- * them as unpinned entries with no ref (§10.1.1, §11.1).
- */
+/** Walk one tracked tap revision and collect re-expansion outcomes (§10.1.1). */
 
 import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
-import { currentTapChildren, groupChildrenByName } from "../tap-children.ts";
-import type { InstallNewChild, ReexpandAccumulator } from "./types.ts";
+import type { InstalledSourceIndex } from "../installed-lookup.ts";
+import { groupChildrenByName } from "../tap-children.ts";
+import { collectAdditions } from "./additions.ts";
+import type { TapScanCache } from "./scan-cache.ts";
+import { surveyGroup } from "./survey.ts";
+import type { InstallNewChild, TapReexpandResult } from "./types.ts";
 
-/** Walk one group's tap at the group's ref and record every outcome. */
-export function reexpandGroup(
-  members: readonly StateEntry[],
-  tap: TapConfig,
-  home: string,
-  projectRoot: string | null,
-  acc: ReexpandAccumulator,
-  installOne: InstallNewChild,
-): void {
-  const first = members[0]!;
-  // Every member of a group shares a ref by construction of the group key.
-  const ref = first.ref;
-  // Only ACQUISITION failures are isolated into per-group rows: a tap
-  // that can't be materialized contributes nothing and the other groups
-  // still update. A failure inside the walk is not a per-tap condition
-  // and keeps escaping to the caller, as before.
-  let acquisitionDone = false;
+interface GroupInput {
+  readonly members: readonly StateEntry[];
+  readonly tap: TapConfig;
+  readonly home: string;
+  readonly projectRoot: string | null;
+  readonly cache: TapScanCache;
+  readonly installedIndex: InstalledSourceIndex;
+  readonly installOne: InstallNewChild;
+  readonly dryRun: boolean;
+  readonly namespaces: ReadonlySet<string> | null;
+}
+
+export function reexpandGroup(input: GroupInput): TapReexpandResult {
+  const first = input.members[0]!;
+  let acquiredDone = false;
   try {
-    withAcquiredTap(tap, ref, home, (acquired) => {
-      acquisitionDone = true;
-      return walk(members, tap, home, acquired, projectRoot, acc, installOne);
-    });
+    const walk = (acquired: AcquiredTap): TapReexpandResult => {
+      acquiredDone = true;
+      return walkGroup(input, acquired);
+    };
+    if (first.ref === null || input.tap.kind === "path") {
+      const acquired = input.cache.acquire(input.tap, input.home);
+      return walk({ ...acquired, pinned: false });
+    }
+    return withAcquiredTap(input.tap, first.ref, input.home, walk);
   } catch (err) {
-    if (acquisitionDone) throw err;
+    if (acquiredDone) throw err;
     const ce = err as CrewError;
-    for (const m of members) {
-      acc.rows.push({
+    return {
+      added: [],
+      updated: [],
+      sourceGone: new Set(),
+      hardFailure: false,
+      rows: input.members.map((m) => ({
         name: m.name,
         scope: m.scope,
-        tap: tap.name,
+        tap: input.tap.name,
         kind: "tap_error",
         error: { code: ce.code ?? "source_unreachable", message: ce.message },
-      });
-    }
+      })),
+    };
   }
 }
 
-function walk(
-  members: readonly StateEntry[],
-  tap: TapConfig,
-  home: string,
-  acquired: AcquiredTap,
-  projectRoot: string | null,
-  acc: ReexpandAccumulator,
-  installOne: InstallNewChild,
-): void {
+function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult {
+  const { members, tap, home, projectRoot, cache } = input;
   const first = members[0]!;
-  const children = currentTapChildren(tap, home, acquired.rootDir);
-  const childrenByName = groupChildrenByName(children);
-
-  const conflictedNames = new Set<string>();
-  for (const [name, locs] of childrenByName) {
-    if (locs.length < 2) continue;
-    conflictedNames.add(name);
-    acc.hardFailure = true;
-    acc.rows.push({
-      name,
-      scope: first.scope,
-      tap: tap.name,
-      kind: "tap_error",
-      error: {
-        code: "conflicting_dependencies",
-        message: `\`${name}\` appears multiple times in tap \`${tap.name}\` at ${locs.map((loc) => loc.tapRelativePath || "(root)").join(", ")}`,
-      },
-    });
-  }
-
-  // SOURCE_GONE: members no longer present upstream.
-  for (const m of members) {
-    if (conflictedNames.has(m.name)) continue;
-    const child = childrenByName.get(m.name)?.[0];
-    if (!child) {
-      acc.sourceGone.add(m.name);
-      acc.rows.push({ name: m.name, scope: m.scope, tap: tap.name, kind: "source_gone" });
-      continue;
-    }
-    if (child.tapRelativePath !== m.source.path) {
-      acc.updated.push({ ...m, source: { ...m.source, path: child.tapRelativePath } });
-    }
-  }
-
-  // ADDITIONS: children at this revision that aren't in state.
-  const memberNames = new Set(members.map((m) => m.name));
-  const aggregateTargets = [...new Set(members.flatMap((m) => m.agents))];
-  for (const child of children) {
-    if (conflictedNames.has(child.name)) continue;
-    if (memberNames.has(child.name)) continue;
-    const entry = installOne({
-      skillDir: child.path,
-      skillName: child.name,
-      tapRelativePath: child.tapRelativePath,
-      scope: first.scope,
-      tap,
-      agents: aggregateTargets,
-      resolvedSha: acquired.resolvedSha,
-      projectRoot,
-      ref: first.ref,
-      pinned: acquired.pinned,
-    });
-    if (entry) {
-      acc.added.push(entry);
-      acc.rows.push({ name: child.name, scope: first.scope, tap: tap.name, kind: "added" });
-    }
-  }
+  const children = cache.children(tap, home, acquired.rootDir);
+  const survey = surveyGroup({ members, childrenByName: groupChildrenByName(children), tap });
+  const additions = collectAdditions({
+    children,
+    conflictedNames: survey.conflictedNames,
+    memberNames: new Set(members.map((m) => m.name)),
+    scope: first.scope,
+    tap,
+    agents: [...new Set(members.flatMap((m) => m.agents))],
+    resolvedSha: acquired.resolvedSha,
+    projectRoot,
+    dryRun: input.dryRun,
+    installOne: input.installOne,
+    cache,
+    namespaces: input.namespaces,
+    installedIndex: input.installedIndex,
+    ref: first.ref,
+    pinned: acquired.pinned,
+  });
+  return {
+    added: additions.added,
+    updated: survey.relocated,
+    sourceGone: survey.sourceGone,
+    rows: [...survey.rows, ...additions.rows],
+    hardFailure: survey.hardFailure || additions.hardFailure,
+  };
 }

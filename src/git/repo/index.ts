@@ -20,6 +20,7 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
+import { displayText, displayUrl } from "../../refs/display-url.ts";
 import { exists, isDirectory } from "../../util/fs.ts";
 import { type GitProcessError, runGit } from "../exec.ts";
 
@@ -34,7 +35,7 @@ export function cloneRepo(url: string, dest: string, full: boolean = false): voi
     const ge = err as GitProcessError;
     throw new CrewError(
       "source_unreachable",
-      `couldn't clone \`${url}\` — ${ge.result.stderr.trim()}`,
+      `couldn't clone \`${displayUrl(url)}\` — ${displayText(ge.result.stderr.trim())}`,
       { url },
     );
   }
@@ -109,7 +110,7 @@ export function fetchRefs(dest: string): void {
     const ge = err as GitProcessError;
     throw new CrewError(
       "source_unreachable",
-      `git fetch failed for the clone at \`${dest}\` — ${ge.result.stderr.trim()}`,
+      `git fetch failed for the clone at \`${dest}\` — ${displayText(ge.result.stderr.trim())}`,
       { dest },
     );
   }

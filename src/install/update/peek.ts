@@ -6,9 +6,10 @@
  * from the object database alone and never exports anything.
  */
 
+import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { runGit } from "../../git/exec.ts";
+import { resolveRef } from "../../git/repo/refs.ts";
 
 /**
  * The SHA `ref` currently names in `tap`'s clone, without materializing
@@ -21,16 +22,10 @@ import { runGit } from "../../git/exec.ts";
 export function peekResolvedSha(tap: TapConfig, ref: string | null, home: string): string | null {
   if (tap.kind !== "git") return null;
   const clone = tapPath(tap.name, home);
-  // One rev-parse answers both questions: a ref absent from the clone
-  // exits non-zero, and a present one prints the commit we want. Asking
-  // twice — once to test, once to read — doubles the subprocess cost of
-  // the routine "nothing moved" path this function exists to make cheap.
-  const target = ref === null ? "HEAD" : ref;
-  const result = runGit(["rev-parse", "--verify", `${target}^{commit}`], {
-    cwd: clone,
-    throwOnError: false,
-  });
-  if (result.exitCode !== 0) return null;
-  const sha = result.stdout.trim();
-  return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  try {
+    return resolveRef(clone, ref);
+  } catch (err) {
+    if (err instanceof CrewError && err.code === "ref_not_found") return null;
+    throw err;
+  }
 }
