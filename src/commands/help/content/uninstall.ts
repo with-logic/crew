@@ -12,11 +12,17 @@ export const uninstallHelp: CommandHelp = {
   flags: [
     {
       flag: "--scope {user,project}",
-      description: "Remove the system-wide copy (default) or just the project-scoped one.",
+      description:
+        "Remove the system-wide copy (default) or just the copy installed in the current project. The other scope is never touched. If a skill is installed in exactly one project and you're somewhere else, `--scope project` still finds it; with several, run the command from the project you mean.",
     },
     {
       flag: "--agent <name>",
       description: "Only remove from the named agent(s); other agents keep their copy. Repeatable.",
+    },
+    {
+      flag: "--dry-run",
+      description:
+        "Show what would be removed (including what `--prune` would clean up) without touching anything.",
     },
     {
       flag: "--prune",
@@ -27,6 +33,10 @@ export const uninstallHelp: CommandHelp = {
       flag: "--force",
       description:
         "Don't complain if the skill isn't installed, or if Homecrew's record of it got tampered with.",
+    },
+    {
+      flag: "--verbose",
+      description: "Show each removal path on stderr as it happens.",
     },
   ],
   examples: [
@@ -47,6 +57,10 @@ export const uninstallHelp: CommandHelp = {
       description: "Remove it and anything it pulled in that's no longer needed.",
     },
     {
+      command: "crew uninstall --dry-run --prune python-testing",
+      description: "Preview exactly what that would remove, without removing it.",
+    },
+    {
       command: "crew uninstall --scope project python-testing",
       description: "Only remove the project-scoped copy; leave the system-wide one.",
     },
@@ -55,6 +69,7 @@ export const uninstallHelp: CommandHelp = {
     "`--prune` only touches dependencies Homecrew auto-installed for you. Anything you installed yourself stays put.",
     "If you only uninstall from some agents (`--agent`), the skill is still installed elsewhere, so its dependencies still count as needed — pruning won't touch them.",
     "Homecrew never reaches outside its own install folders. `--force` lets you get past a tampered marker, but it won't let you delete anything you didn't install through Homecrew.",
+    "If the skill is installed at a different scope than the one you asked for, Homecrew tells you where it is and the exact command to remove it, instead of guessing.",
   ],
   seeAlso: ["list", "install", "agents"],
 };
