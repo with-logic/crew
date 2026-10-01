@@ -85,9 +85,10 @@ function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput 
     kind = tap.kind;
     if (dryRun) return; // §16.3: same lookup + guard, nothing written.
     const updated = { ...config, taps: config.taps.filter((t) => t.name !== name) };
-    writeConfig(updated, ctx.home);
-    if (tap.kind === "git") rmrf(tapPath(name, ctx.home));
-    // Path taps don't own the directory; never delete it.
+    withTapLocks([tap], ctx.home, () => {
+      writeConfig(updated, ctx.home);
+      if (tap.kind === "git") rmrf(tapPath(name, ctx.home));
+    });
   };
   if (dryRun) remove();
   else withStateLock(remove, ctx.home);

@@ -27,7 +27,8 @@
  * taps are left untouched.
  *
  * `--dry-run` (§10.1.1): tap clones are still fetched and checked out —
- * that is how crew learns what moved — but nothing else is written:
+ * that is how crew learns what moved. Coordination files under `locks/`
+ * are also written; installed state remains untouched:
  * per-skill moves report `would_update`, tap additions report
  * `would_add`, and no installed skill, marker, store entry, or
  * `state.json` changes. A dry run also never takes the state lock,

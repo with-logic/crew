@@ -151,7 +151,7 @@ Accepted on any command where they apply:
 - `--dry-run` — describe what would happen without changing any installed state: no skill, marker, store entry, config, or `state.json` is written. A command MAY still refresh its own read caches where that is how it learns what would change (`crew update --dry-run` fetches tap clones — §10.1.1); any such exception MUST be stated in that command's section.
 - `--json` — emit machine-readable output. Required on `list`, `search`, `info`, `agents`, `autoupdate status`. Optional on all other commands; when provided, humans-readable output is suppressed and a structured result is emitted.
 - `--quiet` — suppress non-error output. Error output still goes to stderr.
-- `--verbose` — emit progress details to stderr.
+- `--verbose` — emit progress details to stderr: every `git` (and scheduler) subprocess invocation, tap clone/fetch, store staging, and per-agent install/uninstall step, one line each. Lines go to stderr only, so `--verbose --json` still leaves a clean JSON payload on stdout. Without the flag, none of these lines are emitted. Credentials MUST NOT appear in this output: a URL's password, an `https://<token>@host/…` userinfo token, and the value of a sensitive query parameter (`token`, `access_token`, `private_token`, `api_key`, `apikey`, `password`) are each replaced with `***`. SSH userinfo (`git@host`) is a username, not a secret, and is preserved. Control characters in any echoed value are escaped so crafted input cannot forge or reposition output — including a newline, which would otherwise open its own line and forge what reads as a second message; only line breaks an implementation composes itself as layout are preserved. The same redaction applies wherever a source URL can appear in a user-visible error, through every channel: the rendered message, any diagnostic quoted from `git` (which repeats the remote verbatim), and the `details` object of a `--json` error payload. Error `details` keys remain stable per §13; only their values are redacted.
 - `--yes` — answer "yes" to any confirmation prompt.
 - `--force` — override safety checks as defined in §7 and §10. Never overrides spec validation failures or two-skills-same-name conflicts.
 
@@ -202,6 +202,34 @@ shape of help output; wording is left to each implementation.
 - `crew help <unknown>` MUST fall back to the overview and exit 0.
 - `crew --json help` and `crew help <command> --json` MUST emit
   machine-readable structured help.
+- `--help` or `-h` anywhere on the command line MUST behave as
+  `crew help <command>`, where `<command>` is the first POSITIONAL
+  argument as the parser resolves it — not merely the first token that
+  does not begin with `-`, since a flag's value is also such a token
+  (`crew --scope project install --help` selects `install`, not
+  `project`). Resolving it MUST account for command-scoped flag arity
+  even when such a flag precedes its command, so `crew --prune uninstall
+  --help` selects `uninstall`. A LEADING `help` is skipped, so `crew help
+  help --help` still resolves to `crew help help`; with no positional it
+  is `crew help`.
+  Other flags and positionals are ignored, except `--json`, which still
+  selects structured help. `crew tap remove --help` shows the `tap`
+  page — subcommand words are not separate help pages.
+- `--version`, `-v`, or `-V` as the FIRST token MUST behave as
+  `crew version` (honoring `--json`). After a command name (`crew
+  install -v`) these remain unknown flags — `usage_error`, exit 4 — so
+  `-v` stays free for a future `--verbose` short form.
+- When both a help flag and a first-token version flag appear, `--help`
+  MUST win, regardless of their order: `crew --version --help` and
+  `crew --help --version` both print the overview.
+- The `--json` carried through either rewrite MUST be the flag's
+  effective parsed value, not the presence of a bare `--json` token.
+  Every spelling the parser accepts (`--json`, `--json=true`,
+  `--json=false`) MUST apply identically to the rewritten and canonical
+  forms, so `crew --help --json=true` matches `crew help --json=true`.
+  A repeated `--json` is a `usage_error` under §5.2; the rewrite MUST
+  NOT launder it, so `crew --help --json --json=false` fails exactly as
+  `crew help --json --json=false` does.
 
 **Overview MUST contain:**
 
@@ -334,8 +362,7 @@ With `--json`, help MUST emit a structured payload:
         └── Info.plist
 ```
 
-All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
-All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable. `locks/` holds coordination lockfiles and MUST NOT live under `cache/`: `crew cache clean` deletes that tree wholesale, which would remove a lock another process is actively holding.
+All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable. `locks/` holds coordination lockfiles and MUST NOT live under `cache/`: `crew cache clean` deletes that tree wholesale, which would remove a lock another process is actively holding. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
 
 ### 6.1 `config.yaml` schema
 
@@ -497,6 +524,30 @@ Tap-qualified selectors are accepted even though `state.json` stores the skill
 under its unqualified name. If no installed state entry matches the selector,
 the command reports `not_installed_here` for the selector the user typed.
 
+**Scope.** `--scope` (§5.2) selects which installed entry a selector
+refers to; it never widens to every scope. Without `--scope`, or with
+`--scope user`, only the user-scope entry is a candidate. With
+`--scope project`, the candidate is the project-scope entry whose
+`project_root` is the current working directory; if no entry matches
+the cwd but exactly one project-scope entry exists for that name, that
+entry is the candidate (so the command can be run from any directory,
+e.g. by a scheduler). When the selector matches entries only at other
+scopes or other project roots, the command reports `not_installed_here`
+and the human remedy names where the skill *is* installed together with
+the command that would remove it; `--force` turns this into a no-op as
+usual. In `--json` mode that error's `details` carry
+`installed_locations`: an array of `{ scope, project_root }` objects,
+one per entry the selector matched, with `project_root` null at user
+scope. The field is deliberately not named `installed_at`, which means
+an ISO 8601 timestamp everywhere else in the state (§11.1) and marker
+(§7.5) contracts.
+
+Before removing any bytes, resolve and scope-check every selector. A missing
+selector without `--force`, or an unusable selected project root, aborts the
+command without removing any of the requested installs. A project root must
+be a nonempty absolute path; an unusable root produces `usage_error` even
+with `--force`, because the install location cannot be safely determined.
+
 **Agent set.** The default is to remove the skill from every agent
 it's recorded against in state. `--agent <name>` (repeatable,
 §5.2) restricts removal to the named agents only — other agents
@@ -516,25 +567,69 @@ For each `(dest, agents_in_group)`:
 
 4. Remove the just-removed agent names from the entry's `agents`
    array. If the array is now empty, remove the entry entirely, AND
-   for every other entry whose `required_by` listed this skill, remove
-   the name from that list. If the array still has agents, the entry
-   survives with a reduced agent list and its `required_by` is left
-   alone (the skill isn't truly gone — it's still installed elsewhere).
+   for every other entry **at the same install location** whose
+   `required_by` listed this skill, remove the name from that list.
+   "Same install location" means the same `(scope, project_root)` — the
+   identity §11.1 assigns an entry. Dependency edges are per-location, so
+   removing `foo` in one project MUST NOT scrub `foo` from a `required_by`
+   in another project or at user scope, where `foo` is still installed.
+   If the array still has agents, the entry survives with a reduced agent
+   list and its `required_by` is left alone (the skill isn't truly gone —
+   it's still installed elsewhere).
+   An agent whose removal aborts on a safety check (`untracked_directory`,
+   `customized`, `inconsistent_marker`) keeps its bytes on disk and
+   therefore keeps its entry in `state.json`: state must not claim a skill
+   is gone while the install site still holds it.
 5. **If `--prune` was passed AND the entry was fully removed in step 4**,
-   walk the remaining state entries at the same scope. Any entry with
-   `explicit: false` AND an empty `required_by` is an orphan;
-   recursively uninstall it (steps 1–4), which may produce further
-   orphans. Continue until a full pass finds none. Orphans that abort
-   on a safety check (`customized`, `untracked_directory`) are skipped
-   and reported, not forced; the user can rerun with `--force --prune`
-   to override. A partial `--agent` removal that leaves the entry
-   alive does NOT trigger pruning — the skill is still installed, so
-   its dependencies are still required.
+   walk the remaining state entries **at the same install location** —
+   the same `(scope, project_root)` the removal freed, not the scope at
+   large. Any entry with `explicit: false` AND an empty `required_by` is
+   an orphan; recursively uninstall it (steps 1–4), which may produce
+   further orphans. Continue until a full pass finds none. Orphans that
+   abort on a safety check (`customized`, `untracked_directory`) are
+   skipped and reported, not forced; the user can rerun with
+   `--force --prune` to override. Any reported removal failure, including a
+   skipped orphan, makes the command exit with code 1. A skipped orphan keeps its state entry
+   per step 4, so an implementation MUST NOT rely on the entry
+   disappearing to terminate this walk: track the entries already
+   attempted in this run and never revisit one.
+   Pruning is a consequence of a CONFIRMED physical removal. A removal
+   that aborted on a safety check frees nothing, so it seeds no sweep —
+   its location's dependencies are still required by the bytes that
+   remain on disk. Likewise a partial `--agent` removal that leaves the
+   entry alive does NOT trigger pruning, and a run that removed nothing
+   at all (a forced miss) prunes nothing.
 
 Without `--prune`, transitive dependencies are never auto-removed — a
 skill pulled in only as a dependency stays on disk until the user
 names it directly or asks for a prune. This matches `apt-get remove` /
 `brew uninstall` defaults, not `apt-get autoremove`.
+
+**`--dry-run`.** With `--dry-run` (§5.2), `crew uninstall` runs the
+selector resolution, agent grouping, and every safety check above
+(`not_installed_here`, `untracked_directory`, `inconsistent_marker`
+still abort exactly as they would for a real run), but writes nothing:
+no install directory is removed, no marker is rewritten, `state.json`
+is neither written nor created, no auto tap is garbage-collected, and
+the state lock (§14) is not taken — acquiring it would itself create
+`state.json`.
+
+The output is tagged as a dry run and reports three things separately:
+
+- the skills and agents that **would be removed**, including any
+  orphans a `--prune` pass would then remove;
+- the agents that **would be retained** — each named, not merely
+  counted, so the user can see where the skill still lives; `--json`
+  reports them in `remainingAgents`. A real run reports the same
+  agents the same way, so a preview can never disagree with it.
+  Retention is determined by OUTCOME, not by what the user asked for:
+  an agent excluded by an `--agent` filter is retained, and so is one
+  whose removal aborts on a safety check, because its bytes remain on
+  disk either way;
+- any safety check that **would abort**, with the same error as a real
+  run.
+
+`--json` carries `dry_run: true`.
 
 ### 7.5 Marker format (`.crew.json`)
 
@@ -813,7 +908,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
       explicitly wants a skill, we keep remembering).
     - `required_by` for each skill is recomputed from the direct
       dependency graph built during steps 1–6: entry `X.required_by`
-      contains every installed `Y` at the same scope whose
+      contains every installed `Y` at the same install location (`(scope, project_root)`) whose
       `metadata.crew.dependencies` directly names `X`. Transitive
       relationships are not stored — they are derivable by walking the
       graph. `required_by` is symmetric to `dependencies` at one hop.
@@ -1272,6 +1367,11 @@ skipped entirely — when any of the following hold:
 - `CREW_AUTOUPDATE_LOG=1` is set (the command is running under the
   platform scheduler).
 - The command itself is `self-update` or `version`.
+- `--dry-run` was passed. The 24h check writes `version-check.json`, so
+  leaving it enabled would make every preview write to `~/.crew/` no
+  matter how carefully the command itself avoids writing — breaking the
+  "a dry run changes nothing" guarantee from outside that command's own
+  code.
 
 ## 11. State
 
@@ -1328,6 +1428,11 @@ directory (or by the autoupdate background scheduler from its
 scheduler-assigned cwd) still updates each project-scope install at its
 original location.
 
+A missing, empty, relative, or otherwise malformed `project_root` is retained
+in state, reported by doctor as `missing_project_root`, and never used as an
+install location. Repair preserves these entries until the user corrects the
+recorded path; it must not guess the location from the current directory.
+
 A stale `project_root` (directory no longer exists, was moved,
 permissions changed) is reported by `crew doctor` as a
 `missing_project_root` finding and is a clean skip on `crew update` —
@@ -1346,9 +1451,12 @@ another install. A skill first installed as a dependency and later
 named directly is promoted to `explicit: true` on that later install.
 
 **`required_by`** (array of strings). Names of other installed skills
-at the same scope whose `dependencies` include this skill. Maintained
-by crew on every install and uninstall. A skill with `explicit: false`
-and empty `required_by` is an autoremovable orphan —
+**at the same install location** — the same `(scope, project_root)` —
+whose `dependencies` include this skill. Maintained by crew on every
+install and uninstall. Because edges are per-location, the same skill
+installed in two projects has two independent `required_by` lists, and
+an uninstall in one project never rewrites the other's. A skill with
+`explicit: false` and empty `required_by` is an autoremovable orphan —
 `crew uninstall --prune` removes it.
 
 **`tracks_tap`** (boolean, optional; absent means false). True when
@@ -1369,7 +1477,7 @@ off.
 - Every entry in `state.json` should correspond to a `.crew.json` marker in every listed agent. `crew doctor` detects and reports drift.
 - Every entry's `source.tap` MUST name a tap currently configured in `config.yaml`. `crew doctor --repair` recovers a missing tap by recreating it as an auto-tap from marker contents.
 - `pinned` is true if the ref was an exact SHA or a tag. Otherwise false.
-- Every name appearing in any entry's `required_by` is itself an installed skill at the same scope. `crew doctor` detects and reports dangling `required_by` names.
+- Every name appearing in any entry's `required_by` is itself an installed skill at the same install location (`(scope, project_root)`). `crew doctor` detects and reports dangling `required_by` names.
 - `project_root` is present iff `scope === "project"`. User-scope entries MUST NOT carry a `project_root`; project-scope entries MUST.
 
 ### 11.2 `crew doctor`
@@ -1956,19 +2064,27 @@ Implementations and test suites refer to criteria by ID.
 | C-UNINST-03 | §7.4 | Uninstall does not touch sibling skill directories in the same agent. |
 | C-UNINST-04 | §7.4 | `crew uninstall` on a skill that is not installed produces `not_installed_here`, exit 6, without `--force`. |
 | C-UNINST-05 | §7.4 | `crew uninstall <selector>` without `--prune` does NOT remove that skill's transitive dependencies, even if they are no longer required by anything else. |
-| C-UNINST-06 | §7.4 | `crew uninstall <selector> --prune` removes the selected skill, then recursively removes any remaining skill with `explicit: false` and an empty `required_by` at the same scope. |
+| C-UNINST-06 | §7.4 | `crew uninstall <selector> --prune` removes the selected skill, then recursively removes any remaining skill with `explicit: false` and an empty `required_by` at the same install location (`(scope, project_root)`). |
 | C-UNINST-07 | §7.4 | `--prune` never removes a skill with `explicit: true`, even if no other skill depends on it. |
-| C-UNINST-08 | §11.1 | After `crew uninstall`, every remaining state entry's `required_by` no longer names the uninstalled skill. |
+| C-UNINST-08 | §11.1 | After `crew uninstall`, every remaining state entry **at the removed entry's install location** has a `required_by` that no longer names the uninstalled skill. Entries at other locations (another `project_root`, or user scope) are left untouched, because the skill is still installed there. |
 | C-UNINST-09 | §11.1 | A skill first installed as a dependency (`explicit: false`) and then later installed directly (`crew install <name>`) has `explicit: true` after the second install. |
 | C-UNINST-10 | §7.4 | `crew uninstall --agent <name> <skill>` removes the skill only from the named agent(s); other agents keep their installs. |
 | C-UNINST-11 | §7.4 | After a partial `--agent` uninstall, the state entry survives with a reduced `agents` list; `required_by` on other entries is unchanged. |
-| C-UNINST-12 | §7.4 | When `--agent` removal empties the `agents` list, the entry is removed entirely and `required_by` on other entries is scrubbed — as with a full uninstall. |
+| C-UNINST-12 | §7.4 | When `--agent` removal empties the `agents` list, the entry is removed entirely and `required_by` on other entries at the same install location is scrubbed — as with a full uninstall. |
 | C-UNINST-13 | §7.4 | `--prune` does not cascade through a partial (`--agent`) uninstall that leaves the entry alive. Pruning only triggers when the entry was fully removed. |
+| C-UNINST-13a | §7.4 | A removal that aborts on a safety check keeps its `state.json` entry and its `required_by` edges: state never reports a skill gone while its bytes remain at the install site. |
+| C-UNINST-13b | §7.4 | `--prune` seeds its sweep only from confirmed physical removals. A run whose only removal aborted prunes nothing, so a protected skill's dependencies survive. |
 | C-UNINST-14 | §7.4 | `--agent <name>` naming an agent the skill isn't installed in is a silent per-agent no-op; it never causes `not_installed_here` on its own. |
-| C-UNINST-15 | §11.1 | `crew uninstall --scope project <name>` removes the install at the entry's recorded `project_root`, NOT the user's current working directory. Run from any cwd, it finds and removes the correct files. |
+| C-UNINST-15 | §11.1 | `crew uninstall --scope project <name>` removes the install at the targeted entry's recorded `project_root`, NOT the user's current working directory. When the skill has exactly one project-scope entry, the command finds and removes the correct files from any cwd; when it has several, the cwd selects which one (C-UNINST-15b) and an unrelated cwd is `not_installed_here` (C-UNINST-15c). |
+| C-UNINST-15a | §7.4 | `crew uninstall <name>` without `--scope` removes only the user-scope entry; a project-scope entry with the same name is untouched. |
+| C-UNINST-15b | §7.4 | With one skill installed at project scope in two different project roots, `crew uninstall --scope project <name>` run from one of those roots removes only that root's entry. |
+| C-UNINST-15c | §7.4 | `crew uninstall --scope project <name>` when the skill is installed only at user scope (or vice versa) produces `not_installed_here`, exit 6, and the `--json` details list every scope/project root where the skill is installed; `--force` turns it into a no-op. |
 | C-UNINST-16 | §7.4 | When two agents share a `dest` (e.g. `codex` + `gemini-cli` both at `~/.agents/skills/<name>/`), `crew uninstall --agent codex <name>` removes `codex` from the marker's `agents` list but leaves the bytes on disk; `gemini-cli` continues to work. |
 | C-UNINST-17 | §7.4 | After `crew uninstall --agent codex <name>` in a path-shared install, the marker at `dest` contains every remaining owning adapter and no others. |
 | C-UNINST-18 | §7.4 | `crew uninstall <tap>/<skill>` accepts a tap-qualified selector for an installed skill and removes the matching state entry. |
+| C-UNINST-19 | §7.4 | `crew uninstall --dry-run <selector>` reports what would be removed (including `--prune` orphans) but leaves every install directory, marker, and `state.json` untouched; `--json` output carries `dry_run: true`. |
+| C-UNINST-19a | §7.4 | `crew uninstall --dry-run` against a `CREW_HOME` with no `state.json` does not create it (the state lock is not taken), and writes nothing else under `~/.crew/` — including `version-check.json`, which §10.4's dry-run suppression keeps untouched even on a TTY. |
+| C-UNINST-19b | §7.4 | Both the preview and the real run name every retained agent — human output lists each, and `--json` carries them in `remainingAgents`. An agent is retained when an `--agent` filter excludes it OR when its removal aborts on a safety check, since its bytes remain either way. |
 | C-SHARE-01 | §7.2, §7.3 | When `codex` and `gemini-cli` are both active, `crew install <name>` writes bytes to `~/.agents/skills/<name>/` exactly once, and the per-agent summary reports both adapter names as installed. |
 | C-SHARE-02 | §7.5 | The `agents` field in `.crew.json` is non-empty, alphabetically sorted, and lists every agent currently owning the install. |
 | C-SHARE-03 | §7.3 | Installing into a path already owned by agent X with agent Y active (and not X) results in a marker whose `agents` contains both X and Y, preserving X's ownership. |
@@ -2011,14 +2127,14 @@ Implementations and test suites refer to criteria by ID.
 | ID | Reference | Assertion |
 |---|---|---|
 | C-STATE-01 | §11.1 | `state.json` is valid JSON after every successful command. |
-| C-STATE-02 | §11.1 | Every installed skill has exactly one entry per (skill, scope) pair. |
+| C-STATE-02 | §11.1 | Every installed skill has exactly one entry per (skill, scope, project_root) triple. User-scope entries carry no `project_root`, so a skill has at most one user-scope entry; project-scope entries with different `project_root` values are independent installs. |
 | C-STATE-03 | §7.5 | Every crew-installed skill directory contains a `.crew.json` marker with matching `name` and `resolved_sha`. |
 | C-STATE-04 | §11.1 | `pinned: true` in state iff the ref was a SHA or a tag at install time. |
 | C-STATE-05 | §11.2 | `crew doctor` detects state-vs-marker drift and reports every inconsistency. |
 | C-STATE-06 | §11.2 | `crew doctor --repair` reconstructs `state.json` from markers if `state.json` is deleted. |
 | C-STATE-07 | §11.2 | `crew doctor --verify` recomputes content hashes and reports mismatches. |
 | C-STATE-08 | §11.2 | `crew doctor --repair` never modifies files outside `~/.crew/` and the managed skill directories. |
-| C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same scope. |
+| C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same install location (`(scope, project_root)`). |
 | C-STATE-11 | §11.2 | `crew doctor` reports `missing_project_root` for any project-scope entry whose `project_root` directory no longer exists. |
 | C-STATE-12 | §11.2 | `crew doctor --repair --dry-run` reports the findings a repair would address and changes nothing: state, config, and the store are byte-identical afterward. |
 | C-STATE-12a | §11.2 | Findings `--repair` cannot fix (`customized`, `agent_missing`, `config_invalid`, `missing_project_root`) are excluded from both the dry-run "would address" count and the post-repair "addressed" count; an unrepairable error-level finding keeps the exit code non-zero after `--repair`. |
@@ -2088,6 +2204,8 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-04 | §5.1 | `crew version` prints a version string and exits 0. |
 | C-CLI-05 | §5.2 | `--json` on `list`, `search`, `info`, `agents`, `autoupdate status` produces valid JSON on stdout and no human-readable noise. |
 | C-CLI-06 | §5.2 | `--quiet` suppresses non-error stdout. Error output still reaches stderr. |
+| C-CLI-06a | §5.2 | `--verbose` emits progress lines (git invocations, store staging, per-agent install paths) on stderr and nothing extra on stdout; without the flag those lines are absent, including on the run after a failed `--verbose` run. |
+| C-CLI-06b | §5.2 | `--verbose` output redacts credentials: a URL password, an `https://<token>@host` userinfo token, and sensitive query-parameter values are replaced with `***`, while SSH usernames are preserved. Control characters in echoed values are escaped, newlines included, so an interpolated value cannot forge a second message line. The same redaction applies to source URLs in user-visible errors through every channel: the rendered message, diagnostics quoted from `git`, and the `details` object of a `--json` error payload. |
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
 | C-CLI-08a | §5.2 | A non-repeatable flag passed more than once is a `usage_error` (exit 4) naming the flag — boolean (`--json --json`) as well as value (`--scope user --scope project`); the repeatable `--agent` collects every occurrence. |
@@ -2097,6 +2215,15 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-12 | §5.5 | Per-command help for every command in §5.1 contains a USAGE synopsis and a description. Every command except `version` also contains at least one example. |
 | C-CLI-13 | §5.5 | `crew help --json` emits `{version, commands: [{name, synopsis, summary}]}` covering every command in §5.1. |
 | C-CLI-14 | §5.5 | `crew help <command> --json` emits `{name, synopsis, summary, ...}` with the per-command fields defined in §5.5. |
+| C-CLI-15 | §5.5 | `crew --help`, `crew -h`, `crew <command> --help`, and `crew <command> -h` print the same output as `crew help` / `crew help <command>` on stdout and exit 0; `--json` selects structured help. |
+| C-CLI-16 | §5.5 | `crew --version`, `crew -v`, and `crew -V` print the same output as `crew version` and exit 0; `--json` emits `{version}`. |
+| C-CLI-17 | §5.5 | `-v` after a command name (e.g. `crew install -v`) is an unknown flag: `usage_error`, exit 4. |
+| C-CLI-17a | §5.5 | Every `--json` spelling the parser accepts behaves identically for a rewritten flag form and its canonical command: `crew --help --json=true` matches `crew help --json=true`, `crew --version --json=true` matches `crew version --json=true`, and a repeated `--json` (`--json --json=false`) is the same §5.2 `usage_error` (exit 4) for both. |
+| C-CLI-17b | §5.5 | `--help` takes precedence over a first-token version flag in either order: `crew --version --help` and `crew --help --version` both print the overview and exit 0. |
+| C-CLI-17c | §5.5 | Only a leading `help` token is skipped when resolving the help target, so `crew help help --help` prints the `help` command's page, not the overview. |
+| C-CLI-17d | §5.5 | The help target is the first parser positional, so a flag's value is never mistaken for the command. `crew --scope project install --help`, `crew --agent codex install --help`, `crew --from-git gh:acme/skills install --help`, and the spaced boolean `crew --help --json false install` all print the `install` page, byte-identical to `crew help install`. |
+| C-CLI-17e | §5.5 | A command-scoped flag placed BEFORE its command still resolves the target: `crew --prune uninstall --help` prints the `uninstall` page and `crew --recursive install -h` prints the `install` page, byte-identical to their canonical forms. |
+| C-CLI-17f | §5.5, §13 | A malformed value flag in a conventional-flag rewrite fails as `usage_error` with exit 4, not as an unnamed internal error: `crew --help --agent` (no value) reports the stable error name. |
 
 ### 18.4 Worked examples
 

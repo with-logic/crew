@@ -93,7 +93,8 @@ function shortSha(sha: string | null): string {
  */
 export function nameCell(row: UpdateRow, style: Styler): string {
   const base = `  ${symbolFor(row, style)} ${style.bold(row.name)}`;
-  if (row.scope !== "project" || !row.project_root) return base;
+  if (row.scope !== "project" || typeof row.project_root !== "string" || !row.project_root)
+    return base;
   return `${base} ${style.dim(`(in ${shortenHome(row.project_root)})`)}`;
 }
 

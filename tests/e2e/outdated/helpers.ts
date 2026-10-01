@@ -68,7 +68,9 @@ function snapshotTree(out: Record<string, string>, root: string, label: string):
   if (!existsSync(root)) return;
   for (const entry of walk(root)) {
     if (!entry.isFile) continue;
-    out[`${label}:${relative(root, entry.absPath)}`] = readFileSync(entry.absPath, "utf8");
+    out[`${label}:${relative(root, entry.absPath)}`] = readFileSync(entry.absPath).toString(
+      "base64",
+    );
   }
 }
 

@@ -26,7 +26,7 @@ export function listCommand(ctx: CommandContext): CommandOutput {
   const sorted = [...state.installations].sort((a, b) =>
     a.name === b.name
       ? a.scope === b.scope
-        ? (a.project_root ?? "").localeCompare(b.project_root ?? "")
+        ? String(a.project_root ?? "").localeCompare(String(b.project_root ?? ""))
         : a.scope.localeCompare(b.scope) // "project" sorts before "user"
       : a.name.localeCompare(b.name),
   );
@@ -74,7 +74,7 @@ function renderList(entries: readonly StateEntry[], style: Styler): string[] {
 
     // Sub-rows for each project install (one per project).
     for (const p of projects) {
-      const location = style.dim(`in ${shortenHome(p.project_root ?? "")}`);
+      const location = style.dim(`in ${shortenHome(String(p.project_root ?? ""))}`);
       rowCells.push([
         `    ${style.dim("└")} ${location}`,
         "",
