@@ -10,7 +10,7 @@
 import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { uninstallSkillFromAgents } from "../../agents/uninstall.ts";
-import { CrewError } from "../../core/errors.ts";
+import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
@@ -65,7 +65,7 @@ export function removeOne(
   pruned: boolean,
   agentFilter: readonly string[] | null,
 ): { updatedState: StateFile; rec: UninstallRecord; meta: RemovalMeta } {
-  const { name, entries, raw: errorName } = subject;
+  const { name, entries } = subject;
   const rec: UninstallRecord = {
     name,
     removedFrom: [],
@@ -75,13 +75,7 @@ export function removeOne(
   };
   const meta: RemovalMeta = { fullyRemovedRoots: [] };
   if (entries.length === 0) {
-    if (!(ctx.flags.force || pruned)) {
-      throw new CrewError(
-        "not_installed_here",
-        `\`${errorName}\` isn't in Homecrew's state — nothing to remove`,
-        { name: errorName },
-      );
-    }
+    // Selection was prevalidated; only forced empty subjects reach removal.
     return { updatedState: state, rec, meta };
   }
   // Per-entry processing: each (skill, scope) pair potentially touches
