@@ -10,12 +10,13 @@ import { crewHome, paths } from "../core/paths.ts";
 import * as launchd from "./launchd.ts";
 import { readAutoupdateLogTail } from "./log.ts";
 import * as systemd from "./systemd.ts";
-import type { EnableInput } from "./types.ts";
+import type { EnableInput, SchedulerProbe } from "./types.ts";
 
 type Scheduler = {
   readonly enableAutoupdate: (input: EnableInput) => void;
   readonly disableAutoupdate: (home?: string) => void;
   readonly isAutoupdateLoaded: () => boolean;
+  readonly probeAutoupdate: () => SchedulerProbe;
 };
 
 let platformOverride: NodeJS.Platform | null = null;
@@ -41,6 +42,18 @@ export function disableAutoupdate(home: string = crewHome()): void {
 export function isAutoupdateLoaded(): boolean {
   const selected = schedulerOrNull();
   return selected ? selected.isAutoupdateLoaded() : false;
+}
+
+/**
+ * Scheduler state with "couldn't ask" preserved (§11.2). Callers that
+ * only branch on loaded-or-not keep using `isAutoupdateLoaded`; repair
+ * verification uses this, because a probe that could not run must not
+ * be read as a confirmed "not loaded". An unsupported platform genuinely
+ * has no scheduler, so it answers `not-loaded` rather than indeterminate.
+ */
+export function probeAutoupdate(): SchedulerProbe {
+  const selected = schedulerOrNull();
+  return selected ? selected.probeAutoupdate() : { state: "not-loaded", detail: "" };
 }
 
 /**

@@ -6,12 +6,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../../src/agents/gemini-cli.ts";
-import { resetLaunchctlRunner, setLaunchctlRunner } from "../../../src/autoupdate/launchd.ts";
+import { resetLaunchctlRunner, setLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
 import {
   resetAutoupdatePlatform,
   setAutoupdatePlatform,
@@ -152,5 +152,24 @@ describe("doctor warnings — orphan store", () => {
       resetAutoupdatePlatform();
       resetLaunchctlRunner();
     }
+  });
+
+  test("doctor --repair reports an unparseable config instead of aborting", () => {
+    const home = makeCrewHome();
+    mkdirSync(home, { recursive: true });
+    writeFileSync(join(home, "config.yaml"), "taps:\n\tbad-tab");
+    const orphan = join(home, "store", "ghost@00000000");
+    mkdirSync(orphan, { recursive: true });
+    const c = captureStreams();
+    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    // Repair rewrites `config.yaml` taps from markers, so it is skipped
+    // entirely when the file can't be read — running it would discard
+    // whatever the user has there. The run reports `config_invalid` as
+    // a doctor finding (exit 1, a non-repairable error) rather than
+    // failing with a bare error, and leaves the orphan for a later run.
+    expect(code).toBe(1);
+    const parsed = JSON.parse(c.stdout());
+    expect(parsed.findings.map((f: { code: string }) => f.code)).toContain("config_invalid");
+    expect(existsSync(orphan)).toBe(true);
   });
 });
