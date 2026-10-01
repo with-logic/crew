@@ -1,18 +1,21 @@
 /**
  * The one-time move from the pre-0.11 per-tap-name clone layout to the
- * shared `repos/` layout (§6, C-TAP-27).
+ * shared `repos/` layout (§6, C-TAP-29).
  */
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, renameSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { readConfig } from "../../../src/config/load.ts";
 import { legacyTapPath, paths } from "../../../src/core/paths.ts";
+import { migrateTapClone } from "../../../src/sources/migrate-clones.ts";
+import { withTapLocks } from "../../../src/sources/tap-lock.ts";
 import { ensureDir } from "../../../src/util/fs.ts";
-import { cloneDirForTap, cloneDirs } from "../../helpers/fixtures.ts";
+import { cloneDirForTap, cloneDirs, makeTempDir } from "../../helpers/fixtures.ts";
 import { bareHome, run, twoSubpathRepo } from "./helpers.ts";
 
 describe("migration from the per-tap-name clone layout", () => {
-  test("C-TAP-27 an old-layout clone is moved on the next command and still works", () => {
+  test("C-TAP-29 an old-layout clone is moved on the next command and still works", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     run(home, ["tap", "add", `file://${repo}//alpha`, "alpha-tap"]);
@@ -33,7 +36,7 @@ describe("migration from the per-tap-name clone layout", () => {
     expect(existsSync(legacy)).toBe(false);
   });
 
-  test("C-TAP-27 a redundant old clone is dropped when the shared one already exists", () => {
+  test("C-TAP-29 a redundant old clone is dropped when the shared one already exists", () => {
     const home = bareHome();
     const repo = twoSubpathRepo();
     run(home, ["tap", "add", `file://${repo}//alpha`, "alpha-tap"]);
@@ -53,4 +56,20 @@ describe("migration from the per-tap-name clone layout", () => {
     expect(existsSync(shared)).toBe(true);
     expect(cloneDirs(home)).toHaveLength(1);
   });
+});
+
+test("C-TAP-29 migration cannot relocate or delete an external directory", () => {
+  const home = bareHome();
+  const repo = twoSubpathRepo();
+  expect(run(home, ["tap", "add", `file://${repo}//alpha`, "alpha-tap"]).code).toBe(0);
+  const tap = readConfig(home).taps[0]!;
+  const outside = makeTempDir("crew-migration-outside-");
+  writeFileSync(join(outside, "keep.txt"), "keep");
+  const escaped = { ...tap, name: `../../${outside.split("/").pop()}` };
+  expect(withTapLocks([escaped], home, () => migrateTapClone(escaped, home))).toBe(false);
+  ensureDir(paths(home).tapsDir);
+  symlinkSync(outside, legacyTapPath(tap.name, home));
+  expect(() => withTapLocks([tap], home, () => migrateTapClone(tap, home))).toThrow("symlink");
+  expect(readFileSync(join(outside, "keep.txt"), "utf8")).toBe("keep");
+  expect(existsSync(cloneDirForTap("alpha-tap", home)!)).toBe(true);
 });

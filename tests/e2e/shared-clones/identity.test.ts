@@ -4,9 +4,12 @@ import { expect, test } from "bun:test";
 import { repoDirName, sameRepoUrl } from "../../../src/core/repo-path.ts";
 import { canonicalRepoUrl } from "../../../src/core/repo-url.ts";
 
-test("C-TAP-26 credentials and repository paths retain case in clone identity", () => {
+test("C-TAP-28 credentials and repository paths retain case in clone identity", () => {
   expect(canonicalRepoUrl("HTTPS://Alice:Token@EXAMPLE.COM/Acme/Skills.git/")).toBe(
     "https://Alice:Token@example.com/Acme/Skills",
+  );
+  expect(canonicalRepoUrl("HTTPS://User@EXAMPLE.COM?token=AbCd#Frag")).toBe(
+    "https://User@example.com?token=AbCd#Frag",
   );
   expect(sameRepoUrl("https://Alice@example.com/repo", "https://alice@example.com/repo")).toBe(
     false,
@@ -19,7 +22,7 @@ test("C-TAP-26 credentials and repository paths retain case in clone identity", 
   );
 });
 
-test("C-TAP-26 readable clone prefixes exclude credentials and query secrets", () => {
+test("C-TAP-28 readable clone prefixes exclude credentials and query secrets", () => {
   const name = repoDirName(
     "https://SecretUser:SecretPassword@EXAMPLE.COM/team/repo.git?token=QuerySecret#FragmentSecret",
   );

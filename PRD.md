@@ -2531,10 +2531,10 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-01 | §16.3, §6 | `crew tap add <url>` clones the repo into the repository's shared clone directory under `~/.crew/repos/`. |
 | C-TAP-02 | §16.3 | `crew tap add <url> <name>` uses the given name instead of the derived one. |
 | C-TAP-03 | §16.3 | `crew tap remove <name>` updates config and deletes the local clone when no other configured tap points at the same repository. |
-| C-TAP-26 | §6 | Two taps over different subpaths of one repository share a single clone directory; URLs differing only by a trailing `.git` resolve to the same clone. |
-| C-TAP-26b | §16.3, §16.5 | Removing one of several taps over a repository leaves the clone in place; removing the last one deletes it. |
-| C-TAP-26c | §6 | A single `crew update` fetches a shared repository once, however many of its tap rows are in scope. |
-| C-TAP-27 | §6 | A home using the pre-0.11 `taps/<tap-name>/` layout has its clones relocated on the next command that uses them, without re-cloning; a redundant old copy is discarded when the shared clone already exists. |
+| C-TAP-28 | §6 | Two taps over different subpaths of one repository share a single clone directory; URLs differing only by a trailing `.git` resolve to the same clone. |
+| C-TAP-28b | §16.3, §16.5 | Removing one of several taps over a repository leaves the clone in place; removing the last one deletes it. |
+| C-TAP-28c | §6 | A single `crew update` fetches a shared repository once, however many of its tap rows are in scope. |
+| C-TAP-29 | §6 | A home using the pre-0.11 `taps/<tap-name>/` layout has its clones relocated on the next command that uses them, without re-cloning; a redundant old copy is discarded when the shared clone already exists. |
 | C-TAP-04 | §16.3 | `crew tap list` reports every configured tap with name, kind/status, source target, recursive discovery mode when non-standard, and last-fetched timestamp for git-kind taps. |
 | C-TAP-05 | §16.2 | The default tap named `core` is present on first run. |
 | C-TAP-06 | §16.2 | `crew tap remove core` is refused without `--force`. |

@@ -24,7 +24,7 @@ export function canonicalRepoUrl(url: string): string {
   if (schemeEnd < 0) return canonicalScpUrl(stripped);
   const scheme = stripped.slice(0, schemeEnd).toLowerCase();
   const rest = stripped.slice(schemeEnd + 3);
-  const slash = rest.indexOf("/");
+  const slash = rest.search(/[/?#]/);
   const authority = slash < 0 ? rest : rest.slice(0, slash);
   const path = slash < 0 ? "" : rest.slice(slash);
   return `${scheme}://${lowercaseHostOnly(authority)}${path}`;
