@@ -1,15 +1,33 @@
 /** Collection uninstall safety after integration with dry-run/preflight (§7.4). */
 
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readState, writeState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
-import { addTap, buildTap, install, installed, quiet, useClaudeCodeAdapter } from "./helpers.ts";
+import { addTap, buildTap, install, installed, quiet } from "./helpers.ts";
 
-useClaudeCodeAdapter();
+let originals: { user: () => string; project: (c: string) => string; detect: () => boolean };
+beforeEach(() => {
+  const root = makeTempDir("crew-cc-");
+  originals = {
+    user: claudeCodeAdapter.userPath,
+    project: claudeCodeAdapter.projectPath,
+    detect: claudeCodeAdapter.detect,
+  };
+  (claudeCodeAdapter as { userPath: () => string }).userPath = () => root;
+  (claudeCodeAdapter as { projectPath: (c: string) => string }).projectPath = (c) =>
+    join(c, ".claude", "skills");
+  (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
+});
+afterEach(() => {
+  (claudeCodeAdapter as { userPath: () => string }).userPath = originals.user;
+  (claudeCodeAdapter as { projectPath: (c: string) => string }).projectPath = originals.project;
+  (claudeCodeAdapter as { detect: () => boolean }).detect = originals.detect;
+});
 
 test("C-UNINST-21 qualified namespace never absorbs another tap's namespace", () => {
   const home = makeCrewHome();
