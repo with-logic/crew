@@ -19,8 +19,9 @@ export const MANAGING: CommandGroup = {
     },
     {
       name: "uninstall",
-      signature: <>crew uninstall &lt;name&gt;…</>,
-      description: "Remove installed skills from every agent. Bare and tap-qualified names work.",
+      signature: <>crew uninstall [--scope {"{user,project}"}] &lt;name&gt;…</>,
+      description:
+        "Remove installed skills from every agent. Bare and tap-qualified names work. One scope at a time: your system-wide install by default, or this project's with --scope project. A skill installed in exactly one project can be removed from any directory.",
     },
     {
       name: "remove",
@@ -33,7 +34,9 @@ export const MANAGING: CommandGroup = {
       description: (
         <>
           Update all installed skills, or only those named. Names can be bare or tap-qualified.
-          Pinned SHAs are skipped unless <span className={styles.flag}>--force</span>.
+          Pinned SHAs are skipped unless <span className={styles.flag}>--force</span>.{" "}
+          <span className={styles.flag}>--dry-run</span> previews what would change: taps still
+          refresh, but nothing you have installed is touched.
         </>
       ),
     },
@@ -44,8 +47,12 @@ export const MANAGING: CommandGroup = {
     },
     {
       name: "list",
-      signature: <>crew list</>,
-      description: "List installed skills, grouped by scope, with sources and resolved SHAs.",
+      signature: <>crew list [--scope {"{user,project}"}]</>,
+      description: [
+        "List installed skills, grouped by scope, with sources and resolved SHAs. ",
+        <code key="crew-list-scope">--scope</code>,
+        " narrows the listing to just your user-scoped or just your project-scoped installs.",
+      ],
     },
     {
       name: "skills",

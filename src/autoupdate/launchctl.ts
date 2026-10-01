@@ -7,6 +7,9 @@
  * launchd to talk to. Job management built on top lives in `./launchd.ts`.
  */
 
+import { progress } from "../util/progress.ts";
+import { safeArgs } from "../util/redact.ts";
+
 /**
  * Test seam for `launchctl`. Replace with a stub in tests; the default
  * invokes the real binary on macOS. Where `launchctl` isn't available,
@@ -73,6 +76,7 @@ export function resetLaunchctlRunner(): void {
  * platform-error tests drive the systemd seam.
  */
 export function runLaunchctl(args: string[]): LaunchctlResult {
+  progress(`$ launchctl ${safeArgs(args)}`);
   const r = launchctlRunner(args);
   return typeof r === "boolean" ? { ok: r, stderr: "" } : r;
 }

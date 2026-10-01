@@ -15,7 +15,9 @@
 import { readConfig, writeConfig } from "../../config/load.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { garbageCollectStore } from "../../maintenance/gc.ts";
+import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
+import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
 import type { MarkerEntry } from "./markers.ts";
 
@@ -29,9 +31,7 @@ import type { MarkerEntry } from "./markers.ts";
  */
 function isUnreadableProjectEntry(entry: StateEntry): boolean {
   return (
-    entry.scope === "project" &&
-    entry.project_root !== undefined &&
-    !isDirectory(entry.project_root)
+    entry.scope === "project" && !(hasUsableProjectRoot(entry) && isDirectory(entry.project_root))
   );
 }
 
@@ -83,6 +83,7 @@ export function repairStateUnderLock(markers: readonly MarkerEntry[], home: stri
           (m) =>
             m.record.marker.name === entry.name &&
             m.record.scope === entry.scope &&
+            (m.projectRoot ?? null) === (entry.project_root ?? null) &&
             entry.agents.some((t) => m.record.marker.agents.includes(t)),
         ),
     );
@@ -94,7 +95,10 @@ export function repairStateUnderLock(markers: readonly MarkerEntry[], home: stri
     for (const m of markers) {
       const marker = m.record.marker;
       const existing = current.installations.find(
-        (e) => e.name === marker.name && e.scope === m.record.scope,
+        (e) =>
+          e.name === marker.name &&
+          e.scope === m.record.scope &&
+          (e.project_root ?? null) === (m.projectRoot ?? null),
       );
       if (existing) {
         const missing = marker.agents.filter((a) => !existing.agents.includes(a));
@@ -103,7 +107,7 @@ export function repairStateUnderLock(markers: readonly MarkerEntry[], home: stri
           current = {
             schema_version: 1,
             installations: current.installations.map((e) =>
-              e.name === existing.name && e.scope === existing.scope ? { ...e, agents: merged } : e,
+              entryKey(e) === entryKey(existing) ? { ...e, agents: merged } : e,
             ),
           };
         }

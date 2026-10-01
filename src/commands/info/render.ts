@@ -74,7 +74,7 @@ function locationLines(entries: readonly StateEntry[], style: Styler): string[] 
     if (e.scope === "user") {
       out.push(`${style.symbol("muted")} for you (system-wide)`);
     } else {
-      const root = e.project_root ? shortenHome(e.project_root) : "(unknown project)";
+      const root = e.project_root ? shortenHome(String(e.project_root)) : "(unknown project)";
       out.push(`${style.symbol("muted")} ${root} ${style.dim("(project scope)")}`);
     }
   }
