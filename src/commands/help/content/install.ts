@@ -123,7 +123,7 @@ export const installHelp: CommandHelp = {
             "  @acme/skills                       → Same as gh: — a handy GitHub alias.",
           ],
         },
-        "Any git reference can pin a version with `@<tag>` or `@<sha>`, follow a branch with `@<branch>`, and point at a subfolder with `//<path>`. You can combine them — version first:",
+        "Any git reference can pin a version with `@<tag>` or `@<sha>`, follow a branch with `@<branch>`, and point at a subfolder with `//<path>`. You can combine them, with the version either before or after the subfolder. Versions containing `/` must go before the subfolder, as in `gh:acme/skills@feature/python//python/testing`:",
         {
           literal: true,
           lines: [
@@ -132,6 +132,7 @@ export const installHelp: CommandHelp = {
             "gh:acme/skills@a1b2c3d                   A specific commit.",
             "gh:acme/skills//python/testing           Just the `python/testing` subfolder.",
             "gh:acme/skills@v1.2.0//python/testing    Subfolder, pinned to a release.",
+            "gh:acme/skills//python/testing@v1.2.0    Same thing, version last.",
             "@acme/skills@v1.0.0                      Same with the `@` shorthand.",
           ],
         },
@@ -145,6 +146,7 @@ export const installHelp: CommandHelp = {
     "How Homecrew tells names apart: a plain word is a skill name. Paths start with `./`, `../`, `/`, or `~`. Git URLs start with `https://`, `git@`, `ssh://`, `file://`, `gh:`, `gl:`, `bb:`, `@<owner>/<repo>`, or a host name with a dot in it (`github.com/<owner>/<repo>`). Anything containing `//` is always treated as a git reference (that's the subfolder syntax). A plain `<owner>/<repo>` is read as `<tap>/<skill>` — if you meant a GitHub repo, put an `@` in front.",
     "Browser links: a `/tree/<branch>/<folder>` link becomes `@<branch>//<folder>`, and a `/blob/.../SKILL.md` link points at the skill's folder. The first segment after `tree/` is taken as the branch, so for a branch name with a `/` in it use the explicit form instead — `crew install https://github.com/acme/skills@feature/new-api//python` installs the `python` folder from the `feature/new-api` branch.",
     "Private repos: a URL with credentials in it (`https://<user>:<token>@host/...`) works, and Homecrew never prints the token back at you — it's masked in every message and in `--json` output.",
+    "Folder names containing `@`: write the version first. `gh:acme/skills@main//skills/foo@bar` installs the `skills/foo@bar` folder from `main`, because a version spelled before the subfolder stops Homecrew looking for one at the end.",
   ],
   seeAlso: ["uninstall", "update", "info", "search"],
 };
