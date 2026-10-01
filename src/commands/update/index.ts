@@ -64,7 +64,6 @@ import { planUpdate } from "./plan.ts";
 import { renderUpdate } from "./render.ts";
 
 export function updateCommand(ctx: CommandContext): CommandOutput {
-  const config = readConfig(ctx.home);
   const home = ctx.home ?? crewHome();
   const dryRun = ctx.flags.dryRun;
 
@@ -77,9 +76,9 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   // `locks/` — a preview still mutates the clone it fetches, so it must
   // exclude concurrent writers for the same reason a real run does.
   const plan = dryRun
-    ? planUpdate(ctx, config, home, true)
+    ? planUpdate(ctx, readConfig(home), home, true)
     : withStateLock(() => {
-        const p = planUpdate(ctx, config, home, false);
+        const p = planUpdate(ctx, readConfig(home), home, false);
         writeState(p.state, home);
         return p;
       }, home);

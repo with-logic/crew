@@ -66,7 +66,13 @@ export function removeOne(
   ctx: CommandContext,
   pruned: boolean,
   agentFilter: readonly string[] | null,
-): { updatedState: StateFile; rec: UninstallRecord; meta: RemovalMeta } {
+  deferStateEntryDrops: boolean = false,
+): {
+  updatedState: StateFile;
+  rec: UninstallRecord;
+  meta: RemovalMeta;
+  fullyRemoved: readonly StateEntry[];
+} {
   const { name, entries } = subject;
   const rec: UninstallRecord = {
     name,
@@ -78,7 +84,7 @@ export function removeOne(
   const meta: RemovalMeta = { fullyRemovedRoots: [] };
   if (entries.length === 0) {
     // Selection was prevalidated; only forced empty subjects reach removal.
-    return { updatedState: state, rec, meta };
+    return { updatedState: state, rec, meta, fullyRemoved: [] };
   }
   // Per-entry processing: each (skill, scope) pair potentially touches
   // a different subset of agents.
@@ -105,11 +111,13 @@ export function removeOne(
       fullyRemoved.push(entry);
     }
   }
-  nextState = dropScopedEntriesAndUpdateRequiredBy(nextState, fullyRemoved);
+  // Tap removal batches full drops across names while retaining failed ownership immediately.
+  if (!deferStateEntryDrops)
+    nextState = dropScopedEntriesAndUpdateRequiredBy(nextState, fullyRemoved);
   if (retained.size > 0) {
     Object.assign(rec, { partial: true, remainingAgents: [...retained].sort() });
   }
-  return { updatedState: nextState, rec, meta };
+  return { updatedState: nextState, rec, meta, fullyRemoved };
 }
 
 /**
@@ -133,14 +141,18 @@ function removeFromAgents(
   const entryCwd = cwdForEntry(entry, ctx.cwd);
   const groups = new Map<string, AgentAdapter[]>();
   for (const targetName of agentsToRemove) {
-    // An unknown target name in state shouldn't happen in normal use
-    // but may if state was written by a future crew; skip it
-    // silently rather than aborting the whole uninstall. Similarly,
-    // adapters that don't support the entry's scope (empty base)
-    // wouldn't be in state.agents to begin with, so we don't need
-    // a runtime branch for them.
+    // Unknown owners retain their bytes and prevent tap removal (§16.3).
     const adapter = agentByName(targetName);
-    if (!adapter) continue;
+    if (!adapter) {
+      rec.failures.push({
+        agent: targetName,
+        error: {
+          code: "unknown_agent",
+          message: `no adapter named \`${targetName}\` in this build — its install was left in place`,
+        },
+      });
+      continue;
+    }
     const base = baseFor(adapter, entry.scope, entryCwd);
     const dest = `${base}/${name}`;
     const existing = groups.get(dest);

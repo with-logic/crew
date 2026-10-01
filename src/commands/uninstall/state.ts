@@ -68,7 +68,8 @@ export function dropScopedEntriesAndUpdateRequiredBy(
     if (dropped.has(entryKey(e))) continue;
     const names = namesByLocation.get(loc);
     if (names) {
-      installations.push({ ...e, required_by: e.required_by.filter((n) => !names.has(n)) });
+      const kept = e.required_by.filter((n) => !names.has(n));
+      installations.push(kept.length === e.required_by.length ? e : { ...e, required_by: kept });
     } else {
       installations.push(e);
     }

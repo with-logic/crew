@@ -11,6 +11,7 @@
 
 import type { CommandFlags } from "../../commands/types.ts";
 import { CrewError } from "../../core/errors.ts";
+import { aliasBooleanFlags } from "../aliases.ts";
 import { rewriteConventionalFlags } from "./conventional-flags.ts";
 import {
   ARRAY_GLOBALS,
@@ -40,8 +41,15 @@ export function parseArgs(rawArgv: readonly string[]): ParsedArgs {
   const command = effective[0]!;
   const rest = effective.slice(1);
 
-  // Alias-aware: `subFlags` resolves `rm` to uninstall's tables (§5.1).
-  const booleans = [...BOOLEAN_GLOBALS, ...subFlags(BOOLEAN_SUB, command)];
+  // Alias-aware: `subFlags` resolves `rm` to uninstall's tables (§5.1),
+  // and gives a prefixed alias (`taps` → `tap list`) no subcommand
+  // flags — `crew taps --recursive` stays a usage_error, beyond
+  // whatever `ALIAS_FLAGS` grants the alias itself.
+  const booleans = [
+    ...BOOLEAN_GLOBALS,
+    ...subFlags(BOOLEAN_SUB, command),
+    ...aliasBooleanFlags(command),
+  ];
   const strings = [...STRING_GLOBALS, ...subFlags(STRING_SUB, command)];
 
   let parsed: Record<string, unknown>;

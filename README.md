@@ -180,7 +180,7 @@ When a command asks for an installed skill name, you can use the bare name
 |---|---|
 | `crew search [--tap <name>] [<query>]` | Case-insensitive substring match across every configured tap, or just one with `--tap`. With no query, lists every installable skill in those taps; exact installed matches are marked `✓`. With a query and without `--tap`, also suggests matching known taps to add; `--tap` scopes the search to a tap you already have, so it omits those suggestions. |
 | `crew tap add <url-or-path> [name]` | Add a registry from a git source or local path. Name defaults to the repo/path name. Add `--recursive` for trusted repos with non-standard nested layouts. |
-| `crew tap remove <name>` | Delete a local tap clone and drop it from config. |
+| `crew tap remove <name>` | Delete a local tap clone and drop it from config. Refuses while skills from the tap are installed: pass `--uninstall` to remove them too, or `--force` to keep them. |
 | `crew tap list` | Print each tap's name, kind/status, source target, recursive discovery marker when set, and last-fetched timestamp for git taps. |
 | `crew taps` | Alias for `crew tap list`. |
 | `crew untap <name>` | Alias for `crew tap remove <name>`. |

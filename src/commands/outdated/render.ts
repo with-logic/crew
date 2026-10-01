@@ -38,6 +38,7 @@ export interface RenderOutdatedInput {
 const NOTEWORTHY: Record<UpdateRow["outcome"]["kind"], boolean> = {
   would_update: true,
   source_gone: true,
+  tap_missing: true,
   failed: true,
   // Not noteworthy: these answer "nothing to do here".
   up_to_date: false,

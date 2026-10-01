@@ -13,7 +13,7 @@
  *      the CLI layer can format.
  */
 
-import { writeConfig } from "../config/load.ts";
+import { readConfig, writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
 import type { Config, ResolvedSkill, Scope, StateEntry } from "../core/types.ts";
 import { garbageCollectAutoTaps } from "../maintenance/auto-taps.ts";
@@ -21,6 +21,7 @@ import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { computeAgentSet } from "./agent-set.ts";
+import { assertTapsPresent, mergeAutoTaps } from "./config-merge.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules/index.ts";
 import { type InstallSummary, performInstall } from "./perform/index.ts";
 import { promoteExplicit } from "./promote-explicit.ts";
@@ -123,10 +124,15 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
   // as "already installed" that is no longer there.
   let alreadyInstalled: readonly AlreadyInstalled[] = [];
   const summary = withStateLock(() => {
-    // Persist any auto-taps the resolver created BEFORE we start
-    // writing state entries that reference them — otherwise a partial
-    // crash would leave dangling tap names in state.
-    if (configWithAutoTaps !== config) writeConfig(configWithAutoTaps, home);
+    // Replay resolver additions onto fresh config under the lock (§14),
+    // retaining concurrent removals and rejecting source replacements.
+    const freshConfig = readConfig(home);
+    const mergedConfig =
+      configWithAutoTaps === config
+        ? freshConfig
+        : mergeAutoTaps(freshConfig, config, configWithAutoTaps);
+    assertTapsPresent(mergedConfig, resolvedAll);
+    if (mergedConfig !== freshConfig) writeConfig(mergedConfig, home);
 
     const freshState = readState(home);
     const analysis = applyDuplicateRules(
