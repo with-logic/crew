@@ -83,7 +83,7 @@ describe("C-TAP-16d tap remove --uninstall", () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("Uninstalling alpha (dry run)");
     expect(r.stdout).toContain("would remove from");
-    expect(r.stdout).not.toContain("Uninstalling alpha");
+    expect(r.stdout).not.toMatch(/^Uninstalling alpha$/m);
     expect(r.stdout).toContain("Would remove tap mytap");
   });
 

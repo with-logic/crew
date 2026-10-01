@@ -27,6 +27,7 @@ import { type InstallOutcome, installSkillIntoAgents } from "../../agents/instal
 import type { CrewError } from "../../core/errors.ts";
 import type { ResolvedSkill, Scope, StateFile } from "../../core/types.ts";
 import { upsertEntry } from "../../state/load.ts";
+import type { KeptSource } from "../duplicate-rules/index.ts";
 import type { RequiredByMap } from "../resolve/index.ts";
 import { buildStateEntry, rebuildRequiredBy } from "./state-entry.ts";
 
@@ -70,6 +71,12 @@ export function performInstall(
      * Defaults to `resolved` when absent.
      */
     readonly allResolved?: readonly ResolvedSkill[];
+    /**
+     * Entries whose `source` must survive this install untouched. Set
+     * when re-attribution refused to narrow a whole-tap subscription but
+     * the skill is installed anyway (`--force`, or a new adapter).
+     */
+    readonly keepSource?: readonly KeptSource[];
   },
 ): InstallSummary {
   const records: InstallRecord[] = [];

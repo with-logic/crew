@@ -19,6 +19,19 @@ export function parseTapEntry(entry: YamlValue): TapConfig {
   if (typeof name !== "string" || name.length === 0) {
     throw new CrewError("config_invalid", "config.yaml: each tap needs a non-empty `name`");
   }
+  // A tap name becomes a directory under `~/.crew/taps/`, so a name
+  // carrying `..` or a path separator would aim crew's clone and delete
+  // paths outside the tree it owns. Reject exactly that, rather than the
+  // full slug pattern `crew tap add` applies: auto-tap names are derived
+  // from directory basenames and existing configs legitimately hold
+  // mixed case. `rmrfInside` is the second line of defence.
+  if (!isSafeDirectoryName(name)) {
+    throw new CrewError(
+      "config_invalid",
+      `config.yaml: tap name \`${name}\` is invalid — a tap name is a single directory name and cannot contain \`/\`, \`\\\`, or \`..\``,
+      { name },
+    );
+  }
   const kind = parseKind(em["kind"]);
   const registered =
     em["registered"] === undefined || em["registered"] === null
@@ -117,4 +130,15 @@ function parseSubpath(raw: YamlValue | undefined): string {
     "config_invalid",
     "config.yaml: tap `subpath`, when present, must be a string (directory inside the repo)",
   );
+}
+
+/**
+ * True when `name` is usable as a single directory component: no path
+ * separators, no `.`/`..`, no NUL. This is the containment property the
+ * clone and delete paths depend on, and is deliberately looser than the
+ * slug `crew tap add` enforces for names it creates.
+ */
+function isSafeDirectoryName(name: string): boolean {
+  if (name === "." || name === "..") return false;
+  return !(name.includes("/") || name.includes("\\") || name.includes("\0"));
 }

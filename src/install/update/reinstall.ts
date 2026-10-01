@@ -1,11 +1,10 @@
 /**
- * Re-install an updated skill into every agent its state entry lists
- * (§10.1 step 3e).
+ * Per-agent reinstall for `crew update` (§10.1 step 3e).
  *
- * Adapters are grouped by resolved install path (§7.2 path sharing) so
- * shared-path targets install once while every adapter still reports
- * its own outcome. Per-group failures are recorded as `skipped` with
- * the error code, never thrown — update's error isolation rule.
+ * Once an entry's new commit is staged into the store, this module runs
+ * the install algorithm for every (agent, scope) pair the entry is
+ * recorded against and reports one outcome per agent. Extracted from
+ * `./entry.ts` so that file stays under the 200-line cap.
  */
 
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
@@ -13,19 +12,24 @@ import { installSkillIntoAgents } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
 import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
-import type { StoredSkill } from "../../sources/store.ts";
 import type { PerAgentUpdate } from "./types.ts";
 
-export function reinstallIntoAgents(args: {
+export interface ReinstallInput {
   readonly entry: StateEntry;
-  readonly entryCwd: string;
   readonly tap: TapConfig;
-  readonly staged: StoredSkill;
+  readonly storePath: string;
+  readonly contentHash: string;
   readonly newSha: string | null;
   readonly force: boolean;
-}): PerAgentUpdate[] {
-  const { entry, entryCwd, tap, staged, newSha, force } = args;
+  readonly entryCwd: string;
+}
+
+/** Reinstall one staged entry into every agent it is recorded against. */
+export function reinstallIntoAgents(input: ReinstallInput): PerAgentUpdate[] {
+  const { entry, entryCwd } = input;
   const perTarget: PerAgentUpdate[] = [];
+  // Group by resolved install path (§7.2 path sharing) so shared-path
+  // targets install once but every adapter reports its own outcome.
   const groups = new Map<string, AgentAdapter[]>();
   for (const targetName of entry.agents) {
     const adapter = agentByName(targetName);
@@ -38,32 +42,42 @@ export function reinstallIntoAgents(args: {
     else groups.set(dest, [adapter]);
   }
   for (const group of groups.values()) {
-    try {
-      const res = installSkillIntoAgents({
-        agents: group,
-        scope: entry.scope,
-        cwd: entryCwd,
-        storePath: staged.storePath,
-        skillName: entry.name,
-        tap,
-        tapRelativePath: entry.source.path,
-        ref: entry.ref,
-        resolvedSha: newSha,
-        contentHash: staged.contentHash,
-        force,
-      });
-      for (const a of group) {
-        perTarget.push({
-          agent: a.name,
-          kind: res.kind === "installed" ? "installed" : "up_to_date",
-        });
-      }
-    } catch (err) {
-      const ce = err as CrewError;
-      for (const a of group) {
-        perTarget.push({ agent: a.name, kind: "skipped", reason: ce.code });
-      }
-    }
+    installGroup(group, input, perTarget);
   }
   return perTarget;
+}
+
+function installGroup(
+  group: AgentAdapter[],
+  input: ReinstallInput,
+  perTarget: PerAgentUpdate[],
+): void {
+  const { entry, tap, storePath, contentHash, newSha, force, entryCwd } = input;
+  try {
+    const res = installSkillIntoAgents({
+      agents: group,
+      scope: entry.scope,
+      cwd: entryCwd,
+      storePath,
+      skillName: entry.name,
+      tap,
+      tapRelativePath: entry.source.path,
+      ref: entry.ref,
+      resolvedSha: newSha,
+      contentHash,
+      force,
+    });
+    for (const a of group) {
+      perTarget.push({
+        agent: a.name,
+        kind: res.kind === "installed" ? "installed" : "up_to_date",
+      });
+    }
+  } catch (err) {
+    // `installSkillIntoAgents` only raises `CrewError` (safety-check aborts).
+    const ce = err as CrewError;
+    for (const a of group) {
+      perTarget.push({ agent: a.name, kind: "skipped", reason: ce.code });
+    }
+  }
 }

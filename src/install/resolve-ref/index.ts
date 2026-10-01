@@ -14,21 +14,21 @@
  * Callers in an interactive path should inspect the error's
  * `candidates` detail and present a prompt; the CLI install command
  * does that before calling this module.
+ *
+ * This file owns dispatch and bare-name resolution. Qualified forms
+ * live in `./qualified.ts` and the shared index access in
+ * `./tap-index-lookup.ts`.
  */
 
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapSource } from "../../core/types.ts";
-import { safePath } from "../../util/redact.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 import { enumerateCandidates } from "../attribute-bare-name.ts";
-import { indexTap } from "../tap-index.ts";
 import { ambiguityError, flagFor } from "./errors.ts";
-import { lookupInTap, safeIndex } from "./lookup.ts";
+import { resolveThreeSegment, resolveTwoSegment } from "./qualified.ts";
+import type { KindHint, NonTapNameCandidate, TapRoots } from "./types.ts";
 
-/** Force-one-kind hint from a `--tap` / `--bundle` / `--skill` flag. */
-export type SpecificKindHint = "tap" | "namespace" | "skill";
-export type KindHint = SpecificKindHint | "non-tap" | null;
-export type NonTapNameCandidate = Exclude<NameCandidate, { readonly kind: "tap" }>;
+export type { KindHint, NonTapNameCandidate, SpecificKindHint, TapRoots } from "./types.ts";
 
 /**
  * Resolve a `TapSource` to the single candidate it refers to. See the
@@ -39,95 +39,34 @@ export function resolveTapRef(
   config: Config,
   home: string,
   kindHint: "non-tap",
+  roots?: TapRoots,
 ): NonTapNameCandidate;
 export function resolveTapRef(
   source: TapSource,
   config: Config,
   home: string,
   kindHint?: KindHint,
+  roots?: TapRoots,
 ): NameCandidate;
 export function resolveTapRef(
   source: TapSource,
   config: Config,
   home: string,
   kindHint: KindHint = null,
+  roots: TapRoots = {},
 ): NameCandidate {
   // 3-segment: <tap>/<namespace>/<skill> — always unambiguous.
   if (source.tap !== null && source.namespace !== null) {
-    return resolveThreeSegment(source, config, home);
+    return resolveThreeSegment(source, config, home, roots);
   }
 
   // 2-segment: <first>/<second>. Try tap-first, then namespace-first.
   if (source.tap !== null && source.namespace === null) {
-    return resolveTwoSegment(source, config, home);
+    return resolveTwoSegment(source, config, home, roots);
   }
 
   // Bare name.
-  return resolveBare(source.name, config, home, kindHint);
-}
-
-function resolveThreeSegment(source: TapSource, config: Config, home: string): NonTapNameCandidate {
-  const tap = config.taps.find((t) => t.name === source.tap);
-  if (!tap) {
-    throw new CrewError(
-      "invalid_ref",
-      `\`${source.tap}\` was not found in your list of taps.`,
-      { tap: source.tap },
-      "View your configured taps with `crew tap list`.",
-    );
-  }
-  const index = indexTap(tap, home);
-  const locs = index.skills.get(source.name) ?? [];
-  const match = locs.find((l) => l.namespace === source.namespace);
-  if (!match) {
-    throw new CrewError(
-      "invalid_ref",
-      `\`${source.tap}/${source.namespace}/${source.name}\` doesn't exist — no skill \`${source.name}\` found in namespace \`${source.namespace}\` of tap \`${source.tap}\``,
-      { tap: source.tap, namespace: source.namespace, name: source.name },
-    );
-  }
-  return { kind: "skill", tap, location: match };
-}
-
-function resolveTwoSegment(source: TapSource, config: Config, home: string): NonTapNameCandidate {
-  const first = source.tap!;
-  const second = source.name;
-  const tap = config.taps.find((t) => t.name === first);
-  const asTapSkill = tap ? lookupInTap(tap, home, second) : null;
-
-  // Collect namespace candidates: `<first>` is a namespace in some tap
-  // that holds a skill named `<second>`.
-  const nsCandidates: NonTapNameCandidate[] = [];
-  for (const t of config.taps) {
-    if (t === tap) continue;
-    const idx = safeIndex(t, home);
-    if (!idx) continue;
-    const nsMembers = idx.namespaces.get(first);
-    if (!nsMembers) continue;
-    const loc = nsMembers.find((m) => m.name === second);
-    if (loc) nsCandidates.push({ kind: "skill", tap: t, location: loc });
-  }
-
-  if (asTapSkill && nsCandidates.length === 0) return asTapSkill;
-  if (!asTapSkill && nsCandidates.length === 1) return nsCandidates[0]!;
-  if (asTapSkill && nsCandidates.length >= 1) {
-    // Tap-first wins when both interpretations exist. The user can
-    // force the namespaced form with a 3-segment ref.
-    return asTapSkill;
-  }
-  if (nsCandidates.length > 1) {
-    throw ambiguityError(
-      second,
-      nsCandidates,
-      `\`${first}/${second}\` is a namespaced skill in multiple taps`,
-    );
-  }
-  throw new CrewError(
-    "invalid_ref",
-    `\`${first}/${second}\` does not match any configured tap or namespace.\nNo tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
-    { first, second },
-    `Run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
-  );
+  return resolveBare(source.name, config, home, kindHint, roots);
 }
 
 function resolveBare(
@@ -135,13 +74,14 @@ function resolveBare(
   config: Config,
   home: string,
   kindHint: KindHint,
+  roots: TapRoots,
 ): NameCandidate {
-  const all = enumerateCandidates(name, config, home);
+  const all = enumerateCandidates(name, config, home, roots);
 
   if (kindHint === "non-tap") {
     const filtered = all.filter((c): c is NonTapNameCandidate => c.kind !== "tap");
     if (filtered.length === 0) {
-      const tapNames = config.taps.map((t) => safePath(t.name)).join(", ");
+      const tapNames = config.taps.map((t) => t.name).join(", ");
       throw new CrewError(
         "invalid_ref",
         `\`${name}\` isn't a skill or namespace in any configured tap (searched: ${tapNames || "<none>"})`,
@@ -166,10 +106,7 @@ function resolveBare(
   }
 
   if (all.length === 0) {
-    // Tap names are any non-empty string (§6.1), and a remedy hint is NOT
-    // sanitized by `CrewError` the way a message is — it is passed through
-    // to the renderer verbatim. Escape the names as they are joined.
-    const tapNames = config.taps.map((t) => safePath(t.name)).join(", ");
+    const tapNames = config.taps.map((t) => t.name).join(", ");
     throw new CrewError(
       "invalid_ref",
       `\`${name}\` was not found in any configured tap.`,

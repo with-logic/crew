@@ -23,12 +23,12 @@
 
 import { readConfig, writeConfig } from "../../../config/load.ts";
 import { CrewError } from "../../../core/errors.ts";
-import { tapPath } from "../../../core/paths.ts";
+import { paths, tapPath } from "../../../core/paths.ts";
 import type { StateEntry, TapConfig } from "../../../core/types.ts";
 import { withTapLocks } from "../../../sources/tap-lock.ts";
 import { readState, writeState } from "../../../state/load.ts";
 import { withStateLock } from "../../../state/lock.ts";
-import { rmrf } from "../../../util/fs.ts";
+import { rmrfInside } from "../../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
 import { removeOne, type UninstallRecord } from "../../uninstall/core.ts";
 import { dropScopedEntriesAndUpdateRequiredBy } from "../../uninstall/state.ts";
@@ -75,7 +75,7 @@ function dropTap(home: string, tap: TapConfig): void {
     const config = readConfig(home);
     writeConfig({ ...config, taps: config.taps.filter((t) => t.name !== tap.name) }, home);
     // Path taps don't own their directory; never delete it.
-    if (tap.kind === "git") rmrf(tapPath(tap.name, home));
+    if (tap.kind === "git") rmrfInside(paths(home).tapsDir, tapPath(tap.name, home));
   });
 }
 

@@ -3,29 +3,26 @@
  *
  * Given one state entry, look up its tap, acquire it, and either:
  *   - report `up_to_date` if the resolved SHA / content hash hasn't moved;
+ *   - report `skipped` if the entry is pinned and not forced;
  *   - re-stage and re-install if the SHA moved.
- *
- * With `dryRun` (§10.1.1) the SHA / content-hash comparison and skill
- * validation still run, but a moved entry reports `would_update` and
- * nothing is staged or installed.
  *
  * Tap re-expansion (additions / source_gone) lives in `tap-reexpand/index.ts`;
  * this module handles only the per-existing-entry update.
  */
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { cwdForEntry } from "../../agents/adapter.ts";
 import type { CrewError } from "../../core/errors.ts";
-import type { Config, StateEntry, StateFile } from "../../core/types.ts";
+import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { hashDirectory } from "../../hash/content.ts";
 import { loadSkill } from "../../skill/load.ts";
-import { acquireTap } from "../../sources/acquire/index.ts";
+import { type AcquiredTap, withAcquiredSkillDir } from "../../sources/acquire/index.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
-import { nowIso } from "../../util/time.ts";
+import { peekResolvedSha } from "./peek.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
+import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
 export function updateOneEntry(
@@ -68,14 +65,18 @@ export function updateOneEntry(
         bumpHardFailure: false,
       };
     }
-    const hard = ["source_unreachable", "ref_not_found", "invalid_skill"].includes(ce.code);
+    // Anything that isn't a recognised soft outcome is a hard failure.
+    // Listing the hard codes instead would exit 0 on any error this
+    // module has not enumerated — including a raw `node:fs` error that
+    // never reached a §13 code — reporting `failed` in the rows while
+    // the run claims success (§10.1, C-UPD-09).
     return {
       row: rowFor(entry, {
         kind: "failed",
         error: { code: ce.code ?? "usage_error", message: ce.message },
       }),
       updatedState: state,
-      bumpHardFailure: hard,
+      bumpHardFailure: true,
     };
   }
 }
@@ -89,7 +90,9 @@ function rowFor(entry: StateEntry, outcome: InternalOutcome): UpdateRow {
   return {
     name: entry.name,
     scope: entry.scope,
-    ...(entry.project_root === undefined ? {} : { project_root: entry.project_root }),
+    ...(entry.project_root === undefined
+      ? {}
+      : { project_root: String(entry.project_root ?? "(unknown)") }),
     outcome: publicOutcome,
   };
 }
@@ -108,8 +111,8 @@ function updateOne(
   ) {
     return { kind: "missing_project_root", root: String(entry.project_root ?? "(unknown)") };
   }
-  const entryCwd = cwdForEntry(entry, fallbackCwd);
 
+  const entryCwd = cwdForEntry(entry, fallbackCwd);
   if (entry.pinned && entry.ref !== null && /^[0-9a-f]{40}$/i.test(entry.ref) && !force) {
     return { kind: "skipped", reason: "pinned to exact SHA" };
   }
@@ -119,53 +122,68 @@ function updateOne(
     // Tap was removed from config (manually); doctor --repair can fix.
     return { kind: "tap_missing", tap: entry.source.tap };
   }
-  const acquired = acquireTap(tap, home);
+  // §10.1 step 3c: re-resolve the entry's own ref. An entry installed at
+  // a branch follows that branch (a branch is not pinned), and a forced
+  // tag update installs the tag's current commit — neither is the
+  // clone's `origin/HEAD`.
+  //
+  // Resolution happens before materialization: an up-to-date tap needs
+  // only its SHA, and exporting a large tree just to discard it is the
+  // common case on a routine `crew update`.
+  // `--force` reinstalls a pinned entry even at an unchanged SHA, so it
+  // still needs the bytes.
+  const peeked = peekResolvedSha(tap, entry.ref, home);
+  if (peeked !== null && peeked === entry.resolved_sha && !(force && entry.pinned)) {
+    return { kind: "up_to_date" };
+  }
+  // Only this entry's own subtree is read, so only it is exported —
+  // otherwise every entry sharing a whole-repo tap materializes the
+  // whole repository again (§10.1).
+  return withAcquiredSkillDir(tap, entry.ref, entry.source.path, home, (acquired, skillDir) =>
+    applyUpdate(entry, acquired, skillDir, tap, home, force, entryCwd, dryRun),
+  );
+}
+
+/** Stage and reinstall one entry from an already-acquired tree. */
+function applyUpdate(
+  entry: StateEntry,
+  acquired: AcquiredTap,
+  // Tap re-expansion has already marked missing children `source_gone`.
+  skillDir: string,
+  tap: TapConfig,
+  home: string,
+  force: boolean,
+  entryCwd: string,
+  dryRun: boolean,
+): InternalOutcome {
   const newSha = acquired.resolvedSha;
 
   if (entry.pinned && !force && newSha !== null && newSha !== entry.resolved_sha) {
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
-  // Tap re-expansion has already marked missing children `source_gone`.
-  const skillDir = join(acquired.rootDir, entry.source.path);
-
-  // Path-kind tap (no SHA): hash the source once and reuse it both for
-  // the up-to-date comparison and for the store's short id, rather than
-  // walking the same unbounded tree twice. `hashDirectory` ignores a
-  // root `.crew.json`, matching the store.
   const sourceHash = newSha === null ? hashDirectory(skillDir) : undefined;
-
-  if (newSha === entry.resolved_sha) {
+  if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
     if (newSha !== null) return { kind: "up_to_date" };
     if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
   }
 
-  // Validation runs before the dry-run return on purpose: a broken
-  // upstream version must surface as `failed` in a preview too, not be
-  // reported as a clean `would_update`.
   const loaded = loadSkill(skillDir);
   if (dryRun) return { kind: "would_update", new_sha: newSha };
   const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash);
-  const perTarget = reinstallIntoAgents({ entry, entryCwd, tap, staged, newSha, force });
+  const perTarget = reinstallIntoAgents({
+    entry,
+    tap,
+    storePath: staged.storePath,
+    contentHash: staged.contentHash,
+    newSha,
+    force,
+    entryCwd,
+  });
   return {
     kind: "updated",
     new_sha: newSha,
     content_hash: staged.contentHash,
     per_target: perTarget,
-  };
-}
-
-function rebuildStateEntry(
-  entry: StateEntry,
-  newSha: string | null,
-  contentHash: string,
-  successfulTargets: string[],
-): StateEntry {
-  return {
-    ...entry,
-    resolved_sha: newSha,
-    content_hash: contentHash,
-    agents: successfulTargets.length > 0 ? successfulTargets : entry.agents,
-    installed_at: nowIso(),
   };
 }
