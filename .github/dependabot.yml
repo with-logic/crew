@@ -23,6 +23,14 @@ updates:
 
   - package-ecosystem: "bun"
     directory: "/site"
+    # React and its renderer require matching runtime versions.
+    groups:
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
