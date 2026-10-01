@@ -39,6 +39,11 @@ export function dropScopedEntryAndUpdateRequiredBy(
 }
 
 /** An autoremovable orphan: `explicit: false` AND empty `required_by`. */
-export function findOrphan(state: StateFile): StateEntry | undefined {
-  return state.installations.find((e) => !e.explicit && e.required_by.length === 0);
+export function findOrphan(
+  state: StateFile,
+  attempted: ReadonlySet<string>,
+): StateEntry | undefined {
+  return state.installations.find(
+    (e) => !e.explicit && e.required_by.length === 0 && !attempted.has(e.name),
+  );
 }
