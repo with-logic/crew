@@ -1,6 +1,8 @@
 /**
- * `crew uninstall <name> [<name>...]` (§7.4).
+ * `crew uninstall <selector>... | --all` (§7.4).
  *
+ * Selectors name installed skills, taps, or namespaces; `--all` selects
+ * every skill at the target scope behind a confirmation.
  * Removes each skill from every agent listed in state, then updates
  * state.json. Fails with `not_installed_here` if no state entry exists,
  * unless `--force`.
@@ -29,30 +31,33 @@
  */
 
 import { ALL_AGENTS, agentByName } from "../../agents/registry.ts";
-import { readConfig, writeConfig } from "../../config/load.ts";
+import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import { tapPath } from "../../core/paths.ts";
-import type { Config, StateFile } from "../../core/types.ts";
+import type { StateFile } from "../../core/types.ts";
 import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
-import { resolveStateSubject } from "../../state/subjects.ts";
-import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
+import { allTargets, confirmAll } from "./all.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
+import { gcAutoTaps } from "./gc.ts";
 import { renderUninstall } from "./render.ts";
-import { narrowSubjectToScope } from "./scope.ts";
+import { selectedTargets } from "./select.ts";
 import { findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
-  if (ctx.positional.length === 0) {
+  const all = Boolean(ctx.flags.extras["all"]);
+  if (ctx.positional.length === 0 && !all) {
     throw new CrewError(
       "usage_error",
-      "`crew uninstall` needs at least one skill name — run `crew list` to see what's installed",
+      "`crew uninstall` needs at least one skill name — run `crew list` to see what's installed, or pass `--all` to remove everything",
     );
   }
   const prune = Boolean(ctx.flags.extras["prune"]);
   const agentFilter = validateAgentFilter(ctx.flags.agent);
+
+  // §14: confirmation precedes the lock; execution re-reads state.
+  if (all) confirmAll(ctx, readState(ctx.home));
 
   // A dry run reads state and reports; it never locks, writes, or GCs.
   const { records, exitCode } = ctx.flags.dryRun
@@ -94,23 +99,13 @@ function runUninstall(
   const records: UninstallRecord[] = [];
   let state = readState(ctx.home);
   const removedRoots: (string | null)[] = [];
-  const subjects = ctx.positional.map((raw) =>
-    narrowSubjectToScope(
-      resolveStateSubject(state, raw),
-      ctx.flags.scope,
-      ctx.cwd,
-      ctx.flags.force,
-    ),
-  );
-  for (const planned of subjects) {
-    const subject = {
-      ...planned,
-      entries: state.installations.filter((e) =>
-        planned.entries.some((p) => entryKey(p) === entryKey(e)),
-      ),
-    };
-    if (subject.entries.length === 0 && planned.entries.length > 0) continue;
+  const targets = ctx.flags.extras["all"]
+    ? allTargets(ctx, state)
+    : selectedTargets(ctx, state, readConfig(ctx.home));
+  for (const target of targets) {
+    const subject = target.subject;
     const { updatedState, rec, meta } = removeOne(state, subject, ctx, false, agentFilter);
+    if (target.kind === "collection") rec.collection = target.collection;
     state = updatedState;
     records.push(rec);
     removedRoots.push(...meta.fullyRemovedRoots);
@@ -173,22 +168,4 @@ function pruneOrphans(
     orphan = findOrphan(current, ctx.flags.scope, roots, attempted);
   }
   return current;
-}
-
-/**
- * Drop auto taps (registered: false) that no longer back any state
- * entry. Their on-disk clone is deleted. Registered taps are NEVER
- * gc'd by this — only the user's `crew tap remove` removes them.
- */
-function gcAutoTaps(state: StateFile, home: string): void {
-  const config: Config = readConfig(home);
-  const inUse = new Set(state.installations.map((e) => e.source.tap));
-  const survivors = config.taps.filter((t) => t.registered || inUse.has(t.name));
-  if (survivors.length === config.taps.length) return; // nothing to gc
-  const removed = config.taps.filter((t) => !survivors.includes(t));
-  writeConfig({ ...config, taps: survivors }, home);
-  for (const tap of removed) {
-    if (tap.kind === "git") rmrf(tapPath(tap.name, home));
-    // Path taps own no clone dir; nothing to delete.
-  }
 }

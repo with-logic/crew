@@ -8,7 +8,7 @@
  */
 
 import type { StateEntry, StateFile } from "../../core/types.ts";
-import { type CollectionSubject, entryIdentity } from "../../state/collections.ts";
+import { type CollectionSubject, entryIdentity } from "../../state/collections/index.ts";
 
 export interface DependencyClosure {
   readonly selectedNames: ReadonlySet<string>;

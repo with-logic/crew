@@ -4,7 +4,7 @@
  * The command entry point orchestrates refresh/re-expand/update work;
  * this module owns installed-subject and dependency-closure selection
  * so the command file stays small. Subjects may be single skills or
- * collections (tap / namespace, see `state/collections.ts`); a collection
+ * collections (tap / namespace, see `state/collections/index.ts`); a collection
  * simply contributes every entry it expanded to.
  */
 
@@ -16,7 +16,7 @@ import {
   type CollectionSubject,
   entryIdentity,
   refreshCollectionSubjects,
-} from "../../state/collections.ts";
+} from "../../state/collections/index.ts";
 import { dependencyClosureFor, orderedEntries } from "./dep-closure.ts";
 
 /** Expanded update set + per-entry "who pulled you in" map. */

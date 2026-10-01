@@ -12,9 +12,10 @@ import { agentByName } from "../../agents/registry.ts";
 import { uninstallSkillFromAgents } from "../../agents/uninstall.ts";
 import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
+import type { CollectionKind } from "../../state/collections/index.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
-import { dropInstallLocation, reduceEntryAgents } from "./state.ts";
+import { dropScopedEntriesAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
 
 /** What a removal reports regardless of outcome. */
 interface UninstallRecordBase {
@@ -24,6 +25,7 @@ interface UninstallRecordBase {
   failures: { agent: string; error: { code: string; message: string } }[];
   /** True if the removal was driven by `--prune`, not by a direct command-line arg. */
   pruned?: boolean;
+  collection?: { readonly kind: CollectionKind; readonly name: string };
 }
 
 /**
@@ -82,6 +84,7 @@ export function removeOne(
   // a different subset of agents.
   let nextState = state;
   const retained = new Set<string>();
+  const fullyRemoved: StateEntry[] = [];
   for (const entry of entries) {
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
@@ -99,9 +102,10 @@ export function removeOne(
       for (const a of remainingAgents) retained.add(a);
     } else {
       meta.fullyRemovedRoots.push(entry.project_root ?? null);
-      nextState = dropInstallLocation(nextState, entry);
+      fullyRemoved.push(entry);
     }
   }
+  nextState = dropScopedEntriesAndUpdateRequiredBy(nextState, fullyRemoved);
   if (retained.size > 0) {
     Object.assign(rec, { partial: true, remainingAgents: [...retained].sort() });
   }

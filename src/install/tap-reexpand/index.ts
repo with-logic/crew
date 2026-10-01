@@ -24,7 +24,7 @@
 
 import type { CrewError } from "../../core/errors.ts";
 import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
-import { entryIdentity } from "../../state/collections.ts";
+import { entryIdentity } from "../../state/collections/index.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { groupChildrenByName } from "../tap-children.ts";
