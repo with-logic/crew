@@ -7,9 +7,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { runCli } from "../../src/cli/main.ts";
+import { paths } from "../../src/core/paths.ts";
 import type { Scope, StateEntry } from "../../src/core/types.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
@@ -139,5 +141,15 @@ describe("crew list --scope", () => {
     const out = listHuman(home);
     expect(out).toContain("get started");
     expect(listJson(home).scope).toBeNull();
+  });
+  test("C-STATE-11 list preserves visibility of malformed persisted project roots", () => {
+    const home = makeCrewHome();
+    seed(home);
+    const file = paths(home).stateFile;
+    const state = JSON.parse(readFileSync(file, "utf8"));
+    state.installations.find((entry: StateEntry) => entry.scope === "project").project_root = 42;
+    writeFileSync(file, JSON.stringify(state));
+    expect(listHuman(home, "--scope", "project")).toContain("demo in 42");
+    expect(listJson(home).installations.length).toBe(3);
   });
 });

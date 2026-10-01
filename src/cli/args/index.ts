@@ -3,13 +3,15 @@
  * underlies the full `yargs` library, re-exported as `yargs/yargs`).
  *
  * We use yargs just as a parser, not as a full CLI engine — see
- * `./tables.ts` for the shared configuration and the flag tables.
+ * `./tables.ts` for the shared configuration and the flag tables, and
+ * `./conventional-flags.ts` for the §5.5 `--help`/`--version` rewrite.
  * `.strictOptions()` here makes unknown flags a parse failure we map to
  * `usage_error` (exit 4 per §13).
  */
 
 import type { CommandFlags } from "../../commands/types.ts";
 import { CrewError } from "../../core/errors.ts";
+import { rewriteConventionalFlags } from "./conventional-flags.ts";
 import {
   ARRAY_GLOBALS,
   BOOLEAN_GLOBALS,
@@ -30,7 +32,8 @@ export interface ParsedArgs {
 }
 
 /** Parse raw argv (already stripped of `node` and script name). */
-export function parseArgs(argv: readonly string[]): ParsedArgs {
+export function parseArgs(rawArgv: readonly string[]): ParsedArgs {
+  const argv = rewriteConventionalFlags(rawArgv);
   // Bare `crew` with no arguments: route to `help` so the user sees an
   // overview and examples rather than a "usage_error".
   const effective = argv.length === 0 ? (["help"] as readonly string[]) : argv;

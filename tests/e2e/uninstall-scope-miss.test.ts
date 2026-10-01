@@ -134,7 +134,7 @@ describe("the remedy command survives awkward project paths", () => {
     const home = makeCrewHome();
     // `state.json` is user-editable and may predate `project_root`.
     // §11.1 requires it on a project entry; an entry without one cannot
-    // produce a runnable remedy, so `readState` drops it.
+    // produce a runnable remedy, so its root is never advertised.
     writeFileSync(
       join(home, "state.json"),
       JSON.stringify({
