@@ -12,6 +12,28 @@ import { tapWithUrl } from "./verbose/helpers.ts";
 const SECRET = "PR113_PRIVATE_CREDENTIAL";
 
 describe("credential query values never reach CLI output", () => {
+  test.each([false, true])("C-REF-28 tap collision masks client_secret (json=%s)", (json) => {
+    const home = makeCrewHome();
+    tapWithUrl(home, "https://host/existing/repo.git");
+    const capture = captureStreams();
+    expect(
+      runCli(
+        [
+          "tap",
+          "add",
+          `https://host/other/repo.git?client_secret=${SECRET}`,
+          "creds",
+          ...(json ? ["--json"] : []),
+        ],
+        { home, streams: capture.streams },
+      ),
+    ).toBe(4);
+    const output = capture.stdout() + capture.stderr();
+    expect(output).not.toContain(SECRET);
+    expect(output).toContain("client_secret=***");
+    if (json) expect(JSON.parse(capture.stdout()).error.name).toBe("usage_error");
+  });
+
   test.each([false, true])("C-TAP-26 tap refresh dry-run masks credentials (json=%s)", (json) => {
     const home = makeCrewHome();
     tapWithUrl(home, `https://user:${SECRET}@host/repo.git?client_secret=${SECRET}&sig=${SECRET}`);
