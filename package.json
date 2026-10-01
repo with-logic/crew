@@ -37,7 +37,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "js-yaml": "^5.2.0",
+    "js-yaml": "^5.4.2",
     "proper-lockfile": "^4.1.2",
     "yargs": "^18.0.0"
   }
