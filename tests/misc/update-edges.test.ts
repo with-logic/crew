@@ -123,7 +123,7 @@ describe("update edge cases", () => {
 
     expect(code).toBe(1);
     expect(c.stdout()).toContain("failed");
-    expect(c.stdout()).toContain("source unreachable");
+    expect(c.stdout()).toContain("source_unreachable");
   });
 
   test("skill removed from tap upstream → source_gone", () => {
