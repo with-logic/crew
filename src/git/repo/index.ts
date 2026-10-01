@@ -5,7 +5,9 @@
  *
  * Every external operation translates `GitProcessError` into crew's
  * `source_unreachable` / `ref_not_found` errors with appropriate exit
- * codes, so callers just catch `CrewError` and report.
+ * codes, so callers just catch `CrewError` and report. Git's stderr is
+ * quoted into those messages and can repeat a credential-bearing
+ * remote, so it passes through `displayText` first (§5.2).
  *
  * Network policy (§16.4): read-only commands (`crew search`, bare-name
  * `crew install`) call `ensureClone` — clones a missing tap the first
@@ -16,6 +18,7 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
+import { displayText, displayUrl } from "../../refs/display-url.ts";
 import { exists, isDirectory } from "../../util/fs.ts";
 import { type GitProcessError, runGit } from "../exec.ts";
 
@@ -28,10 +31,12 @@ export function cloneRepo(url: string, dest: string, full: boolean = false): voi
     // `runGit` only ever throws `GitProcessError`, so this narrow is
     // safe. Translate to the user-facing error category.
     const ge = err as GitProcessError;
+    // Git's stderr repeats the remote verbatim, so it needs `displayText`
+    // (prose with a URL inside) as much as the interpolation needs `displayUrl`.
     throw new CrewError(
       "source_unreachable",
-      `couldn't clone \`${url}\` — ${ge.result.stderr.trim()}`,
-      { url },
+      `couldn't clone \`${displayUrl(url)}\` — ${displayText(ge.result.stderr.trim())}`,
+      { url: displayUrl(url) },
     );
   }
 }
@@ -71,9 +76,10 @@ export function fetchAndCheckout(dest: string): void {
     runGit(["fetch", "--tags", "--prune", "origin"], { cwd: dest });
   } catch (err) {
     const ge = err as GitProcessError;
+    // Fetch stderr names the remote, so it can carry credentials too.
     throw new CrewError(
       "source_unreachable",
-      `git fetch failed for the clone at \`${dest}\` — ${ge.result.stderr.trim()}`,
+      `git fetch failed for the clone at \`${dest}\` — ${displayText(ge.result.stderr.trim())}`,
       { dest },
     );
   }
