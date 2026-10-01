@@ -34,7 +34,6 @@ describe("flag guards", () => {
     // Yargs collapses a repeated boolean to `true`, leaving no trace in
     // the parsed result — so only raw argv can witness these.
     for (const argv of [
-      ["install", "--json", "--json", "foo"],
       ["install", "--force", "--force", "foo"],
       ["install", "--recursive", "--recursive", "foo"],
     ]) {
@@ -43,6 +42,14 @@ describe("flag guards", () => {
       expect(code).toBe(4);
       expect(capture.stderr()).toContain("more than once");
     }
+    // A repeated `--json` is still a `--json` run, so the parse-stage
+    // error honors it (C-CLI-08c): structured payload on stdout.
+    const capture = captureStreams();
+    expect(runCli(["install", "--json", "--json", "foo"], { home, streams: capture.streams })).toBe(
+      4,
+    );
+    expect(capture.stderr()).toBe("");
+    expect(JSON.parse(capture.stdout()).error.message).toContain("more than once");
   });
 
   test("C-CLI-08a a repeated single-value flag is a usage_error", () => {

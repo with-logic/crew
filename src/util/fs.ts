@@ -38,10 +38,62 @@ export function readText(path: string): string {
   return readFileSync(path, "utf8");
 }
 
-/** Write a file as UTF-8, creating parents as needed. */
+/**
+ * Mode for a crew-written file that did not exist before: owner-only.
+ *
+ * `config.yaml` can hold clone URLs carrying credentials, and `state.json`
+ * records every install location, so neither belongs in a world-readable
+ * file by default. The umask would otherwise decide, which on a typical
+ * host means `0644`.
+ */
+const NEW_FILE_MODE = 0o600;
+
+/**
+ * Write a file as UTF-8, creating parents as needed.
+ *
+ * Published atomically: the bytes land in a sibling temp file which is
+ * then renamed over `path`. Readers take no lock (§14 — read-only
+ * commands never lock), so a plain in-place write would let a concurrent
+ * `crew list` observe a truncated `config.yaml` and fail `config_invalid`.
+ * `renameSync` within one directory is atomic on POSIX and Windows, so a
+ * reader sees either the old file or the new one, never a partial one.
+ *
+ * Rename replaces the inode, so the temp file's permissions become the
+ * published file's. An existing target's mode is therefore carried over
+ * explicitly — without that, a `0600` config silently widens to whatever
+ * the umask allows on its next write. A file crew is creating for the
+ * first time gets `NEW_FILE_MODE`.
+ */
 export function writeText(path: string, contents: string): void {
   ensureDir(dirname(path));
-  writeFileSync(path, contents, { encoding: "utf8" });
+  // The suffix keeps the temp name out of any directory listing crew
+  // treats as meaningful (a skill dir, a tap root) if we crash mid-write.
+  const tmp = `${path}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    writeFileSync(tmp, contents, { encoding: "utf8", mode: modeFor(path) });
+    renameSync(tmp, path);
+  } catch (err) {
+    // The temp file can hold whatever the caller was writing — config.yaml
+    // carries credential-bearing clone URLs — so a failed write or rename
+    // must not leave it behind. Cleanup failure is swallowed deliberately:
+    // the original error is what the user needs, and masking it with an
+    // unlink error would hide the real cause.
+    try {
+      rmSync(tmp, { force: true });
+    } catch {
+      // Nothing useful to do; rethrowing the original below.
+    }
+    throw err;
+  }
+}
+
+/** The existing file's permission bits, or `NEW_FILE_MODE` if it is new. */
+function modeFor(path: string): number {
+  try {
+    return statSync(path).mode & 0o777;
+  } catch {
+    return NEW_FILE_MODE;
+  }
 }
 
 /** Recursively remove a path if it exists. No-op if missing. */

@@ -10,6 +10,9 @@
  * one place that touches the subprocess boundary.
  */
 
+import { progress } from "../util/progress.ts";
+import { safeArgs, safePath } from "../util/redact.ts";
+
 /** Result of running a git command. */
 export interface GitResult {
   readonly stdout: string;
@@ -34,6 +37,10 @@ let runner: GitRunner = defaultRunner;
 
 /** Run `git` with the given args. */
 export function runGit(args: readonly string[], options: GitRunOptions = {}): GitResult {
+  // Argv can carry a clone URL with credentials, so it never reaches
+  // the sink unredacted (see `util/redact.ts`).
+  const rendered = safeArgs(args);
+  progress(options.cwd ? `$ git ${rendered}  (in ${safePath(options.cwd)})` : `$ git ${rendered}`);
   const result = runner(args, options);
   if (result.exitCode !== 0 && options.throwOnError !== false) {
     const stderr = result.stderr.trim();
@@ -62,9 +69,24 @@ export function setGitRunner(next: GitRunner): GitRunner {
   return prev;
 }
 
-/** Reset the git runner to the default (real subprocess). */
+/**
+ * What `resetGitRunner` restores. Normally the real subprocess runner;
+ * the test preload swaps in a wrapper so that a stub installed by one
+ * test and reset in its `afterEach` doesn't discard the suite-wide
+ * network tripwire (`tests/helpers/no-network.ts`).
+ */
+let baseRunner: GitRunner = defaultRunner;
+
+/** Replace the runner that `resetGitRunner` restores. Returns the previous base. */
+export function setBaseGitRunner(next: GitRunner): GitRunner {
+  const prev = baseRunner;
+  baseRunner = next;
+  return prev;
+}
+
+/** Reset the git runner to the base (real subprocess unless overridden). */
 export function resetGitRunner(): void {
-  runner = defaultRunner;
+  runner = baseRunner;
 }
 
 /** The real runner: invokes `git` via `Bun.spawnSync`. */
