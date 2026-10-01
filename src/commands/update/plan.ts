@@ -63,7 +63,7 @@ export function planUpdate(
   const current = readState(home);
 
   // Dep-closure expansion — may add more entries, but they all live in
-  // state already (we never install new skills during update).
+  // state already (re-expansion separately installs new tap children).
   const subjects = resolveCollectionSubjects(current, config, rawNames);
   const { entries: initialSelected, transitiveSources } = chooseEntries(current, subjects);
 

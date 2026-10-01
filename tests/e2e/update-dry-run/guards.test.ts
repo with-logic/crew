@@ -80,6 +80,29 @@ describe("crew update --dry-run guarantees", () => {
     expect(existsSync(join(ccRoot, "bad"))).toBe(false);
   });
 
+  test("C-UPD-18c an installed skill becoming invalid fails without writing", () => {
+    const home = makeCrewHome();
+    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
+    const repo = makeTempDir("crew-dry-invalid-existing-");
+    makeGitRepo(repo);
+    makeSkill(repo, "alpha", skillFrontmatter({ name: "alpha" }));
+    commitAll(repo, "v1");
+    expect(runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams })).toBe(
+      0,
+    );
+    const before = snapshotInstalledState(home);
+    makeSkill(repo, "alpha", "name: alpha");
+    commitAll(repo, "invalid upstream");
+    const c = captureStreams();
+    expect(runCli(["update", "--dry-run", "--json"], { home, streams: c.streams })).toBe(1);
+    const parsed = JSON.parse(c.stdout()) as UpdateJson;
+    expect(parsed.rows[0]!.outcome).toMatchObject({
+      kind: "failed",
+      error: { code: "invalid_skill" },
+    });
+    expect(snapshotInstalledState(home)).toEqual(before);
+  });
+
   test("C-UPD-18b --force --dry-run previews a pinned skill without writing", () => {
     const home = makeCrewHome();
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });

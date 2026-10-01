@@ -41,13 +41,17 @@ export function overview(): CommandOutput {
     }
     lines.push("");
   }
+  lines.push("GLOBAL FLAGS");
+  lines.push("  --json      Machine-readable output.     --quiet    Only print errors.");
+  lines.push("  --verbose   Show git/file steps on stderr.  --dry-run  Preview, change nothing.");
+  lines.push("");
   lines.push("ENVIRONMENT");
   lines.push("  CREW_HOME             Where crew stores its data. Defaults to ~/.crew.");
   lines.push(
     "  CREW_NO_UPDATE_CHECK  Set to 1 to silence the new-version notice (also off on CI).",
   );
   lines.push("");
-  lines.push("Run `crew help <command>` for details and examples on any command.");
+  lines.push("Run `crew help <command>` (or `crew <command> --help`) for details and examples.");
   lines.push("About Agent Skills: https://agentskills.io/specification");
   return {
     exitCode: 0,

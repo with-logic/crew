@@ -17,6 +17,8 @@
 import { crewHome, paths } from "../core/paths.ts";
 import type { StateEntry, StateFile } from "../core/types.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
+import { entryKey } from "./identity.ts";
+import { isStateEntry } from "./validation.ts";
 
 /** Read state.json or return an empty state file. */
 export function readState(home: string = crewHome()): StateFile {
@@ -30,7 +32,8 @@ export function readState(home: string = crewHome()): StateFile {
   if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.installations)) {
     return { schema_version: 1, installations: [] };
   }
-  return { schema_version: 1, installations: parsed.installations as StateEntry[] };
+  const installations = parsed.installations.filter(isStateEntry);
+  return { schema_version: 1, installations };
 }
 
 /** Write state.json, replacing whatever was there. */
@@ -62,10 +65,10 @@ export function removeByName(state: StateFile, name: string): StateFile {
   return { schema_version: 1, installations: state.installations.filter((e) => e.name !== name) };
 }
 
-/** Remove a specific (name, scope) entry. */
-export function removeEntry(state: StateFile, name: string, scope: StateEntry["scope"]): StateFile {
+/** Remove one complete install identity (§11.1). */
+export function removeEntry(state: StateFile, entry: StateEntry): StateFile {
   return {
     schema_version: 1,
-    installations: state.installations.filter((e) => !(e.name === name && e.scope === scope)),
+    installations: state.installations.filter((e) => entryKey(e) !== entryKey(entry)),
   };
 }
