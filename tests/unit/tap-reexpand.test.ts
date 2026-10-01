@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync } from "node:fs";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../src/core/types.ts";
-import { reexpandTaps } from "../../src/install/tap-reexpand.ts";
+import { reexpandTaps } from "../../src/install/tap-reexpand/index.ts";
 import { makeCrewHome } from "../helpers/env.ts";
 import { makeTempDir } from "../helpers/fixtures.ts";
 

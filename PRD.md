@@ -147,10 +147,10 @@ Accepted on any command where they apply:
 
 - `--scope {user,project}` — default `user`.
 - `--agent <name>` (repeatable) — restrict the operation to the named agents.
-- `--dry-run` — describe what would happen without changing anything.
+- `--dry-run` — describe what would happen without changing any installed state: no skill, marker, store entry, config, or `state.json` is written. A command MAY still refresh its own read caches where that is how it learns what would change (`crew update --dry-run` fetches tap clones — §10.1.1); any such exception MUST be stated in that command's section.
 - `--json` — emit machine-readable output. Required on `list`, `search`, `info`, `agents`, `autoupdate status`. Optional on all other commands; when provided, humans-readable output is suppressed and a structured result is emitted.
 - `--quiet` — suppress non-error output. Error output still goes to stderr.
-- `--verbose` — emit progress details to stderr.
+- `--verbose` — emit progress details to stderr: every `git` (and scheduler) subprocess invocation, tap clone/fetch, store staging, and per-agent install/uninstall step, one line each. Lines go to stderr only, so `--verbose --json` still leaves a clean JSON payload on stdout. Without the flag, none of these lines are emitted. Credentials MUST NOT appear in this output: a URL's password, an `https://<token>@host/…` userinfo token, and the value of a sensitive query parameter (`token`, `access_token`, `private_token`, `api_key`, `apikey`, `password`) are each replaced with `***`. SSH userinfo (`git@host`) is a username, not a secret, and is preserved. Control characters in any echoed value are escaped so crafted input cannot forge or reposition output — including a newline, which would otherwise open its own line and forge what reads as a second message; only line breaks an implementation composes itself as layout are preserved. The same redaction applies wherever a source URL can appear in a user-visible error, through every channel: the rendered message, any diagnostic quoted from `git` (which repeats the remote verbatim), and the `details` object of a `--json` error payload. Error `details` keys remain stable per §13; only their values are redacted.
 - `--yes` — answer "yes" to any confirmation prompt.
 - `--force` — override safety checks as defined in §7 and §10. Never overrides spec validation failures or two-skills-same-name conflicts.
 
@@ -349,6 +349,9 @@ With `--json`, help MUST emit a structured payload:
 │   └── <tap-name>/
 ├── cache/               # ephemeral git clones of ad-hoc git sources
 │   └── git/<host>/<owner>/<repo>@<ref>/
+├── locks/               # per-tap clone locks (see §14)
+│   └── tap-<hash>
+
 ├── store/               # content-addressed canonical skill copies
 │   └── <skill-name>@<short-sha>/
 ├── logs/
@@ -358,7 +361,7 @@ With `--json`, help MUST emit a structured payload:
         └── Info.plist
 ```
 
-All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
+All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable. `locks/` holds coordination lockfiles and MUST NOT live under `cache/`: `crew cache clean` deletes that tree wholesale, which would remove a lock another process is actively holding. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
 
 ### 6.1 `config.yaml` schema
 
@@ -1000,12 +1003,18 @@ On every `crew update` run, for each group of state entries sharing
    entries pointed at their previous source path, and the update run
    exits 1.
 2. For each child that is **not** already in state (a skill the
-   maintainer added upstream since the user's last update): runs the
-   install algorithm (§7.3) for every agent in the current agent
-   set, at the scope of the originating install, with `explicit: true`,
-   `tracks_tap: true`, and `source.tap` pointing at this tap. This is
-   how `crew install @with-logic/skills` + autoupdate picks up new
-   skills as the team adds them, with no follow-up `crew install`.
+   maintainer added upstream since the user's last update): validates
+   it against §9 step 4 and then runs the install algorithm (§7.3) for
+   every agent in the current agent set, at the scope of the
+   originating install, with `explicit: true`, `tracks_tap: true`, and
+   `source.tap` pointing at this tap. This is how `crew install
+   @with-logic/skills` + autoupdate picks up new skills as the team
+   adds them, with no follow-up `crew install`.
+   Child discovery reads only the declared `name`, so validation here
+   is mandatory: a child whose frontmatter is invalid (missing
+   `description`, over-long fields, …) MUST be reported as a per-child
+   failure carrying `invalid_skill` and MUST NOT be installed, in both
+   real and `--dry-run` runs. The run exits 1.
 3. For each skill in state attributed to this tap whose directory is
    **no longer present** under the resolved root: reports `source_gone`
    and leaves the local install untouched (per the upstream-deletion
@@ -1029,9 +1038,41 @@ tap re-expansion is automatic. The expected flow: a user runs
 enables autoupdate; as the team adds skills, they appear in the
 user's agents on the next autoupdate tick without further action.
 
-**`--dry-run` on update** reports tap additions and deletions
-separately from per-skill updates so users can preview what
-autoupdate would do.
+**`--dry-run` on update.** `crew update --dry-run` is a preview of
+what a real run would do. Step 1 of §10.1 (tap fetch) still runs —
+refreshing local tap clones is how crew learns what changed upstream,
+and clones are not user-visible install state. Everything after that
+is read-only:
+
+- A per-skill row whose SHA (or, for path-kind taps, content hash) has
+  moved is reported with outcome `would_update` carrying the `new_sha`
+  a real run would install. The skill is still validated, so a broken
+  upstream version still surfaces as `failed`.
+- A newly-added tap child is reported with kind `would_add` instead of
+  being installed.
+- `up_to_date`, `skipped`, `source_gone`, `missing_project_root`, and
+  `failed` rows are reported exactly as a real run would.
+- Nothing is staged into the store, no agent directory is written, no
+  marker is touched, `state.json` is not written, and the store is not
+  garbage-collected.
+- The state lock (§14) is NOT acquired. Acquiring it creates
+  `state.json` when absent, which would itself be a write; §14 reserves
+  the lock for commands that modify state.
+- Per-tap clone locks (§14) ARE acquired, because a dry run still
+  fetches and so still mutates a shared clone.
+
+A dry run writes exactly two things: the refreshed tap clones under
+`taps/`, and the transient lockfiles under `locks/` that guard them for
+the duration of the run. It writes no `state.json`, no store entry, and
+no installed skill or marker. User-facing descriptions of the flag MUST
+NOT claim it writes nothing at all; they state that collections still
+refresh while nothing installed changes.
+
+Human output tags the header with `(dry run)` and renders the pending
+rows as "would update" / "would add". `--json` output includes
+`dry_run: true` and uses the `would_update` / `would_add` kinds so
+scripts can tell a preview from a real run. `--force --dry-run`
+previews pinned skills as `would_update` instead of `skipped`.
 
 ### 10.2 `crew autoupdate`
 
@@ -1505,7 +1546,7 @@ Every error below has a stable machine-readable name (for `--json` output) and a
 | `not_installed_here` | 6 | Uninstall agent has no marker. |
 | `no_agents` | 4 | No agent tools detected or all disabled. |
 | `config_invalid` | 4 | `config.yaml` did not parse. |
-| `state_locked` | 7 | Could not acquire `state.json.lock` within timeout. |
+| `state_locked` | 7 | Could not acquire a coordination lock within the timeout — either the state lock (`state.json.lock`) or a per-tap clone lock (§14). |
 | `autoupdate_failure` | 8 | Autoupdate enable/disable couldn't load/unload the platform scheduler. |
 | `self_update_unavailable` | 5 | `crew self-update` couldn't reach the release feed, the asset is missing for the current arch, or the named `--version` doesn't exist. |
 | `self_update_failed` | 8 | `crew self-update` fetched a new binary but couldn't replace the running one (e.g. the install prefix isn't writable). |
@@ -1548,7 +1589,10 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
 1. Every command that writes `state.json` or installs into an agent acquires an advisory lock on `~/.crew/state.json.lock` (using `flock(2)` or an equivalent platform file-lock primitive) before making changes. Read-only commands do not take the lock.
 2. Lock timeout: 30 seconds. If not acquired, exit with `state_locked` (§13).
 3. The lock is held for the full duration of file-modifying operations and released on exit, including crashes (OS-level file locks release on fd close).
-4. Git clone/fetch against a single repo is serialized under the state lock. This is not the most parallel design but is simple and adequate for a desktop tool.
+4. A tap's clone is shared mutable state: fetching fast-forwards its working tree while other work resolves SHAs from it and copies bytes out of it. Every command that reads or refreshes tap clones therefore holds a **per-tap advisory lock** for the whole span in which it depends on that clone's contents — from refresh through source read and staging. Without this, one run can check out a different commit in the window between another run resolving a SHA and reading that SHA's bytes, so state would record one commit for another's content.
+   - Locks are acquired in a deterministic order (sorted tap name) so two runs touching the same taps cannot deadlock, and use the same 30 s timeout and `state_locked` failure as the state lock.
+   - This applies to read-only previews too: `crew update --dry-run` does not take the state lock (§10.1.1) but DOES take clone locks, because it still fetches.
+   - The state lock and clone locks are separate. A command that takes both acquires the state lock first.
 
 ## 15. Exit codes
 
@@ -1977,7 +2021,12 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). |
 | C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
 | C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`, its clone deleted. Registered taps are NOT garbage-collected by uninstall. |
-| C-UPD-18 | §10.1.1 | `crew update --dry-run` on a tap with pending additions lists those additions without installing anything. |
+| C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps — the one thing it does change — then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, store entries, and state are byte-identical before and after; `--json` carries `dry_run: true`. |
+| C-UPD-18a | §10.1.1, §14 | `crew update --dry-run` against a home with no `state.json` leaves it absent: the state lock is never acquired, so neither the state file nor its lock is created. |
+| C-UPD-18b | §10.1.1 | `--force --dry-run` previews a pinned skill whose upstream moved as `would_update` (rather than `skipped`) and still writes nothing. |
+| C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. |
+| C-UPD-18d | §10.1.1, §14 | `crew update` holds a per-tap clone lock spanning refresh through source read, in both real and `--dry-run` runs, so a concurrent run cannot change the clone's checked-out commit between SHA resolution and byte read. A run blocked past the timeout exits `state_locked`. |
+| C-UPD-18e | §10.1.1 | A newly-discovered child that fails validation is named in human output along with its error code and message, and is counted as a failure in the run totals. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
 | C-UPD-23 | §10.1 / §16.6 | `crew update <selector>...` restricts fetching to taps that back the selected entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
 | C-UPD-24 | §10.1 | `crew update <selector>...` includes each selected entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the selected entries, marked as transitively required in `--json` output. |
@@ -2141,6 +2190,8 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-04 | §5.1 | `crew version` prints a version string and exits 0. |
 | C-CLI-05 | §5.2 | `--json` on `list`, `search`, `info`, `agents`, `autoupdate status` produces valid JSON on stdout and no human-readable noise. |
 | C-CLI-06 | §5.2 | `--quiet` suppresses non-error stdout. Error output still reaches stderr. |
+| C-CLI-06a | §5.2 | `--verbose` emits progress lines (git invocations, store staging, per-agent install paths) on stderr and nothing extra on stdout; without the flag those lines are absent, including on the run after a failed `--verbose` run. |
+| C-CLI-06b | §5.2 | `--verbose` output redacts credentials: a URL password, an `https://<token>@host` userinfo token, and sensitive query-parameter values are replaced with `***`, while SSH usernames are preserved. Control characters in echoed values are escaped, newlines included, so an interpolated value cannot forge a second message line. The same redaction applies to source URLs in user-visible errors through every channel: the rendered message, diagnostics quoted from `git`, and the `details` object of a `--json` error payload. |
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
 | C-CLI-08a | §5.2 | A non-repeatable flag passed more than once is a `usage_error` (exit 4) naming the flag — boolean (`--json --json`) as well as value (`--scope user --scope project`); the repeatable `--agent` collects every occurrence. |
