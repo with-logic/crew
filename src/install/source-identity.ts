@@ -27,9 +27,9 @@ import type { StateSource, TapConfig } from "../core/types.ts";
 
 /** A source location, canonicalized for comparison. */
 export interface SourceIdentity {
-  /** Canonical repo URL (git taps) or absolute directory (path taps). */
+  /** Canonical repo URL (git taps) or the local-path discriminator. */
   readonly root: string;
-  /** POSIX location inside that root. Empty when the root is the skill. */
+  /** Repository-relative POSIX path, or the absolute directory for path taps. */
   readonly location: string;
 }
 

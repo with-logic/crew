@@ -8,7 +8,6 @@
  */
 
 import { join } from "node:path";
-import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { captureStreams } from "../../helpers/env.ts";
 import {
@@ -18,31 +17,6 @@ import {
   makeTempDir,
   skillFrontmatter,
 } from "../../helpers/fixtures.ts";
-
-/** Adapter redirection shared by every suite here. */
-export interface AdapterRedirect {
-  root: string;
-  restore: () => void;
-}
-
-/**
- * Point Claude Code at a temp root and mark it detected. Returns the
- * root plus the restore function each suite calls in `afterEach`.
- */
-export function redirectClaudeCode(): AdapterRedirect {
-  const root = makeTempDir("crew-cc-");
-  const user = claudeCodeAdapter.userPath;
-  const detect = claudeCodeAdapter.detect;
-  (claudeCodeAdapter as { userPath: () => string }).userPath = () => root;
-  (claudeCodeAdapter as { detect: () => boolean }).detect = () => true;
-  return {
-    root,
-    restore: () => {
-      (claudeCodeAdapter as { userPath: () => string }).userPath = user;
-      (claudeCodeAdapter as { detect: () => boolean }).detect = detect;
-    },
-  };
-}
 
 /** A repo whose skills live under `skills/`. */
 export function buildRepo(names: readonly string[]): string {

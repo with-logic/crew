@@ -20,7 +20,7 @@ export function parseTapEntry(entry: YamlValue): TapConfig {
     throw new CrewError("config_invalid", "config.yaml: each tap needs a non-empty `name`");
   }
   // A tap name may identify a legacy directory under `~/.crew/taps/`, so a name
-  // carrying `..` or a path separator would aim crew's clone and delete
+  // equal to `.`/`..` or containing a separator would aim clone and delete
   // paths outside the tree it owns. Reject exactly that, rather than the
   // full slug pattern `crew tap add` applies: auto-tap names are derived
   // from directory basenames and existing configs legitimately hold
@@ -28,7 +28,7 @@ export function parseTapEntry(entry: YamlValue): TapConfig {
   if (!isSafeDirectoryName(name)) {
     throw new CrewError(
       "config_invalid",
-      `config.yaml: tap name \`${name}\` is invalid — a tap name is a single directory name and cannot contain \`/\`, \`\\\`, or \`..\``,
+      `config.yaml: tap name \`${name}\` is invalid — a tap name is a single directory name and cannot equal \`.\` or \`..\` or contain \`/\`, \`\\\`, or NUL`,
       { name },
     );
   }

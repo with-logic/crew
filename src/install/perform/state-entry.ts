@@ -47,15 +47,14 @@ export function buildStateEntry(
   const mergedAgents = [
     ...new Set<string>([...(existing?.agents ?? []), ...successfulAgents]),
   ].sort();
-  // A pinned source outranks the incoming tap: re-attribution already
-  // refused this move as a narrowing, so the install must not perform it
-  // anyway (§5.4, §10.1.1).
-  const pinnedSource = options.keepSource?.find(
+  // A refused attribution move stays refused on the write path too
+  // (§5.4, §10.1.1).
+  const retainedSource = options.keepSource?.find(
     (k) => k.name === skill.name && k.scope === scope && k.projectRoot === incomingProjectRoot,
   );
   return {
     name: skill.name,
-    source: pinnedSource?.source ?? { tap: skill.tap.name, path: skill.tapRelativePath },
+    source: retainedSource?.source ?? { tap: skill.tap.name, path: skill.tapRelativePath },
     ref: skill.ref,
     resolved_sha: skill.resolvedSha,
     content_hash: skill.contentHash,
