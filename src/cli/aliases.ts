@@ -22,6 +22,7 @@ export type CanonicalCommand =
   | "install"
   | "uninstall"
   | "update"
+  | "outdated"
   | "list"
   | "search"
   | "info"

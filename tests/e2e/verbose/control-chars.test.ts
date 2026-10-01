@@ -96,7 +96,7 @@ describe("--verbose control-character escaping", () => {
     const all = capture.stderr() + capture.stdout();
     expect(all).not.toContain(secret);
     expect(all).toContain("no_skills_found");
-    expect(all).toContain("https://oauth2:***@127.0.0.1:1/a/b.git");
+    expect(all).toContain("https://***@127.0.0.1:1/a/b.git");
   });
 
   test("C-CLI-06b an unlisted secret query parameter is redacted too", () => {

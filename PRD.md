@@ -102,10 +102,12 @@ crew remove <selector> [<selector>...]    Alias for `crew uninstall`.
 crew rm <selector> [<selector>...]        Alias for `crew uninstall`.
 crew update [<selector>...]       Update all installed skills, or only those selected.
 crew upgrade [<selector>...]      Alias for `crew update`.
+crew outdated [<selector>...]     Preview what `crew update` would change, without changing it.
 crew list                         List installed skills.
 crew skills                       Alias for `crew list`.
 crew ls                           Alias for `crew list`.
-crew search <query>               Search across configured taps.
+crew search [--tap <name>] [<query>]
+                                   Search across configured taps (or one tap).
 crew info <ref-or-selector>       Show details for an installed or searchable skill.
 
 crew tap add [--recursive] <url-or-path> [<name>]
@@ -151,6 +153,25 @@ project-scope installations, one row per project root. `--json` filters `install
 filter in a `scope` field (`"user"`, `"project"`, or `null` when unfiltered).
 When the filter leaves nothing, the human output says so for that scope
 rather than printing the first-run getting-started hint.
+
+**`crew list` agent and tap filters.** `--agent <name>` (repeatable) keeps
+only installations recorded against at least one of the named agents; an
+unknown agent name is a `usage_error` that lists the known agents. `--tap
+<name>` keeps only installations attributed to that configured tap
+(`state.source.tap`); an unknown tap name is a `usage_error` pointing at
+`crew tap list`. Filters compose with each other and with `--scope`. Rows
+that survive a filter still render their full agent list — the filter
+selects rows, it does not hide data. `--json` reports the filters in
+`agent` (array, empty when unfiltered) and `tap` (name or `null`). When
+the combined filters leave nothing and a `--agent` or `--tap` filter was
+given, the human output says no skills match those filters.
+
+Repeating `--tap` (or any other single-value flag) is a `usage_error`
+under the general flag-uniqueness rule in §5.2, not a silent fall back to
+unfiltered output. A bare command alias (`crew skills`) accepts exactly
+the flags its canonical command accepts; an alias that resolves to a
+subcommand (`crew taps` → `crew tap list`) accepts only that
+subcommand's flags.
 
 ### 5.2 Global flags
 
@@ -742,6 +763,62 @@ gh:owner/repo@v1.2.0//skills/python
 
 A ref and a subpath may combine. Ref appears before the subpath.
 
+**Browser URLs.** A URL copied from a forge's web UI is accepted anywhere
+a git source is accepted (`crew install`, `crew info`, `crew tap add`,
+dependency lists). Homecrew rewrites it to the canonical
+`https://<host>/<owner>/<repo>.git[@<ref>][//<subpath>]` form before
+anything else looks at it, so a pasted link "just works":
+
+```
+https://github.com/<o>/<r>/tree/<ref>[/<path>]          → @<ref>//<path>
+https://github.com/<o>/<r>/blob/<ref>/<path>/SKILL.md    → @<ref>//<path>
+https://github.com/<o>/<r>/commit/<sha>                  → @<sha>
+https://github.com/<o>/<r>/releases/tag/<tag>            → @<tag>
+https://gitlab.com/<group>[/<sub>...]/<r>/-/tree/<ref>[/<path>]
+https://gitlab.com/<group>[/<sub>...]/<r>/-/blob/<ref>/<path>/SKILL.md
+https://gitlab.com/<group>[/<sub>...]/<r>/-/commit/<sha>
+https://gitlab.com/<group>[/<sub>...]/<r>/-/tags/<tag>
+https://bitbucket.org/<o>/<r>/src/<ref>[/<path>]
+https://bitbucket.org/<o>/<r>/commits/<sha>
+```
+
+Rules:
+
+- The GitLab shapes are recognised on any host whose path contains a
+  `/-/` segment (self-hosted GitLab included); GitHub and Bitbucket
+  shapes are recognised on `github.com` and `bitbucket.org` only.
+- A `?query`, `#fragment`, or trailing `/` is dropped from every
+  `http(s)` URL, and a leading `www.` is dropped from the host. This
+  happens **before** any `@<ref>` / `//<subpath>` tail is parsed, so
+  text inside a query or fragment is never read as grammar.
+- Userinfo (`https://<user>[:<token>]@host/...`) is preserved: an
+  authenticated HTTPS URL must still clone. Credentials MUST NOT
+  appear in any human message or `--json` payload; implementations
+  redact them wherever a reference is echoed back (§13).
+- A GitHub or GitLab `blob` link must end in `SKILL.md`; the skill
+  directory is the reference. A `blob` link to any other file is
+  `invalid_ref` — a reference must be a directory that contains
+  `SKILL.md`. A `blob` link naming a ref but no path at all is also
+  `invalid_ref`.
+- Bitbucket serves directories and files alike under `src/`, with
+  nothing in the URL to distinguish them. A trailing `SKILL.md` is
+  therefore stripped and **any other leaf is taken as a directory**,
+  rather than rejected as GitHub/GitLab `blob` links are. A `src/`
+  link to a non-skill file resolves to a location with no `SKILL.md`
+  and fails later with `no_skills_found`.
+- The first path segment after `tree/`, `blob/`, or `src/` is the ref,
+  so a branch name containing `/` is mis-split by a pasted browser
+  URL. Use the explicit `<url>@<branch>//<subpath>` form for those —
+  an explicit `@<ref>` may contain `/`, because the `//<subpath>`
+  delimiter is what ends it.
+- If an explicit `@<ref>` or `//<subpath>` tail is also appended to a
+  browser URL, the explicit tail wins and the browser-derived value
+  for that part is discarded.
+- A repo-only URL (`https://github.com/<o>/<r>`) is unchanged; it is
+  already a valid git source.
+- An `http(s)` URL too malformed to parse is `invalid_ref` (§13), not
+  an unexpected internal error.
+
 The resolved location inside the repo is either the repo root or the subpath. Behavior at the resolved location matches §9 step 5 (single skill if `SKILL.md` present, walk one level otherwise).
 
 Git sources are ad-hoc. They are never promoted to taps and do not appear in `crew search` results.
@@ -793,7 +870,9 @@ tap-source  := [ tap-name "/" ] [ namespace-name "/" ] skill-name [ "@" tap-ref 
 tap-name    := [a-z0-9][a-z0-9-]*
 namespace-name := [a-z0-9][a-z0-9-]*
 skill-name  := [a-z0-9][a-z0-9-]*  (matches the Agent Skills spec's name rules)
-git-ref     := any non-empty string not containing "/" or whitespace; must not start with "//"
+git-ref     := any non-empty string not containing ":" or whitespace; may contain "/"
+               (a "//" ends the ref and starts the subpath, so `@feature/foo//python` is
+                ref `feature/foo` + subpath `python`); must not start with "//"
 tap-ref     := any non-empty string not containing "/" or whitespace
 subpath     := any POSIX relative path not starting with "/"
 ```
@@ -1084,6 +1163,16 @@ rows as "would update" / "would add". `--json` output includes
 `dry_run: true` and uses the `would_update` / `would_add` kinds so
 scripts can tell a preview from a real run. `--force --dry-run`
 previews pinned skills as `would_update` instead of `skipped`.
+
+**`crew outdated`.** `crew outdated [<selector>...]` is the
+discoverable name for that preview (compare `brew outdated`). It runs
+exactly `crew update --dry-run` with the same selectors and flags
+(`--force`, `--json`) and the same exit-code rule, and its `--json`
+payload is identical to `crew update --dry-run --json` (including
+`dry_run: true`). Only the human rendering differs: it is trimmed to
+the rows that answer "what would change" — `would_update`, `would_add`,
+`source_gone`, and failures — and omits `up_to_date` and `skipped`
+rows. When nothing would change it prints a single line saying so.
 
 ### 10.2 `crew autoupdate`
 
@@ -1569,6 +1658,16 @@ JSON error payloads remain the stable machine contract:
 `{ "error": { "name": string, "message": string, "details": object } }`.
 Human-mode remedy hints are not part of that payload.
 
+**Credentials never reach error output.** A git URL may legitimately
+carry userinfo or a credential-bearing query parameter, and an error
+message often echoes the reference that failed. Redaction is therefore
+applied at the output boundary every error passes through, not left to
+each message: the secret must not appear on stdout or stderr in either
+mode, while `details` keys survive so the machine contract above holds.
+Implementations SHOULD also render a safe form at construction sites
+that compose a URL into a sentence, because a redacted URL reads better
+there than a scrub of the finished text.
+
 **Human-mode error quality.** In human mode, an error message should
 name the offending thing (path, skill, ref, URL) and — whenever a
 reasonable next step exists — point the user at what to try. The stable
@@ -1734,7 +1833,8 @@ since the registry was built, the normal tap-add or install error applies.
 ### 16.3 Tap management
 
 - `crew tap add <url-or-path> [<name>]` registers a tap.
-  - `<url-or-path>` is either a git URL (with optional `//<subpath>` tail using the same syntax as §8.2 git refs — e.g. `crew tap add @with-logic/backend//skills`) or a filesystem path.
+  - `<url-or-path>` is either a git URL (with optional `//<subpath>` tail using the same syntax as §8.2 git refs — e.g. `crew tap add @with-logic/backend//skills`) or a filesystem path. Browser URLs (§8.2) are accepted; `crew tap add https://github.com/acme/skills/tree/main/skills` registers a tap at subpath `skills`.
+  - Taps track the default branch and cannot be pinned. A `@<ref>` tail — explicit, or derived from a browser URL — is a `usage_error`, with one exception: a ref of `main` or `master` is taken to name the default branch and is silently dropped, so a pasted `/tree/main/...` link works without editing.
   - If `<name>` is omitted, it is derived: for root git taps, the final URL path component (minus `.git`); for subpath git taps, `<last-repo-segment>-<last-subpath-segment>` (so `@with-logic/backend//skills` → `backend-skills`); for path taps, the basename of the directory.
   - For git taps, the initial clone runs **before** the tap is written to config. If the clone fails (bad URL, typo, network failure, no access), the tap is not added — neither `crew tap list` nor `config.yaml` shows it, and any partially-materialized clone directory is removed.
   - If the named tap already exists with a matching URL/path/subpath, the call is an idempotent no-op (exit 0). If an existing tap of the same name has a different URL/path/subpath, the call is a `usage_error` — the user must pick a different name.
@@ -1793,7 +1893,7 @@ Auto taps are functionally indistinguishable from registered taps for `crew upda
 
 ### 16.6 Search and network policy
 
-`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured git-kind tap (registered or auto). Path-kind taps are searched too if their root is reachable. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. Namespaced skills render as `<namespace>/<name>` in the name column. Each row is prefixed by `✓` only when local state contains the same skill name from the same tap name and same tap-relative path (installed at user or project scope). A same-name skill installed from another tap or path MUST NOT be marked with `✓`; implementations SHOULD make that distinction visible in human output so users are not told the displayed tap skill is installed when only a conflicting same-name skill is installed elsewhere. `--json` emits a structured `{ hits, known_hits, warnings }` object; each configured-tap hit has fields `{ tap, name, namespace, description, installed, same_name_installed }` where `namespace` is `string | null`, `installed` is `boolean`, and `same_name_installed` is `true` only when another state entry has the same skill name but the displayed tap/path is not installed.
+`crew search <query>` matches `query` (case-insensitive substring) against the `name` and `description` of every skill in every configured git-kind tap (registered or auto). Path-kind taps are searched too if their root is reachable. Output is grouped by tap: a count header, then one section per tap with its matching skills listed below, name column left-aligned, description truncated to fit the terminal width. Namespaced skills render as `<namespace>/<name>` in the name column. Each row is prefixed by `✓` only when local state contains the same skill name from the same tap name and same tap-relative path (installed at user or project scope). A same-name skill installed from another tap or path MUST NOT be marked with `✓`; implementations SHOULD make that distinction visible in human output so users are not told the displayed tap skill is installed when only a conflicting same-name skill is installed elsewhere. `--json` emits a structured `{ tap, hits, known_hits, warnings }` object, where `tap` is the `--tap <name>` filter's tap name and is `null` whenever the flag was not given; each configured-tap hit has fields `{ tap, name, namespace, description, installed, same_name_installed }` where `namespace` is `string | null`, `installed` is `boolean`, and `same_name_installed` is `true` only when another state entry has the same skill name but the displayed tap/path is not installed.
 
 For non-empty `<query>` values, `crew search` also consults the known-tap registry (§16.2.1) without cloning, fetching, or mutating config. Human output lists configured-tap matches first, then presents matching known-but-untapped entries in a separate "Trusted taps you can add" section with a `crew tap add <source-ref> <name>` command for each matching tap, where `<source-ref>` follows the display rule in §16.2.1. These rows are suggestions only: they do not appear in `crew tap list`, are not marked installed, and are not installable by bare skill name until the user adds the tap. If a known tap is already configured by matching name or matching `(url, subpath)`, it is omitted from the known-tap suggestions; tap names and URLs compare case-insensitively, while subpaths compare exactly. JSON output includes suggestions in `known_hits`; each known hit has fields `{ tap, url, subpath, trust, name, namespace, description }`.
 
@@ -1818,6 +1918,15 @@ Add a tap first, then install a suggested skill by qualified name.
 ```
 
 `crew search` (no query) lists every skill in every configured tap — the exhaustive catalog. It does not list the known-tap registry. Output and JSON shape are identical to the query form; the installed marker appears the same way and `known_hits` is empty.
+
+**`--tap <name>`.** `crew search --tap <name> [<query>]` scopes the search
+(or the no-query catalog) to the single configured tap `<name>`. Only that
+tap is walked; every other configured tap is skipped, and known-tap registry
+suggestions are omitted because the user asked about one tap they already
+have. `<name>` must match a configured tap (registered or auto); anything
+else is a `usage_error` that names the value and points at `crew tap list`.
+The JSON payload gains a top-level `tap` field: the tap name when `--tap`
+was given, `null` otherwise.
 
 **Network policy.** Read-only commands (`crew search`, `crew info`, `crew list`, `crew install <bare-name>` and `<tap>/<skill>` forms, tap re-expansion during `crew update` for unrelated taps) MUST NOT contact the network. They read from local tap clones as-of the last `crew update` / `crew tap update`. A tap that has never been cloned is materialized on demand on first use; if that initial clone fails (offline, bad URL), the command warns on stderr and skips that tap — it does not fail the whole run.
 
@@ -1906,6 +2015,14 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-22b | §8.4 | A git subpath's `.` components and repeated `/` separators are collapsed, so `//./a//b` resolves to `a/b`. |
 | C-REF-22c | §8.4 | A subpath that is lexically valid but resolves through a committed symlink — at the named path or any directory above it — is `invalid_ref` (exit 4), and nothing from the symlink's target is installed. |
 | C-REF-22d | §8.4 | Containment is re-checked when a stored tap subpath is resolved, not only when a reference is parsed: a `subpath` in `config.yaml` that escapes its clone (via `..` or a symlink) is refused wherever the tap is indexed. Read-only commands that treat an unusable tap as a warning (§16.6) report the containment failure for what it is rather than as an unreachable source. |
+| C-REF-23 | §8.2 | `https://github.com/o/r/tree/<ref>/<path>` is parsed as a git source with url `https://github.com/o/r.git`, ref `<ref>`, and subpath `<path>`; `/tree/<ref>` alone yields ref only; `/commit/<sha>` and `/releases/tag/<tag>` yield ref only. |
+| C-REF-24 | §8.2 | `https://github.com/o/r/blob/<ref>/<path>/SKILL.md` is parsed with subpath `<path>` (the `SKILL.md` leaf is dropped); a `blob` link to any other file produces `invalid_ref` (exit 4). |
+| C-REF-25 | §8.2 | GitLab `/-/tree/`, `/-/blob/`, `/-/commit/`, and `/-/tags/` URLs (including nested groups and self-hosted hosts) are parsed by the same rules as C-REF-23/24. Bitbucket `/commits/` yields ref only; Bitbucket `/src/` strips a trailing `SKILL.md` and otherwise treats the leaf as a directory (it does not reject non-`SKILL.md` files the way C-REF-24 does, because `src/` is used for both). |
+| C-REF-26 | §8.2 | A `?query`, `#fragment`, or trailing `/` is dropped from any `http(s)` git URL and a leading `www.` is dropped from the host; an explicit `@<ref>` or `//<subpath>` tail appended to a browser URL overrides the browser-derived value. |
+| C-REF-27 | §16.3 | `crew tap add` accepts a browser URL; a derived or explicit ref of `main`/`master` is dropped, any other ref is a `usage_error`. |
+| C-REF-28 | §8.2, §13 | A reference echoed back in an error message or `--json` payload has its URL userinfo and credential-bearing query values redacted; the secret never appears on stdout or stderr. |
+| C-REF-29 | §8.2 | URL userinfo is preserved in the resolved clone URL (`https://user:token@host/o/r/tree/main/py` keeps its credentials), and is not mistaken for an `@<ref>` delimiter. |
+| C-REF-30 | §8.2, §13 | `?query` and `#fragment` text is discarded before grammar parsing, so it cannot supply an `@<ref>` or `//<subpath>`; an explicit `@<ref>` may contain `/` (`@feature/foo//python`); an `http(s)` URL too malformed to parse is `invalid_ref` (exit 4). |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -2039,6 +2156,9 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. |
 | C-UPD-18d | §10.1.1, §14 | `crew update` holds a per-tap clone lock spanning refresh through source read, in both real and `--dry-run` runs, so a concurrent run cannot change the clone's checked-out commit between SHA resolution and byte read. A run blocked past the timeout exits `state_locked`. |
 | C-UPD-18e | §10.1.1 | A newly-discovered child that fails validation is named in human output along with its error code and message, and is counted as a failure in the run totals. |
+| C-UPD-18f | §10.1.1 | `crew outdated [<selector>...]` behaves as `crew update --dry-run`: identical `--json` payload (`dry_run: true`, `would_update` / `would_add` kinds), identical exit code, and the same write boundary — tap clones refresh, while installed skills, markers, store entries, and `state.json` are unchanged. Human output lists only rows that would change and prints a single "up to date" line when none would. |
+| C-UPD-18g | §10.1.1, §14 | `crew outdated` against a home with no `state.json` leaves it absent, and never acquires the state lock. |
+| C-UPD-18h | §10.1.1 | When a tap refresh or re-expansion fails, `crew outdated` reports the results as possibly stale rather than printing an unqualified "up to date", even if every locally-known row is up to date. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
 | C-UPD-23 | §10.1 / §16.6 | `crew update <selector>...` restricts fetching to taps that back the selected entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
 | C-UPD-24 | §10.1 | `crew update <selector>...` includes each selected entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the selected entries, marked as transitively required in `--json` output. |
@@ -2098,7 +2218,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-05 | §16.2 | The default tap named `core` is present on first run. |
 | C-TAP-06 | §16.2 | `crew tap remove core` is refused without `--force`. |
 | C-TAP-07 | §16.6 | `crew search <skill>` matches case-insensitively against `name` and `description` across every tap. |
-| C-TAP-08 | §16.6 | `crew search --json` emits a structured array of matches. Each hit includes `installed: boolean`, `same_name_installed: boolean`, and `namespace: string \| null` fields. |
+| C-TAP-08 | §16.6 | `crew search --json` emits a structured object `{ tap, hits, known_hits, warnings }`. `tap` is the `--tap <name>` filter's tap name, or `null` when the flag was absent. Each hit in `hits` includes `installed: boolean`, `same_name_installed: boolean`, and `namespace: string \| null` fields. |
 | C-TAP-08b | §16.6 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
 | C-TAP-08c | §16.6 | A same-name skill from a different tap/path is not marked installed in `crew search`; JSON reports `installed: false` and `same_name_installed: true`. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
@@ -2118,6 +2238,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-22 | §16.5 | Running `crew tap add <url>` against a URL that already backs an auto tap promotes it (`registered` flips to `true`) without re-cloning, and applies any user-supplied `<name>` argument. |
 | C-TAP-22b | §16.3 / §16.6 | `crew tap add --recursive <url-or-path> <name>` persists recursive discovery for that tap; later `crew search` and `crew install <name>/<skill>` can find skills only reachable through bounded recursive fallback. |
 | C-TAP-23 | §16.2.1 / §16.6 | `crew search <query>` surfaces matching known-tap registry entries that are not already configured as suggestions after configured-tap hits, without cloning, fetching, mutating config, or listing them for `crew search` with no query. Suggestions include the canonical `crew tap add <source-ref> <name>` command. JSON includes those suggestions in `known_hits`. |
+| C-TAP-23a | §16.6 | `crew search --tap <name> [<query>]` walks only the named configured tap: hits from other taps are absent, known-tap suggestions are omitted, and JSON reports `tap: <name>`. An unknown `<name>` is a `usage_error` naming it and pointing at `crew tap list`. Without `--tap`, JSON reports `tap: null`. |
 | C-TAP-24 | §9 / §16.2.1 | `crew install <tap-source>` that cannot resolve from configured taps surfaces exact known-tap registry matches in the `invalid_ref` error, including canonical `crew tap add` and follow-up install commands, without cloning, fetching, mutating config, or installing from the known tap. JSON errors include `known_tap_suggestions`. |
 
 #### C-STATE: State and markers (§11)
@@ -2135,6 +2256,10 @@ Implementations and test suites refer to criteria by ID.
 | C-LIST-01 | §5.1 | `crew list` with no `--scope` shows user- and project-scope installations together; `--json` has `scope: null`. |
 | C-LIST-02 | §5.1 | `crew list --scope user` shows only user-scope installations and `crew list --scope project` shows only project-scope installations (one row per project root); `--json` filters `installations` identically and sets `scope` to the filter. |
 | C-LIST-03 | §5.1 | When a `--scope` filter matches nothing, `crew list` prints a scope-specific empty message (not the getting-started hint) and `--json` returns an empty `installations` array. |
+| C-LIST-04 | §5.1 | `crew list --agent <name>` shows only installations recorded against that agent (repeatable, any-of); an unknown agent is a `usage_error` naming the known agents; `--json` reports the filter in `agent`. |
+| C-LIST-05 | §5.1 | `crew list --tap <name>` shows only installations attributed to that tap; an unknown tap is a `usage_error` pointing at `crew tap list`; `--json` reports the filter in `tap`. |
+| C-LIST-06 | §5.1 | `--agent`, `--tap`, and `--scope` compose; when the combination matches nothing and an agent or tap filter was given, `crew list` says no skills match those filters. |
+| C-LIST-07 | §5.1, §5.2 | A repeated single-value flag (e.g. `crew list --tap a --tap b`) is a `usage_error` per §5.2's flag-uniqueness rule; it never silently drops the filter. `crew skills` accepts every flag `crew list` accepts. |
 | C-STATE-10 | §11.1 | After any install, every name appearing in any `required_by` array is itself an installed skill at the same install location (`(scope, project_root)`). |
 | C-STATE-11 | §11.2 | `crew doctor` reports `missing_project_root` for any project-scope entry whose `project_root` directory no longer exists. |
 | C-STATE-11a | §11.2 | `crew doctor --repair` with `autoupdate.enabled: true` in config and no loaded scheduler writes and loads the platform scheduler at the configured interval; the run exits 0 and reports the repair. |
@@ -2216,6 +2341,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
 | C-CLI-08a | §5.2 | A non-repeatable flag passed more than once is a `usage_error` (exit 4) naming the flag — boolean (`--json --json`) as well as value (`--scope user --scope project`); the repeatable `--agent` collects every occurrence. |
+| C-CLI-08c | §5.2, §13 | A parse-stage failure honors the requested output mode: with `--json`, the error is the structured `{ error: { name, message, details } }` payload on stdout, not human text on stderr. |
 | C-CLI-09 | §5.5 | Bare `crew` is equivalent to `crew help` — same output, exit 0 (no "usage error"). |
 | C-CLI-10 | §5.5 | `crew help <unknown>` falls back to the overview and exits 0. |
 | C-CLI-11 | §5.5 | The overview contains a one-sentence description of crew, a getting-started section with at least three example invocations, and a command list covering every command from §5.1. |

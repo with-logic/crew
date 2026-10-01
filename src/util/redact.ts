@@ -152,16 +152,24 @@ export function safePath(path: string): string {
  * pass that through verbatim in `source_unreachable` messages. Scanning
  * for URL-shaped substrings is what stops the secret escaping that way.
  */
-export function redactText(text: string): string {
+export function redactText(text: string, renderUrl = redactUrl): string {
   // Match an http(s)/ssh/git URL up to the first character that can't be
   // part of one. Trailing punctuation (quote, comma, period) is excluded
   // so we don't swallow the prose around it.
-  return text.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s'"<>`]+/gi, (m) => {
+  const withUrls = text.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s'"<>`]+/gi, (m) => {
     // Git often quotes the URL and appends a slash; redact the URL body
     // and leave whatever punctuation followed it in place.
     const trailing = m.match(/[.,;:)\]]+$/)?.[0] ?? "";
     const body = trailing.length > 0 ? m.slice(0, -trailing.length) : m;
-    return redactUrl(body) + trailing;
+    return renderUrl(body) + trailing;
+  });
+  // Git strips file:// before echoing a failing path (§13); its query
+  // must obey the same allow-list even when no scheme remains.
+  return withUrls.replace(/\?[^\s'"<>`]+/g, (match) => {
+    const trailing = match.match(/[.,;:)\]]+$/)?.[0] ?? "";
+    const body = trailing.length > 0 ? match.slice(0, -trailing.length) : match;
+    const base = "https://x.invalid/";
+    return redactUrl(new URL(body, base).toString()).slice(base.length) + trailing;
   });
 }
 
@@ -170,10 +178,13 @@ export function redactText(text: string): string {
  * `details`. The JSON error payload is a stable machine contract
  * (§13), so keys are preserved — only their values are masked.
  */
-export function redactDetails(details: Readonly<Record<string, unknown>>): Record<string, unknown> {
+export function redactDetails(
+  details: Readonly<Record<string, unknown>>,
+  renderText = redactText,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(details)) {
-    out[key] = typeof value === "string" ? redactText(value) : value;
+    out[key] = typeof value === "string" ? sanitizeBlock(renderText(value)) : value;
   }
   return out;
 }
