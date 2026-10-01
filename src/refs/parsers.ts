@@ -5,7 +5,8 @@
  * absolute path. `parseTap` handles bare names (`my-skill`) and
  * qualified names (`core/my-skill`), each with an optional `@ref` tail.
  *
- * The leaner git-URL logic lives in `refs/git-url.ts`.
+ * Every git-shaped recognizer, including the scheme-less host form,
+ * lives in `refs/git-url.ts`.
  */
 
 import { homedir } from "node:os";

@@ -13,6 +13,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { paths } from "../../../src/core/paths.ts";
+import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { commitAll, makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
 import {
@@ -93,6 +94,17 @@ describe("C-UPD-18f crew outdated", () => {
     const after = tapHeads(home);
     const gammaTap = Object.keys(after).find((t) => t.startsWith("crew-second-"))!;
     expect(after[gammaTap]).toBe(before[gammaTap]);
+
+    const tap = readState(home).installations.find((entry) => entry.name === "alpha")!.source.tap;
+    for (const selector of ["alpha", tap]) {
+      const preview = captureStreams();
+      const update = captureStreams();
+      expect(runCli(["outdated", selector, "--json"], { home, streams: preview.streams })).toBe(0);
+      expect(
+        runCli(["update", selector, "--dry-run", "--json"], { home, streams: update.streams }),
+      ).toBe(0);
+      expect(preview.stdout()).toBe(update.stdout());
+    }
   });
 
   test("C-UPD-18g leaves state.json absent on a fresh home and never locks", () => {

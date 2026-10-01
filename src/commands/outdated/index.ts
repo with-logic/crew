@@ -28,10 +28,10 @@ export function outdatedCommand(ctx: CommandContext): CommandOutput {
   const home = ctx.home ?? crewHome();
   const plan = planUpdate(ctx, config, home, true);
 
-  const { rows, tapReexpandRows, tapRows } = plan;
+  const { rows, tapReexpandRows, tapRows, selectors } = plan;
   return {
     exitCode: plan.hardFailure ? 1 : 0,
     human: renderOutdated({ rows, tapReexpandRows, tapRows }, ctx.style),
-    json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows, dry_run: true },
+    json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows, dry_run: true, selectors },
   };
 }
