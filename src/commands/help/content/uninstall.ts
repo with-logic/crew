@@ -19,6 +19,11 @@ export const uninstallHelp: CommandHelp = {
       description: "Only remove from the named agent(s); other agents keep their copy. Repeatable.",
     },
     {
+      flag: "--dry-run",
+      description:
+        "Show what would be removed (including what `--prune` would clean up) without touching anything.",
+    },
+    {
       flag: "--prune",
       description:
         "Also clean up dependencies that are no longer needed. Like `apt autoremove` — safe and tidy.",
@@ -45,6 +50,10 @@ export const uninstallHelp: CommandHelp = {
     {
       command: "crew uninstall --prune python-testing",
       description: "Remove it and anything it pulled in that's no longer needed.",
+    },
+    {
+      command: "crew uninstall --dry-run --prune python-testing",
+      description: "Preview exactly what that would remove, without removing it.",
     },
     {
       command: "crew uninstall --scope project python-testing",
