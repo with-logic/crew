@@ -10,7 +10,7 @@
  * command could remove, so a namespace colliding only with an
  * out-of-scope install is unambiguous; *what* that collection contains is
  * then re-read from full state and narrowed, so §7.4's lone-project
- * fallback applies per selected collection rather than across every
+ * fallback applies per skill within the selected collection rather than across every
  * install on the machine. And the final target list is deduplicated by
  * installed-entry identity, because overlapping selectors (`crew
  * uninstall acme alpha`) would otherwise remove a skill once and then
@@ -22,7 +22,7 @@ import { type CollectionKind, resolveCollectionSubjects } from "../../state/coll
 import { entryKey } from "../../state/identity.ts";
 import { namespaceForEntry, type StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
-import { entriesAtScope, narrowSubjectToScope } from "./scope.ts";
+import { entriesAtScopeByName, narrowSubjectToScope } from "./scope.ts";
 
 /**
  * One skill to remove. `removeOne` works on a single skill name, so a
@@ -55,15 +55,12 @@ export function selectedTargets(
   // command could remove (§7.4 "Scope"): a namespace that collides only
   // with an out-of-scope install is not ambiguous.
   //
-  // WHAT that collection contains is then taken from full state, because
-  // §7.4's lone-project fallback asks whether the *selected collection*
-  // has exactly one project install — not whether the machine does.
-  // Deciding membership on scoped state let an unrelated project install
-  // of a different tap silence the removal: it exited 0 having removed
-  // nothing, which reads as success.
+  // WHAT it contains is re-taken from full state. §7.4's lone-project
+  // fallback is per skill name within that collection, so unrelated
+  // installs cannot hide a selected skill.
   const scoped: StateFile = {
     schema_version: state.schema_version,
-    installations: entriesAtScope(state.installations, ctx.flags.scope, ctx.cwd),
+    installations: collectionEntriesAtScope(state, ctx),
   };
   const resolved = resolveCollectionSubjects(state, config, ctx.positional, "uninstall", scoped);
   const targets: UninstallTarget[] = [];
@@ -118,8 +115,8 @@ function dedupe(targets: readonly UninstallTarget[]): readonly UninstallTarget[]
  *
  * The collection was identified against scoped state (so ambiguity is
  * decided among removable entries), but its membership is re-taken from
- * full state so `entriesAtScope` can apply §7.4's lone-project fallback
- * to this collection alone.
+ * full state so §7.4's lone-project fallback applies per skill within
+ * this collection alone.
  */
 function entriesForCollection(
   subject: { readonly kind: CollectionKind; readonly name: string },
@@ -132,7 +129,23 @@ function entriesForCollection(
       ? e.source.tap === subject.name
       : taps.has(e.source.tap) && namespaceForEntry(e) === subject.name,
   );
-  return entriesAtScope(all, ctx.flags.scope, ctx.cwd);
+  return entriesAtScopeByName(all, ctx.flags.scope, ctx.cwd);
+}
+
+/** Discover namespaces using scope candidates within each tap/namespace. */
+function collectionEntriesAtScope(state: StateFile, ctx: CommandContext): readonly StateEntry[] {
+  const groups = new Map<string, StateEntry[]>();
+  for (const entry of state.installations) {
+    const key = JSON.stringify([entry.source.tap, namespaceForEntry(entry)]);
+    const group = groups.get(key);
+    if (group) group.push(entry);
+    else groups.set(key, [entry]);
+  }
+  const selected: StateEntry[] = [];
+  for (const group of groups.values()) {
+    selected.push(...entriesAtScopeByName(group, ctx.flags.scope, ctx.cwd));
+  }
+  return selected;
 }
 
 /** One subject per distinct skill name, preserving state order. */

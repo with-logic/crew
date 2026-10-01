@@ -39,7 +39,7 @@ import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
-import { allTargets, confirmAll, countAllTargets } from "./all.ts";
+import { allTargets, confirmAll } from "./all.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
 import { selectedTargets } from "./select.ts";
@@ -57,7 +57,7 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
   const agentFilter = validateAgentFilter(ctx.flags.agent);
 
   // §14: confirmation precedes the lock; execution re-reads state.
-  if (all) confirmAll(ctx, countAllTargets(ctx, readState(ctx.home)));
+  if (all) confirmAll(ctx, readState(ctx.home));
 
   // A dry run reads state and reports; it never locks, writes, or GCs.
   const { records, exitCode } = ctx.flags.dryRun
