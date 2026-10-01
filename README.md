@@ -102,8 +102,8 @@ skill can list as a dependency. Three shapes:
 
 | Kind | Example | What it is |
 |---|---|---|
-| **Tap source** | `crew install founding-engineer` | A skill, namespace, or tap known to a configured tap. Bare names search every tap, including the default `core` tap. Qualify with `tap/skill`, `tap/namespace/skill`, or `namespace/skill`. Pin with `@v1.0`. If a miss exactly matches a known-but-untapped source, Homecrew suggests the `crew tap add` command. |
-| **Git source** | `crew install @acme/skills@v1.2.0//engineers/founding` | Any reachable git URL. `@owner/repo` is GitHub shorthand; full `https://` and `git@` URLs work too, as does a scheme-less `github.com/owner/repo`. Append `@ref` to pin, `//subpath` to scope. A slash-free ref can also follow the subpath: `@acme/skills//engineers/founding@v1.2.0`. Put the ref first for branch names containing `/` (`@acme/skills@feature/python//engineers/founding`) or a final folder containing a literal `@` (`@acme/skills@main//skills/foo@bar`). Links pasted from GitHub, GitLab, or Bitbucket (`.../tree/main/engineers/founding`, `.../blob/main/.../SKILL.md`) work as-is. |
+| **Tap source** | `crew install founding-engineer` | A skill, namespace, or tap known to a configured tap. Bare names search every tap, including the default `core` tap. Qualify with `tap/skill`, `tap/namespace/skill`, or `namespace/skill`. Pin with `@v1.0` or a SHA; `@main` follows a branch. If a miss exactly matches a known-but-untapped source, Homecrew suggests the `crew tap add` command. |
+| **Git source** | `crew install @acme/skills@v1.2.0//engineers/founding` | Any reachable git URL. `@owner/repo` is GitHub shorthand; full `https://` and `git@` URLs work too, as does a scheme-less `github.com/owner/repo`. Append `@<tag>` or `@<sha>` to pin, `@<branch>` to follow a branch, `//subpath` to scope. A slash-free ref can also follow the subpath: `@acme/skills//engineers/founding@v1.2.0`. Put the ref first for branch names containing `/` (`@acme/skills@feature/python//engineers/founding`) or a final folder containing a literal `@` (`@acme/skills@main//skills/foo@bar`). Links pasted from GitHub, GitLab, or Bitbucket (`.../tree/main/engineers/founding`, `.../blob/main/.../SKILL.md`) work as-is. |
 | **Local path** | `crew install ./my-skill` | A directory on your machine. Detected by a leading `./`, `../`, `/`, or `~`. |
 
 Run `crew help install` for the full grammar.
@@ -165,7 +165,7 @@ When a command asks for an installed skill name, you can use the bare name
 |---|---|
 | `crew install <ref>…` | Install one or more skills into every detected agent; on misses, may suggest skills from trusted taps you haven't added yet. |
 | `crew install --from-git <source>` | Install from a git source without a positional ref. Forces the value to be read as git, so a bare `owner/repo` means GitHub rather than `<tap>/<skill>`. Combines with positional refs. |
-| `crew uninstall <name>…` | Remove installed skills from every agent they were installed into. Acts on one scope at a time: the system-wide install by default, or the current project's with `--scope project`. A skill installed in exactly one project can be removed from any directory. |
+| `crew uninstall <selector>…` | Remove installed skills from every agent they were installed into. A selector is a skill (`pdf`, `anthropic/pdf`), a tap (`acme`) to remove everything installed from it, or a namespace — qualified (`acme/marketing`) or bare when unique across your taps. `--all` removes everything at the target scope. Acts on one scope at a time: the user-scoped install by default, or the current project's with `--scope project`. |
 | `crew remove <name>…`, `crew rm <name>…` | Aliases for `crew uninstall`. |
 | `crew upgrade [<name>…]` | Alias for `crew update`. |
 | `crew update [<selector>…]` | Update all installed skills, or only those selected. A selector is a skill name (`pdf`, `anthropic/pdf`), a tap name (`acme`), or a namespace (`acme/marketing`); a tap or namespace updates everything installed from it, and a skill name wins over a same-named collection. Pinned SHAs are skipped unless `--force`. `--dry-run` previews pending updates and new tap skills: tap clones are still refreshed, but no installed skill, marker, store entry, or `state.json` changes. |
@@ -339,8 +339,11 @@ ones. Delete code aggressively. Write the boring version first.
 - **`homepage`** — shown by `crew info` so people can find your docs.
 - **`dependencies`** — other skills to pull in (by name, git URL, or path).
   Walked transitively.
-- **versions** — every install pins to a git commit SHA. Pin to a tag with
-  `@v1.0`.
+- **versions** — every install records the git commit SHA it resolved to.
+  `@v1.0` or `@<sha>` pins that commit, so `crew update` leaves it alone
+  without `--force`. `@main` tracks a branch instead: the install records
+  the branch's current commit, and `crew update` advances it as the
+  branch moves.
 
 ## Agents
 

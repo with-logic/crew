@@ -11,41 +11,49 @@
  *      re-staging.
  *
  * A different-source install of the same name throws `name_conflict`
- * (never overridden by --force — per §13). "Same source" now means
- * "same tap name + same path inside the tap" — the URL/filesystem
- * location lives on the tap row, not on the entry.
+ * (never overridden by --force — per §13). "Same source" means the same
+ * canonical location: the same repo (or directory) and the same path
+ * inside it, per `../source-identity.ts`. One repo can back several taps
+ * — installing `//skills/docx` and later the whole repo reaches the same
+ * directory two ways — so comparing tap names would report a conflict
+ * where there is none.
+ *
+ * When the existing entry sits on an auto tap and the incoming install
+ * reaches the same location through another tap covering it, the
+ * entry is re-attributed to the incoming tap (§16.5) instead of
+ * conflicting.
  */
 
-import { CrewError } from "../core/errors.ts";
-import type { ResolvedSkill, Scope, StateFile } from "../core/types.ts";
+import type { ResolvedSkill, Scope, StateFile } from "../../core/types.ts";
+import { classifySource } from "./classify.ts";
+import type {
+  AlreadyInstalled,
+  DuplicateAnalysis,
+  DuplicateOptions,
+  KeptSource,
+  Reattribution,
+} from "./types.ts";
 
-export interface AlreadyInstalled {
-  readonly name: string;
-  readonly ref: string | null;
-  readonly resolvedSha: string | null;
-  readonly scope: Scope;
-  readonly agents: readonly string[];
-}
-
-export interface DuplicateAnalysis {
-  readonly toInstall: ResolvedSkill[];
-  readonly alreadyInstalled: AlreadyInstalled[];
-  readonly promoteToExplicit: string[];
-}
+export type {
+  AlreadyInstalled,
+  DuplicateAnalysis,
+  DuplicateOptions,
+  KeptSource,
+  Reattribution,
+} from "./types.ts";
 
 export function applyDuplicateRules(
   resolved: readonly ResolvedSkill[],
   state: StateFile,
   scope: Scope,
   cwd: string,
-  options: { readonly activeAgents: readonly string[]; readonly force: boolean } = {
-    activeAgents: [],
-    force: false,
-  },
+  options: DuplicateOptions = { activeAgents: [], force: false, taps: [] },
 ): DuplicateAnalysis {
   const toInstall: ResolvedSkill[] = [];
   const alreadyInstalled: AlreadyInstalled[] = [];
   const promoteToExplicit: string[] = [];
+  const reattributions: Reattribution[] = [];
+  const keepSource: KeptSource[] = [];
 
   const incomingProjectRoot = scope === "project" ? cwd : null;
   for (const skill of resolved) {
@@ -60,17 +68,23 @@ export function applyDuplicateRules(
       continue;
     }
 
-    const sameSource =
-      existing.source.tap === skill.tap.name && existing.source.path === skill.tapRelativePath;
-    if (!sameSource) {
-      throw new CrewError(
-        "name_conflict",
-        `a skill named \`${skill.name}\` is already installed from a different source — run \`crew uninstall ${skill.name}\` first, then install from the new source`,
-        {
-          existing: existing.source,
-          incoming: { tap: skill.tap.name, path: skill.tapRelativePath },
-        },
-      );
+    const reattribution = classifySource(existing, skill, options.taps, incomingProjectRoot);
+    if (reattribution) reattributions.push(reattribution);
+    // Registered attribution and broad subscriptions survive reinstalls
+    // as well as duplicate short-circuits (§5.4, §10.1.1).
+    else if (
+      existing.source.tap !== skill.tap.name ||
+      existing.source.path !== skill.tapRelativePath
+    ) {
+      // Successful source classification already proved this tap exists.
+      const tap = options.taps.find((row) => row.name === existing.source.tap)!;
+      keepSource.push({
+        name: existing.name,
+        scope: existing.scope,
+        projectRoot: incomingProjectRoot,
+        source: existing.source,
+        tap,
+      });
     }
 
     // The set of adapters active for this install — if it includes
@@ -92,6 +106,7 @@ export function applyDuplicateRules(
         resolvedSha: existing.resolved_sha,
         scope: existing.scope,
         agents: existing.agents,
+        ...(reattribution ? { reattributedFrom: reattribution.fromTap } : {}),
       });
       if (skill.explicit && !existing.explicit) {
         promoteToExplicit.push(skill.name);
@@ -102,5 +117,5 @@ export function applyDuplicateRules(
     // → install (possibly as no-op byte-copy but with marker rewrite).
     toInstall.push(skill);
   }
-  return { toInstall, alreadyInstalled, promoteToExplicit };
+  return { toInstall, alreadyInstalled, promoteToExplicit, reattributions, keepSource };
 }

@@ -27,6 +27,7 @@ import { type InstallOutcome, installSkillIntoAgents } from "../../agents/instal
 import type { CrewError } from "../../core/errors.ts";
 import type { ResolvedSkill, Scope, StateFile } from "../../core/types.ts";
 import { upsertEntry } from "../../state/load.ts";
+import type { KeptSource } from "../duplicate-rules/index.ts";
 import type { RequiredByMap } from "../resolve/index.ts";
 import { buildStateEntry, rebuildRequiredBy } from "./state-entry.ts";
 
@@ -70,12 +71,23 @@ export function performInstall(
      * Defaults to `resolved` when absent.
      */
     readonly allResolved?: readonly ResolvedSkill[];
+    /**
+     * Entries whose attribution must survive a reinstall in both state
+     * and markers (registered tap or a broader whole-tap subscription).
+     */
+    readonly keepSource?: readonly KeptSource[];
   },
 ): InstallSummary {
   const records: InstallRecord[] = [];
   let state = startingState;
 
   for (const skill of resolved) {
+    const retained = options.keepSource?.find(
+      (entry) =>
+        entry.name === skill.name &&
+        entry.scope === scope &&
+        entry.projectRoot === (scope === "project" ? cwd : null),
+    );
     const perAgent: PerAgentResult[] = [];
     const successfulAgents: string[] = [];
     const groups = groupAgentsByDest(activeAgents, skill.name, scope, cwd);
@@ -94,8 +106,8 @@ export function performInstall(
           cwd,
           storePath: skill.storePath,
           skillName: skill.name,
-          tap: skill.tap,
-          tapRelativePath: skill.tapRelativePath,
+          tap: retained?.tap ?? skill.tap,
+          tapRelativePath: retained?.source.path ?? skill.tapRelativePath,
           ref: skill.ref,
           resolvedSha: skill.resolvedSha,
           contentHash: skill.contentHash,

@@ -123,7 +123,7 @@ export const installHelp: CommandHelp = {
             "  @acme/skills                       → Same as gh: — a handy GitHub alias.",
           ],
         },
-        "Any git reference can pin a version with `@<tag>`, `@<branch>`, or `@<sha>`, and can point at a subfolder with `//<path>`. You can combine them, with the version either before or after the subfolder. Versions containing `/` must go before the subfolder, as in `gh:acme/skills@feature/python//python/testing`:",
+        "Any git reference can pin a version with `@<tag>` or `@<sha>`, follow a branch with `@<branch>`, and point at a subfolder with `//<path>`. You can combine them, with the version either before or after the subfolder. Versions containing `/` must go before the subfolder, as in `gh:acme/skills@feature/python//python/testing`:",
         {
           literal: true,
           lines: [

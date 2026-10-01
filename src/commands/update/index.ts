@@ -2,7 +2,7 @@
  * `crew update [<selector>...]` (§10.1).
  *
  * A selector is an installed skill, a tap, or a namespace — see
- * `state/collections.ts`. For each entry the selectors resolve to (plus
+ * `state/collections/index.ts`. For each entry the selectors resolve to (plus
  * its transitive dependency closure), re-resolve the ref to a SHA. If
  * the SHA hasn't moved, report up-to-date. If it has and the ref is not
  * pinned (or `--force`), re-stage into the store and re-run the install
@@ -25,7 +25,7 @@
  * in the rows so humans and scripts can tell them apart.
  *
  * Collection selectors (§10.1): a positional may also be a tap name or a
- * namespace (`state/collections.ts`); it contributes every installed
+ * namespace (`state/collections/index.ts`); it contributes every installed
  * entry it expands to, and re-expansion treats those members as named.
  *
  * Fetch scope (§16.4): `crew update` with no args refreshes every

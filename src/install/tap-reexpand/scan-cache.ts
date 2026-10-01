@@ -61,10 +61,11 @@ export function makeTapScanCache(): TapScanCache {
     },
 
     children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[] {
-      const hit = childLists.get(tap.name);
+      const key = JSON.stringify([tap.name, rootDir]);
+      const hit = childLists.get(key);
       if (hit) return hit;
       const walked = currentTapChildren(tap, home, rootDir);
-      childLists.set(tap.name, walked);
+      childLists.set(key, walked);
       return walked;
     },
 

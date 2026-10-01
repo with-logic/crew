@@ -62,7 +62,7 @@ export function narrowSubjectToScope(
   );
 }
 
-function entriesAtScope(
+export function entriesAtScope(
   entries: readonly StateEntry[],
   scope: Scope,
   cwd: string,
@@ -73,6 +73,23 @@ function entriesAtScope(
   if (here.length > 0) return here;
   // §7.4: a lone project install is reachable from any cwd.
   return projects.length === 1 ? projects : [];
+}
+
+/** Apply §7.4's lone-project fallback independently for each skill name. */
+export function entriesAtScopeByName(
+  entries: readonly StateEntry[],
+  scope: Scope,
+  cwd: string,
+): readonly StateEntry[] {
+  const groups = new Map<string, StateEntry[]>();
+  for (const entry of entries) {
+    const group = groups.get(entry.name);
+    if (group) group.push(entry);
+    else groups.set(entry.name, [entry]);
+  }
+  const selected: StateEntry[] = [];
+  for (const group of groups.values()) selected.push(...entriesAtScope(group, scope, cwd));
+  return selected;
 }
 
 function describeScope(scope: Scope, cwd: string): string {
