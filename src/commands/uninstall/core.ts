@@ -66,7 +66,7 @@ export function removeOne(
   ctx: CommandContext,
   pruned: boolean,
   agentFilter: readonly string[] | null,
-  deferFullRemoval: boolean = false,
+  deferStateEntryDrops: boolean = false,
 ): {
   updatedState: StateFile;
   rec: UninstallRecord;
@@ -112,7 +112,8 @@ export function removeOne(
     }
   }
   // Tap removal batches full drops across names while retaining failed ownership immediately.
-  if (!deferFullRemoval) nextState = dropScopedEntriesAndUpdateRequiredBy(nextState, fullyRemoved);
+  if (!deferStateEntryDrops)
+    nextState = dropScopedEntriesAndUpdateRequiredBy(nextState, fullyRemoved);
   if (retained.size > 0) {
     Object.assign(rec, { partial: true, remainingAgents: [...retained].sort() });
   }

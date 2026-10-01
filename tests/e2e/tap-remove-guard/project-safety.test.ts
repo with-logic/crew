@@ -1,19 +1,25 @@
 /** Tap collection removal prevalidates every install location (§7.4, §16.3). */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { paths } from "../../../src/core/paths.ts";
-import {
-  agentRoot,
-  buildTapRepo,
-  makeCrewHome,
-  run,
-  tapWithInstall,
-  useTempAgentRoot,
-} from "./helpers.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
+import { buildTapRepo, makeCrewHome, run, tapWithInstall } from "./helpers.ts";
 
-useTempAgentRoot();
+let ccRoot = "";
+let ccOriginal: { userPath: () => string; detect: () => boolean };
+beforeEach(() => {
+  ccRoot = makeTempDir("crew-tap-remove-agent-");
+  ccOriginal = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
+});
 
 describe("tap uninstall project identity preflight", () => {
   for (const root of [undefined, "", "relative"] as const) {
@@ -30,7 +36,7 @@ describe("tap uninstall project identity preflight", () => {
         const result = run(home, ["tap", "remove", "mytap", "--uninstall", ...dry]);
         expect(result.code).toBe(4);
         expect(result.stderr).toContain("project root");
-        expect(existsSync(join(agentRoot(), "alpha"))).toBe(true);
+        expect(existsSync(join(ccRoot, "alpha"))).toBe(true);
         expect(readFileSync(statePath, "utf8")).toBe(before);
         expect(readFileSync(paths(home).configFile, "utf8")).toBe(config);
       }

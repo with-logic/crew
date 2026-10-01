@@ -126,10 +126,13 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
   const summary = withStateLock(() => {
     // Replay resolver additions onto fresh config under the lock (§14),
     // retaining concurrent removals and rejecting source replacements.
-    if (configWithAutoTaps !== config) {
-      writeConfig(mergeAutoTaps(readConfig(home), config, configWithAutoTaps), home);
-    }
-    assertTapsPresent(readConfig(home), resolvedAll);
+    const freshConfig = readConfig(home);
+    const mergedConfig =
+      configWithAutoTaps === config
+        ? freshConfig
+        : mergeAutoTaps(freshConfig, config, configWithAutoTaps);
+    assertTapsPresent(mergedConfig, resolvedAll);
+    if (mergedConfig !== freshConfig) writeConfig(mergedConfig, home);
 
     const freshState = readState(home);
     const analysis = applyDuplicateRules(

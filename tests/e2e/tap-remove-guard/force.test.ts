@@ -4,22 +4,27 @@
  * (§10.1, C-UPD-12b).
  */
 
-import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { readConfig } from "../../../src/config/load.ts";
 import { readState } from "../../../src/state/load.ts";
-import { commitAll, makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
-import {
-  agentRoot,
-  buildTapRepo,
-  makeCrewHome,
-  run,
-  tapWithInstall,
-  useTempAgentRoot,
-} from "./helpers.ts";
+import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { buildTapRepo, makeCrewHome, run, tapWithInstall } from "./helpers.ts";
 
-useTempAgentRoot();
+let ccRoot = "";
+let ccOriginal: { userPath: () => string; detect: () => boolean };
+beforeEach(() => {
+  ccRoot = makeTempDir("crew-tap-remove-agent-");
+  ccOriginal = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
+});
 
 describe("C-TAP-16e tap remove --force keeps skills", () => {
   test("removes the tap, keeps the install, and warns", () => {
@@ -31,7 +36,7 @@ describe("C-TAP-16e tap remove --force keeps skills", () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("Removed tap mytap");
     expect(r.stdout).toContain("stayed installed: alpha (user)");
-    expect(existsSync(join(agentRoot(), "alpha"))).toBe(true);
+    expect(existsSync(join(ccRoot, "alpha"))).toBe(true);
     expect(readState(home).installations).toHaveLength(1);
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(false);
   });
@@ -43,14 +48,18 @@ describe("C-UPD-12b tap_missing", () => {
     expect(tapWithInstall(home, buildTapRepo())).toBe(0);
     expect(run(home, ["tap", "remove", "--force", "mytap"]).code).toBe(0);
 
+    const stateBefore = readState(home).installations;
+    const skillBefore = readFileSync(join(ccRoot, "alpha", "SKILL.md"));
+    const markerBefore = readFileSync(join(ccRoot, "alpha", ".crew.json"));
     const r = run(home, ["update"]);
 
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("tap removed");
     expect(r.stdout).toContain("1 with a removed tap");
-    // The install and its state entry are left alone.
-    expect(existsSync(join(agentRoot(), "alpha"))).toBe(true);
-    expect(readState(home).installations).toHaveLength(1);
+    // C-UPD-12b preserves bytes, marker, and every state field.
+    expect(readFileSync(join(ccRoot, "alpha", "SKILL.md"))).toEqual(skillBefore);
+    expect(readFileSync(join(ccRoot, "alpha", ".crew.json"))).toEqual(markerBefore);
+    expect(readState(home).installations).toEqual(stateBefore);
   });
 
   test("JSON reports the outcome and names the missing tap", () => {

@@ -43,7 +43,7 @@ export function renderTapRemove(input: RenderTapRemoveInput): string[] {
     lines.push(
       `${style.symbol("fail")} Kept tap ${style.bold(name)} ${style.dim("(a skill couldn't be removed)")}`,
     );
-    lines.push(style.dim(`  fix the failure above, or retry with \`--force --uninstall\``));
+    lines.push(style.dim("  fix the failure above, then retry"));
     return lines;
   }
 

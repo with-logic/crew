@@ -3,14 +3,26 @@
  * plus flag-placement errors.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
 import { readState } from "../../../src/state/load.ts";
-import { cloneDirForTap } from "../../helpers/fixtures.ts";
-import { buildTapRepo, makeCrewHome, run, tapWithInstall, useTempAgentRoot } from "./helpers.ts";
+import { cloneDirForTap, makeTempDir } from "../../helpers/fixtures.ts";
+import { buildTapRepo, makeCrewHome, run, tapWithInstall } from "./helpers.ts";
 
-useTempAgentRoot();
+let ccRoot = "";
+let ccOriginal: { userPath: () => string; detect: () => boolean };
+beforeEach(() => {
+  ccRoot = makeTempDir("crew-tap-remove-agent-");
+  ccOriginal = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
+});
 
 describe("C-TAP-16c attached-skill guard", () => {
   test("refuses to remove a tap with installed skills and names them", () => {

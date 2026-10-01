@@ -27,7 +27,8 @@ import type { Config, ResolvedSkill, TapConfig } from "../core/types.ts";
  *
  *   - not in `before`, not in `fresh` → the resolver added it; keep it.
  *   - not in `before`, in `fresh`     → another process added the same
- *     name concurrently; keep fresh's row rather than clobbering it.
+ *     name concurrently; keep fresh's row and replay a same-source
+ *     recursive upgrade.
  *   - in `before`, not in `fresh`     → concurrently REMOVED. The
  *     resolver never deletes, so removal is the only explanation; it
  *     stays removed.
@@ -50,8 +51,15 @@ export function mergeAutoTaps(fresh: Config, before: Config, extended: Config): 
     const original = beforeByName.get(t.name);
     if (!original) {
       // New to the resolver. If fresh already has the name, a concurrent
-      // writer got there first and its row wins.
-      if (!freshByName.has(t.name)) added.push(t);
+      // keep its registration and source, replaying a same-source upgrade.
+      const concurrent = freshByName.get(t.name);
+      if (!concurrent) added.push(t);
+      else if (
+        t.discovery === "recursive" &&
+        concurrent.discovery !== "recursive" &&
+        sourceIdentity(concurrent) === sourceIdentity(t)
+      )
+        upgraded.add(t.name);
       continue;
     }
     // Present in `before`: only a concurrent removal can drop it from
@@ -84,7 +92,10 @@ function sourceIdentity(tap: TapConfig): string {
  * removal (or removal + re-add) is the only way to reach either, so the
  * message says to retry rather than blaming the reference.
  */
-export function assertTapsPresent(config: Config, skills: readonly ResolvedSkill[]): void {
+export function assertTapsPresent(
+  config: Config,
+  skills: readonly Pick<ResolvedSkill, "name" | "tap">[],
+): void {
   const byName = new Map(config.taps.map((t) => [t.name, t]));
   for (const skill of skills) {
     const current = byName.get(skill.tap.name);

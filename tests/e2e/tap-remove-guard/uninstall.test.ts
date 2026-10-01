@@ -4,30 +4,43 @@
  * `./aborts.test.ts`.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { readConfig } from "../../../src/config/load.ts";
 import { readState } from "../../../src/state/load.ts";
 import { cloneDirForTap } from "../../helpers/fixtures.ts";
-import {
-  agentRoot,
-  buildTapRepo,
-  makeCrewHome,
-  makeTempDir,
-  run,
-  runIn,
-  tapWithInstall,
-  useTempAgentRoot,
-} from "./helpers.ts";
+import { buildTapRepo, makeCrewHome, makeTempDir, run, runIn, tapWithInstall } from "./helpers.ts";
 
-useTempAgentRoot();
+let ccRoot = "";
+let ccOriginal: {
+  userPath: () => string;
+  detect: () => boolean;
+  projectPath: (cwd: string) => string;
+};
+beforeEach(() => {
+  ccRoot = makeTempDir("crew-tap-remove-agent-");
+  ccOriginal = {
+    userPath: claudeCodeAdapter.userPath,
+    detect: claudeCodeAdapter.detect,
+    projectPath: claudeCodeAdapter.projectPath,
+  };
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+  claudeCodeAdapter.projectPath = (cwd) => join(cwd, ".claude", "skills");
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
+  claudeCodeAdapter.projectPath = ccOriginal.projectPath;
+});
 
 describe("C-TAP-16d tap remove --uninstall", () => {
   test("removes the skills and then the tap", () => {
     const home = makeCrewHome();
     expect(tapWithInstall(home, buildTapRepo())).toBe(0);
-    expect(existsSync(join(agentRoot(), "alpha"))).toBe(true);
+    expect(existsSync(join(ccRoot, "alpha"))).toBe(true);
     // Resolve the shared clone before removal — afterwards the tap row is
     // gone and the path can no longer be looked up from config.
     const clone = cloneDirForTap("mytap", home)!;
@@ -37,7 +50,7 @@ describe("C-TAP-16d tap remove --uninstall", () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("Uninstalling alpha");
     expect(r.stdout).toContain("Removed tap mytap");
-    expect(existsSync(join(agentRoot(), "alpha"))).toBe(false);
+    expect(existsSync(join(ccRoot, "alpha"))).toBe(false);
     expect(readState(home).installations).toHaveLength(0);
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(false);
     expect(existsSync(clone)).toBe(false);
@@ -54,8 +67,8 @@ describe("C-TAP-16d tap remove --uninstall", () => {
     // `beta` belongs to another tap and must survive untouched.
     const survivors = readState(home).installations.map((e) => `${e.name}/${e.source.tap}`);
     expect(survivors).toEqual(["beta/tapb"]);
-    expect(existsSync(join(agentRoot(), "beta"))).toBe(true);
-    expect(existsSync(join(agentRoot(), "alpha"))).toBe(false);
+    expect(existsSync(join(ccRoot, "beta"))).toBe(true);
+    expect(existsSync(join(ccRoot, "alpha"))).toBe(false);
     expect(readConfig(home).taps.some((t) => t.name === "tapb")).toBe(true);
   });
 
@@ -70,8 +83,8 @@ describe("C-TAP-16d tap remove --uninstall", () => {
     expect(payload.dry_run).toBe(true);
     expect(payload.uninstalled).toHaveLength(1);
     // Install, state, config, and clone all survive the preview.
-    expect(existsSync(join(agentRoot(), "alpha"))).toBe(true);
-    expect(existsSync(join(agentRoot(), "alpha", ".crew.json"))).toBe(true);
+    expect(existsSync(join(ccRoot, "alpha"))).toBe(true);
+    expect(existsSync(join(ccRoot, "alpha", ".crew.json"))).toBe(true);
     expect(readState(home).installations).toHaveLength(1);
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(true);
     expect(existsSync(cloneDirForTap("mytap", home)!)).toBe(true);
@@ -114,7 +127,7 @@ describe("C-TAP-16d tap remove --uninstall", () => {
     // `othertap`'s install, its state row, its config row, and its clone
     // all survive; only `mytap`'s user-scope copy came off.
     expect(existsSync(otherDest)).toBe(true);
-    expect(existsSync(join(agentRoot(), "alpha"))).toBe(false);
+    expect(existsSync(join(ccRoot, "alpha"))).toBe(false);
     const survivors = readState(home).installations;
     expect(survivors.map((e) => `${e.name}/${e.scope}/${e.source.tap}`)).toEqual([
       "alpha/project/othertap",

@@ -17,8 +17,10 @@ import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { paths } from "../../src/core/paths.ts";
+import { readState } from "../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
+  cloneDirForTap,
   commitAll,
   makeGitRepo,
   makeSkill,
@@ -70,7 +72,8 @@ describe("C-UNINST-19c uninstall --dry-run writes nothing", () => {
     const configBefore = readFileSync(p.configFile, "utf8");
     const markerBefore = readFileSync(join(ccRoot, "demo", ".crew.json"), "utf8");
     // The auto tap's clone directory, whichever name was derived for it.
-    const tapDirBefore = existsSync(p.tapsDir);
+    const clone = cloneDirForTap(readState(home).installations[0]!.source.tap, home)!;
+    expect(existsSync(clone)).toBe(true);
 
     const r = run(home, ["uninstall", "--dry-run", "demo"]);
 
@@ -83,7 +86,7 @@ describe("C-UNINST-19c uninstall --dry-run writes nothing", () => {
     expect(readFileSync(p.stateFile, "utf8")).toBe(stateBefore);
     expect(readFileSync(p.configFile, "utf8")).toBe(configBefore);
     // The clone the preview claims to keep is still there.
-    expect(existsSync(p.tapsDir)).toBe(tapDirBefore);
+    expect(existsSync(clone)).toBe(true);
   });
 
   test("a real uninstall still removes everything the preview described", () => {

@@ -23,8 +23,8 @@ function configWith(taps: TapConfig[]): Config {
   return { ...defaultConfig(), taps };
 }
 
-function skillFrom(tap: TapConfig, name = "alpha"): ResolvedSkill {
-  return { name, tap } as ResolvedSkill;
+function skillFrom(tap: TapConfig, name = "alpha"): Pick<ResolvedSkill, "name" | "tap"> {
+  return { name, tap };
 }
 
 /** Run `fn`, returning the CrewError it threw, or null if it returned. */
