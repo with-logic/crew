@@ -15,6 +15,7 @@ import { infoHelp } from "./info.ts";
 import { installHelp } from "./install.ts";
 import { listHelp } from "./list.ts";
 import { lsHelp } from "./ls.ts";
+import { outdatedHelp } from "./outdated.ts";
 import { removeHelp } from "./remove.ts";
 import { rmHelp } from "./rm.ts";
 import { searchHelp } from "./search.ts";
@@ -54,6 +55,7 @@ export const GROUPS: readonly CommandGroup[] = [
       "rm",
       "update",
       "upgrade",
+      "outdated",
       "list",
       "skills",
       "ls",
@@ -79,6 +81,7 @@ export const COMMANDS: Record<VisibleCommand, CommandHelp> = {
   rm: rmHelp,
   update: updateHelp,
   upgrade: upgradeHelp,
+  outdated: outdatedHelp,
   list: listHelp,
   skills: skillsHelp,
   ls: lsHelp,
@@ -107,6 +110,7 @@ export const ONELINERS: Record<VisibleCommand, string> = {
   rm: "Alias for `uninstall`.",
   update: "Catch installed skills up to the latest.",
   upgrade: "Alias for `update`.",
+  outdated: "See which skills have updates available.",
   list: "See what you have installed.",
   skills: "Alias for `list`.",
   ls: "Alias for `list`.",
