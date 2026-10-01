@@ -12,6 +12,7 @@ import { dirname } from "node:path";
 import lockfile from "proper-lockfile";
 import { CrewError } from "../core/errors.ts";
 import { ensureDir, exists, touch } from "../util/fs.ts";
+import { lockOwnerFs } from "./lock-owner.ts";
 
 /** Handle representing a held advisory lock. */
 export interface HeldLock {
@@ -48,11 +49,19 @@ export function acquireLock(target: string, timeoutMs: number = defaultTimeoutMs
   const pollMs = 100;
   for (;;) {
     try {
+      const owner = lockOwnerFs(`${target}.lock`);
       const release = lockfile.lockSync(target, {
+        fs: owner.fs,
         stale: 60_000,
         realpath: false,
         lockfilePath: `${target}.lock`,
       });
+      try {
+        owner.record();
+      } catch (err) {
+        release();
+        throw err;
+      }
       let released = false;
       return {
         release(): void {

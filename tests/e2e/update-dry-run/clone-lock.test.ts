@@ -32,11 +32,14 @@ redirectClaudeCode();
 
 // §14's real timeout is 30 s; these tests assert that a run BLOCKS, so
 // shorten it rather than waiting.
+let previousTimeout: string | undefined;
 beforeEach(() => {
+  previousTimeout = process.env["CREW_LOCK_TIMEOUT_MS"];
   process.env["CREW_LOCK_TIMEOUT_MS"] = "200";
 });
 afterEach(() => {
-  delete process.env["CREW_LOCK_TIMEOUT_MS"];
+  if (previousTimeout === undefined) delete process.env["CREW_LOCK_TIMEOUT_MS"];
+  else process.env["CREW_LOCK_TIMEOUT_MS"] = previousTimeout;
 });
 
 /**

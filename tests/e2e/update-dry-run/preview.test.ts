@@ -31,6 +31,7 @@ describe("C-UPD-18 crew update --dry-run", () => {
     makeGitRepo(repo);
     makeSkill(repo, "alpha", skillFrontmatter({ name: "alpha", description: "v1" }), "body v1\n");
     writeFileSync(join(repo, "alpha", "reference.md"), "resource v1\n");
+    writeFileSync(join(repo, "alpha", "binary.bin"), Buffer.from([0, 128, 255]));
     commitAll(repo, "v1");
     expect(runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams })).toBe(
       0,
@@ -43,6 +44,7 @@ describe("C-UPD-18 crew update --dry-run", () => {
       `---\n${skillFrontmatter({ name: "alpha", description: "v2" })}\n---\nbody v2\n`,
     );
     writeFileSync(join(repo, "alpha", "reference.md"), "resource v2\n");
+    writeFileSync(join(repo, "alpha", "binary.bin"), Buffer.from([0, 129, 255]));
     makeSkill(repo, "beta", skillFrontmatter({ name: "beta", description: "new sibling" }));
     const newSha = commitAll(repo, "v2");
 

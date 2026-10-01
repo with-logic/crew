@@ -58,19 +58,19 @@ export function redirectClaudeCode(): void {
  * them out (§10.1.1), which is how it learns what moved. They are the
  * one documented exception to "nothing is written".
  */
-export function snapshotInstalledState(home: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  out["state"] = readFileSync(paths(home).stateFile, "utf8");
+export function snapshotInstalledState(home: string): Record<string, Buffer> {
+  const out: Record<string, Buffer> = {};
+  out["state"] = readFileSync(paths(home).stateFile);
   snapshotTree(out, paths(home).storeDir, "store");
   snapshotTree(out, ccRoot, "installed");
   return out;
 }
 
 /** Record every file under `root` by content, keyed by relative path. */
-function snapshotTree(out: Record<string, string>, root: string, label: string): void {
+function snapshotTree(out: Record<string, Buffer>, root: string, label: string): void {
   if (!existsSync(root)) return;
   for (const entry of walk(root)) {
     if (!entry.isFile) continue;
-    out[`${label}:${relative(root, entry.absPath)}`] = readFileSync(entry.absPath, "utf8");
+    out[`${label}:${relative(root, entry.absPath)}`] = readFileSync(entry.absPath);
   }
 }

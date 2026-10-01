@@ -51,7 +51,7 @@ export function planUpdate(
   const current = readState(home);
 
   // Dep-closure expansion — may add more entries, but they all live in
-  // state already (we never install new skills during update).
+  // state already (re-expansion separately installs new tap children).
   const subjects = resolveStateSubjects(current, rawNames);
   const { entries: initialSelected, transitiveSources } = chooseEntries(current, subjects);
   const names = subjects.map((subject) => subject.name);
@@ -61,7 +61,8 @@ export function planUpdate(
   // refresh, re-expansion, and every per-skill source read — because
   // all three read or mutate the same working tree.
   const taps = tapsToRefreshFor(config, names, initialSelected);
-  return withTapLocks(taps, home, () =>
+  const cloneTaps = tapsForReexpansion(config, current, names, taps);
+  return withTapLocks(cloneTaps, home, () =>
     planLockedUpdate({
       ctx,
       config,
@@ -159,4 +160,20 @@ function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
   }
 
   return { state: current, rows, tapReexpandRows, tapRows, hardFailure };
+}
+
+/** Re-expansion's name filter may touch another tap with a same-named member. */
+function tapsForReexpansion(
+  config: Config,
+  state: StateFile,
+  names: readonly string[],
+  refreshed: readonly TapConfig[],
+): readonly TapConfig[] {
+  const wanted = new Set(refreshed.map((tap) => tap.name));
+  for (const entry of state.installations) {
+    if (names.length === 0 || names.includes(entry.name) || names.includes(entry.source.tap)) {
+      wanted.add(entry.source.tap);
+    }
+  }
+  return config.taps.filter((tap) => wanted.has(tap.name));
 }
