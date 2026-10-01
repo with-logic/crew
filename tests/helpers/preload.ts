@@ -22,13 +22,27 @@
  * `tests/e2e/install.test.ts` swaps real `userPath` / `projectPath` /
  * `detect` in for the duration of the test and restores on
  * `afterEach`.
+ *
+ * 3. Install the network tripwire, so a fixture carrying a remote URL
+ *    fails loudly instead of silently cloning over the network. See
+ *    `./no-network.ts`.
  */
 
+import { afterEach } from "bun:test";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { neutralizeAdaptersExcept } from "./env.ts";
+import { installNetworkTripwire, takeRemoteGitFailure } from "./no-network.ts";
 
 neutralizeAdaptersExcept([]);
+installNetworkTripwire();
+
+// Turns a violation the code under test swallowed into a failed test.
+// See `takeRemoteGitFailure` for why the tripwire's own throw isn't enough.
+afterEach(() => {
+  const failure = takeRemoteGitFailure();
+  if (failure !== null) throw new Error(failure);
+});
 
 type Mut = { detect: () => boolean; projectPath: (cwd: string) => string };
 (claudeCodeAdapter as Mut).detect = () => true;

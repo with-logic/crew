@@ -24,6 +24,20 @@ export interface AdditionsInput {
   readonly dryRun: boolean;
   readonly installOne: InstallNewChild;
   readonly cache: TapScanCache;
+  /**
+   * When a namespace selector drove this run, the namespaces it named.
+   * Children outside them are skipped: the group spans the whole tap,
+   * but the user asked about one namespace (§10.1.1). `null` is
+   * unbounded.
+   */
+  readonly namespaces: ReadonlySet<string> | null;
+}
+
+/** The namespace a child lives under (`skills/<ns>/<name>`), or null. */
+function namespaceForChild(child: CurrentTapChild): string | null {
+  const parts = child.tapRelativePath.split("/");
+  if (parts.length === 3 && parts[0] === "skills") return parts[1]!;
+  return null;
 }
 
 export interface AdditionsResult {
@@ -40,6 +54,10 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
   for (const child of input.children) {
     if (input.conflictedNames.has(child.name)) continue;
     if (input.memberNames.has(child.name)) continue;
+    if (input.namespaces !== null) {
+      const ns = namespaceForChild(child);
+      if (ns === null || !input.namespaces.has(ns)) continue;
+    }
 
     // §9 step 4: discovery only validated the declared name, so a child
     // can reach here with (say) no `description`. Validate in full
