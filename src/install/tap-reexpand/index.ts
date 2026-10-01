@@ -23,14 +23,18 @@
  */
 
 import type { CrewError } from "../../core/errors.ts";
-import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
+import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import { entryIdentity } from "../../state/collections/index.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
+import { buildInstalledSourceIndex } from "../installed-lookup.ts";
 import { groupChildrenByName } from "../tap-children.ts";
 import { collectAdditions } from "./additions.ts";
 import { type AcquiredTapScan, makeTapScanCache } from "./scan-cache.ts";
 import { surveyGroup } from "./survey.ts";
+import type { InstallNewChild, TapReexpandResult, TapReexpandRow } from "./types.ts";
+
+export type { InstallNewChild, TapReexpandResult, TapReexpandRow } from "./types.ts";
 
 /**
  * Which groups a restricted run should re-expand. `memberIdentities`
@@ -52,36 +56,6 @@ export interface ReexpandSelection {
   readonly namespaces: ReadonlySet<string> | null;
 }
 
-/** One re-expansion outcome row. */
-export interface TapReexpandRow {
-  readonly name: string;
-  readonly scope: Scope;
-  readonly kind: "added" | "would_add" | "source_gone" | "tap_error";
-  readonly tap: string;
-  readonly error?: { readonly code: string; readonly message: string };
-}
-
-/** Callback to install one newly-detected child skill. */
-export type InstallNewChild = (args: {
-  readonly skillDir: string;
-  readonly skillName: string;
-  readonly tapRelativePath: string;
-  readonly scope: Scope;
-  readonly tap: TapConfig;
-  readonly agents: readonly string[];
-  readonly resolvedSha: string | null;
-  readonly projectRoot: string | null;
-}) => StateEntry | null;
-
-export interface TapReexpandResult {
-  readonly added: readonly StateEntry[];
-  readonly updated: readonly StateEntry[];
-  readonly hardFailure: boolean;
-  /** Vanished sources, keyed by full install identity (§11.1), never name alone. */
-  readonly sourceGone: ReadonlySet<string>;
-  readonly rows: readonly TapReexpandRow[];
-}
-
 export function reexpandTaps(
   state: StateFile,
   config: Config,
@@ -98,6 +72,7 @@ export function reexpandTaps(
   // One tap backs several (scope, project_root) groups; acquire, walk
   // and validate it once per run rather than once per group.
   const cache = makeTapScanCache();
+  const installedIndex = buildInstalledSourceIndex(state, config);
 
   // Group state entries by (tap-name, scope, project_root). Entries
   // sharing all three are managed together: same tap clone, same
@@ -183,6 +158,7 @@ export function reexpandTaps(
       dryRun,
       installOne,
       cache,
+      installedIndex,
       namespaces: selection?.namespaces ?? null,
     });
     added.push(...additions.added);

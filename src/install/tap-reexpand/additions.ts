@@ -8,6 +8,11 @@
  */
 
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
+import {
+  type InstalledSourceIndex,
+  indexHasSameSource,
+  noteInstalled,
+} from "../installed-lookup.ts";
 import type { CurrentTapChild } from "../tap-children.ts";
 import type { InstallNewChild, TapReexpandRow } from "./index.ts";
 import type { TapScanCache } from "./scan-cache.ts";
@@ -24,6 +29,7 @@ export interface AdditionsInput {
   readonly dryRun: boolean;
   readonly installOne: InstallNewChild;
   readonly cache: TapScanCache;
+  readonly installedIndex: InstalledSourceIndex;
   /**
    * When a namespace selector drove this run, the namespaces it named.
    * Children outside them are skipped: the group spans the whole tap,
@@ -59,6 +65,15 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       if (ns === null || !input.namespaces.has(ns)) continue;
     }
 
+    const lookup = {
+      name: child.name,
+      scope: input.scope,
+      projectRoot: input.projectRoot,
+      tap: input.tap,
+      tapRelativePath: child.tapRelativePath,
+    };
+    if (indexHasSameSource(input.installedIndex, lookup)) continue;
+
     // §9 step 4: discovery only validated the declared name, so a child
     // can reach here with (say) no `description`. Validate in full
     // before reporting or installing, so the preview and the real run
@@ -76,6 +91,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       continue;
     }
     if (input.dryRun) {
+      noteInstalled(input.installedIndex, lookup);
       rows.push({
         name: child.name,
         scope: input.scope,
@@ -96,6 +112,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
     });
     if (entry) {
       added.push(entry);
+      noteInstalled(input.installedIndex, lookup);
       rows.push({ name: child.name, scope: input.scope, tap: input.tap.name, kind: "added" });
     }
   }

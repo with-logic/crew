@@ -34,13 +34,13 @@ import { ALL_AGENTS, agentByName } from "../../agents/registry.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateFile } from "../../core/types.ts";
+import { garbageCollectAutoTaps } from "../../maintenance/auto-taps.ts";
 import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { allTargets, confirmAll } from "./all.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
-import { gcAutoTaps } from "./gc.ts";
 import { renderUninstall } from "./render.ts";
 import { selectedTargets } from "./select.ts";
 import { findOrphan } from "./state.ts";
@@ -67,7 +67,7 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
         writeState(plan.state, ctx.home);
         // Auto-tap GC: any auto tap with no remaining state entries is
         // dropped from config and its clone deleted. Registered taps stay.
-        gcAutoTaps(plan.state, ctx.home);
+        garbageCollectAutoTaps(plan.state, ctx.home);
         return plan;
       }, ctx.home);
 
