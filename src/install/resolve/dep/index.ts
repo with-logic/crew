@@ -73,6 +73,7 @@ export function enqueueDeps(
         // A miss falls through to the cross-tap search below, which
         // does not need the parent's tree.
         if (sibling) {
+          requireTap(sibling.tap);
           const produced = siblingItems(sibling, parent, home);
           hits.push(...produced.items);
           current = produced.config;
@@ -84,7 +85,7 @@ export function enqueueDeps(
   }
 
   for (const depRef of [...unresolved, ...others]) {
-    const enqueued = enqueueDep(depRef, parent, current, cwd, home, requireTap);
+    const enqueued = enqueueDep(depRef, current, cwd, home, requireTap);
     current = enqueued.config;
     items.push(...enqueued.items);
     skipped.push(...enqueued.skipped);
@@ -93,35 +94,15 @@ export function enqueueDeps(
   return { items, config: current, skipped };
 }
 
-/** Resolve and enqueue items for a single dependency reference. */
+/** Enqueue a remaining dependency after the batched sibling search. */
 export function enqueueDep(
   depRef: string,
-  parent: PendingItem,
   config: Config,
   cwd: string,
   home: string,
   requireTap: (tap: TapConfig) => void,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const source = parseRef(depRef, cwd);
-
-  // Bare-name dep with a tap-aware parent: prefer a sibling in the parent's tap.
-  if (source.type === "tap" && source.tap === null) {
-    // A parent read at an explicit ref has its siblings read at the
-    // parent's commit, not HEAD — otherwise their bytes get recorded
-    // under the parent's SHA while actually coming from somewhere
-    // else (§9 step 3).
-    const found = withParentSkillDir(parent, home, (parentDir) => {
-      const sibling = findSiblingDep(
-        { tap: parent.tap, tapRelativePath: parent.tapRelativePath, parentDir },
-        source.name,
-        home,
-        config,
-      );
-      return sibling ? siblingItems(sibling, parent, home) : null;
-    });
-    if (found) return found;
-    // Fall through to bare-name search across all configured taps.
-  }
 
   if (source.type === "tap") return enqueueTapRef(source, config, home, false, null);
 

@@ -7,17 +7,30 @@
  * Per-entry ref behavior is `./update.test.ts`.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { runGit } from "../../../src/git/exec.ts";
+import type { UpdateRow } from "../../../src/install/update/types.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { commitAll, makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { installedBody, retag, twoCommitRepo, useRedirectedAdapter } from "./helpers.ts";
+import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { installedBody, retag, twoCommitRepo } from "./helpers.ts";
 
-useRedirectedAdapter();
+let ccRoot = "";
+let ccOriginal: { userPath: () => string; detect: () => boolean };
+beforeEach(() => {
+  ccRoot = makeTempDir("crew-requested-ref-agent-");
+  ccOriginal = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
+});
 
 describe("re-expanding a whole-tap install at its ref", () => {
   test("C-UPD-16b a whole-tap install at a ref re-expands at that ref", () => {
@@ -80,7 +93,7 @@ describe("re-expanding a whole-tap install at its ref", () => {
     const home = makeCrewHome();
     const { repo } = twoCommitRepo();
     runCli(["install", `file://${repo}@v1//demo`], { home, streams: captureStreams().streams });
-    const before = installedBody();
+    const before = installedBody(ccRoot);
 
     writeFileSync(
       join(repo, "demo", "SKILL.md"),
@@ -98,11 +111,14 @@ describe("re-expanding a whole-tap install at its ref", () => {
 
     expect(code).toBe(1);
     const payload = JSON.parse(cap.stdout()) as {
-      rows: { outcome: { kind: string; error?: { code: string } } }[];
+      rows: readonly UpdateRow[];
     };
     expect(payload.rows[0]!.outcome.kind).toBe("failed");
-    expect(payload.rows[0]!.outcome.error?.code).toBe("source_unreachable");
+    expect(payload.rows[0]!.outcome).toMatchObject({
+      kind: "failed",
+      error: { code: "source_unreachable" },
+    });
     // The working install survives a failure to materialize the update.
-    expect(installedBody()).toBe(before);
+    expect(installedBody(ccRoot)).toBe(before);
   });
 });

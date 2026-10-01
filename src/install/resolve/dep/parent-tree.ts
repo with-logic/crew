@@ -36,7 +36,8 @@ export function withParentSkillDir<T>(
   home: string,
   fn: (parentDir: string | undefined) => T,
 ): T {
-  if (parent.requestedRef === null || parent.tap.kind !== "git") return fn(undefined);
+  if (parent.requestedRef === null || parent.resolvedSha === null || parent.tap.kind !== "git")
+    return fn(undefined);
   const widened: TapConfig = { ...parent.tap, subpath: enclosingSubpath(parent.tap.subpath) };
   // Inside the widened export, the parent sits at its own directory name
   // (subpath case) or at its tap-relative path (whole-repo tap case).
@@ -44,7 +45,8 @@ export function withParentSkillDir<T>(
     parent.tap.subpath.length > 0
       ? posix.join(posix.basename(parent.tap.subpath), parent.tapRelativePath)
       : parent.tapRelativePath;
-  return withAcquiredTap(widened, parent.requestedRef, home, (acq) =>
+  // Another root's fetch can move a branch; siblings use the captured commit (§9 step 3).
+  return withAcquiredTap(widened, parent.resolvedSha, home, (acq) =>
     fn(rel.length > 0 ? join(acq.rootDir, rel) : acq.rootDir),
   );
 }
