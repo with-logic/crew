@@ -170,7 +170,7 @@ When a command asks for an installed skill name, you can use the bare name
 | `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. `--dry-run` previews pending updates and new tap skills: tap clones are still refreshed, but no installed skill, marker, store entry, or `state.json` changes. |
 | `crew upgrade [<name>…]` | Alias for `crew update`. |
 | `crew outdated [<name>…]` | Preview what `crew update` would change — pending updates, plus new skills added to a tap you installed whole. Same as `crew update --dry-run`, trimmed to what matters: tap clones are still refreshed, but nothing installed changes. |
-| `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. `--scope user` or `--scope project` narrows to one scope. |
+| `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. `--scope user` or `--scope project` narrows to one scope; `--agent <name>` and `--tap <name>` filter by agent or tap. |
 | `crew skills`, `crew ls` | Aliases for `crew list`. |
 | `crew info <ref-or-name>` | Show details for an installed skill or one available in a tap. |
 

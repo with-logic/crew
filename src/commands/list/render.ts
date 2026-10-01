@@ -23,7 +23,8 @@ import type { Scope, StateEntry } from "../../core/types.ts";
 import { columns, shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 
-export function renderEmpty(scope: Scope | null, style: Styler): string[] {
+export function renderEmpty(scope: Scope | null, rowFiltered: boolean, style: Styler): string[] {
+  if (rowFiltered) return [style.dim("No skills match those filters.")];
   if (scope !== null) return [style.dim(`No skills installed at ${scope} scope.`)];
   return [
     style.dim("You don't have any skills installed yet."),
