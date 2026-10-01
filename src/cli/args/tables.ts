@@ -2,8 +2,9 @@
  * Flag tables and the shared yargs parser configuration (§5.2, §5.3).
  *
  * One place declares which flags exist and which take values, so the
- * parse in `./index.ts` and anything else that has to tell a flag value
- * from a positional can never disagree.
+ * conventional-flag rewrite in `./conventional-flags.ts` and the real
+ * parse in `./index.ts` can never disagree about what is a flag value
+ * and what is a positional.
  */
 
 import yargsFactory from "yargs/yargs";
@@ -32,6 +33,14 @@ export const STRING_SUB: Readonly<Record<string, readonly string[]>> = {
 };
 /** Flags that should always be collected into a list. */
 export const ARRAY_GLOBALS = ["agent"] as const;
+/**
+ * Widen `withFlagTables` to every command's flags at once, for the
+ * discovery parse that has to find the command before it knows which
+ * tables apply. A command-scoped flag can precede its command
+ * (`crew --prune uninstall --help`), so a discovery parse that knows only
+ * the globals would read `uninstall` as `--prune`'s value.
+ */
+export const EVERY_COMMAND = Symbol("every-command");
 /** The subset of flags that is part of the public `CommandFlags` surface. */
 export const BUILT_IN_FLAGS: ReadonlySet<string> = new Set<string>([
   ...BOOLEAN_GLOBALS,
@@ -58,6 +67,33 @@ export function baseParser() {
 }
 
 /**
+ * Configure `p` with the flag tables that apply to `command` (the global
+ * tables plus that command's own), so the parser knows which tokens are
+ * flag values and which are positionals.
+ *
+ * `command === EVERY_COMMAND` widens this to every command's tables at
+ * once. That is only correct for *discovery* — finding which positional
+ * is the command before the command is known — never for the real parse,
+ * which must reject a flag belonging to a different command.
+ *
+ * `help` is declared boolean so `--help` never swallows the word after it.
+ */
+export function withFlagTables(
+  p: ReturnType<typeof baseParser>,
+  command: string | undefined | typeof EVERY_COMMAND,
+) {
+  const booleans =
+    command === EVERY_COMMAND ? Object.values(BOOLEAN_SUB).flat() : subFlags(BOOLEAN_SUB, command);
+  const strings =
+    command === EVERY_COMMAND ? Object.values(STRING_SUB).flat() : subFlags(STRING_SUB, command);
+  return p
+    .boolean([...BOOLEAN_GLOBALS, "help", ...booleans])
+    .string([...STRING_GLOBALS, ...strings])
+    .array([...ARRAY_GLOBALS])
+    .nargs(Object.fromEntries(ARRAY_GLOBALS.map((n) => [n, 1])));
+}
+
+/**
  * The per-subcommand flags `command` owns, resolved through its alias.
  *
  * A bare alias shares its canonical command's flag tables (`crew rm
@@ -68,8 +104,9 @@ export function baseParser() {
  */
 export function subFlags(
   table: Readonly<Record<string, readonly string[]>>,
-  command: string,
+  command: string | undefined,
 ): readonly string[] {
+  if (command === undefined) return [];
   const key = aliasFlagKey(command);
   if (key === null) return [];
   return lookup(table, key) ?? [];

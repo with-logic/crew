@@ -167,7 +167,7 @@ When a command asks for an installed skill name, you can use the bare name
 | `crew install --from-git <source>` | Install from a git source without a positional ref. Forces the value to be read as git, so a bare `owner/repo` means GitHub rather than `<tap>/<skill>`. Combines with positional refs. |
 | `crew uninstall <name>…` | Remove installed skills from every agent they were installed into. |
 | `crew remove <name>…`, `crew rm <name>…` | Aliases for `crew uninstall`. |
-| `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. |
+| `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. `--dry-run` previews pending updates and new tap skills: tap clones are still refreshed, but no installed skill, marker, store entry, or `state.json` changes. |
 | `crew upgrade [<name>…]` | Alias for `crew update`. |
 | `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. |
 | `crew skills`, `crew ls` | Aliases for `crew list`. |
@@ -206,8 +206,8 @@ When a command asks for an installed skill name, you can use the bare name
 
 | Command | What it does |
 |---|---|
-| `crew help [<command>]` | Overview or per-command help, with realistic examples. |
-| `crew version` | Print the version string and exit. |
+| `crew help [<command>]` | Overview or per-command help, with realistic examples. `crew <command> --help` and `-h` work too. |
+| `crew version` | Print the version string and exit. `crew --version`, `-v`, and `-V` work too. |
 
 ## Taps: a tap is just a git repo full of skills
 

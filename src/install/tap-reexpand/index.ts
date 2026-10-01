@@ -4,8 +4,10 @@
  * For every git-kind tap with at least one state entry attributed to it
  * (filtered by `restrictNames`), walk the tap one level deep and:
  *
- *   1. ADDITIONS — children present upstream but not in state: install
- *      via the caller-provided `installNewChild` callback.
+ *   1. ADDITIONS — children present upstream but not in state: validate
+ *      in full (§9 step 4) and install via the caller-provided
+ *      `installNewChild` callback. A child that fails validation is
+ *      reported as a `tap_error` and never installed.
  *   2. SOURCE_GONE — entries in state attributed to this tap whose
  *      directory is no longer present upstream: report; preserve local
  *      install.
@@ -15,19 +17,23 @@
  *
  * Path-kind taps follow the same algorithm; they just don't fetch and
  * their `resolvedSha` is null.
+ *
+ * With `dryRun` (§10.1.1) additions are reported as `would_add` and the
+ * install callback is never invoked.
  */
 
-import type { CrewError } from "../core/errors.ts";
-import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../core/types.ts";
-import { acquireTap } from "../sources/acquire/index.ts";
-import { isDirectory } from "../util/fs.ts";
-import { currentTapChildren, groupChildrenByName } from "./tap-children.ts";
+import type { CrewError } from "../../core/errors.ts";
+import type { Config, Scope, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
+import { isDirectory } from "../../util/fs.ts";
+import { groupChildrenByName } from "../tap-children.ts";
+import { collectAdditions } from "./additions.ts";
+import { type AcquiredTapScan, makeTapScanCache } from "./scan-cache.ts";
 
 /** One re-expansion outcome row. */
 export interface TapReexpandRow {
   readonly name: string;
   readonly scope: Scope;
-  readonly kind: "added" | "source_gone" | "tap_error";
+  readonly kind: "added" | "would_add" | "source_gone" | "tap_error";
   readonly tap: string;
   readonly error?: { readonly code: string; readonly message: string };
 }
@@ -58,12 +64,16 @@ export function reexpandTaps(
   home: string,
   restrictNames: readonly string[],
   installOne: InstallNewChild,
+  dryRun: boolean = false,
 ): TapReexpandResult {
   const added: StateEntry[] = [];
   const updated: StateEntry[] = [];
   const sourceGone = new Set<string>();
   const rows: TapReexpandRow[] = [];
   let hardFailure = false;
+  // One tap backs several (scope, project_root) groups; acquire, walk
+  // and validate it once per run rather than once per group.
+  const cache = makeTapScanCache();
 
   // Group state entries by (tap-name, scope, project_root). Entries
   // sharing all three are managed together: same tap clone, same
@@ -104,9 +114,9 @@ export function reexpandTaps(
     const projectRoot = first.project_root ?? null;
     if (first.scope === "project" && projectRoot && !isDirectory(projectRoot)) continue;
 
-    let acquired: { rootDir: string; resolvedSha: string | null };
+    let acquired: AcquiredTapScan;
     try {
-      acquired = acquireTap(tap, home);
+      acquired = cache.acquire(tap, home);
     } catch (err) {
       const ce = err as CrewError;
       for (const m of members) {
@@ -121,7 +131,7 @@ export function reexpandTaps(
       continue;
     }
 
-    const children = currentTapChildren(tap, home, acquired.rootDir);
+    const children = cache.children(tap, home, acquired.rootDir);
     const childrenByName = groupChildrenByName(children);
     const conflictedNames = new Set<string>();
     for (const [name, locs] of childrenByName) {
@@ -156,26 +166,22 @@ export function reexpandTaps(
     }
 
     // ADDITIONS: children upstream not in state.
-    const memberNames = new Set(members.map((m) => m.name));
-    const aggregateTargets = [...new Set(members.flatMap((m) => m.agents))];
-    for (const child of children) {
-      if (conflictedNames.has(child.name)) continue;
-      if (memberNames.has(child.name)) continue;
-      const entry = installOne({
-        skillDir: child.path,
-        skillName: child.name,
-        tapRelativePath: child.tapRelativePath,
-        scope: first.scope,
-        tap,
-        agents: aggregateTargets,
-        resolvedSha: acquired.resolvedSha,
-        projectRoot,
-      });
-      if (entry) {
-        added.push(entry);
-        rows.push({ name: child.name, scope: first.scope, tap: tap.name, kind: "added" });
-      }
-    }
+    const additions = collectAdditions({
+      children,
+      conflictedNames,
+      memberNames: new Set(members.map((m) => m.name)),
+      scope: first.scope,
+      tap,
+      agents: [...new Set(members.flatMap((m) => m.agents))],
+      resolvedSha: acquired.resolvedSha,
+      projectRoot,
+      dryRun,
+      installOne,
+      cache,
+    });
+    added.push(...additions.added);
+    rows.push(...additions.rows);
+    if (additions.hardFailure) hardFailure = true;
   }
 
   return { added, updated, hardFailure, sourceGone, rows };
