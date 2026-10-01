@@ -49,9 +49,13 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   // Collection selectors: one line each so the user sees what a tap or
   // namespace name expanded to (including "nothing installed").
   for (const c of input.collections ?? []) {
+    const refreshed =
+      c.kind === "tap" &&
+      input.tapRows.some((row) => row.name === c.name && row.kind === "refreshed");
+    const empty = `No skills installed from ${c.kind} ${c.name}${refreshed ? " — refreshed it anyway." : "."}`;
     lines.push(
       c.count === 0
-        ? `${style.symbol("muted")} ${style.dim(`No skills installed from ${c.kind} ${c.name} — refreshed it anyway.`)}`
+        ? `${style.symbol("muted")} ${style.dim(empty)}`
         : `${style.bold(`Updating ${c.kind} ${c.name}`)} ${style.dim(`(${plural(c.count, "skill")})`)}`,
     );
   }

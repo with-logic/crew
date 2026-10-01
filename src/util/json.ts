@@ -25,7 +25,11 @@ export function tryReadJson<T>(path: string): T | null {
   }
 }
 
-/** Write a value as pretty JSON with a trailing newline. */
+/**
+ * Write a value as pretty JSON with a trailing newline, replacing the
+ * destination atomically so an unlocked concurrent reader never observes
+ * a truncated file (see `writeText`).
+ */
 export function writeJson(path: string, value: unknown): void {
   writeText(path, `${JSON.stringify(value, null, 2)}\n`);
 }
