@@ -15,6 +15,7 @@
 import type { CommandOutput } from "../commands/types.ts";
 import type { CrewError, CrewErrorName } from "../core/errors.ts";
 import { displayDetails, displayText } from "../refs/display-url.ts";
+import { sanitizeLine } from "../util/redact.ts";
 import type { Styler } from "../util/term.ts";
 
 /** Writable stream shape used by `writeOutput` — lets tests pass buffers. */
@@ -62,6 +63,9 @@ export function writeError(
   style: Styler,
 ): void {
   if (json) {
+    // `details` is a stable machine contract (§13), so keys are kept —
+    // but a value can be a credential-bearing URL, and the JSON payload
+    // is exactly what gets pasted into a CI log or an issue.
     streams.stdout(
       `${JSON.stringify(
         {
@@ -98,7 +102,8 @@ export function writeError(
  */
 function writeMessageBlock(message: string, streams: OutputStreams): void {
   for (const line of displayText(message).split("\n")) {
-    streams.stderr(line.length === 0 ? "\n" : `  ${line}\n`);
+    const safe = sanitizeLine(line);
+    streams.stderr(safe.length === 0 ? "\n" : `  ${safe}\n`);
   }
 }
 

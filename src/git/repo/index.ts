@@ -5,7 +5,9 @@
  *
  * Every external operation translates `GitProcessError` into crew's
  * `source_unreachable` / `ref_not_found` errors with appropriate exit
- * codes, so callers just catch `CrewError` and report.
+ * codes, so callers just catch `CrewError` and report. Git's stderr is
+ * quoted into those messages and can repeat a credential-bearing
+ * remote, so it passes through `displayText` first (§5.2).
  *
  * Network policy (§16.4): read-only commands (`crew search`, bare-name
  * `crew install`) call `ensureClone` — clones a missing tap the first
@@ -74,6 +76,7 @@ export function fetchAndCheckout(dest: string): void {
     runGit(["fetch", "--tags", "--prune", "origin"], { cwd: dest });
   } catch (err) {
     const ge = err as GitProcessError;
+    // Fetch stderr names the remote, so it can carry credentials too.
     throw new CrewError(
       "source_unreachable",
       `git fetch failed for the clone at \`${dest}\` — ${displayText(ge.result.stderr.trim())}`,

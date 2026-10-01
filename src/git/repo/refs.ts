@@ -5,7 +5,9 @@
  * is `./index.ts`.
  *
  * `GitProcessError` is translated into crew's `ref_not_found` /
- * `source_unreachable` errors here, as in `./index.ts`.
+ * `source_unreachable` errors here, as in `./index.ts`. Git's stderr is
+ * quoted into those messages and can repeat a credential-bearing
+ * remote, so it passes through `displayText` first (§5.2).
  */
 
 import { CrewError } from "../../core/errors.ts";

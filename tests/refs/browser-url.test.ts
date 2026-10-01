@@ -91,6 +91,21 @@ describe("parseRef: GitLab and Bitbucket browser URLs", () => {
   });
 });
 
+describe("parseRef: GitLab blob errors", () => {
+  test.each([
+    "https://gitlab.com/acme/skills/-/blob/main/python/README.md",
+    "https://git.example.com/group/subgroup/skills/-/blob/main",
+  ])("C-REF-25 %s is invalid_ref", (raw) => {
+    try {
+      parseRef(raw);
+      throw new Error("expected a non-skill blob link to fail");
+    } catch (err) {
+      expect(err).toBeInstanceOf(CrewError);
+      expect((err as CrewError).code).toBe("invalid_ref");
+    }
+  });
+});
+
 describe("parseRef: URL hygiene and explicit tails (C-REF-26)", () => {
   test.each([
     ["https://github.com/acme/skills/tree/main/python?tab=readme", git(GH, "main", "python")],
