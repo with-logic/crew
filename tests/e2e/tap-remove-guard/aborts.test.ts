@@ -4,46 +4,59 @@
  * as, so a retry can never orphan an install.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { readConfig } from "../../../src/config/load.ts";
 import { paths } from "../../../src/core/paths.ts";
 import { readState } from "../../../src/state/load.ts";
-import {
-  agentRoot,
-  buildTapRepo,
-  makeCrewHome,
-  makeTempDir,
-  run,
-  runIn,
-  tapWithInstall,
-  useTempAgentRoot,
-} from "./helpers.ts";
+import { buildTapRepo, makeCrewHome, makeTempDir, run, runIn, tapWithInstall } from "./helpers.ts";
 
-useTempAgentRoot();
+let ccRoot = "";
+let ccOriginal: {
+  userPath: () => string;
+  detect: () => boolean;
+  projectPath: (cwd: string) => string;
+};
+beforeEach(() => {
+  ccRoot = makeTempDir("crew-tap-remove-agent-");
+  ccOriginal = {
+    userPath: claudeCodeAdapter.userPath,
+    detect: claudeCodeAdapter.detect,
+    projectPath: claudeCodeAdapter.projectPath,
+  };
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+  claudeCodeAdapter.projectPath = (cwd) => join(cwd, ".claude", "skills");
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
+  claudeCodeAdapter.projectPath = ccOriginal.projectPath;
+});
 
 describe("C-TAP-16d tap remove --uninstall aborts", () => {
   test("a safety abort keeps the tap so the user can retry", () => {
     const home = makeCrewHome();
     expect(tapWithInstall(home, buildTapRepo())).toBe(0);
     // Drop the marker so removal hits `untracked_directory` (§7.4 step 1).
-    rmSync(join(agentRoot(), "alpha", ".crew.json"));
+    rmSync(join(ccRoot, "alpha", ".crew.json"));
 
     const r = run(home, ["tap", "remove", "--uninstall", "mytap"]);
 
     expect(r.code).toBe(1);
     expect(r.stdout).toContain("Kept tap mytap");
-    expect(r.stdout).toContain("--force --uninstall");
+    expect(r.stdout).toContain("pass --force");
     // The tap survives so the retry has something to act on.
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(true);
-    expect(existsSync(join(agentRoot(), "alpha"))).toBe(true);
+    expect(existsSync(join(ccRoot, "alpha"))).toBe(true);
   });
 
   test("C-TAP-16d an aborted removal keeps its state entry so a retry can't orphan it", () => {
     const home = makeCrewHome();
     expect(tapWithInstall(home, buildTapRepo())).toBe(0);
-    rmSync(join(agentRoot(), "alpha", ".crew.json"));
+    rmSync(join(ccRoot, "alpha", ".crew.json"));
 
     expect(run(home, ["tap", "remove", "--uninstall", "mytap"]).code).toBe(1);
     // The bytes still exist, so state must still claim them. Dropping the
@@ -54,7 +67,7 @@ describe("C-TAP-16d tap remove --uninstall aborts", () => {
     const retry = run(home, ["tap", "remove", "--force", "--uninstall", "mytap"]);
 
     expect(retry.code).toBe(0);
-    expect(existsSync(join(agentRoot(), "alpha"))).toBe(false);
+    expect(existsSync(join(ccRoot, "alpha"))).toBe(false);
     expect(readState(home).installations).toHaveLength(0);
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(false);
   });
@@ -76,6 +89,8 @@ describe("C-TAP-16d tap remove --uninstall aborts", () => {
     const r = run(home, ["tap", "remove", "--uninstall", "mytap"]);
 
     expect(r.code).toBe(1);
+    expect(r.stdout).toContain("required adapter");
+    expect(r.stdout).not.toContain("--force --uninstall");
     expect(readState(home).installations).toHaveLength(1);
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(true);
   });
@@ -101,7 +116,7 @@ describe("C-TAP-16d tap remove --uninstall aborts", () => {
 
     expect(r.code).toBe(1);
     // The user-scope copy is gone from disk, so its row must be gone too.
-    expect(existsSync(join(agentRoot(), "alpha"))).toBe(false);
+    expect(existsSync(join(ccRoot, "alpha"))).toBe(false);
     // The aborted copy keeps both its bytes and its row.
     expect(existsSync(projDest)).toBe(true);
     const survivors = readState(home).installations;
