@@ -2,6 +2,7 @@
 
 import { expect, test } from "bun:test";
 import { runCli } from "../../../src/cli/main.ts";
+import { readConfig } from "../../../src/config/load.ts";
 import { tapLockTarget } from "../../../src/sources/tap-lock.ts";
 import { readState, writeState } from "../../../src/state/load.ts";
 import { acquireLock } from "../../../src/util/advisory-lock.ts";
@@ -46,7 +47,9 @@ test("C-UPD-18d a qualified selection does not consult an unrelated same-named t
   );
   const previous = process.env["CREW_LOCK_TIMEOUT_MS"];
   process.env["CREW_LOCK_TIMEOUT_MS"] = "100";
-  const held = acquireLock(tapLockTarget("second", home));
+  const held = acquireLock(
+    tapLockTarget(readConfig(home).taps.find((tap) => tap.name === "second")!, home),
+  );
   try {
     expect(
       runCli(["update", "first/alpha", "--dry-run"], { home, streams: captureStreams().streams }),

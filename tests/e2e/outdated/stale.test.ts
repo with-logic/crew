@@ -16,10 +16,11 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
-import { paths } from "../../../src/core/paths.ts";
+import { readConfig } from "../../../src/config/load.ts";
+import { tapClonePath } from "../../../src/core/repo-path.ts";
 import { captureStreams } from "../../helpers/env.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
 import { breakTapOrigin, installedFromRepo, moveUpstream, useClaudeCodeRoot } from "./helpers.ts";
@@ -32,7 +33,7 @@ describe("C-UPD-18h crew outdated with an unreachable collection", () => {
     // Clone retained but origin dead: refresh fails while every locally
     // known row reads up_to_date. Filtering those rows away must not
     // leave an unqualified all-clear — we never saw upstream.
-    const tapName = readdirSync(paths(home).tapsDir)[0]!;
+    const tapName = readConfig(home).taps[0]!.name;
     breakTapOrigin(home, tapName);
 
     const c = captureStreams();
@@ -61,7 +62,7 @@ describe("C-UPD-18h crew outdated with an unreachable collection", () => {
     expect(c.stdout()).toContain(`(in ${project}`);
 
     // Retained clone, dead origin: a warning, not a failure — exit 0.
-    const tapName = readdirSync(paths(home).tapsDir)[0]!;
+    const tapName = readConfig(home).taps[0]!.name;
     breakTapOrigin(home, tapName);
     const warn = captureStreams();
     expect(runCli(["outdated"], { home, cwd: project, streams: warn.streams })).toBe(0);
@@ -73,11 +74,14 @@ describe("C-UPD-18h crew outdated with an unreachable collection", () => {
 
   test("a tap that cannot be acquired at all exits like update --dry-run", () => {
     const { home, repo } = installedFromRepo();
-    const tapName = readdirSync(paths(home).tapsDir)[0]!;
+    const tapName = readConfig(home).taps[0]!.name;
 
     // Clone gone AND configured URL dead: re-expansion can't acquire
     // the tap, so a tap-level error row renders.
-    rmSync(join(paths(home).tapsDir, tapName), { recursive: true, force: true });
+    rmSync(tapClonePath(readConfig(home).taps.find((tap) => tap.name === tapName)!, home), {
+      recursive: true,
+      force: true,
+    });
     const cfg = join(home, "config.yaml");
     writeFileSync(
       cfg,

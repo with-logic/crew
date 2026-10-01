@@ -7,9 +7,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
 import { readState } from "../../../src/state/load.ts";
-import { makeTempDir } from "../../helpers/fixtures.ts";
+import { cloneDirForTap, makeTempDir } from "../../helpers/fixtures.ts";
 import { buildTapRepo, makeCrewHome, run, tapWithInstall } from "./helpers.ts";
 
 let ccRoot = "";
@@ -38,7 +37,7 @@ describe("C-TAP-16c attached-skill guard", () => {
     expect(r.stderr).toContain("--force mytap");
     // The tap and its clone survive the refusal.
     expect(readConfig(home).taps.some((t) => t.name === "mytap")).toBe(true);
-    expect(existsSync(tapPath("mytap", home))).toBe(true);
+    expect(existsSync(cloneDirForTap("mytap", home)!)).toBe(true);
     expect(readState(home).installations).toHaveLength(1);
   });
 

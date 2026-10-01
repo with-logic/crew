@@ -9,7 +9,7 @@ export const untapHelp: CommandHelp = {
   synopsis: "crew untap <name>",
   summary: [
     "Alias for `crew tap remove <name>`.",
-    "Stop using a tap, delete its local clone if it was git-backed, and drop it from config.",
+    "Stop using a tap and drop it from config; delete its shared clone when no other tap uses that repository.",
   ],
   flags: [
     {

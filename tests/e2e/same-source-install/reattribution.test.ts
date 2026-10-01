@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
+import { repoClonePath } from "../../../src/core/repo-path.ts";
 import type { Marker } from "../../../src/core/types.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
@@ -71,7 +71,7 @@ describe("C-INST-13b re-attribution to the incoming tap", () => {
 
     install(home, `file://${repo}//skills/docx`);
     const narrowTap = readState(home).installations.find((e) => e.name === "docx")!.source.tap;
-    expect(existsSync(tapPath(narrowTap, home))).toBe(true);
+    expect(existsSync(repoClonePath(`file://${repo}`, home))).toBe(true);
 
     const second = install(home, `file://${repo}`);
     expect(second.out).toContain("now tracked via");
@@ -87,9 +87,9 @@ describe("C-INST-13b re-attribution to the incoming tap", () => {
     expect(marker.path).toBe("skills/docx");
     expect(marker.tap_subpath).toBe("");
 
-    // The emptied auto tap and its clone are gone (§16.5).
+    // The emptied auto tap is gone; the broader tap keeps the shared clone (§16.5).
     expect(readConfig(home).taps.some((t) => t.name === narrowTap)).toBe(false);
-    expect(existsSync(tapPath(narrowTap, home))).toBe(false);
+    expect(existsSync(repoClonePath(`file://${repo}`, home))).toBe(true);
   });
 
   test("C-INST-13b re-attributes a project-scope install and its marker", () => {

@@ -7,9 +7,10 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
-import { tapPath } from "../../core/paths.ts";
+import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { resolveRef } from "../../git/repo/refs.ts";
+import { migrateTapClone } from "../../sources/migrate-clones.ts";
 
 /**
  * The SHA `ref` currently names in `tap`'s clone, without materializing
@@ -21,7 +22,8 @@ import { resolveRef } from "../../git/repo/refs.ts";
  */
 export function peekResolvedSha(tap: TapConfig, ref: string | null, home: string): string | null {
   if (tap.kind !== "git") return null;
-  const clone = tapPath(tap.name, home);
+  migrateTapClone(tap, home);
+  const clone = tapClonePath(tap, home);
   try {
     return resolveRef(clone, ref);
   } catch (err) {

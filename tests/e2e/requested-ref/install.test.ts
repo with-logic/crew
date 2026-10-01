@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { paths } from "../../../src/core/paths.ts";
+import { repoClonePath } from "../../../src/core/repo-path.ts";
 import { runGit } from "../../../src/git/exec.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
@@ -110,7 +111,7 @@ describe("installing at an explicit ref", () => {
     const home = makeCrewHome();
     const { repo, shaB } = twoCommitRepo();
     runCli(["tap", "add", `file://${repo}`, "acme"], { home, streams: captureStreams().streams });
-    const clone = join(paths(home).tapsDir, "acme");
+    const clone = repoClonePath(`file://${repo}`, home);
     const index = readFileSync(join(clone, ".git", "index"));
     const bytes = readFileSync(join(clone, "demo", "SKILL.md"));
     expect(runCli(["install", "acme/demo@v1"], { home, streams: captureStreams().streams })).toBe(

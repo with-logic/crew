@@ -16,10 +16,11 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { runCli } from "../../src/cli/main.ts";
-import { paths, tapPath } from "../../src/core/paths.ts";
+import { paths } from "../../src/core/paths.ts";
 import { readState } from "../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
+  cloneDirForTap,
   commitAll,
   makeGitRepo,
   makeSkill,
@@ -71,7 +72,7 @@ describe("C-UNINST-19c uninstall --dry-run writes nothing", () => {
     const configBefore = readFileSync(p.configFile, "utf8");
     const markerBefore = readFileSync(join(ccRoot, "demo", ".crew.json"), "utf8");
     // The auto tap's clone directory, whichever name was derived for it.
-    const clone = tapPath(readState(home).installations[0]!.source.tap, home);
+    const clone = cloneDirForTap(readState(home).installations[0]!.source.tap, home)!;
     expect(existsSync(clone)).toBe(true);
 
     const r = run(home, ["uninstall", "--dry-run", "demo"]);

@@ -151,15 +151,7 @@ function applyAdd(ctx: CommandContext, config: Config, plan: TapAddPlan, input: 
     return;
   }
   if (plan.outcome === "promoted") {
-    promoteExistingTap(
-      ctx.home,
-      ctx.cwd,
-      config,
-      plan.sameTarget,
-      target.kind,
-      explicitName,
-      recursive,
-    );
+    promoteExistingTap(ctx.home, ctx.cwd, config, plan.sameTarget, explicitName, recursive);
     return;
   }
   // `added` is the only remaining variant. `satisfies` makes a newly
@@ -167,6 +159,6 @@ function applyAdd(ctx: CommandContext, config: Config, plan: TapAddPlan, input: 
   // it inherit the clone-and-write path, without costing an unreachable
   // branch under the 100% coverage gate.
   plan satisfies Extract<TapAddPlan, { outcome: "added" }>;
-  if (target.kind === "git") cloneNewTap(name, target.url, ctx.home);
+  if (target.kind === "git") cloneNewTap(target.url, ctx.home);
   writeConfig({ ...config, taps: [...config.taps, newTapOf(name, target, recursive)] }, ctx.home);
 }

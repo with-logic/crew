@@ -13,6 +13,7 @@
 import { requireConfiguredTap } from "../../config/find-tap.ts";
 import { readConfig } from "../../config/load.ts";
 import type { TapConfig } from "../../core/types.ts";
+import { withTapLocks } from "../../sources/tap-lock.ts";
 import { readState } from "../../state/load.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { collectConfiguredHits } from "./configured.ts";
@@ -29,7 +30,9 @@ export function searchCommand(ctx: CommandContext): CommandOutput {
 
   const tapFilter = readTapFilter(ctx, config.taps);
   const taps = tapFilter === null ? config.taps : [tapFilter];
-  const { hits, warnings } = collectConfiguredHits(taps, query, installIndex, ctx.home);
+  const { hits, warnings } = withTapLocks(taps, ctx.home, () =>
+    collectConfiguredHits(taps, query, installIndex, ctx.home),
+  );
   const knownHits = tapFilter === null ? collectKnownHits(query, config.taps) : [];
   const human = formatSearchResults({
     hits,
