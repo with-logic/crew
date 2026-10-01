@@ -56,7 +56,7 @@ export function countAllTargets(ctx: CommandContext, state: StateFile): number {
 export function confirmAll(ctx: CommandContext, count: number): void {
   if (ctx.flags.yes) return;
   const scope = describeScope(ctx.flags.scope, ctx.cwd);
-  const answer = ctx.prompt(`Remove ${plural(count, "skill")} from ${scope}? [y/N]: `);
+  const answer = ctx.prompt(`Remove ${plural(count, "skill")} from ${scope}? [y/N]: `, "no");
   if (answer === "yes") return;
   if (answer === "no") {
     throw new CrewError("usage_error", "Aborted — nothing was removed", { scope: ctx.flags.scope });
