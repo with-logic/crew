@@ -36,12 +36,8 @@ export function allTargets(ctx: CommandContext, state: StateFile): readonly Unin
   );
 }
 
-/**
- * Reject `--all` combined with positionals, then count what it would
- * remove so the caller can confirm before locking. Returns the number of
- * distinct skills, or throws when nothing is installed at this scope.
- */
-export function countAllTargets(ctx: CommandContext, state: StateFile): number {
+/** Validate `--all` targets, then confirm their actual location before locking. */
+export function confirmAll(ctx: CommandContext, state: StateFile): void {
   if (ctx.positional.length > 0) {
     throw new CrewError(
       "usage_error",
@@ -49,14 +45,15 @@ export function countAllTargets(ctx: CommandContext, state: StateFile): number {
       { positional: [...ctx.positional] },
     );
   }
-  return allTargets(ctx, state).length;
-}
-
-/** Gate `--all` behind `--yes` or an interactive confirmation. */
-export function confirmAll(ctx: CommandContext, count: number): void {
+  const targets = allTargets(ctx, state);
   if (ctx.flags.yes) return;
-  const scope = describeScope(ctx.flags.scope, ctx.cwd);
-  const answer = ctx.prompt(`Remove ${plural(count, "skill")} from ${scope}? [y/N]: `, "no");
+  // The lone-project fallback can target a recorded root unlike the cwd.
+  const root = targets[0]!.subject.entries[0]!.project_root ?? ctx.cwd;
+  const scope = describeScope(ctx.flags.scope, root);
+  const answer = ctx.prompt(
+    `Remove ${plural(targets.length, "skill")} from ${scope}? [y/N]: `,
+    "no",
+  );
   if (answer === "yes") return;
   if (answer === "no") {
     throw new CrewError("usage_error", "Aborted — nothing was removed", { scope: ctx.flags.scope });

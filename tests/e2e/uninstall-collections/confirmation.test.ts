@@ -36,7 +36,7 @@ afterEach(() => {
   (claudeCodeAdapter as { detect: () => boolean }).detect = originalAdapter.detect;
 });
 
-function exerciseConfirmation(input: string, scope: Scope) {
+function exerciseConfirmation(input: string, scope: Scope, fromElsewhere = false) {
   const home = makeCrewHome();
   const cwd = makeTempDir("crew-confirm-project-");
   const source = makeSkill(
@@ -62,15 +62,35 @@ function exerciseConfirmation(input: string, scope: Scope) {
     return 1;
   };
   const captured = captureStreams();
+  const commandCwd = fromElsewhere ? makeTempDir("crew-confirm-elsewhere-") : cwd;
   const code = runCli(["uninstall", "--all", "--scope", scope], {
     home,
-    cwd,
+    cwd: commandCwd,
     streams: captured.streams,
   });
   const installedDir =
     scope === "user" ? join(user, "alpha") : join(cwd, ".claude", "skills", "alpha");
-  return { home, installedDir, before, installCode, code, message, stderr: captured.stderr() };
+  return {
+    home,
+    cwd,
+    commandCwd,
+    installedDir,
+    before,
+    installCode,
+    code,
+    message,
+    stderr: captured.stderr(),
+  };
 }
+
+test("C-UNINST-25 project fallback confirmation names the actual selected root", () => {
+  const result = exerciseConfirmation("\n", "project", true);
+  expect(result.code).toBe(4);
+  expect(result.message).toContain(result.cwd);
+  expect(result.message).not.toContain(result.commandCwd);
+  expect(readState(result.home)).toEqual(result.before);
+  expect(existsSync(join(result.installedDir, "SKILL.md"))).toBe(true);
+});
 
 test.each([
   { input: "\n", scope: "user" },
