@@ -17,6 +17,10 @@ describe("displayUrl", () => {
     );
   });
 
+  test("reference display removes SSH userinfo too", () => {
+    expect(displayUrl("ssh://git@host/o/r.git")).toBe("ssh://***@host/o/r.git");
+  });
+
   test("masks a lone username with no password", () => {
     expect(displayUrl("https://ghp_tokenvalue@github.com/acme/skills")).toBe(
       "https://***@github.com/acme/skills",
@@ -24,10 +28,10 @@ describe("displayUrl", () => {
   });
 
   test("redacts sensitive query values and keeps innocuous ones", () => {
-    const rendered = displayUrl("https://host/o/r?token=abc123&branch=main");
+    const rendered = displayUrl("https://host/o/r?token=abc123&ref=main");
     expect(rendered).not.toContain("abc123");
     expect(rendered).toContain("token=***");
-    expect(rendered).toContain("branch=main");
+    expect(rendered).toContain("ref=main");
   });
 
   test("matches sensitive parameter names case-insensitively", () => {
@@ -54,7 +58,7 @@ describe("displayUrl", () => {
   test("masks userinfo even when the URL is too malformed to parse", () => {
     const rendered = displayUrl("https://user:s3cr3t@exa mple.com/a/b");
     expect(rendered).not.toContain("s3cr3t");
-    expect(rendered).toContain("***@");
+    expect(rendered).toBe("***");
   });
 });
 
@@ -94,12 +98,28 @@ describe("displayText", () => {
   });
 
   test("leaves a non-sensitive query parameter readable", () => {
-    expect(displayText("fetched /repo.git?depth=1 ok")).toContain("depth=1");
+    expect(displayText("fetched /repo.git?version=1 ok")).toContain("version=1");
   });
 
   test("leaves text with no URL untouched", () => {
     expect(displayText("nothing to redact here")).toBe("nothing to redact here");
   });
+});
+
+describe("unknown query credentials", () => {
+  test.each(["client_secret", "sig", "provider_credential", "%63lient_secret"])(
+    "%s is masked in full URLs and bare query tails",
+    (name) => {
+      for (const input of [
+        `https://host/repo?${name}=private-value&ref=main`,
+        `fatal: '/repo?${name}=private-value&ref=main': denied`,
+        `https://host:99999/repo?${name}=private-value`,
+      ]) {
+        expect(displayText(input)).not.toContain("private-value");
+        expect(displayText(input)).toContain("***");
+      }
+    },
+  );
 });
 
 describe("displayDetails", () => {

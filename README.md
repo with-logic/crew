@@ -103,7 +103,7 @@ skill can list as a dependency. Three shapes:
 | Kind | Example | What it is |
 |---|---|---|
 | **Tap source** | `crew install founding-engineer` | A skill, namespace, or tap known to a configured tap. Bare names search every tap, including the default `core` tap. Qualify with `tap/skill`, `tap/namespace/skill`, or `namespace/skill`. Pin with `@v1.0`. If a miss exactly matches a known-but-untapped source, Homecrew suggests the `crew tap add` command. |
-| **Git source** | `crew install @acme/skills@v1.2.0//engineers/founding` | Any reachable git URL. `@owner/repo` is GitHub shorthand; full `https://` and `git@` URLs work too, as does a scheme-less `github.com/owner/repo`. Append `@ref` to pin, `//subpath` to scope. Links pasted from GitHub, GitLab, or Bitbucket (`.../tree/main/engineers/founding`, `.../blob/main/.../SKILL.md`) work as-is. |
+| **Git source** | `crew install @acme/skills@v1.2.0//engineers/founding` | Any reachable git URL. `@owner/repo` is GitHub shorthand; full `https://` and `git@` URLs work too, as does a scheme-less `github.com/owner/repo`. Append `@ref` to pin, `//subpath` to scope. Links pasted from GitHub, GitLab, or Bitbucket (`.../tree/main/engineers/founding`, `.../blob/main/.../SKILL.md`) work as-is. For branch names containing `/`, use an explicit tail such as `https://github.com/acme/skills@feature/python//engineers/founding`. |
 | **Local path** | `crew install ./my-skill` | A directory on your machine. Detected by a leading `./`, `../`, `/`, or `~`. |
 
 Run `crew help install` for the full grammar.
@@ -134,9 +134,9 @@ $ crew install @acme/skills@v1.2.0//engineers/founding
 # See what's installed.
 $ crew list
 Installed skills (3)
-  founding-engineer   core         a1b2c3d   5 agents
-  code-review         core         d4e5f6a   5 agents
-  platform-engineer   acme@v1.2.0  9c8b7a6   5 agents
+  founding-engineer   core                              a1b2c3d   5 agents
+  code-review         core                              d4e5f6a   5 agents
+  platform-engineer   @acme/skills//engineers/founding   9c8b7a6   5 agents
 
 # Pull the latest versions of everything.
 $ crew update
@@ -165,11 +165,12 @@ When a command asks for an installed skill name, you can use the bare name
 |---|---|
 | `crew install <ref>…` | Install one or more skills into every detected agent; on misses, may suggest skills from trusted taps you haven't added yet. |
 | `crew install --from-git <source>` | Install from a git source without a positional ref. Forces the value to be read as git, so a bare `owner/repo` means GitHub rather than `<tap>/<skill>`. Combines with positional refs. |
-| `crew uninstall <name>…` | Remove installed skills from every agent they were installed into. |
+| `crew uninstall <name>…` | Remove installed skills from every agent they were installed into. Acts on one scope at a time: the system-wide install by default, or the current project's with `--scope project`. A skill installed in exactly one project can be removed from any directory. |
 | `crew remove <name>…`, `crew rm <name>…` | Aliases for `crew uninstall`. |
-| `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. |
+| `crew update [<name>…]` | Update all installed skills, or only those named. Pinned SHAs are skipped unless `--force`. `--dry-run` previews pending updates and new tap skills: tap clones are still refreshed, but no installed skill, marker, store entry, or `state.json` changes. |
 | `crew upgrade [<name>…]` | Alias for `crew update`. |
-| `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. |
+| `crew outdated [<name>…]` | Preview what `crew update` would change — pending updates, plus new skills added to a tap you installed whole. Same as `crew update --dry-run`, trimmed to what matters: tap clones are still refreshed, but nothing installed changes. |
+| `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. `--scope user` or `--scope project` narrows to one scope; `--agent <name>` and `--tap <name>` filter by agent or tap. |
 | `crew skills`, `crew ls` | Aliases for `crew list`. |
 | `crew info <ref-or-name>` | Show details for an installed skill or one available in a tap. |
 
@@ -177,7 +178,7 @@ When a command asks for an installed skill name, you can use the bare name
 
 | Command | What it does |
 |---|---|
-| `crew search [<query>]` | Case-insensitive substring match across every configured tap. With no query, lists every installable skill; exact installed matches are marked `✓`. With a query, also suggests matching known taps to add. |
+| `crew search [--tap <name>] [<query>]` | Case-insensitive substring match across every configured tap, or just one with `--tap`. With no query, lists every installable skill in those taps; exact installed matches are marked `✓`. With a query and without `--tap`, also suggests matching known taps to add; `--tap` scopes the search to a tap you already have, so it omits those suggestions. |
 | `crew tap add <url-or-path> [name]` | Add a registry from a git source or local path. Name defaults to the repo/path name. Add `--recursive` for trusted repos with non-standard nested layouts. |
 | `crew tap remove <name>` | Delete a local tap clone and drop it from config. |
 | `crew tap list` | Print each tap's name, kind/status, source target, recursive discovery marker when set, and last-fetched timestamp for git taps. |
@@ -206,8 +207,8 @@ When a command asks for an installed skill name, you can use the bare name
 
 | Command | What it does |
 |---|---|
-| `crew help [<command>]` | Overview or per-command help, with realistic examples. |
-| `crew version` | Print the version string and exit. |
+| `crew help [<command>]` | Overview or per-command help, with realistic examples. `crew <command> --help` and `-h` work too. |
+| `crew version` | Print the version string and exit. `crew --version`, `-v`, and `-V` work too. |
 
 ## Taps: a tap is just a git repo full of skills
 

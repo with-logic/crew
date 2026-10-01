@@ -3,6 +3,7 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
+import { safePath } from "../../util/redact.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 import { formatCandidate } from "./format.ts";
 
@@ -42,8 +43,13 @@ export function ambiguityError(
   candidates: readonly NameCandidate[],
   reason?: string,
 ): CrewError {
+  const safeName = safePath(name);
   const lines: string[] = [];
-  lines.push(reason ?? `\`${name}\` is ambiguous across taps, skills, and namespaces`);
+  lines.push(
+    reason === undefined
+      ? `\`${safeName}\` is ambiguous across taps, skills, and namespaces`
+      : safePath(reason),
+  );
   lines.push("");
   lines.push("  Rerun with one of:");
   lines.push("");
@@ -52,8 +58,11 @@ export function ambiguityError(
   }
   lines.push("");
   const detail = candidates.map((c) => formatCandidate(c, name));
-  return new CrewError("ambiguous_reference", lines.join("\n"), {
-    name,
-    candidates: detail,
-  });
+  return new CrewError(
+    "ambiguous_reference",
+    lines.join("\n"),
+    { name, candidates: detail },
+    undefined,
+    true,
+  );
 }
