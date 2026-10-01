@@ -33,7 +33,7 @@ export const DISCOVERY: CommandGroup = {
       name: "tap-remove",
       signature: <>crew tap remove [--uninstall] [--force] &lt;name&gt;</>,
       description: [
-        "Delete a local tap clone and drop it from config. If skills are still installed from the tap, the command stops and asks which you meant: ",
+        "Drop a tap from config and delete its shared clone when no other tap uses that repository. If skills are still installed from the tap, the command stops and asks which you meant: ",
         <code key="crew-tap-remove-uninstall">--uninstall</code>,
         " removes those skills too, while ",
         <code key="crew-tap-remove-force">--force</code>,

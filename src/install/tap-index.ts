@@ -19,11 +19,12 @@
  */
 
 import { join, relative } from "node:path";
-import { tapPath } from "../core/paths.ts";
+import { tapClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
+import { migrateTapClone } from "../sources/migrate-clones.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
 import { isDirectory, listDir, toPosix } from "../util/fs.ts";
 
@@ -53,7 +54,8 @@ export interface TapIndex {
 /** Resolve a tap's on-disk root, materializing a git clone if needed. */
 export function tapRoot(tap: TapConfig, home: string): string {
   if (tap.kind === "git") {
-    const tp = tapPath(tap.name, home);
+    migrateTapClone(tap, home);
+    const tp = tapClonePath(tap, home);
     ensureClone(tap.url, tp);
     return tapRootDir(tp, tap);
   }

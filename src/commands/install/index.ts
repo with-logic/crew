@@ -13,6 +13,7 @@ import { detectCollision } from "../../install/collision-check.ts";
 import { runInstall } from "../../install/flow.ts";
 import type { KindHint } from "../../install/resolve-ref/index.ts";
 import { parseRef } from "../../refs/parse.ts";
+import { withTapLocks } from "../../sources/tap-lock.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promptBareNameAmbiguity } from "./ambiguity-prompt.ts";
 import { promptForCollision } from "./collision-prompt.ts";
@@ -160,7 +161,9 @@ function resolveCollisions(ctx: CommandContext, config: Config): string[] {
       refs.push(raw);
       continue;
     }
-    const collision = detectCollision(canonical, config, ctx.home);
+    const collision = withTapLocks(config.taps, ctx.home, () =>
+      detectCollision(canonical, config, ctx.home),
+    );
     if (collision && !ctx.flags.yes) {
       refs.push(promptForCollision(ctx, collision, canonical, raw));
       continue;

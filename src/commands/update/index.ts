@@ -43,7 +43,7 @@
  * the lock for commands that write).
  *
  * Clone locking (§14): because a dry run still fetches, it still
- * mutates shared tap clones. Both paths therefore hold a per-tap lock
+ * mutates shared tap clones. Both paths therefore hold a per-repository lock
  * spanning refresh → re-expansion → per-skill source read and staging,
  * so a concurrent run can't check out a different commit in the window
  * between this run resolving a SHA and copying that SHA's bytes.
@@ -72,7 +72,7 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   // state lock, stage into the store, GC the store, or touch any
   // installed skill or marker.
   //
-  // It does take per-tap clone locks and creates their lockfiles under
+  // It does take per-repository clone locks and creates their lockfiles under
   // `locks/` — a preview still mutates the clone it fetches, so it must
   // exclude concurrent writers for the same reason a real run does.
   const plan = dryRun

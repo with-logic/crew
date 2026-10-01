@@ -12,9 +12,14 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
-import { tapPath } from "../../../src/core/paths.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import {
+  cloneDirForTap,
+  makeGitRepo,
+  makeSkill,
+  makeTempDir,
+  skillFrontmatter,
+} from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, tapWithUrl } from "./helpers.ts";
 
 redirectClaudeCode();
@@ -85,7 +90,7 @@ describe("--verbose control-character escaping", () => {
     // `no_skills_found` embeds `tap.url` — so the secret rides the prose.
     const secret = "ghp_HUMANMESSAGESECRET";
     tapWithUrl(home, `https://oauth2:${secret}@127.0.0.1:1/a/b.git`);
-    const clone = tapPath("creds", home);
+    const clone = cloneDirForTap("creds", home)!;
     makeSkill(clone, "demo", skillFrontmatter({ name: "demo" }));
     makeGitRepo(clone);
     const config = readConfig(home);

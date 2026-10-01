@@ -5,7 +5,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
-import { tapPath } from "../../../src/core/paths.ts";
+import { repoClonePath } from "../../../src/core/repo-path.ts";
+import type { TapConfig } from "../../../src/core/types.ts";
 import { deriveAutoTapName } from "../../../src/install/tap-naming.ts";
 import { tapLockTarget } from "../../../src/sources/tap-lock.ts";
 import { readState } from "../../../src/state/load.ts";
@@ -38,7 +39,7 @@ afterEach(() => {
   else process.env["CREW_LOCK_TIMEOUT_MS"] = previousTimeout;
 });
 
-test("C-CONC-01 a discovered sibling tap waits before acquiring its own dependency tree", () => {
+test("C-CONC-01 a narrowed install waits for the sibling repository clone lock", () => {
   const home = makeCrewHome();
   const invoke = (args: string[]) => runCli(args, { home, streams: captureStreams().streams });
   expect(invoke(["tap", "remove", "core", "--force"])).toBe(0);
@@ -51,10 +52,18 @@ test("C-CONC-01 a discovered sibling tap waits before acquiring its own dependen
   tagRepo(repo, "v1");
   const url = `file://${repo}`;
   const siblingName = deriveAutoTapName(url, "beta");
-  const held = acquireLock(tapLockTarget(siblingName, home));
+  const siblingTap: TapConfig = {
+    name: siblingName,
+    kind: "git",
+    registered: false,
+    url,
+    subpath: "beta",
+    path: "",
+  };
+  const held = acquireLock(tapLockTarget(siblingTap, home));
   try {
     expect(invoke(["install", `${url}@v1//alpha`])).toBe(7);
-    expect(existsSync(tapPath(siblingName, home))).toBe(false);
+    expect(existsSync(repoClonePath(url, home))).toBe(false);
     expect(readState(home).installations).toEqual([]);
     for (const name of ["alpha", "beta", "gamma"])
       expect(existsSync(join(installDir, name))).toBe(false);

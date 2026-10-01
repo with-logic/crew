@@ -8,8 +8,8 @@
  * (§10.1.1), and it is garbage-collected once its last entry leaves.
  */
 
+import { canonicalRepoUrl } from "../core/repo-url.ts";
 import type { TapConfig } from "../core/types.ts";
-import { canonicalRepoUrl } from "./source-identity.ts";
 
 /**
  * True when `incoming` is rooted strictly deeper in the same repository

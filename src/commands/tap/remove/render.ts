@@ -16,6 +16,7 @@ export interface RenderTapRemoveInput {
   readonly name: string;
   readonly kind: "git" | "path";
   readonly dryRun: boolean;
+  readonly cloneShared: boolean;
   /** False when a skill removal aborted and the tap was left in place. */
   readonly tapRemoved: boolean;
   /** `<skill> (<scope>)` labels kept installed by `--force` (§16.3). */
@@ -50,7 +51,15 @@ export function renderTapRemove(input: RenderTapRemoveInput): string[] {
     `${style.symbol("ok")} ${dryRun ? "Would remove" : "Removed"} tap ${style.bold(name)}${tag}`,
   );
   if (kind === "git") {
-    lines.push(style.dim(dryRun ? "  local clone would be deleted" : "  local clone deleted"));
+    lines.push(
+      style.dim(
+        input.cloneShared
+          ? "  shared clone retained for another tap"
+          : dryRun
+            ? "  local clone would be deleted"
+            : "  local clone deleted",
+      ),
+    );
   } else {
     const verb = dryRun ? "wouldn't be" : "wasn't";
     lines.push(style.dim(`  (the local folder itself ${verb} touched)`));
