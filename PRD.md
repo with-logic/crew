@@ -762,7 +762,31 @@ gh:<owner>/<repo>             # shorthand for https://github.com/<owner>/<repo>.
 gl:<owner>/<repo>             # shorthand for https://gitlab.com/<owner>/<repo>.git
 bb:<owner>/<repo>             # shorthand for https://bitbucket.org/<owner>/<repo>.git
 @<owner>/<repo>               # shorthand for https://github.com/<owner>/<repo>.git (GitHub)
+<host>/<owner>/<repo>[...]    # scheme-less; treated as https://<host>/<owner>/<repo>[...]
 ```
+
+**Scheme-less hosts.** An argument whose first `/`-separated segment is
+a bare `<host>[:<port>]` containing a `.` (`github.com/acme/skills`,
+`www.gitlab.com/acme/skills`, `git.example.com:8443/acme/skills`) and
+that has at least three segments is a git source: Homecrew prepends
+`https://` and parses the result exactly as it would the full URL,
+including the browser-URL rules below
+(`github.com/acme/skills/tree/main/skills/foo` works). A tap name can
+never contain a `.` (§8.4), so the rule is unambiguous. Two-segment
+arguments (`github.com/acme`) do not qualify — a clone URL needs an
+owner and a repo.
+
+Because this form synthesizes a URL from user input, the first segment
+MUST be a bare authority: dot-separated alphanumeric/hyphen DNS labels
+with an optional all-digit port. Userinfo (`@`), query (`?`), fragment
+(`#`), a non-numeric port, and empty or hyphen-edged labels all
+disqualify the argument, which then falls through to tap parsing and
+fails as `invalid_ref`. This is a security requirement, not a
+convenience: `github.com@evil.example/acme/skills` would otherwise be
+parsed with `github.com` as userinfo and `evil.example` as the host, so
+a reference that reads as GitHub would clone from an unrelated server.
+Implementations MUST NOT emit a native URL-parsing error for these
+inputs; the stable name is `invalid_ref` (§13).
 
 The leading-`@` form is an ergonomic alias for `gh:` — GitHub is the
 overwhelming common case, and the `@` prefix matches how users already
@@ -786,7 +810,27 @@ gh:owner/repo//skills/python
 gh:owner/repo@v1.2.0//skills/python
 ```
 
-A ref and a subpath may combine. Ref appears before the subpath.
+A ref and a subpath may combine, in either order. These two forms are
+equivalent:
+
+```
+gh:owner/repo@v1.2.0//skills/python    # ref first
+gh:owner/repo//skills/python@v1.2.0    # ref last
+```
+
+In the ref-last form the ref is everything after the last `@` in the
+final segment of the subpath, subject to the slash-free `trailing-ref` rule
+(non-empty, no `/`, `:`, or whitespace).
+
+A ref spelled before the subpath takes precedence and suppresses the
+ref-last scan entirely, so the two positions can never disagree. That
+also makes the ref-first form the escape hatch for a subpath whose final
+directory name legitimately contains `@`:
+
+```
+gh:owner/repo@main//skills/foo@bar     # ref `main`, subpath `skills/foo@bar`
+gh:owner/repo//skills/foo@bar          # ref `bar`,  subpath `skills/foo`
+```
 
 **Browser URLs.** A URL copied from a forge's web UI is accepted anywhere
 a git source is accepted (`crew install`, `crew info`, `crew tap add`,
@@ -886,10 +930,22 @@ Informally:
 ```
 ref         := path | git-source | tap-source
 path        := "./..." | "../..." | "/..." | "~..."
-git-source  := git-url [ "@" git-ref ] [ "//" subpath ]
+git-source  := git-url "@" git-ref [ "//" subpath ]      (ref first; subpath kept verbatim)
+             | git-url [ "//" subpath [ "@" trailing-ref ] ]  (ref last, or no ref)
 git-url     := "https://..." | "git@...:..." | shorthand-host ":" owner "/" repo
              | "@" owner "/" repo
+             | bare-authority "/" owner "/" repo        (scheme-less, §8.2)
 shorthand-host := "gh" | "gl" | "bb"
+bare-authority := dns-label 1*("." dns-label) [ ":" port ]
+               (at least one "." is required, so a bare-authority can never
+                collide with a tap-name; userinfo, query, and fragment are
+                NOT permitted — see the note below)
+port        := 1*DIGIT, numeric value 1-65535
+               (a digit run outside that range is not a port: the value is
+                not a bare-authority and falls through to tap parsing, so
+                it reports `invalid_ref` rather than surfacing whatever
+                URL parsing throws for an unrepresentable port)
+dns-label   := [a-z0-9] [ [a-z0-9-]* [a-z0-9] ]         (case-insensitive)
 tap-source  := [ tap-name "/" ] [ namespace-name "/" ] skill-name [ "@" tap-ref ]
              | tap-name [ "@" tap-ref ]                   (whole-tap install)
 tap-name    := [a-z0-9][a-z0-9-]*
@@ -898,6 +954,19 @@ skill-name  := [a-z0-9][a-z0-9-]*  (matches the Agent Skills spec's name rules)
 git-ref     := any non-empty string not containing ":" or whitespace; may contain "/"
                (a "//" ends the ref and starts the subpath, so `@feature/foo//python` is
                 ref `feature/foo` + subpath `python`); must not start with "//"
+trailing-ref := any non-empty string not containing "/", ":" or whitespace
+
+               The ref-last form deliberately admits LESS than `git-ref`: its ref
+               may not contain "/". The two positions are asymmetric because only
+               the ref-first form is unambiguous. A subpath may itself contain "@",
+               so in `//a@b/c` nothing distinguishes a slash-containing ref from a
+               directory literally named `a@b`; accepting both readings would make
+               the grammar ambiguous rather than merely restrictive. A slash-
+               containing ref is therefore written ref-first —
+               `gh:o/r@feature/foo//skills` — which exists for exactly this case.
+               `gh:o/r//skills@feature/foo` is consequently subpath
+               `skills@feature/foo` with no ref, and NOT an error: that is a legal
+               subpath, and refusing it would reject a directory a user may have.
 tap-ref     := any non-empty string not containing "/" or whitespace
 subpath     := any POSIX relative path not starting with "/"
 ```
@@ -928,6 +997,16 @@ resolved against its clone. Commands that treat an unusable tap as a
 warning rather than a failure (§16.6) MUST still distinguish a
 containment refusal from an unreachable source: advising the user to
 retry when back online never resolves a subpath that escapes its clone.
+`bare-authority` is deliberately narrow, and an implementation MUST NOT widen
+it to "everything before the first `/`". The scheme-less form is resolved by
+prepending `https://`, so any authority syntax a URL parser would reinterpret
+must be rejected before that happens. In particular userinfo is forbidden:
+`github.com@evil.example/o/r` would otherwise parse as host `evil.example`
+with `github.com` demoted to a username, so a reference a human reads as
+GitHub would clone from somewhere else. Query and fragment delimiters and
+non-numeric ports are rejected for the same reason. An argument whose first
+segment is not a `bare-authority` is not a git source at all; it falls through
+to tap-source parsing and fails as `invalid_ref` (C-REF-32a).
 
 Tap-source identifiers are matched case-insensitively and canonicalized to
 lowercase before lookup. For example, `crew install Core/Python-Testing`
@@ -943,14 +1022,30 @@ When the argument could match multiple forms, crew applies these rules in order:
 1. If the argument starts with `./`, `../`, `/`, or `~` → path.
 2. If the argument matches `https://`, `http://`, `git@`, or `<shorthand>:` → git source.
 3. If the argument starts with `@` followed by `<owner>/<repo>` → git source (GitHub shorthand).
-4. If the argument contains `//` → git source (subpath syntax is git-only).
-5. Otherwise → tap source.
+4. If the first `/`-separated segment is a `bare-authority` (§8.4) and the argument has at least three segments → git source (scheme-less host; `https://` is prepended). A `bare-authority` is dot-separated DNS labels with an optional port in 1–65535: no userinfo, no query, no fragment, no non-numeric or out-of-range port. Anything else falls through to rule 5. The restriction is load-bearing rather than cosmetic — `https://` is prepended before parsing, so a permitted `@` would make `github.com@evil.example/o/r` resolve to host `evil.example` with `github.com` demoted to userinfo, and a reference that reads as GitHub would clone from elsewhere.
+5. If the argument contains `//` → git source (subpath syntax is git-only).
+6. Otherwise → tap source.
 
 Between `@` forms, rule 2's `git@host:...` takes precedence over rule 3
 because rule 2 runs first. A bare `@` with nothing after it, or `@name`
 with no `/`, is not a valid git source — rule 3 does not match, and
-rule 5 sends it to tap-source parsing, which rejects it as `invalid_ref`
+rule 6 sends it to tap-source parsing, which rejects it as `invalid_ref`
 because tap names cannot start with `@`.
+
+**Two-segment misses.** A tap-source argument of the form `foo/bar`
+that names neither a configured tap nor a namespace (§8.3) is
+`invalid_ref`. Because that shape is also how people write a GitHub
+repository, the human-mode error MUST suggest the `@foo/bar` form. If
+the known-tap registry (§16.2.1) contains a tap whose URL is
+`https://github.com/foo/bar` (with or without `.git`), the error also
+names that tap and gives its `crew tap add` command, per §9 step 2.
+`crew tap add foo/bar` gives the same `@foo/bar` suggestion (§16.3).
+
+When the argument carried an `@ref` tail (`foo/bar@v1`), every
+suggested command MUST preserve it (`@foo/bar@v1`, `crew install
+<tap>@v1`), and the echoed reference MUST show the tail the user
+typed. A suggestion that silently drops the ref would install a
+different revision than the one requested.
 
 Infix `@` inside git and tap sources (`gh:owner/repo@v1.0`,
 `core/python-testing@v1.0`) continues to denote a ref and does not
@@ -968,7 +1063,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Git URL or shorthand (`@org/repo`, `gh:org/repo`, etc.): if any configured tap already points at the same URL+subpath, use it; otherwise create an auto tap (§16.5) and use it. The new tap is cloned and refreshed.
    - Path reference (`./foo`, `/abs/foo`): if any configured tap already points at the same path, use it; otherwise create a path-kind auto tap and use it.
    In all cases, the resolved `state.installations[i].source` is `{ tap: <tap-name>, path: <skill-relative-path-inside-tap> }`. The URL/path of the tap itself lives in `config.yaml`.
-   - If a tap-source reference cannot be resolved from configured taps, Homecrew consults the known-tap registry (§16.2.1) before returning `invalid_ref`. Exact known-tap matches are suggestions only: Homecrew MUST NOT clone, fetch, add a tap to config, or install anything from a known tap until the user explicitly runs the suggested `crew tap add <source-ref> <name>` command (or a future interactive flow confirms that same action). The error MUST include the tap-add command and the follow-up `crew install <tap>/<skill>` or `crew install <tap>` command.
+   - If a tap-source reference cannot be resolved from configured taps, Homecrew consults the known-tap registry (§16.2.1) before returning `invalid_ref`. Exact known-tap matches are suggestions only: Homecrew MUST NOT clone, fetch, add a tap to config, or install anything from a known tap until the user explicitly runs the suggested `crew tap add <source-ref> <name>` command (or a future interactive flow confirms that same action). The error MUST include the tap-add command and the follow-up `crew install <tap>/<skill>` or `crew install <tap>` command. A two-segment reference `<owner>/<repo>` also matches a known tap whose URL is `https://github.com/<owner>/<repo>` — the user typed the repository, not a tap name — and the error suggests that tap the same way (§8.5 "Two-segment misses").
 3. **Resolve refs to SHAs.** For git sources and tap sources, the ref (tag, branch, or `HEAD`) is resolved to a full commit SHA. This SHA is what's recorded in state and markers, even if the user specified a tag or branch.
 4. **Validate each candidate skill** against the Agent Skills specification:
    - `SKILL.md` exists at the expected location.
@@ -1062,10 +1157,73 @@ or a tap-qualified installed skill reference (`<tap>/<skill>` or
 `<tap>/<namespace>/<skill>`), using the same installed-skill selector rules as
 `crew uninstall` (§7.4).
 
-1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<selector>...`, it is the subset of taps that host the selected entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run.
+**Collection selectors.** Mirroring `crew install <tap>` (§16.4), a selector
+may also name a collection of installed skills. Resolution order per argument:
+
+1. An installed skill (bare name or tap-qualified) — today's meaning, and it
+   always wins when a skill of that name is installed.
+2. Otherwise, a configured tap name (registered or auto) → every state entry
+   attributed to that tap, at every scope. A tap with zero installed entries is
+   not an error: the tap is still fetched (step 1) and the summary reports that
+   nothing is installed from it (exit 0).
+3. Otherwise, a namespace: `<tap>/<namespace>` selects the installed entries
+   whose tap-relative path is `skills/<namespace>/<skill>` in that tap; a bare
+   `<namespace>` selects the same set when exactly one tap has installed entries
+   under that namespace. A bare word that is both a tap name and a namespace
+   with installed entries in another tap, or a namespace with installed entries
+   in more than one tap, is `ambiguous_reference` naming each qualified form.
+4. Otherwise `unknown_skill`, whose message says the argument isn't an
+   installed skill, a tap, or a namespace.
+
+The dependency closure of step 2 and the tap re-expansion of step 2b apply to
+the entries a collection selector expands to, exactly as if each had been named
+individually. `--json` output carries `selectors: [{ raw, kind, name }]` where
+`kind` is `skill`, `tap`, or `namespace`.
+
+**A namespace selector bounds which additions are installed.** Re-expansion
+groups are keyed by `(tap, scope, project_root)`, so the group behind
+`<tap>/<namespace>` spans the whole tap — but the user asked about one part of
+it. When every selector in a run is a namespace, step 2b MUST install only
+newly-added children that live under one of the named namespaces
+(`skills/<namespace>/<skill>`); children added elsewhere in the tap are left
+alone. Naming the tap itself asks for the whole tap and imposes no such bound.
+A skill selector imposes none either: it says nothing about which namespaces
+are in scope, so a run mixing a skill selector with a namespace selector is
+unbounded.
+
+**Selector identity is fixed at resolution.** A selector resolves to exactly one
+kind before any fetching or re-expansion happens, and keeps it for the rest of
+the run. Two consequences are normative, because a run mutates `state.json`
+between resolution and targeting:
+
+- Selecting an installed skill named `foo` MUST NOT fetch or re-expand a tap
+  that merely happens to be named `foo`. Skill names and tap names are matched
+  against their own kind, never pooled into one namespace of strings.
+- A selector resolved as a tap MUST still select every member of that tap after
+  re-expansion, even when re-expansion installs a new child whose declared name
+  equals the tap's name. Re-resolving the raw argument after re-expansion would
+  demote the selector to a skill (rule 1 wins) and silently drop the tap's other
+  members.
+- A selector MUST stay bound to the state entries it resolved to, identified by
+  their full identity — tap, name, scope, and `project_root` (§11.1) — not by
+  name alone. Re-expansion installs new entries mid-run, so a run that re-reads
+  its selection by name can adopt a same-named skill from a different tap, or
+  the same skill at a different scope, that the user never selected. The same
+  rule governs which `(tap, scope, project_root)` groups step 2b re-expands: a
+  group is re-expanded only when the selection contains one of *its* entries,
+  or the user named its tap as a tap.
+
+  The entry's tap-relative source path is deliberately NOT part of this
+  identity. A skill relocated upstream — moved between namespaces, or into or
+  out of `skills/` — is still the same install, and step 2b rewrites its
+  recorded path in the same run that reads the selection back. Including the
+  path would make a relocated entry fail to match itself, silently dropping it
+  from the selection and leaving stale bytes installed.
+
+1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<selector>...`, it is the subset of taps that host the selected entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run: other taps and every per-skill update still process. A tap the user named *as a tap selector* is the exception — the run did not do what was asked, so its refresh failure is a hard failure (exit 1) in addition to the warning, even when nothing is installed from that tap. A tap that merely happens to be configured, or that backs a selected entry without having been named, stays a warning.
 2. Build the list of skills to consider:
    - `crew update` with no args → every entry in `state.json`.
-   - `crew update <selector>...` → the selected entries, **plus their transitive dependency closure**. Concretely: for each selected entry, take its direct deps (from its SKILL.md `metadata.crew.dependencies`, resolved against `required_by` in state), then their deps, and so on. A dep that isn't in state — one that was never installed — is not added; Homecrew does not install new skills during update. Entries pulled in this way appear in the results alongside the selected entries, marked `transitively_required_by: [<name>...]` in JSON output so callers can tell them apart. An unknown top-level selector (no matching state entry) is an error per argument.
+   - `crew update <selector>...` → the selected entries (a collection selector contributes every entry it expands to), **plus their transitive dependency closure**. Concretely: for each selected entry, take its direct deps (from its SKILL.md `metadata.crew.dependencies`, resolved against `required_by` in state), then their deps, and so on. A dep that isn't in state — one that was never installed — is not added; Homecrew does not install new skills during update. Entries pulled in this way appear in the results alongside the selected entries, marked `transitively_required_by: [<name>...]` in JSON output so callers can tell them apart. An unknown top-level selector (no matching state entry, tap, or namespace) is an error per argument.
 2b. **Re-expand taps** per §10.1.1. For every git-kind tap with at
    least one state entry attributed to it (filtered by the same selector
    rule as step 2 — `crew update <selector>` only touches taps that
@@ -1715,6 +1873,9 @@ is part of the product. Implementations SHOULD follow these guidelines:
   into one line.
 - **Speak as a peer.** "run `crew list` to see what's installed" lands
   better than "the requested skill is not present in the state file."
+- **Guess the spelling.** When an argument is one character away from
+  a form that would have worked (`acme/skills` vs `@acme/skills`), say
+  so and show the corrected command (§8.5 "Two-segment misses").
 - **Respect `--force` semantics.** If the error is one `--force`
   overrides (§13 list), say so. If it's one `--force` won't override,
   also say so — it saves a second attempt.
@@ -1872,7 +2033,7 @@ since the registry was built, the normal tap-add or install error applies.
   - If the URL/path matches an existing **auto** tap, `crew tap add` promotes it: `registered` flips to `true`, and the `<name>` argument (if supplied) renames the tap. No re-clone.
   - `--dry-run` runs the same parsing, name validation, and same-name/same-target checks (producing the same `usage_error`s), then reports which outcome would apply — add, no-op, promote, or recursive-discovery upgrade — without cloning, writing `config.yaml`, or rewriting any marker. `--json` output carries `dry_run: true`.
 - `crew tap add --recursive <url-or-path> [<name>]` registers or promotes the tap with `discovery: recursive`. Re-running it against an existing registered tap with the same target upgrades that tap to recursive discovery. Promoting an existing auto tap preserves any recursive discovery mode already recorded for that tap; adding `--recursive` during promotion upgrades it at the same time. This is an explicit trust signal for non-standard repository layouts: standard discovery still runs first, and recursive discovery is only the fallback described in §9 step 5.4. There is no command-level downgrade flag. Editing `config.yaml` to remove `discovery` makes live tap resolution use standard discovery, but existing installed markers retain the discovery mode used at install time; `doctor --repair` can therefore reconstruct recursive discovery from those markers until the affected skills are reinstalled or markers are rewritten by a future command.
-- `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Bare `crew tap` (no positional at all) prints the command's help page (same as `crew help tap`) with exit 0. Any other input — an unknown subcommand, or a word that doesn't parse as a source — is a `usage_error` whose message names the offending input and points at `crew help tap`. Other commands that take subcommands (`crew cache`, `crew autoupdate`) behave the same way; `crew agents` lists agents when bare and errors on an unknown subcommand.
+- `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Bare `crew tap` (no positional at all) prints the command's help page (same as `crew help tap`) with exit 0. Any other input — an unknown subcommand, or a word that doesn't parse as a source — is a `usage_error` whose message names the offending input and points at `crew help tap`. When the rejected argument to `crew tap add` is a two-segment tap reference (`acme/skills`), the error's remedy suggests `crew tap add @acme/skills`, since that is almost always what was meant. Other commands that take subcommands (`crew cache`, `crew autoupdate`) behave the same way; `crew agents` lists agents when bare and errors on an unknown subcommand.
 - Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`). The subpath, URL, or path is entirely internal — it never appears in skill references.
 - `crew tap remove <name>` deletes the local clone and removes the tap from config. Auto taps are also removed automatically when their last associated state entry is uninstalled (see §16.5). With `--dry-run`, the same lookup and default-tap guard run, but nothing is written or deleted; the command reports what would be removed and `--json` carries `dry_run: true`.
 - `crew tap list` prints each tap's name, kind (`registered` / `auto`), discovery mode when non-standard, source (URL`//subpath` or path), and last-fetched timestamp (for git-kind taps only). `--json` emits the structured shape.
@@ -2054,6 +2215,14 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-28 | §8.2, §13 | A reference echoed back in an error message or `--json` payload has its URL userinfo and credential-bearing query values redacted; the secret never appears on stdout or stderr. |
 | C-REF-29 | §8.2 | URL userinfo is preserved in the resolved clone URL (`https://user:token@host/o/r/tree/main/py` keeps its credentials), and is not mistaken for an `@<ref>` delimiter. |
 | C-REF-30 | §8.2, §13 | `?query` and `#fragment` text is discarded before grammar parsing, so it cannot supply an `@<ref>` or `//<subpath>`; an explicit `@<ref>` may contain `/` (`@feature/foo//python`); an `http(s)` URL too malformed to parse is `invalid_ref` (exit 4). |
+| C-REF-31 | §8.2, §8.5 | `github.com/o/r`, `www.github.com/o/r`, `gitlab.com/o/r`, `git.example.com:8443/o/r`, and `github.com/o/r/tree/main/path` are parsed as git sources exactly as their `https://`-prefixed forms would be. |
+| C-REF-32 | §8.2, §8.5 | `core/python-testing` remains a tap source; `a.b` and `a.b/c` are not scheme-less hosts and produce `invalid_ref`. |
+| C-REF-32a | §8.2 | A scheme-less argument whose first segment is not a bare `<host>[:<port>]` is not a git source: `github.com@evil.example/o/r`, `github.com:443@evil.example/o/r`, and `github.com:abc/o/r` all produce `invalid_ref` (exit 4) and MUST NOT clone from the trailing host or surface a native URL-parsing error. |
+| C-REF-32b | §8.2 | A scheme-less argument whose port is outside 1–65535 (`github.com:99999/o/r`, `github.com:0/o/r`) produces `invalid_ref` (exit 4), not a native URL-parsing error. A port inside the range still parses as a git source. |
+| C-REF-32c | §8.2 / §13 | A malformed scheme-less argument carrying a credential in a query (`github.com?token=<secret>/o/r`) is echoed back redacted in both the human message and the JSON `details`. |
+| C-REF-34 | §8.2 | For a slash-free ref, `<git-url>//<subpath>@<ref>` parses identically to `<git-url>@<ref>//<subpath>` for every git-shaped form (https, ssh, `gh:`/`gl:`/`bb:`, `@owner/repo`, `file://`); the ref is the text after the last `@` in the subpath's final segment, and an `@` in an earlier segment is part of the path. |
+| C-REF-35 | §8.2 | A ref spelled before the subpath suppresses the trailing scan, so a final path segment containing a literal `@` is preserved: `gh:o/r@main//skills/foo@bar` resolves to ref `main` and subpath `skills/foo@bar`. |
+| C-REF-36 | §8.2, §8.4 | The ref-last form takes `trailing-ref`, which excludes `/`, so the two positions are not interchangeable for a slash-containing ref: `gh:o/r//skills@feature/foo` is subpath `skills@feature/foo` with NO ref (a legal subpath, not an error), while the ref-first `gh:o/r@feature/foo//skills` is ref `feature/foo` + subpath `skills`. Ref-first is the documented spelling for a slash-containing ref. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -2194,6 +2363,18 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-23 | §10.1 / §16.6 | `crew update <selector>...` restricts fetching to taps that back the selected entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
 | C-UPD-24 | §10.1 | `crew update <selector>...` includes each selected entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the selected entries, marked as transitively required in `--json` output. |
 | C-UPD-25 | §10.1 | `crew update <tap>/<skill>` accepts a tap-qualified selector for an installed skill and updates the matching state entry. |
+| C-UPD-26 | §10.1 | `crew update <tap>` selects every installed entry attributed to that tap, fetches the tap, and (for whole-tap installs) re-expands it so newly added upstream skills are installed alongside the updates. |
+| C-UPD-27 | §10.1 | `crew update <tap>/<namespace>` and a bare `<namespace>` unique across taps select only the installed entries under `skills/<namespace>/`; sibling entries in other namespaces are left untouched. |
+| C-UPD-28 | §10.1 | An installed skill name wins over a same-named tap or namespace; a bare namespace with installed entries in more than one tap, or a word that is both a tap and a namespace elsewhere, is `ambiguous_reference` naming each qualified form. |
+| C-UPD-29 | §10.1 | `crew update <tap>` for a configured tap with no installed entries fetches the tap, reports that nothing is installed from it, and exits 0. |
+| C-UPD-30 | §10.1 | A selector matching no installed skill, tap, or namespace is `unknown_skill` and the message says so; `--json` carries `selectors` with each argument's resolved `kind`. |
+| C-UPD-31 | §10.1 | Selecting an installed skill never re-expands or fetches an unrelated tap whose name equals that skill's name. |
+| C-UPD-32 | §10.1 | A selector's resolved kind is fixed at resolution: a tap selector still selects every member after re-expansion installs a new child whose declared name equals the tap's name. |
+| C-UPD-33 | §10.1 | A selector stays bound to the entries it resolved to by full identity: a same-named skill installed from another tap, or at another scope, that appears during the run is neither updated nor used to re-expand its group. |
+| C-UPD-34 | §10.1.1 | One tap installed as a whole at both user and project scope re-expands both groups: a newly added sibling is installed into each. |
+| C-UPD-35 | §10.1 | A tap named as a selector whose refresh fails is a hard failure (exit 1), even with nothing installed from it; an unnamed configured tap whose refresh fails remains a warning and the run exits 0. |
+| C-UPD-36 | §10.1, §10.1.1 | A namespace selector bounds re-expansion additions to that namespace: a child added upstream under a different namespace of the same tap is not installed. Naming the tap installs both. |
+| C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
@@ -2272,6 +2453,12 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-23 | §16.2.1 / §16.6 | `crew search <query>` surfaces matching known-tap registry entries that are not already configured as suggestions after configured-tap hits, without cloning, fetching, mutating config, or listing them for `crew search` with no query. Suggestions include the canonical `crew tap add <source-ref> <name>` command. JSON includes those suggestions in `known_hits`. |
 | C-TAP-23a | §16.6 | `crew search --tap <name> [<query>]` walks only the named configured tap: hits from other taps are absent, known-tap suggestions are omitted, and JSON reports `tap: <name>`. An unknown `<name>` is a `usage_error` naming it and pointing at `crew tap list`. Without `--tap`, JSON reports `tap: null`. |
 | C-TAP-24 | §9 / §16.2.1 | `crew install <tap-source>` that cannot resolve from configured taps surfaces exact known-tap registry matches in the `invalid_ref` error, including canonical `crew tap add` and follow-up install commands, without cloning, fetching, mutating config, or installing from the known tap. JSON errors include `known_tap_suggestions`. |
+| C-TAP-24b | §8.5 / §9 / §16.2.1 | `crew install <owner>/<repo>` and `crew info <owner>/<repo>` where `<owner>` is neither a configured tap nor a namespace produce `invalid_ref` whose human output suggests `@<owner>/<repo>`; when the known-tap registry has a tap at `https://github.com/<owner>/<repo>`, the install error also carries that tap's `crew tap add` command and JSON `known_tap_suggestions` includes it. |
+| C-TAP-24c | §16.3 | `crew tap add <owner>/<repo>` is a `usage_error` whose remedy suggests `crew tap add @<owner>/<repo>`. |
+| C-TAP-24e | §13 | Every command crew prints for the user to run quotes each interpolated reference as one literal shell argument, on both the human and `--json` surface. A reference carrying shell syntax in its `@<ref>` tail — `pdf@$(id)` — MUST be rendered `crew install 'anthropic/pdf@$(id)'`, never bare. A reference needing no quoting is left unquoted. |
+| C-TAP-24f | §16.3 | `crew tap add <owner>/<repo>@<ref>` keeps the ref in the suggested correction: `crew tap add @<owner>/<repo>@<ref>`. |
+| C-TAP-24g | §16.2.1 | When an argument matches both a skill inside a known tap and the GitHub repository that tap lives at, both suggestions are offered; neither interpretation suppresses the other. |
+| C-TAP-24d | §8.5 / §9 | `crew install <owner>/<repo>@<ref>` and `crew info <owner>/<repo>@<ref>` preserve `@<ref>` in every suggested command and in the echoed reference. |
 
 #### C-STATE: State and markers (§11)
 
