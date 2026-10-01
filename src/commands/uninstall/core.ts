@@ -10,11 +10,11 @@
 import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { uninstallSkillFromAgents } from "../../agents/uninstall.ts";
-import { CrewError } from "../../core/errors.ts";
+import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
-import { dropScopedEntryAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
+import { dropInstallLocation, reduceEntryAgents } from "./state.ts";
 
 /** What a removal reports regardless of outcome. */
 interface UninstallRecordBase {
@@ -47,6 +47,11 @@ export type UninstallRecord = UninstallRecordBase &
       }
   );
 
+/** Locations fully removed by one call; null denotes user scope (§7.4). */
+export interface RemovalMeta {
+  fullyRemovedRoots: (string | null)[];
+}
+
 /**
  * Remove one named skill. If `agentFilter` is null, removes from every
  * agent the skill is on (full uninstall). If non-null, removes only
@@ -55,17 +60,12 @@ export type UninstallRecord = UninstallRecordBase &
  */
 export function removeOne(
   state: StateFile,
-  subject: string | StateSubject,
+  subject: StateSubject,
   ctx: CommandContext,
   pruned: boolean,
   agentFilter: readonly string[] | null,
-): { updatedState: StateFile; rec: UninstallRecord } {
-  const name = typeof subject === "string" ? subject : subject.name;
-  const entries =
-    typeof subject === "string"
-      ? state.installations.filter((e) => e.name === name)
-      : subject.entries;
-  const errorName = typeof subject === "string" ? subject : subject.raw;
+): { updatedState: StateFile; rec: UninstallRecord; meta: RemovalMeta } {
+  const { name, entries } = subject;
   const rec: UninstallRecord = {
     name,
     removedFrom: [],
@@ -73,15 +73,10 @@ export function removeOne(
     failures: [],
     ...(pruned ? { pruned: true } : {}),
   };
+  const meta: RemovalMeta = { fullyRemovedRoots: [] };
   if (entries.length === 0) {
-    if (!(ctx.flags.force || pruned)) {
-      throw new CrewError(
-        "not_installed_here",
-        `\`${errorName}\` isn't in Homecrew's state — nothing to remove`,
-        { name: errorName },
-      );
-    }
-    return { updatedState: state, rec };
+    // Selection was prevalidated; only forced empty subjects reach removal.
+    return { updatedState: state, rec, meta };
   }
   // Per-entry processing: each (skill, scope) pair potentially touches
   // a different subset of agents.
@@ -98,18 +93,19 @@ export function removeOne(
     // retained even though the user asked for it to go.
     const remainingAgents = entry.agents.filter((t) => !detached.has(t));
     if (remainingAgents.length > 0) {
-      nextState = reduceEntryAgents(nextState, name, entry.scope, remainingAgents);
+      nextState = reduceEntryAgents(nextState, entry, remainingAgents);
       // Entries at different scopes can retain different agents; the
       // record reports the union, deduplicated.
       for (const a of remainingAgents) retained.add(a);
     } else {
-      nextState = dropScopedEntryAndUpdateRequiredBy(nextState, name, entry.scope);
+      meta.fullyRemovedRoots.push(entry.project_root ?? null);
+      nextState = dropInstallLocation(nextState, entry);
     }
   }
   if (retained.size > 0) {
     Object.assign(rec, { partial: true, remainingAgents: [...retained].sort() });
   }
-  return { updatedState: nextState, rec };
+  return { updatedState: nextState, rec, meta };
 }
 
 /**

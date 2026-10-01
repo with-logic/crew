@@ -3,8 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+  # No `branches` filter: that key matches the PR's BASE branch, so
+  # `[main]` silently skipped every stacked PR (one feature branch
+  # based on another). Those PRs showed only the non-test checks and
+  # looked green without ever running the suite.
   pull_request:
-    branches: [main]
 
 # Cancel in-progress runs for the same ref when a new push arrives.
 # Saves CI minutes on fast follow-ups.
