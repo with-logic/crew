@@ -79,7 +79,7 @@ export function splitGitRef(head: string): { url: string; ref: string | null } {
 export function splitTrailingRef(subpath: string): { subpath: string; ref: string | null } {
   const lastSlash = subpath.lastIndexOf("/");
   const atIdx = subpath.lastIndexOf("@");
-  if (atIdx <= lastSlash + 1) return { subpath, ref: null };
+  if (atIdx <= lastSlash) return { subpath, ref: null };
   const possibleRef = subpath.slice(atIdx + 1);
   if (possibleRef.length === 0 || /[\s:]/.test(possibleRef)) return { subpath, ref: null };
   return { subpath: subpath.slice(0, atIdx), ref: possibleRef };

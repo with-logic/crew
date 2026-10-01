@@ -1,5 +1,5 @@
 /**
- * Ref-last git references (§8.2, C-REF-34/32): `url//subpath@ref` parses
+ * Ref-last git references (§8.2, C-REF-34–36): `url//subpath@ref` parses
  * the same as `url@ref//subpath`, across every git-shaped form, and a
  * ref spelled first suppresses the trailing scan.
  */
@@ -43,6 +43,19 @@ describe("parseRef: @ref after //subpath", () => {
       url: "https://github.com/acme/skills.git",
       ref: "a1b2c3d",
       subpath: "py",
+    });
+  });
+
+  test.each(["skills/", ""])("C-REF-34 ref-last after subpath %s equals ref-first", (subpath) => {
+    expect(parseRef(`gh:acme/skills//${subpath}@main`)).toEqual(
+      parseRef(`gh:acme/skills@main//${subpath}`),
+    );
+  });
+
+  test("C-REF-35 ref-first preserves a final folder starting with @", () => {
+    expect(parseRef("gh:acme/skills@main//skills/@literal")).toMatchObject({
+      ref: "main",
+      subpath: "skills/@literal",
     });
   });
 

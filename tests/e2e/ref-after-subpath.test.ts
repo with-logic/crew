@@ -36,43 +36,49 @@ afterEach(() => {
   restore = null;
 });
 
-test("C-REF-34 install file://<repo>//<sub>@<sha> records the ref and pins", () => {
-  const home = makeCrewHome();
-  const repo = makeTempDir("crew-reflast-");
-  makeGitRepo(repo);
-  makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
-  const sha = commitAll(repo, "add demo");
+test.each(["demo", "demo/"])(
+  "C-REF-34 install ref-last subpath %s records the ref and pins",
+  (subpath) => {
+    const home = makeCrewHome();
+    const repo = makeTempDir("crew-reflast-");
+    makeGitRepo(repo);
+    makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }));
+    const sha = commitAll(repo, "add demo");
 
-  // Both installs name their agent: only Claude Code is redirected here, so
-  // an unrestricted install would make the recorded agent list depend on
-  // which adapters the host happens to have.
-  const refFirst = makeCrewHome();
-  expect(
-    runCli(["install", `file://${repo}@${sha}//demo`, "--agent", "claude-code"], {
-      home: refFirst,
-      streams: captureStreams().streams,
-    }),
-  ).toBe(0);
-  const expected = readState(refFirst).installations[0]!;
+    // Both installs name their agent: only Claude Code is redirected here, so
+    // an unrestricted install would make the recorded agent list depend on
+    // which adapters the host happens to have.
+    const refFirst = makeCrewHome();
+    expect(
+      runCli(["install", `file://${repo}@${sha}//demo`, "--agent", "claude-code"], {
+        home: refFirst,
+        streams: captureStreams().streams,
+      }),
+    ).toBe(0);
+    const expected = readState(refFirst).installations[0]!;
 
-  const out = captureStreams();
-  const code = runCli(["install", `file://${repo}//demo@${sha}`, "--agent", "claude-code"], {
-    home,
-    streams: out.streams,
-  });
-  expect(code).toBe(0);
-  expect(existsSync(join(ccRoot, "demo", "SKILL.md"))).toBe(true);
+    const out = captureStreams();
+    const code = runCli(
+      ["install", `file://${repo}//${subpath}@${sha}`, "--agent", "claude-code"],
+      {
+        home,
+        streams: out.streams,
+      },
+    );
+    expect(code).toBe(0);
+    expect(existsSync(join(ccRoot, "demo", "SKILL.md"))).toBe(true);
 
-  const entry = readState(home).installations[0]!;
-  expect(entry.ref).toBe(sha);
-  expect(entry.pinned).toBe(true);
-  expect(entry.resolved_sha).toBe(sha);
-  // Same recorded shape as the ref-first form, bar the two fields that vary
-  // per run: the derived auto-tap name in `source` and the `installed_at`
-  // timestamp.
-  expect({ ...entry, source: null, installed_at: null }).toEqual({
-    ...expected,
-    source: null,
-    installed_at: null,
-  });
-});
+    const entry = readState(home).installations[0]!;
+    expect(entry.ref).toBe(sha);
+    expect(entry.pinned).toBe(true);
+    expect(entry.resolved_sha).toBe(sha);
+    // Same recorded shape as the ref-first form, bar the two fields that vary
+    // per run: the derived auto-tap name in `source` and the `installed_at`
+    // timestamp.
+    expect({ ...entry, source: null, installed_at: null }).toEqual({
+      ...expected,
+      source: null,
+      installed_at: null,
+    });
+  },
+);
