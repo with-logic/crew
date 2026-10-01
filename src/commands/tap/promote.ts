@@ -16,6 +16,8 @@ import type { readConfig } from "../../config/load.ts";
 import { writeConfig } from "../../config/load.ts";
 import type { StateFile, TapConfig } from "../../core/types.ts";
 import { rewriteTapMarkers } from "../../install/rewrite-tap-markers.ts";
+import { migrateTapClone } from "../../sources/migrate-clones.ts";
+import { withTapLocks } from "../../sources/tap-lock.ts";
 import { readState, writeState } from "../../state/load.ts";
 
 export function promoteExistingTap(
@@ -26,6 +28,7 @@ export function promoteExistingTap(
   explicitName: string | undefined,
   recursive: boolean,
 ): void {
+  withTapLocks([sameTarget], home, () => migrateTapClone(sameTarget, home));
   const renamedName = explicitName ?? sameTarget.name;
   const promoted: TapConfig = {
     ...sameTarget,

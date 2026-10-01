@@ -95,13 +95,13 @@ export function refreshTaps(taps: readonly TapConfig[], home: string): TapRefres
       continue;
     }
     const repoKey = canonicalRepoUrl(tap.url);
-    const previous = fetched.get(repoKey);
-    if (previous !== undefined) {
-      rows.push(repeatRow(tap, previous));
-      continue;
-    }
     try {
       migrateTapClone(tap, home);
+      const previous = fetched.get(repoKey);
+      if (previous !== undefined) {
+        rows.push(repeatRow(tap, previous));
+        continue;
+      }
       progress(`refreshing tap ${tap.name} from ${safeUrl(tap.url)}`);
       ensureRepo(tap.url, tapClonePath(tap, home));
       fetched.set(repoKey, null);

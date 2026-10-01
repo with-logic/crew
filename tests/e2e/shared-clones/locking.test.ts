@@ -35,6 +35,7 @@ test("C-UPD-18d different tap names share a deduplicated physical clone lock", (
   try {
     for (const args of [
       ["search", "--tap", "beta"],
+      ["install", "beta"],
       ["tap", "update", "beta"],
       ["tap", "remove", "beta"],
     ]) {
