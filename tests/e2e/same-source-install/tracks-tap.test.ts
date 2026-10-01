@@ -5,25 +5,32 @@
  * same location moves the entry's attribution (§5.4). The subscription
  * has to move with it: `tracks_tap` is what §10.1.1 consults to decide
  * whether a later `crew update` picks up siblings added upstream. A
- * re-attributed entry never reaches `performInstall` — the only other
- * place `tracks_tap` is written — so without an explicit promotion an
+ * re-attributed entry can skip `performInstall` when already installed,
+ * so without recording the subscription on that path an
  * entry that changed hands would stay subscribed to nothing, silently,
  * on a tap the user asked for whole.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { type AdapterRedirect, buildRepo, install, redirectClaudeCode } from "./helpers.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
+import { buildRepo, install } from "./helpers.ts";
 
-let cc: AdapterRedirect;
+let cc: { root: string };
+let ccOriginal: { userPath: () => string; detect: () => boolean };
 
 beforeEach(() => {
-  cc = redirectClaudeCode();
+  cc = { root: makeTempDir("crew-cc-") };
+  ccOriginal = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
+  claudeCodeAdapter.userPath = () => cc.root;
+  claudeCodeAdapter.detect = () => true;
 });
 afterEach(() => {
-  cc.restore();
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
 });
 
 /** Install a single skill by its `<tap>/<skill>` name. */

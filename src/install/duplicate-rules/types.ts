@@ -29,9 +29,8 @@ export interface Reattribution {
   readonly toPath: string;
   /**
    * Whether the incoming install subscribed to its whole tap. Carried
-   * with the move because a re-attributed entry never reaches
-   * `performInstall`, which is the only other place `tracks_tap` is
-   * written (§10.1.1).
+   * with the move because an already-installed entry can skip
+   * `performInstall`, which otherwise records `tracks_tap` (§10.1.1).
    */
   readonly tracksTap: boolean;
 }

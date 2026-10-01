@@ -7,7 +7,7 @@
  *      (in `./resolve.ts`).
  *   2. Compute the active target set (in `./target-set.ts`).
  *   3. Detect "already installed" and "name conflict" against the current
- *      state (§5.4; in `./duplicate-rules.ts`).
+ *      state (§5.4; in `./duplicate-rules/index.ts`).
  *   4. Perform the installs (in `./perform/index.ts`).
  *   5. Write state back under the lock, and return a structured summary
  *      the CLI layer can format.

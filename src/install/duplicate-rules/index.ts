@@ -13,7 +13,7 @@
  * A different-source install of the same name throws `name_conflict`
  * (never overridden by --force — per §13). "Same source" means the same
  * canonical location: the same repo (or directory) and the same path
- * inside it, per `./source-identity.ts`. One repo can back several taps
+ * inside it, per `../source-identity.ts`. One repo can back several taps
  * — installing `//skills/docx` and later the whole repo reaches the same
  * directory two ways — so comparing tap names would report a conflict
  * where there is none.

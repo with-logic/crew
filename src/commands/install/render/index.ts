@@ -49,6 +49,7 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
           input.cwd,
           input.width,
           style,
+          input.dryRun,
         ),
       );
     }
@@ -68,7 +69,14 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
   for (const existing of input.alreadyInstalled) {
     lines.push("");
     lines.push(
-      ...renderAlreadyInstalled(existing, byName.get(existing.name), input.cwd, input.width, style),
+      ...renderAlreadyInstalled(
+        existing,
+        byName.get(existing.name),
+        input.cwd,
+        input.width,
+        style,
+        input.dryRun,
+      ),
     );
   }
 
@@ -123,9 +131,11 @@ function renderAlreadyInstalled(
   cwd: string,
   width: number,
   style: Styler,
+  dryRun: boolean,
 ): string[] {
   const lines: string[] = [];
   const tagParts: string[] = [style.dim("(already installed)")];
+  if (dryRun) tagParts.push(style.dim("(dry run)"));
   const version = formatVersion(existing.ref, existing.resolvedSha);
   if (version) tagParts.push(style.dim(`· ${version}`));
   // Match `renderRecord`'s scope-tag shape: two leading spaces
@@ -133,7 +143,8 @@ function renderAlreadyInstalled(
   const scopeTag = existing.scope === "project" ? style.dim(`  in ${shortenHome(cwd)}`) : "";
   lines.push(`  ${style.bold(existing.name)} ${tagParts.join(" ")}${scopeTag}`);
   if (existing.reattributedFrom && resolved) {
-    lines.push(style.dim(`    now tracked via ${resolved.tap.name}`));
+    const tracking = dryRun ? "would track via" : "now tracked via";
+    lines.push(style.dim(`    ${tracking} ${resolved.tap.name}`));
   }
   if (resolved?.frontmatter.description) {
     const desc = firstSentences(resolved.frontmatter.description, 200);
