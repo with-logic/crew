@@ -42,7 +42,7 @@ export function reexpandGroup(input: GroupInput): TapReexpandResult {
       added: [],
       updated: [],
       sourceGone: new Set(),
-      hardFailure: false,
+      hardFailure: ce.code !== "no_skills_found" && ce.code !== "invalid_ref",
       rows: input.members.map((m) => ({
         name: m.name,
         scope: m.scope,

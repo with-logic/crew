@@ -2,24 +2,37 @@
  * Updating an entry installed at an explicit `@<ref>` (§10.1 step 3).
  */
 
-import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { runGit } from "../../../src/git/exec.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { commitAll, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { installedBody, retag, tag, twoCommitRepo, useRedirectedAdapter } from "./helpers.ts";
+import { commitAll, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { installedBody, retag, tag, twoCommitRepo } from "./helpers.ts";
 
-useRedirectedAdapter();
+let ccRoot = "";
+let ccOriginal: { userPath: () => string; detect: () => boolean };
+beforeEach(() => {
+  ccRoot = makeTempDir("crew-requested-ref-agent-");
+  ccOriginal = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
+});
 
 describe("updating an entry installed at a ref", () => {
   test("C-UPD-04b --force on a moved tag installs the tag's new commit", () => {
     const home = makeCrewHome();
     const { repo } = twoCommitRepo();
-    runCli(["install", `file://${repo}@v1//demo`], { home, streams: captureStreams().streams });
-    expect(installedBody()).toContain("VERSION ONE");
+    runCli(["tap", "add", `file://${repo}`, "acme"], { home, streams: captureStreams().streams });
+    runCli(["install", "acme/demo@v1"], { home, streams: captureStreams().streams });
+    expect(installedBody(ccRoot)).toContain("VERSION ONE");
 
     writeFileSync(
       join(repo, "demo", "SKILL.md"),
@@ -27,13 +40,21 @@ describe("updating an entry installed at a ref", () => {
     );
     const shaC = commitAll(repo, "three");
     retag(repo, "v1");
+    writeFileSync(
+      join(repo, "demo", "SKILL.md"),
+      `---\n${skillFrontmatter({ name: "demo", description: "HEAD FOUR" })}\n---\nfour\n`,
+    );
+    commitAll(repo, "advance HEAD beyond moved tag");
+    rmSync(join(home, "cache"), { recursive: true, force: true });
+    writeFileSync(join(home, "cache"), "not a directory\n");
 
     expect(runCli(["update"], { home, streams: captureStreams().streams })).toBe(0);
-    expect(installedBody()).toContain("VERSION ONE");
+    expect(installedBody(ccRoot)).toContain("VERSION ONE");
 
+    rmSync(join(home, "cache"));
     const code = runCli(["update", "--force"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
-    expect(installedBody()).toContain("VERSION THREE");
+    expect(installedBody(ccRoot)).toContain("VERSION THREE");
     expect(readState(home).installations[0]!.resolved_sha).toBe(shaC);
   });
 
@@ -49,7 +70,7 @@ describe("updating an entry installed at a ref", () => {
     runGit(["checkout", "--quiet", "main"], { cwd: repo });
 
     runCli(["install", `file://${repo}@side//demo`], { home, streams: captureStreams().streams });
-    expect(installedBody()).toContain("SIDE ONE");
+    expect(installedBody(ccRoot)).toContain("SIDE ONE");
 
     runGit(["checkout", "--quiet", "side"], { cwd: repo });
     writeFileSync(
@@ -61,7 +82,7 @@ describe("updating an entry installed at a ref", () => {
 
     const code = runCli(["update"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
-    expect(installedBody()).toContain("SIDE TWO");
+    expect(installedBody(ccRoot)).toContain("SIDE TWO");
     expect(readState(home).installations[0]!.resolved_sha).toBe(sideTwo);
   });
 
@@ -72,7 +93,7 @@ describe("updating an entry installed at a ref", () => {
     const home = makeCrewHome();
     const { repo } = twoCommitRepo();
     runCli(["install", `file://${repo}@v1//demo`], { home, streams: captureStreams().streams });
-    const before = installedBody();
+    const before = installedBody(ccRoot);
     const beforeSha = readState(home).installations[0]!.resolved_sha;
 
     runGit(["tag", "--delete", "v1"], { cwd: repo });
@@ -88,7 +109,7 @@ describe("updating an entry installed at a ref", () => {
     expect(c.stdout()).toContain("ref not found");
     // The local install survives — §10.1 keeps working bytes in place
     // when the source can no longer supply them.
-    expect(installedBody()).toBe(before);
+    expect(installedBody(ccRoot)).toBe(before);
     expect(readState(home).installations[0]!.resolved_sha).toBe(beforeSha);
   });
 

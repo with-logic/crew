@@ -136,6 +136,9 @@ function updateOne(
   if (peeked !== null && peeked === entry.resolved_sha && !(force && entry.pinned)) {
     return { kind: "up_to_date" };
   }
+  if (peeked !== null && entry.pinned && !force) {
+    return { kind: "skipped", reason: "pinned to tag; upstream moved" };
+  }
   // Only this entry's own subtree is read, so only it is exported —
   // otherwise every entry sharing a whole-repo tap materializes the
   // whole repository again (§10.1).

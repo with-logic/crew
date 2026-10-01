@@ -2,13 +2,25 @@
  * Previewing an explicit `@<ref>` with `crew info` (§9.1).
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { repoWithSkillDeletedAtHead, twoCommitRepo, useRedirectedAdapter } from "./helpers.ts";
+import { repoWithSkillDeletedAtHead, twoCommitRepo } from "./helpers.ts";
 
-useRedirectedAdapter();
+let ccRoot = "";
+let ccOriginal: { userPath: () => string; detect: () => boolean };
+beforeEach(() => {
+  ccRoot = makeTempDir("crew-requested-ref-agent-");
+  ccOriginal = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
+});
 
 describe("crew info at an explicit ref", () => {
   test("C-INST-05b info previews the ref's content", () => {

@@ -22,8 +22,8 @@ import { CrewError } from "../core/errors.ts";
 import { toPosix } from "../util/fs.ts";
 
 /**
- * Throw unless `rootDir` is reachable from `exportRoot` without
- * traversing a symlink, and is itself a real directory.
+ * Reject symlinks along an already-contained exported path. The caller
+ * establishes lexical containment; discovery checks the directory layout.
  *
  * Checks every path segment, not just the leaf: a symlinked parent
  * directory redirects just as effectively as a symlinked leaf.

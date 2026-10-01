@@ -1,9 +1,9 @@
 /**
  * Materialize several taps at one requested ref (§9 step 3).
  *
- * A qualified reference (`<tap>/<skill>@v1`) names its tap, so a single
- * export precedes resolution. A BARE name with a ref (`<skill>@v1`)
- * names no tap at all: the skill could live in any configured tap, and
+ * Only a three-segment reference (`<tap>/<namespace>/<skill>@v1`)
+ * binds one tap. Bare names and two-segment namespace fallback can
+ * match another configured tap, so each candidate reads its commit, and
  * §9 step 3 requires resolution itself to read the requested commit —
  * a skill present at `@v1` but deleted at the default branch must still
  * resolve. That means every candidate tap has to be materialized at the
@@ -32,12 +32,13 @@ export function withTapsAtRef<T>(
   taps: readonly TapConfig[],
   ref: string,
   home: string,
-  fn: (roots: Record<string, string | undefined>) => T,
+  fn: (roots: Record<string, string | undefined>, unavailable: ReadonlyMap<string, unknown>) => T,
 ): T {
   const roots: Record<string, string | undefined> = {};
+  const unavailable = new Map<string, unknown>();
 
   const step = (i: number): T => {
-    if (i >= taps.length) return fn(roots);
+    if (i >= taps.length) return fn(roots, unavailable);
     const tap = taps[i]!;
     // A path tap has no commits, so a ref cannot narrow it; it keeps its
     // usual root and needs no export.
@@ -55,6 +56,7 @@ export function withTapsAtRef<T>(
     } catch (err) {
       if (reached) throw err;
       // This tap cannot supply the ref; carry on without it.
+      unavailable.set(tap.name, err);
       return step(i + 1);
     }
   };

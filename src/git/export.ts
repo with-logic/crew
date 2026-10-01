@@ -18,7 +18,7 @@
  * would add an undeclared dependency.
  *
  * `withExportedTree` wraps the common "use it, then delete it" shape so
- * a thrown error can't leak a directory into the cache.
+ * normal success and failure share a cleanup scope.
  */
 
 import { mkdtempSync } from "node:fs";
@@ -50,7 +50,7 @@ export function exportTreeAt(clonePath: string, sha: string, subpath: string, de
   ensureDir(dest);
   // A scratch index keeps the clone's real index untouched; without it
   // `git checkout` would stage the exported paths into the shared repo.
-  const indexFile = join(dest, ".crew-export-index");
+  const indexFile = `${dest}.crew-export-index`;
   const pathspec = subpath.length > 0 ? subpath : ".";
   const args = [`--work-tree=${dest}`, "checkout", sha, "--", pathspec];
   try {
@@ -93,8 +93,8 @@ function exportFailure(
 
 /**
  * Run `fn` against a scratch export of `sha`, then delete the scratch
- * directory — even when `fn` throws, so a failed install never leaves
- * bytes behind in the cache.
+ * directory when `fn` returns or throws. Cleanup IO errors propagate;
+ * `crew cache clean` can remove any leftover scratch directories.
  *
  * `fn` receives the directory matching the source root: the export root
  * when `subpath` is empty, otherwise the subpath inside it. That root is
@@ -117,12 +117,8 @@ export function withExportedTree<T>(
     assertNoSymlinkEscape(dest, rootDir, subpath);
     return fn(rootDir);
   } finally {
-    // `rmrf` passes `force: true`, so a missing directory is not an
-    // error. A genuine removal failure must NOT be raised from here: it
-    // would replace `fn`'s own error (or its result) with a cleanup
-    // complaint, which is strictly less useful to the caller. The
-    // leftover directory is reclaimed by `crew cache clear` and by the
-    // store GC that already runs after install and update.
+    // Cleanup can throw on an IO/permission failure and replace the callback
+    // result. Any leftover scratch export can be removed by `crew cache clean`.
     rmrf(dest);
   }
 }
@@ -146,7 +142,7 @@ function makeScratchDir(cacheRoot: string, sha: string): string {
       "source_unreachable",
       `couldn't create a scratch directory for ${sha.slice(0, 8)} under \`${cacheRoot}\` — ${(err as Error).message}`,
       { sha, cacheRoot },
-      "Check that `~/.crew/cache` is writable, or run `crew cache clear`.",
+      "Check that `~/.crew/cache` is writable, or run `crew cache clean`.",
     );
   }
 }

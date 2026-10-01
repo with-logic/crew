@@ -17,8 +17,8 @@
  * the recorded SHA and the bytes the caller reads. Since the clone is
  * shared, the content is exported to a scratch directory rather than
  * checked out in place; `withAcquiredTap` scopes that directory to the
- * callback and deletes it afterwards. `acquireTap` without a ref is
- * unchanged and needs no cleanup.
+ * callback and deletes it afterwards. `acquireTap` without a ref reads
+ * the live checkout and records its SHA, requiring no cleanup.
  *
  * The "find or create the tap that backs this install ref" logic lives
  * in `install/flow.ts` — by the time we get here, we already know which
@@ -38,7 +38,7 @@ import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
-  /** Absolute directory the tap is rooted at — walk this to find skills. */
+  /** Materialized tap root, or the narrowed root returned by skill acquisition. */
   readonly rootDir: string;
   /** Full 40-char SHA for git taps; null for path taps. */
   readonly resolvedSha: string | null;
@@ -69,7 +69,8 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
   // kind === "git"
   const clonePath = tapPath(tap.name, home);
   ensureClone(tap.url, clonePath);
-  const sha = resolveRef(clonePath, null);
+  // §9 step 3: Git's `@` is checkout HEAD, even after a refs-only fetch.
+  const sha = resolveRef(clonePath, "@");
   // `tapRootDir` proves containment (lexical + symlink) as it resolves.
   const rootDir = tapRootDir(clonePath, tap);
   if (!isDirectory(rootDir)) {

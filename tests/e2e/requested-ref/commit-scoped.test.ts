@@ -9,9 +9,10 @@
  * tree.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { runGit } from "../../../src/git/exec.ts";
 import { readState } from "../../../src/state/load.ts";
@@ -23,9 +24,20 @@ import {
   makeTempDir,
   skillFrontmatter,
 } from "../../helpers/fixtures.ts";
-import { adapterRoot, tag, useRedirectedAdapter } from "./helpers.ts";
+import { tag } from "./helpers.ts";
 
-useRedirectedAdapter();
+let ccRoot = "";
+let ccOriginal: { userPath: () => string; detect: () => boolean };
+beforeEach(() => {
+  ccRoot = makeTempDir("crew-requested-ref-agent-");
+  ccOriginal = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
+});
 
 /** Repo where `gone/` exists at `v1` and is deleted at HEAD. */
 function deletedAtHeadRepo(): string {
@@ -52,14 +64,13 @@ describe("C-INST-05e resolution reads the requested commit", () => {
     const code = runCli(["install", "mytap/gone@v1"], { home, streams: c.streams });
 
     expect(code).toBe(0);
-    expect(existsSync(join(adapterRoot(), "gone", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(ccRoot, "gone", "SKILL.md"))).toBe(true);
     expect(readState(home).installations[0]!.name).toBe("gone");
   });
 
   test("a bare name carrying a ref previews that commit", () => {
     // A bare name could live in any configured tap, so it resolves
-    // against the clone and re-expands at the ref afterwards — the
-    // other arm of the same guarantee.
+    // against each candidate tap at the requested commit.
     const home = makeCrewHome();
     const repo = makeTempDir("crew-solo-");
     makeSkill(repo, "solo", skillFrontmatter({ name: "solo", description: "SOLO AT V1" }));
@@ -129,7 +140,7 @@ describe("C-INST-05f sibling dependencies read the parent's commit", () => {
     expect(code).toBe(0);
     // The sibling's bytes must be the parent's commit, not HEAD —
     // otherwise state records the parent's SHA over HEAD's content.
-    const installed = readFileSync(join(adapterRoot(), "sibling", "SKILL.md"), "utf8");
+    const installed = readFileSync(join(ccRoot, "sibling", "SKILL.md"), "utf8");
     expect(installed).toContain("SIBLING V1");
     expect(installed).not.toContain("SIBLING HEAD");
 
@@ -172,6 +183,6 @@ describe("C-INST-05g the exported tree cannot escape via symlink", () => {
     // a future refactor turning containment into an unrelated error.
     expect(code).toBe(4);
     expect(JSON.parse(c.stdout()).error.name).toBe("invalid_skill");
-    expect(existsSync(join(adapterRoot(), "outside"))).toBe(false);
+    expect(existsSync(join(ccRoot, "outside"))).toBe(false);
   });
 });

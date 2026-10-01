@@ -2,23 +2,30 @@
  * Installing at an explicit `@<ref>` (§8.2, §9 step 3).
  */
 
-import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { paths } from "../../../src/core/paths.ts";
 import { runGit } from "../../../src/git/exec.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { commitAll, makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
-import {
-  installedBody,
-  repoWithSkillDeletedAtHead,
-  twoCommitRepo,
-  useRedirectedAdapter,
-} from "./helpers.ts";
+import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { installedBody, repoWithSkillDeletedAtHead, twoCommitRepo } from "./helpers.ts";
 
-useRedirectedAdapter();
+let ccRoot = "";
+let ccOriginal: { userPath: () => string; detect: () => boolean };
+beforeEach(() => {
+  ccRoot = makeTempDir("crew-requested-ref-agent-");
+  ccOriginal = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = ccOriginal.userPath;
+  claudeCodeAdapter.detect = ccOriginal.detect;
+});
 
 describe("installing at an explicit ref", () => {
   test("C-INST-05b install at a tag uses the tag's commit, not HEAD", () => {
@@ -28,7 +35,7 @@ describe("installing at an explicit ref", () => {
     const code = runCli(["install", `file://${repo}@v1//demo`], { home, streams: cap.streams });
 
     expect(code).toBe(0);
-    expect(installedBody()).toContain("VERSION ONE");
+    expect(installedBody(ccRoot)).toContain("VERSION ONE");
     const entry = readState(home).installations.find((e) => e.name === "demo")!;
     expect(entry.resolved_sha).toBe(shaA);
     expect(entry.ref).toBe("v1");
@@ -44,7 +51,7 @@ describe("installing at an explicit ref", () => {
     });
 
     expect(code).toBe(0);
-    expect(installedBody()).toContain("VERSION ONE");
+    expect(installedBody(ccRoot)).toContain("VERSION ONE");
     expect(readState(home).installations[0]!.resolved_sha).toBe(shaA);
   });
 
@@ -57,7 +64,7 @@ describe("installing at an explicit ref", () => {
     });
 
     expect(code).toBe(0);
-    expect(installedBody()).toContain("VERSION TWO");
+    expect(installedBody(ccRoot)).toContain("VERSION TWO");
     const entry = readState(home).installations[0]!;
     expect(entry.resolved_sha).toBe(shaB);
     expect(entry.pinned).toBe(false);
@@ -71,7 +78,7 @@ describe("installing at an explicit ref", () => {
     const code = runCli(["install", "acme/demo@v1"], { home, streams: captureStreams().streams });
 
     expect(code).toBe(0);
-    expect(installedBody()).toContain("VERSION ONE");
+    expect(installedBody(ccRoot)).toContain("VERSION ONE");
     expect(readState(home).installations[0]!.resolved_sha).toBe(shaA);
   });
 
@@ -102,9 +109,15 @@ describe("installing at an explicit ref", () => {
   test("C-INST-05d the shared clone stays put and no scratch dirs leak", () => {
     const home = makeCrewHome();
     const { repo, shaB } = twoCommitRepo();
-    runCli(["install", `file://${repo}@v1//demo`], { home, streams: captureStreams().streams });
-
-    const clone = join(paths(home).tapsDir, readdirSync(paths(home).tapsDir)[0]!);
+    runCli(["tap", "add", `file://${repo}`, "acme"], { home, streams: captureStreams().streams });
+    const clone = join(paths(home).tapsDir, "acme");
+    const index = readFileSync(join(clone, ".git", "index"));
+    const bytes = readFileSync(join(clone, "demo", "SKILL.md"));
+    expect(runCli(["install", "acme/demo@v1"], { home, streams: captureStreams().streams })).toBe(
+      0,
+    );
+    expect(readFileSync(join(clone, ".git", "index"))).toEqual(index);
+    expect(readFileSync(join(clone, "demo", "SKILL.md"))).toEqual(bytes);
     expect(runGit(["rev-parse", "HEAD"], { cwd: clone }).stdout.trim()).toBe(shaB);
 
     const gitCache = paths(home).gitCacheDir;
