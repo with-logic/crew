@@ -14,6 +14,7 @@
 import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { countSkills } from "../../install/collision-check.ts";
+import { withTapLocks } from "../../sources/tap-lock.ts";
 import type { CommandContext } from "../types.ts";
 
 export function promptForCollision(
@@ -22,7 +23,7 @@ export function promptForCollision(
   trimmed: string,
   raw: string,
 ): string {
-  const count = countSkills(collision.tap, ctx.home);
+  const count = withTapLocks([collision.tap], ctx.home, () => countSkills(collision.tap, ctx.home));
   const skillsLine = count === null ? "" : ` (${count} skill${count === 1 ? "" : "s"})`;
   const qualifiedFor = (t: TapConfig): string => `${t.name}/${trimmed}`;
 

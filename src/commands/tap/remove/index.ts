@@ -23,12 +23,14 @@
 
 import { readConfig, writeConfig } from "../../../config/load.ts";
 import { CrewError } from "../../../core/errors.ts";
-import { paths, tapPath } from "../../../core/paths.ts";
+import { paths } from "../../../core/paths.ts";
+import { cloneStillReferenced, tapClonePath } from "../../../core/repo-path.ts";
 import type { StateEntry, TapConfig } from "../../../core/types.ts";
 import { withTapLocks } from "../../../sources/tap-lock.ts";
 import { readState, writeState } from "../../../state/load.ts";
 import { withStateLock } from "../../../state/lock.ts";
 import { rmrfInside } from "../../../util/fs.ts";
+import { assertNoSymlinkEscape } from "../../../util/symlink-containment.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
 import { removeOne, type UninstallRecord } from "../../uninstall/core.ts";
 import { dropScopedEntriesAndUpdateRequiredBy } from "../../uninstall/state.ts";
@@ -69,13 +71,24 @@ function runPlan(ctx: CommandContext, plan: RemovePlan, dryRun: boolean): Comman
   return removeTapOnly(ctx, plan.tap, ctx.flags.force ? plan.attached : [], dryRun);
 }
 
-/** Drop the tap row and its clone. Caller holds the state lock. */
+/**
+ * Drop the tap row and, when nothing else needs them, its clone's bytes.
+ * Caller holds the state lock.
+ *
+ * Clones are shared per repository (§6), so the directory is deleted only
+ * once no surviving tap row points at the same repo.
+ */
 function dropTap(home: string, tap: TapConfig): void {
   withTapLocks([tap], home, () => {
     const config = readConfig(home);
-    writeConfig({ ...config, taps: config.taps.filter((t) => t.name !== tap.name) }, home);
+    const survivors = config.taps.filter((t) => t.name !== tap.name);
+    writeConfig({ ...config, taps: survivors }, home);
     // Path taps don't own their directory; never delete it.
-    if (tap.kind === "git") rmrfInside(paths(home).tapsDir, tapPath(tap.name, home));
+    if (tap.kind === "git" && !cloneStillReferenced(tap, survivors)) {
+      const clone = tapClonePath(tap, home);
+      assertNoSymlinkEscape(home, clone, "shared tap clone");
+      rmrfInside(paths(home).reposDir, clone);
+    }
   });
 }
 
@@ -86,11 +99,13 @@ function removeTapOnly(
   kept: readonly StateEntry[],
   dryRun: boolean,
 ): CommandOutput {
+  const cloneShared = cloneStillReferenced(tap, readConfig(ctx.home).taps);
   if (!dryRun) dropTap(ctx.home, tap);
   const keptLabels = describe(kept);
   return {
     exitCode: 0,
     human: renderTapRemove({
+      cloneShared,
       name: tap.name,
       kind: tap.kind,
       dryRun,
@@ -108,6 +123,7 @@ function removeTapOnly(
 
 /** `--uninstall`: run the §7.4 removal for each attached entry, then drop the tap. */
 function removeWithSkills(ctx: CommandContext, plan: RemovePlan, dryRun: boolean): CommandOutput {
+  const cloneShared = cloneStillReferenced(plan.tap, readConfig(ctx.home).taps);
   const records: UninstallRecord[] = [];
   let state = readState(ctx.home);
   // Group this tap's entries by skill name so each name is removed once,
@@ -155,6 +171,7 @@ function removeWithSkills(ctx: CommandContext, plan: RemovePlan, dryRun: boolean
   return {
     exitCode: failed ? 1 : 0,
     human: renderTapRemove({
+      cloneShared,
       name: plan.tap.name,
       kind: plan.tap.kind,
       dryRun,

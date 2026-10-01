@@ -60,7 +60,7 @@ export function Taps() {
             <CodeBlock>
               <Prompt /> crew tap add <Acc>@acme/skills</Acc>
               {"\n"}
-              <Ok>✓</Ok> cloned <Key>acme</Key> → ~/.crew/taps/acme (42 skills)
+              <Ok>✓</Ok> added tap <Key>acme</Key> (42 skills)
               {"\n\n"}
               <Prompt /> crew install <Acc>acme/team-baseline</Acc>
               {"\n"}

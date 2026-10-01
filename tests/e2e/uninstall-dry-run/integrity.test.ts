@@ -10,7 +10,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig } from "../../../src/config/load.ts";
-import { paths, tapPath } from "../../../src/core/paths.ts";
+import { paths } from "../../../src/core/paths.ts";
+import { tapClonePath } from "../../../src/core/repo-path.ts";
 import { setReleaseFetcher } from "../../../src/self-update/github.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
@@ -113,7 +114,7 @@ describe("crew uninstall --dry-run integrity", () => {
     const tapsBefore = readConfig(home).taps.map((t) => t.name);
     expect(tapsBefore.length).toBeGreaterThan(1);
     const autoTap = readConfig(home).taps.find((t) => !t.registered);
-    const clone = tapPath(autoTap?.name ?? "", home);
+    const clone = tapClonePath(autoTap!, home);
     const configBefore = readFileSync(paths(home).configFile);
     expect(existsSync(clone)).toBe(true);
 

@@ -4,10 +4,11 @@
  * `config.yaml` entry. Split from `./add.ts`, which owns the add flow.
  */
 
-import { tapPath } from "../../core/paths.ts";
+import { repoClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { ensureClone } from "../../git/repo/index.ts";
 import { deriveAutoTapName } from "../../install/tap-naming.ts";
+import { withTapLocks } from "../../sources/tap-lock.ts";
 import { exists, rmrf } from "../../util/fs.ts";
 import type { TapAddTarget } from "./target.ts";
 
@@ -17,14 +18,21 @@ export function deriveName(target: TapAddTarget): string {
 }
 
 /** Clone a new git tap; a failed clone leaves no partial directory (§16.3). */
-export function cloneNewTap(name: string, url: string, home: string): void {
-  const cloneDir = tapPath(name, home);
-  try {
-    ensureClone(url, cloneDir);
-  } catch (err) {
-    if (exists(cloneDir)) rmrf(cloneDir);
-    throw err;
-  }
+export function cloneNewTap(url: string, home: string): void {
+  withTapLocks(
+    [{ name: "", kind: "git", url, subpath: "", path: "", registered: true }],
+    home,
+    () => {
+      const cloneDir = repoClonePath(url, home);
+      const preexisting = exists(cloneDir);
+      try {
+        ensureClone(url, cloneDir);
+      } catch (err) {
+        if (!preexisting && exists(cloneDir)) rmrf(cloneDir);
+        throw err;
+      }
+    },
+  );
 }
 
 export function newTapOf(name: string, target: TapAddTarget, recursive: boolean): TapConfig {

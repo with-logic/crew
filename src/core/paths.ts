@@ -52,6 +52,7 @@ export interface CrewPaths {
   readonly stateFile: string;
   readonly stateLock: string;
   readonly tapsDir: string;
+  readonly reposDir: string;
   readonly cacheDir: string;
   readonly locksDir: string;
   readonly gitCacheDir: string;
@@ -74,6 +75,7 @@ export function paths(home: string = crewHome()): CrewPaths {
     stateFile: join(home, "state.json"),
     stateLock: join(home, "state.json.lock"),
     tapsDir: join(home, "taps"),
+    reposDir: join(home, "repos"),
     cacheDir: join(home, "cache"),
     // Coordination locks live OUTSIDE `cache/`: `crew cache clean` deletes
     // that tree wholesale, which would remove a lockfile another process
@@ -92,8 +94,14 @@ export function paths(home: string = crewHome()): CrewPaths {
   };
 }
 
-/** Path to a tap's local clone. */
-export function tapPath(name: string, home: string = crewHome()): string {
+/**
+ * Path to a tap's clone under the pre-0.11 per-tap-name layout.
+ *
+ * Clones now live under `repos/`, keyed by repository (see
+ * `core/repo-path.ts`). This remains only so the one-time migration in
+ * `sources/migrate-clones.ts` can find and relocate old directories.
+ */
+export function legacyTapPath(name: string, home: string = crewHome()): string {
   return join(paths(home).tapsDir, name);
 }
 

@@ -8,10 +8,15 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { tapPath } from "../../../src/core/paths.ts";
 import { runGit } from "../../../src/git/exec.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
-import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import {
+  cloneDirForTap,
+  commitAll,
+  makeSkill,
+  makeTempDir,
+  skillFrontmatter,
+} from "../../helpers/fixtures.ts";
 import { buildTapRepo, run } from "./helpers.ts";
 
 /** Every ref in the clone, so a fetch that moves only remote refs is caught. */
@@ -27,7 +32,7 @@ describe("C-TAP-16b tap update --dry-run", () => {
     run(home, ["tap", "add", `file://${repo}`, "remote"]);
     const dir = makeTempDir("crew-dry-update-path-");
     run(home, ["tap", "add", dir, "local"]);
-    const clone = tapPath("remote", home);
+    const clone = cloneDirForTap("remote", home)!;
     const headBefore = runGit(["rev-parse", "HEAD"], { cwd: clone }).stdout.trim();
     const refsBefore = refSnapshot(clone);
     // New upstream commit the preview must not pull down.
@@ -51,7 +56,7 @@ describe("C-TAP-16b tap update --dry-run", () => {
     run(home, ["tap", "remove", "core", "--force"]);
     const repo = buildTapRepo("crew-dry-update-named-");
     run(home, ["tap", "add", `file://${repo}`, "remote"]);
-    const clone = tapPath("remote", home);
+    const clone = cloneDirForTap("remote", home)!;
     const refsBefore = refSnapshot(clone);
     makeSkill(repo, "delta", skillFrontmatter({ name: "delta" }));
     commitAll(repo, "add delta");

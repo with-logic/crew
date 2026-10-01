@@ -14,6 +14,7 @@ import type { Config } from "../../core/types.ts";
 import { enumerateCandidates, type NameCandidate } from "../../install/attribute-bare-name.ts";
 import { ambiguityError } from "../../install/resolve-ref/errors.ts";
 import { shortLabelFor } from "../../install/resolve-ref/format.ts";
+import { withTapLocks } from "../../sources/tap-lock.ts";
 import { safePath } from "../../util/redact.ts";
 import type { CommandContext } from "../types.ts";
 
@@ -50,7 +51,9 @@ export function promptBareNameAmbiguity(
   trimmed: string,
   raw: string,
 ): string {
-  const candidates = filterForAmbiguity(enumerateCandidates(trimmed, config, ctx.home), trimmed);
+  const candidates = withTapLocks(config.taps, ctx.home, () =>
+    filterForAmbiguity(enumerateCandidates(trimmed, config, ctx.home), trimmed),
+  );
   if (candidates.length <= 1) return raw;
   // `--yes` skips this prompt but does NOT pick a default candidate
   // the way it does in the tap/skill collision path (where the tap

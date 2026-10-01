@@ -30,6 +30,7 @@ import { readConfig, writeConfig } from "../../src/config/load.ts";
 import { readState } from "../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
+  cloneDirForTap,
   commitAll,
   makeGitRepo,
   makeSkill,
@@ -115,7 +116,7 @@ describe("update edge cases", () => {
     // from the deconfigured-tap case above.
     const state = readState(home);
     const tapName = state.installations[0]!.source.tap;
-    rmSync(join(home, "taps", tapName), { recursive: true, force: true });
+    rmSync(cloneDirForTap(tapName, home)!, { recursive: true, force: true });
     rmSync(repo, { recursive: true, force: true });
 
     const c = captureStreams();

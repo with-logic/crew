@@ -60,6 +60,8 @@ for (const scope of ["user", "project"] as const) {
         if (mode === "changed-sha") {
           appendFileSync(join(repo, "skills", "docx", "SKILL.md"), "\nUpdated content.\n");
           commitAll(repo, "change docx");
+          // A second tap shares the existing cache; refresh its bytes explicitly (§6).
+          expect(run(["tap", "update", retainedTap.name])).toBe(0);
         }
         const incomingRef = registered ? `file://${repo}` : `file://${repo}//skills/docx`;
         const args = ["install", incomingRef, "--scope", scope, "--agent", "claude-code"];

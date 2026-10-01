@@ -462,11 +462,11 @@ With `--json`, help MUST emit a structured payload:
 ├── config.yaml          # user configuration (see §6.1)
 ├── state.json           # installed-skills ledger (see §11.1)
 ├── state.json.lock      # file lock for state mutations (see §14)
-├── taps/                # cloned tap repositories
-│   └── <tap-name>/
+├── repos/               # cloned tap repositories, one per repository
+│   └── <readable-prefix>-<sha256>/
 ├── cache/               # ephemeral git clones of ad-hoc git sources
 │   └── git/<host>/<owner>/<repo>@<ref>/
-├── locks/               # per-tap clone locks (see §14)
+├── locks/               # per-repository clone locks (see §14)
 │   └── tap-<hash>
 
 ├── store/               # content-addressed canonical skill copies
@@ -478,7 +478,37 @@ With `--json`, help MUST emit a structured payload:
         └── Info.plist
 ```
 
-All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `taps/`, `state.json`, `config.yaml`, and `logs/` are durable. `locks/` holds coordination lockfiles and MUST NOT live under `cache/`: `crew cache clean` deletes that tree wholesale, which would remove a lock another process is actively holding. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
+All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `repos/`, `state.json`, `config.yaml`, and `logs/` are durable. `locks/` holds coordination lockfiles and MUST NOT live under `cache/`: cleaning the cache must not remove an active lock. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
+
+**One clone per repository.** A tap row is identified by its
+`(url, subpath)` pair, so several taps can point into one repository —
+`@acme/skills//docs` and `@acme/skills//tools` are two taps over the same
+repo. Clone directories are keyed by the repository's canonical URL, not
+by tap name, so that repository is cloned once and every tap row over it
+reads from the same working tree. Two URLs address the same repository
+when they match after dropping a trailing `.git`, dropping trailing
+slashes, and lowercasing the scheme and host. The directory name carries
+a readable `<host>-<owner>-<repo>` prefix for humans, truncated to 160
+ASCII characters, plus the full 64-character lowercase hexadecimal SHA-256
+digest of the canonical URL. The full digest distinguishes repository
+identities; a shortened digest MUST NOT be used. Userinfo and path case are preserved; the readable prefix MUST exclude userinfo, query strings, and fragments.
+
+Consequences an implementation MUST honor:
+
+- Fetching for one tap refreshes every tap row over the same repository.
+  A single command MUST NOT fetch one repository more than once, however
+  many of its tap rows are in scope.
+- Deleting a tap row MUST NOT delete the clone while another configured
+  tap row still points at that repository (§16.3, §16.5).
+- Renaming a tap (auto-tap promotion, §16.5) does not move any clone,
+  since the name is not part of the clone's location.
+
+**Migration.** Implementations that previously stored clones per tap
+name (Homecrew before 0.11 used `taps/<tap-name>/`) MUST relocate them
+on first use rather than re-cloning: move the old directory to the
+repository's shared location when that location is free, and discard the
+old directory when the shared clone already exists. Migration holds the same shared-clone lock as acquisition and refresh, and only relocates or deletes paths contained in crew-owned clone roots. The step is
+idempotent and leaves no `taps/` entries for configured git taps.
 
 ### 6.1 `config.yaml` schema
 
@@ -1479,7 +1509,7 @@ is read-only:
   fetches and so still mutates a shared clone.
 
 A dry run writes exactly two things: the refreshed tap clones under
-`taps/`, and the transient lockfiles under `locks/` that guard them for
+`repos/`, and the transient lockfiles under `locks/` that guard them for
 the duration of the run. It writes no `state.json`, no store entry, and
 no installed skill or marker. User-facing descriptions of the flag MUST
 NOT claim it writes nothing at all; they state that collections still
@@ -1977,7 +2007,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 | `not_installed_here` | 6 | Uninstall agent has no marker. |
 | `no_agents` | 4 | No agent tools detected or all disabled. |
 | `config_invalid` | 4 | `config.yaml` did not parse, or a tap name is not a single directory component (contains `/`, `\`, or is `.`/`..`). |
-| `state_locked` | 7 | Could not acquire a coordination lock within the timeout — either the state lock (`state.json.lock`) or a per-tap clone lock (§14). |
+| `state_locked` | 7 | Could not acquire a coordination lock within the timeout — either the state lock (`state.json.lock`) or a per-repository clone lock (§14). |
 | `autoupdate_failure` | 8 | Autoupdate enable/disable couldn't load/unload the platform scheduler. |
 | `self_update_unavailable` | 5 | `crew self-update` couldn't reach the release feed, the asset is missing for the current arch, or the named `--version` doesn't exist. |
 | `self_update_failed` | 8 | `crew self-update` fetched a new binary but couldn't replace the running one (e.g. the install prefix isn't writable). |
@@ -2033,8 +2063,8 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
 1. Every command that writes `state.json` or installs into an agent acquires an advisory lock on `~/.crew/state.json.lock` (using `flock(2)` or an equivalent platform file-lock primitive) before making changes. Read-only commands do not take the lock.
 2. Lock timeout: 30 seconds. If not acquired, exit with `state_locked` (§13).
 3. The lock is held for the full duration of file-modifying operations and released on exit, including crashes (OS-level file locks release on fd close).
-4. A tap's clone is shared mutable state: fetching fast-forwards its working tree while other work resolves SHAs from it and copies bytes out of it. Every command that reads or refreshes tap clones therefore holds a **per-tap advisory lock** for the whole span in which it depends on that clone's contents — from refresh through source read and staging. Without this, one run can check out a different commit in the window between another run resolving a SHA and reading that SHA's bytes, so state would record one commit for another's content.
-   - Locks are acquired in a deterministic order (sorted tap name) so two runs touching the same taps cannot deadlock, and use the same 30 s timeout and `state_locked` failure as the state lock.
+4. A tap's clone is shared mutable state: fetching fast-forwards its working tree while other work resolves SHAs from it and copies bytes out of it. Every command that reads or refreshes tap clones therefore holds a **per-repository advisory lock** (keyed by the physical shared clone, never the tap name) for the whole span in which it depends on that clone's contents — from refresh through source read and staging. Without this, one run can check out a different commit in the window between another run resolving a SHA and reading that SHA's bytes, so state would record one commit for another's content.
+   - Locks are acquired in a deterministic order (sorted physical clone path) so two runs touching the same taps cannot deadlock, and use the same 30 s timeout and `state_locked` failure as the state lock.
    - This applies to read-only previews too: `crew update --dry-run` does not take the state lock (§10.1.1) but DOES take clone locks, because it still fetches.
    - The state lock and clone locks are separate. A command that takes both acquires the state lock first.
 
@@ -2176,7 +2206,7 @@ since the registry was built, the normal tap-add or install error applies.
 - `crew tap add --recursive <url-or-path> [<name>]` registers or promotes the tap with `discovery: recursive`. Re-running it against an existing registered tap with the same target upgrades that tap to recursive discovery. Promoting an existing auto tap preserves any recursive discovery mode already recorded for that tap; adding `--recursive` during promotion upgrades it at the same time. This is an explicit trust signal for non-standard repository layouts: standard discovery still runs first, and recursive discovery is only the fallback described in §9 step 5.4. There is no command-level downgrade flag. Editing `config.yaml` to remove `discovery` makes live tap resolution use standard discovery, but existing installed markers retain the discovery mode used at install time; `doctor --repair` can therefore reconstruct recursive discovery from those markers until the affected skills are reinstalled or markers are rewritten by a future command.
 - `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Bare `crew tap` (no positional at all) prints the command's help page (same as `crew help tap`) with exit 0. Any other input — an unknown subcommand, or a word that doesn't parse as a source — is a `usage_error` whose message names the offending input and points at `crew help tap`. When the rejected argument to `crew tap add` is a two-segment tap reference (`acme/skills`), the error's remedy suggests `crew tap add @acme/skills`, since that is almost always what was meant. Other commands that take subcommands (`crew cache`, `crew autoupdate`) behave the same way; `crew agents` lists agents when bare and errors on an unknown subcommand.
 - Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`). The subpath, URL, or path is entirely internal — it never appears in skill references.
-- `crew tap remove <name>` deletes the local clone and removes the tap from config. Auto taps are also removed automatically when their last associated state entry is uninstalled (see §16.5). With `--dry-run`, the same lookup and default-tap guard run, but nothing is written or deleted; the command reports what would be removed and `--json` carries `dry_run: true`.
+- `crew tap remove <name>` removes the tap from config and deletes the local clone, unless another configured tap still points at the same repository (§6) — clones are shared per repository, so the bytes go only with the last tap referencing them. Auto taps are also removed automatically when their last associated state entry is uninstalled (see §16.5). With `--dry-run`, the same lookup and default-tap guard run, but nothing is written or deleted; the command reports what would be removed and `--json` carries `dry_run: true`.
   - **Attached-skill guard.** If any `state.json` entry, at any scope, is attributed to the tap (`state.source.tap == <name>`), the bare command is a `usage_error` (exit 4). Removing the tap would leave those entries pointing at a tap that no longer exists. The error lists each attached skill with its scope and names the two ways forward: `crew tap remove --uninstall <name>` (remove the skills, then the tap) and `crew tap remove --force <name>` (drop the tap and keep the skills installed). A tap with no attached entries removes without a prompt, as before.
   - `--uninstall` uninstalls every attached entry, at every scope, through the uninstall algorithm of §7.4, and then removes the tap. Only entries attributed to this tap are removed: a skill of the same name installed from a different tap, or the same skill in a different project root, keeps its install and its state entry. Human output renders the per-skill removal blocks followed by the tap-removed line; `--json` emits `{ name, uninstalled: [<uninstall records>], dry_run }`. Combined with `--dry-run`, both the skill removals and the tap removal are previewed and nothing is written. A per-agent safety abort (`customized`, `untracked_directory`) is reported per skill and leaves the tap in place, exit 1 — the user can retry with `--force`. An aborted agent keeps its ownership in `state.json`, matching the bytes it still owns, so the attached-skill guard continues to see the install rather than letting a later forced retry orphan it.
   - `--force` removes the tap and keeps the attached skills installed. They keep working at their installed version; the command warns and names them. Their state entries survive with a `source.tap` that no longer resolves, and `crew update` reports each as `tap_missing` (§10.1) rather than failing. `crew doctor --repair` reconstructs the tap from markers, which is the way back.
@@ -2226,7 +2256,7 @@ When `crew install` is given a reference that resolves to a source not currently
 Auto taps are functionally indistinguishable from registered taps for `crew update`, `crew tap update`, `crew search`, and `crew install <tap-name>` purposes. The only differences are:
 
 - They appear with `kind: auto` in `crew tap list`.
-- They are garbage-collected when their last associated state entry goes away: the tap row is dropped from `config.yaml` and the local clone is deleted. This happens when `crew uninstall` removes the last entry, and when `crew install` re-attributes the last entry to a broader tap covering the same canonical location (§5.4). (Registered taps are not garbage-collected.)
+- They are garbage-collected when their last associated state entry goes away, through uninstall or re-attribution to a broader tap (§5.4): the tap row is dropped from `config.yaml` and the local clone is deleted, unless another configured tap still points at the same repository (§6). (Registered taps are not garbage-collected.)
 - A user can convert an auto tap to registered by running `crew tap add <url-or-path>` against the same source — this idempotent promotion preserves the existing clone and installed skills.
 
 Because auto-tap names are crew's bookkeeping rather than something the
@@ -2421,7 +2451,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-12 | §5.4 | Installing an already-installed skill from the same source at a different ref performs an update. |
 | C-INST-13 | §5.4 | Installing a skill with the same `name` from a different source produces `name_conflict`, exit 4, without `--force`. |
 | C-INST-13a | §5.4 | Installing a repo subpath (`<url>//skills/foo`) and then the whole repo (`<url>`) does NOT produce `name_conflict`: both reach the same canonical location, so `foo` is reported as already installed. |
-| C-INST-13b | §5.4, §16.5 | In that case the entry is re-attributed to the broader tap — `state.source` and the markers name it — and the emptied auto tap plus its clone are garbage-collected. |
+| C-INST-13b | §5.4, §16.5 | In that case the entry is re-attributed to the broader tap — `state.source` and the markers name it — and the emptied auto tap is garbage-collected; its clone is deleted only when no remaining configured tap references that repository. |
 | C-INST-13c | §5.4 | An entry attributed to a **registered** tap is not re-attributed; the install reports it as already installed and leaves `state.source` alone. |
 | C-INST-13d | §5.4 | Canonical URL comparison ignores a trailing `.git`, a trailing `/`, and host casing, so those spellings of one repo are the same source. |
 | C-INST-13e | §10.1.1, §5.4 | Tap re-expansion does not "add" a child that is already installed at the same scope from the same canonical location through another tap. |
@@ -2523,12 +2553,12 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
 | C-UPD-16b | §10.1.1 | A whole-tap install at an explicit `@<ref>` is re-expanded against that ref: a child added to the tap's default branch but absent at the ref is NOT installed, and a child present at the ref is installed carrying that ref and the group's `pinned` value. |
 | C-UPD-16c | §10.1, §13 | A `crew update` run in which any skill failed for a reason outside the soft set (`source_gone` / `no_skills_found` / `invalid_ref`) exits 1. A failure crew cannot classify MUST NOT be reported as a `failed` row on a run that exits 0. |
-| C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`, its clone deleted. Registered taps are NOT garbage-collected by uninstall. |
+| C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`; its clone is deleted only when no remaining configured tap references that repository. Registered taps are NOT garbage-collected by uninstall. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps — the one thing it does change — then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, store entries, and state are byte-identical before and after; `--json` carries `dry_run: true`. |
 | C-UPD-18a | §10.1.1, §14 | `crew update --dry-run` against a home with no `state.json` leaves it absent: the state lock is never acquired, so neither the state file nor its lock is created. |
 | C-UPD-18b | §10.1.1 | `--force --dry-run` previews a pinned skill whose upstream moved as `would_update` (rather than `skipped`) and still writes nothing. |
 | C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. |
-| C-UPD-18d | §10.1.1, §14 | `crew update` holds a per-tap clone lock spanning refresh through source read, in both real and `--dry-run` runs, so a concurrent run cannot change the clone's checked-out commit between SHA resolution and byte read. A run blocked past the timeout exits `state_locked`. |
+| C-UPD-18d | §10.1.1, §14 | `crew update` holds a per-repository clone lock spanning refresh through source read, in both real and `--dry-run` runs, so a concurrent run cannot change the clone's checked-out commit between SHA resolution and byte read. A run blocked past the timeout exits `state_locked`. |
 | C-UPD-18e | §10.1.1 | A newly-discovered child that fails validation is named in human output along with its error code and message, and is counted as a failure in the run totals. |
 | C-UPD-18f | §10.1.1 | `crew outdated [<selector>...]` behaves as `crew update --dry-run`: identical `--json` payload (`dry_run: true`, `would_update` / `would_add` kinds), identical exit code, and the same write boundary — tap clones refresh, while installed skills, markers, store entries, and `state.json` are unchanged. Human output lists only rows that would change and prints a single "up to date" line when none would. |
 | C-UPD-18g | §10.1.1, §14 | `crew outdated` against a home with no `state.json` leaves it absent, and never acquires the state lock. |
@@ -2606,9 +2636,13 @@ Implementations and test suites refer to criteria by ID.
 
 | ID | Reference | Assertion |
 |---|---|---|
-| C-TAP-01 | §16.3 | `crew tap add <url>` clones the repo into `~/.crew/taps/<name>/`. |
+| C-TAP-01 | §16.3, §6 | `crew tap add <url>` clones the repo into the repository's shared clone directory under `~/.crew/repos/`. |
 | C-TAP-02 | §16.3 | `crew tap add <url> <name>` uses the given name instead of the derived one. |
-| C-TAP-03 | §16.3 | `crew tap remove <name>` deletes the local clone and updates config. |
+| C-TAP-03 | §16.3 | `crew tap remove <name>` updates config and deletes the local clone when no other configured tap points at the same repository. |
+| C-TAP-28 | §6 | Two taps over different subpaths of one repository share a single clone directory; URLs differing only by a trailing `.git` resolve to the same clone. |
+| C-TAP-28b | §16.3, §16.5 | Removing one of several taps over a repository leaves the clone in place; removing the last one deletes it. |
+| C-TAP-28c | §6 | A single `crew update` fetches a shared repository once, however many of its tap rows are in scope. |
+| C-TAP-29 | §6 | A home using the pre-0.11 `taps/<tap-name>/` layout has its clones relocated on the next command that uses them, without re-cloning; a redundant old copy is discarded when the shared clone already exists. |
 | C-TAP-04 | §16.3 | `crew tap list` reports every configured tap with name, kind/status, source target, recursive discovery mode when non-standard, and last-fetched timestamp for git-kind taps. |
 | C-TAP-05 | §16.2 | The default tap named `core` is present on first run. |
 | C-TAP-06 | §16.2 | `crew tap remove core` is refused without `--force`. |
@@ -2625,7 +2659,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-16 | §16.3 | `crew tap update` fetches + fast-forwards every configured tap. `crew tap update <name>...` restricts to the named taps. Unknown names produce `usage_error`. It does not touch installed skills. |
 | C-TAP-16b | §16.3 | `crew tap add --dry-run`, `crew tap remove --dry-run`, and `crew tap update --dry-run` report the outcome that would apply and exit 0 without cloning, fetching, deleting a clone, writing `config.yaml`, or rewriting markers. The same `usage_error`s as the real command still fire. JSON output carries `dry_run: true`. |
 | C-TAP-16c | §16.3 | `crew tap remove <name>` where any state entry has `source.tap == <name>` is a `usage_error` (exit 4) that names each attached skill with its scope and offers both `--uninstall` and `--force`. The tap stays in `config.yaml` and its clone is not deleted. |
-| C-TAP-16d | §16.3 | `crew tap remove --uninstall <name>` uninstalls every attached entry at every scope, then removes the tap and its clone. Only entries attributed to `<name>` are touched; a same-named skill installed from another tap, or the same skill in another project root, is left installed. With `--dry-run` nothing is removed: the installs, markers, `state.json`, and `config.yaml` are all unchanged. |
+| C-TAP-16d | §16.3 | `crew tap remove --uninstall <name>` uninstalls every attached entry at every scope, then removes the tap; its clone is deleted only when no remaining configured tap references that repository. Only entries attributed to `<name>` are touched; a same-named skill installed from another tap, or the same skill in another project root, is left installed. With `--dry-run` nothing is removed: the installs, markers, `state.json`, and `config.yaml` are all unchanged. |
 | C-TAP-16d1 | §16.3, §7.4 | When a per-agent safety check aborts a `--uninstall` removal, the skill's state entry is retained alongside its bytes, so the attached-skill guard still sees it and a later `--force --uninstall` cannot remove the tap while leaving the install unattributed. |
 | C-TAP-16d2 | §5.1, §16.3 | `crew untap --uninstall <name>` behaves identically to `crew tap remove --uninstall <name>`. An alias accepts exactly the flags its resolved subcommand accepts, so `crew untap --recursive` remains a `usage_error`. |
 | C-TAP-16e | §16.3 | `crew tap remove --force <name>` with attached skills removes the tap, keeps every attached install and state entry, and warns naming those skills. |
@@ -2647,7 +2681,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-24f | §16.3 | `crew tap add <owner>/<repo>@<ref>` keeps the ref in the suggested correction: `crew tap add @<owner>/<repo>@<ref>`. |
 | C-TAP-24g | §16.2.1 | When an argument matches both a skill inside a known tap and the GitHub repository that tap lives at, both suggestions are offered; neither interpretation suppresses the other. |
 | C-TAP-24d | §8.5 / §9 | `crew install <owner>/<repo>@<ref>` and `crew info <owner>/<repo>@<ref>` preserve `@<ref>` in every suggested command and in the echoed reference. |
-| C-TAP-25 | §6.1 / §16.5 | A tap name in `config.yaml` that is not a single directory component (contains `/` or `\`, or is `.`/`..`) is rejected with `config_invalid`, and no clone-directory deletion ever targets a path resolving outside `~/.crew/taps/`. |
+| C-TAP-25 | §6.1 / §16.5 | A tap name in `config.yaml` that is not a single directory component (contains `/` or `\`, or is `.`/`..`) is rejected with `config_invalid`, and no clone-directory deletion ever targets a path resolving outside crew-owned `repos/` or legacy `taps/` roots. |
 
 #### C-STATE: State and markers (§11)
 

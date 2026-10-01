@@ -12,7 +12,7 @@
  * Being a preview, it calls `planUpdate` directly and never takes the
  * STATE lock — acquiring it would create `state.json` on a fresh home,
  * and §14 reserves that lock for commands that write. It does hold the
- * per-tap CLONE locks, because `planUpdate` takes them for every run:
+ * per-repository CLONE locks, because `planUpdate` takes them for every run:
  * a preview still fetches, so it still mutates the shared clone and
  * must not race a real update between SHA resolution and byte read.
  */

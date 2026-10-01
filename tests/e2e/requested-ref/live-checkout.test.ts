@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
-import { tapPath } from "../../../src/core/paths.ts";
+import { repoClonePath } from "../../../src/core/repo-path.ts";
 import type { Marker } from "../../../src/core/types.ts";
 import { runGit } from "../../../src/git/exec.ts";
 import { readState } from "../../../src/state/load.ts";
@@ -42,7 +42,7 @@ for (const reference of ["acme/demo", "demo"]) {
     const { sha: oldSha } = makeGitRepo(repo);
     const invoke = (args: string[]) => runCli(args, { home, streams: captureStreams().streams });
     expect(invoke(["tap", "add", `file://${repo}`, "acme"])).toBe(0);
-    const clone = tapPath("acme", home);
+    const clone = repoClonePath(`file://${repo}`, home);
     const indexBefore = readFileSync(join(clone, ".git/index"));
     const skillBefore = readFileSync(join(clone, "demo/SKILL.md"));
     makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }), "NEW UPSTREAM\n");
