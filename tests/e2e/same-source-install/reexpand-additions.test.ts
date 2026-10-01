@@ -54,6 +54,8 @@ describe("C-INST-13k overlapping tap groups share new siblings", () => {
       expect(invoke(["install", "outer", "--agent", "claude-code"])).toBe(0);
       makeSkill(join(repo, "skills"), "beta", skillFrontmatter({ name: "beta" }));
       commitAll(repo, "beta");
+      // The inner alias shares outer's existing clone; refresh before installing beta.
+      expect(invoke(["tap", "update", "outer"])).toBe(0);
       expect(invoke(["tap", "add", `file://${repo}//skills`, "inner"])).toBe(0);
       expect(invoke(["install", "inner", "--agent", "claude-code"])).toBe(0);
       const before = readState(home);
