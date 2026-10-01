@@ -12,7 +12,7 @@
 
 import { existsSync } from "node:fs";
 import { cwdForEntry } from "../../agents/adapter.ts";
-import { CrewError } from "../../core/errors.ts";
+import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { hashDirectory } from "../../hash/content.ts";
 import { loadSkill } from "../../skill/load.ts";
@@ -120,11 +120,7 @@ function updateOne(
   const tap = config.taps.find((t) => t.name === entry.source.tap);
   if (!tap) {
     // Tap was removed from config (manually); doctor --repair can fix.
-    throw new CrewError(
-      "source_unreachable",
-      `tap \`${entry.source.tap}\` is no longer in config — run \`crew doctor --repair\` to rebuild it from markers`,
-      { tap: entry.source.tap },
-    );
+    return { kind: "tap_missing", tap: entry.source.tap };
   }
   // §10.1 step 3c: re-resolve the entry's own ref. An entry installed at
   // a branch follows that branch (a branch is not pinned), and a forced
