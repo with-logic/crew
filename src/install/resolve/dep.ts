@@ -2,7 +2,7 @@
  * Dependency enqueueing for the install resolver (§9 step 6).
  */
 
-import type { Config } from "../../core/types.ts";
+import type { Config, TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
@@ -18,6 +18,7 @@ export function enqueueDep(
   config: Config,
   cwd: string,
   home: string,
+  requireTap: (tap: TapConfig) => void,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const source = parseRef(depRef, cwd);
 
@@ -29,7 +30,10 @@ export function enqueueDep(
       home,
       config,
     );
-    if (sibling) return siblingItems(sibling, parent);
+    if (sibling) {
+      requireTap(sibling.tap);
+      return siblingItems(sibling, parent);
+    }
     // Fall through to bare-name search across all configured taps.
   }
 
@@ -38,6 +42,7 @@ export function enqueueDep(
   // Git or path dep ref. Dep edges don't subscribe the user to every
   // sibling of the dep's source.
   const attrib = attributeRef(source, config);
+  requireTap(attrib.tap);
   const acquired = acquireTap(attrib.tap, home);
   const expansion = expandSkillsAsItems(
     acquired.rootDir,

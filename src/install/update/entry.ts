@@ -6,23 +6,27 @@
  *   - report `skipped` if the entry is pinned and not forced;
  *   - re-stage and re-install if the SHA moved.
  *
- * Tap re-expansion (additions / source_gone) lives in `tap-reexpand.ts`;
+ * With `dryRun` (§10.1.1) the SHA / content-hash comparison and skill
+ * validation still run, but a moved entry reports `would_update` and
+ * nothing is staged or installed.
+ *
+ * Tap re-expansion (additions / source_gone) lives in `tap-reexpand/index.ts`;
  * this module handles only the per-existing-entry update.
  */
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
-import { installSkillIntoAgents } from "../../agents/install.ts";
-import { agentByName } from "../../agents/registry.ts";
+import { cwdForEntry } from "../../agents/adapter.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
+import { hashDirectory } from "../../hash/content.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { nowIso } from "../../util/time.ts";
-import type { InternalOutcome, PerAgentUpdate, UpdateRow } from "./types.ts";
+import { reinstallIntoAgents } from "./reinstall.ts";
+import type { InternalOutcome, UpdateRow } from "./types.ts";
 
 export function updateOneEntry(
   entry: StateEntry,
@@ -31,9 +35,10 @@ export function updateOneEntry(
   home: string,
   force: boolean,
   fallbackCwd: string,
+  dryRun: boolean = false,
 ): { row: UpdateRow; updatedState: StateFile; bumpHardFailure: boolean } {
   try {
-    const outcome = updateOne(entry, config, home, force, fallbackCwd);
+    const outcome = updateOne(entry, config, home, force, fallbackCwd, dryRun);
     let next = state;
     if (outcome.kind === "updated") {
       const successfulTargets = outcome.per_target
@@ -95,6 +100,7 @@ function updateOne(
   home: string,
   force: boolean,
   fallbackCwd: string,
+  dryRun: boolean,
 ): InternalOutcome {
   const entryCwd = cwdForEntry(entry, fallbackCwd);
   if (entry.scope === "project" && entry.project_root && !existsSync(entry.project_root)) {
@@ -124,56 +130,24 @@ function updateOne(
   // Tap re-expansion has already marked missing children `source_gone`.
   const skillDir = join(acquired.rootDir, entry.source.path);
 
+  // Path-kind tap (no SHA): hash the source once and reuse it both for
+  // the up-to-date comparison and for the store's short id, rather than
+  // walking the same unbounded tree twice. `hashDirectory` ignores a
+  // root `.crew.json`, matching the store.
+  const sourceHash = newSha === null ? hashDirectory(skillDir) : undefined;
+
   if (newSha === entry.resolved_sha) {
     if (newSha !== null) return { kind: "up_to_date" };
-    const tentative = stageIntoStore(skillDir, entry.name, null, home);
-    if (tentative.contentHash === entry.content_hash) return { kind: "up_to_date" };
+    if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
   }
 
+  // Validation runs before the dry-run return on purpose: a broken
+  // upstream version must surface as `failed` in a preview too, not be
+  // reported as a clean `would_update`.
   const loaded = loadSkill(skillDir);
-  const staged = stageIntoStore(loaded.path, entry.name, newSha, home);
-  const perTarget: PerAgentUpdate[] = [];
-  // Group by resolved install path (§7.2 path sharing) so shared-path
-  // targets install once but every adapter reports its own outcome.
-  const groups = new Map<string, AgentAdapter[]>();
-  for (const targetName of entry.agents) {
-    const adapter = agentByName(targetName);
-    if (!adapter) continue;
-    const base = baseFor(adapter, entry.scope, entryCwd);
-    if (base === "") continue;
-    const dest = `${base}/${entry.name}`;
-    const existing = groups.get(dest);
-    if (existing) existing.push(adapter);
-    else groups.set(dest, [adapter]);
-  }
-  for (const group of groups.values()) {
-    try {
-      const res = installSkillIntoAgents({
-        agents: group,
-        scope: entry.scope,
-        cwd: entryCwd,
-        storePath: staged.storePath,
-        skillName: entry.name,
-        tap,
-        tapRelativePath: entry.source.path,
-        ref: entry.ref,
-        resolvedSha: newSha,
-        contentHash: staged.contentHash,
-        force,
-      });
-      for (const a of group) {
-        perTarget.push({
-          agent: a.name,
-          kind: res.kind === "installed" ? "installed" : "up_to_date",
-        });
-      }
-    } catch (err) {
-      const ce = err as CrewError;
-      for (const a of group) {
-        perTarget.push({ agent: a.name, kind: "skipped", reason: ce.code });
-      }
-    }
-  }
+  if (dryRun) return { kind: "would_update", new_sha: newSha };
+  const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash);
+  const perTarget = reinstallIntoAgents({ entry, entryCwd, tap, staged, newSha, force });
   return {
     kind: "updated",
     new_sha: newSha,
