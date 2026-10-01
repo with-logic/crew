@@ -21,6 +21,8 @@ export type InstallNewChild = (args: {
   readonly agents: readonly string[];
   readonly resolvedSha: string | null;
   readonly projectRoot: string | null;
+  readonly ref: string | null;
+  readonly pinned: boolean;
 }) => StateEntry | null;
 
 export interface TapReexpandResult {

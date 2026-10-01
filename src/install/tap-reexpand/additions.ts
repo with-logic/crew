@@ -27,6 +27,8 @@ export interface AdditionsInput {
   readonly resolvedSha: string | null;
   readonly projectRoot: string | null;
   readonly dryRun: boolean;
+  readonly ref: string | null;
+  readonly pinned: boolean;
   readonly installOne: InstallNewChild;
   readonly cache: TapScanCache;
   readonly installedIndex: InstalledSourceIndex;
@@ -109,6 +111,8 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       agents: input.agents,
       resolvedSha: input.resolvedSha,
       projectRoot: input.projectRoot,
+      ref: input.ref,
+      pinned: input.pinned,
     });
     if (entry) {
       added.push(entry);

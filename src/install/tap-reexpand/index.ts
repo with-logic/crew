@@ -22,16 +22,13 @@
  * install callback is never invoked.
  */
 
-import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import { entryIdentity } from "../../state/collections/index.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { buildInstalledSourceIndex } from "../installed-lookup.ts";
-import { groupChildrenByName } from "../tap-children.ts";
-import { collectAdditions } from "./additions.ts";
-import { type AcquiredTapScan, makeTapScanCache } from "./scan-cache.ts";
-import { surveyGroup } from "./survey.ts";
+import { reexpandGroup } from "./group.ts";
+import { makeTapScanCache } from "./scan-cache.ts";
 import type { InstallNewChild, TapReexpandResult, TapReexpandRow } from "./types.ts";
 
 export type { InstallNewChild, TapReexpandResult, TapReexpandRow } from "./types.ts";
@@ -79,7 +76,12 @@ export function reexpandTaps(
   // install location, same target set (typically).
   const byKey = new Map<string, StateEntry[]>();
   for (const entry of state.installations) {
-    const key = `${entry.source.tap}::${entry.scope}::${entry.project_root ?? ""}`;
+    const key = JSON.stringify([
+      entry.source.tap,
+      entry.scope,
+      entry.project_root ?? "",
+      entry.ref,
+    ]);
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key)!.push(entry);
   }
@@ -119,51 +121,22 @@ export function reexpandTaps(
     )
       continue;
 
-    let acquired: AcquiredTapScan;
-    try {
-      acquired = cache.acquire(tap, home);
-    } catch (err) {
-      const ce = err as CrewError;
-      for (const m of members) {
-        rows.push({
-          name: m.name,
-          scope: m.scope,
-          tap: tap.name,
-          kind: "tap_error",
-          error: { code: ce.code ?? "source_unreachable", message: ce.message },
-        });
-      }
-      continue;
-    }
-
-    const children = cache.children(tap, home, acquired.rootDir);
-    const childrenByName = groupChildrenByName(children);
-    const survey = surveyGroup({ members, childrenByName, tap });
-    rows.push(...survey.rows);
-    updated.push(...survey.relocated);
-    for (const id of survey.sourceGone) sourceGone.add(id);
-    if (survey.hardFailure) hardFailure = true;
-    const conflictedNames = survey.conflictedNames;
-
-    // ADDITIONS: children upstream not in state.
-    const additions = collectAdditions({
-      children,
-      conflictedNames,
-      memberNames: new Set(members.map((m) => m.name)),
-      scope: first.scope,
+    const result = reexpandGroup({
+      members,
       tap,
-      agents: [...new Set(members.flatMap((m) => m.agents))],
-      resolvedSha: acquired.resolvedSha,
+      home,
       projectRoot,
-      dryRun,
-      installOne,
       cache,
       installedIndex,
+      installOne,
+      dryRun,
       namespaces: selection?.namespaces ?? null,
     });
-    added.push(...additions.added);
-    rows.push(...additions.rows);
-    if (additions.hardFailure) hardFailure = true;
+    rows.push(...result.rows);
+    updated.push(...result.updated);
+    added.push(...result.added);
+    for (const id of result.sourceGone) sourceGone.add(id);
+    if (result.hardFailure) hardFailure = true;
   }
 
   return { added, updated, hardFailure, sourceGone, rows };

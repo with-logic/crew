@@ -122,10 +122,10 @@ describe("crew update --dry-run guarantees", () => {
     commitAll(repo, "v2");
     const before = snapshotInstalledState(home);
 
-    // Without --force a pinned entry is skipped outright.
+    // Its unchanged tag is up to date; --force still previews a reinstall.
     const plain = captureStreams();
     expect(runCli(["update", "--dry-run", "--json"], { home, streams: plain.streams })).toBe(0);
-    expect((JSON.parse(plain.stdout()) as UpdateJson).rows[0]!.outcome.kind).toBe("skipped");
+    expect((JSON.parse(plain.stdout()) as UpdateJson).rows[0]!.outcome.kind).toBe("up_to_date");
 
     // With --force it previews the move but still writes nothing.
     const forced = captureStreams();
