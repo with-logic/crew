@@ -62,7 +62,7 @@ describe("--verbose control-character escaping", () => {
             name: hostile,
             kind: "git",
             registered: true,
-            url: "https://127.0.0.1:1/a/b.git",
+            url: `file://${makeTempDir("crew-control-failure-")}/absent.git`,
             subpath: "",
             path: "",
           },
@@ -104,7 +104,10 @@ describe("--verbose control-character escaping", () => {
     // The parameter allow-list is inverted deliberately: a blocklist of
     // secret-sounding names fails open for the first one nobody thought of.
     const secret = "CLIENTSECRETVALUE";
-    tapWithUrl(home, `https://127.0.0.1:1/a/b.git?client_secret=${secret}`);
+    tapWithUrl(
+      home,
+      `file://${makeTempDir("crew-query-failure-")}/absent.git?client_secret=${secret}`,
+    );
     const capture = captureStreams();
     runCli(["update", "--verbose"], { home, streams: capture.streams });
     const all = capture.stderr() + capture.stdout();
