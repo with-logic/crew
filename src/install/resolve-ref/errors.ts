@@ -3,6 +3,7 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
+import { shellQuote } from "../../util/format.ts";
 import { safePath } from "../../util/redact.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 import { formatCandidate } from "./format.ts";
@@ -15,14 +16,30 @@ export function flagFor(k: "tap" | "namespace" | "skill"): string {
 }
 
 /**
- * Build the shared ambiguity error for tap, namespace, and skill collisions.
+ * `invalid_ref` for a two-segment reference that names neither a tap
+ * nor a namespace (§8.5 "Two-segment misses"). The shape is also how
+ * people write a GitHub repo, so the remedy points at `@first/second`.
  *
- * `name` and `reason` carry user- and config-controlled text, so they are
- * escaped here, as the lines are composed. `formatCandidate` escapes its own
- * fragments for the same reason. Only once every fragment is safe are the
- * remaining "\n" breaks guaranteed to be layout, which is what lets this
- * error pass `multiline: true` without letting data forge a line (§5.2).
+ * `ref` carries the user's `@tail` through to the suggestion: dropping
+ * it would advise a command that installs a different revision than the
+ * one they asked for.
  */
+export function twoSegmentMissError(
+  first: string,
+  second: string,
+  ref: string | null = null,
+): CrewError {
+  const tail = ref === null ? "" : `@${ref}`;
+  const suggestion = shellQuote(`@${first}/${second}${tail}`);
+  return new CrewError(
+    "invalid_ref",
+    `\`${first}/${second}${tail}\` does not match any configured tap or namespace.\nNo tap or namespace named \`${first}\` has a skill named \`${second}\`.`,
+    { first, second, ...(ref === null ? {} : { ref }) },
+    `If you meant the GitHub repository ${first}/${second}, use \`${suggestion}\` instead. Otherwise run \`crew search ${second}\` to look for matching skills, or \`crew tap list\` to see your taps.`,
+  );
+}
+
+/** Build the shared ambiguity error for tap, namespace, and skill collisions. */
 export function ambiguityError(
   name: string,
   candidates: readonly NameCandidate[],
