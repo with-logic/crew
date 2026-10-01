@@ -9,6 +9,7 @@
 import { afterEach, beforeEach } from "bun:test";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
+import { resetGitRunner, setGitRunner } from "../../../src/git/exec.ts";
 import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 
 let restore: (() => void) | null = null;
@@ -54,4 +55,20 @@ export function tapWithUrl(home: string, url: string): void {
     },
     home,
   );
+}
+
+/** Keep HTTP credential syntax while sending clone failures to real local git (§5.2). */
+export function useLocalCloneFailures(): void {
+  beforeEach(() => {
+    const local = `file://${makeTempDir("crew-credential-failure-")}/absent.git`;
+    const previous = setGitRunner((args, options) => {
+      const offline = args.map((arg) => {
+        if (!arg.startsWith("https://")) return arg;
+        const query = arg.indexOf("?");
+        return query < 0 ? local : `${local}${arg.slice(query)}`;
+      });
+      return previous(offline, options);
+    });
+  });
+  afterEach(() => resetGitRunner());
 }

@@ -3,20 +3,31 @@
  * (PRD §10.1, C-UPD-31/32), plus dependency-closure coverage for
  * collection members.
  *
- * A selector's *kind* is fixed when it first resolves. Re-expansion runs
- * between resolution and targeting and can install new skills, so a run
- * that re-reads raw strings afterwards — or that passes skill and tap
- * names around in one flat list — lets a name collision silently change
- * what the user asked for.
+ * Re-expansion runs between resolution and targeting. Re-reading raw
+ * strings or pooling skill and tap names lets collisions change selection.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import type { UpdateRow } from "../../../src/install/update/types.ts";
+import { readState } from "../../../src/state/load.ts";
 import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { buildFlatTap, bump, freshHome, installedBody, installRoot, run } from "./helpers.ts";
+import { buildFlatTap, bump, freshHome, installedBody, run } from "./helpers.ts";
 
-const ccRoot = installRoot("upd-coll-x-");
-const body = (name: string) => installedBody(ccRoot(), name);
+const originalUserPath = claudeCodeAdapter.userPath;
+const originalDetect = claudeCodeAdapter.detect;
+let ccRoot = "";
+beforeEach(() => {
+  ccRoot = makeTempDir("upd-coll-x-");
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = originalUserPath;
+  claudeCodeAdapter.detect = originalDetect;
+});
+const body = (name: string) => installedBody(ccRoot, name);
 
 describe("crew update selector identity", () => {
   test("C-UPD-31 a selected skill does not re-expand a tap that shares its name", () => {
@@ -74,21 +85,31 @@ describe("crew update selector identity", () => {
     run(home, ["tap", "add", `file://${tapA}`, "a"]);
     run(home, ["tap", "add", `file://${tapB}`, "b"]);
     expect(run(home, ["install", "a/shared"]).code).toBe(0);
-    expect(run(home, ["install", "b"]).code).toBe(0);
+    const project = makeTempDir("upd-coll-c3-project-");
+    expect(run(home, ["install", "b", "--scope", "project"], project).code).toBe(0);
 
     // Tap `b` gains its own `shared` upstream. Re-expansion installs it
     // mid-run, so it only exists in state AFTER the selector resolved.
     makeSkill(tapB, "shared", skillFrontmatter({ name: "shared" }));
     commitAll(tapB, "add shared to b");
 
-    // `crew update a/shared` named exactly one install. Refreshing the
-    // selection must not adopt `b`'s new same-named skill.
-    const j = run(home, ["update", "a/shared", "--json"]).json();
-    expect(j.selectors).toEqual([{ raw: "a/shared", kind: "skill", name: "shared" }]);
-    const taps = (j.rows as { name: string }[]).map((row) => row.name);
-    expect(taps).toEqual(["shared"]);
-    // One row, not two: the b-tap copy is a different install.
-    expect(j.rows).toHaveLength(1);
+    // Selecting b/other re-expands its project group, but a/shared must
+    // remain bound to the original user install after b/shared appears.
+    const j = run(home, ["update", "a/shared", "b/other", "--json"]).json();
+    expect(j.tap_reexpand_rows).toContainEqual({
+      name: "shared",
+      scope: "project",
+      tap: "b",
+      kind: "added",
+    });
+    expect(installedBody(join(project, ".claude", "skills"), "shared")).toContain("name: shared");
+    expect(
+      readState(home).installations.some((e) => e.name === "shared" && e.source.tap === "b"),
+    ).toBe(true);
+    expect(j.rows.map((row) => `${row.name}@${row.scope}`)).toEqual([
+      "shared@user",
+      "other@project",
+    ]);
   });
 
   test("C-UPD-33 a project-scope install from another tap is not re-expanded", () => {

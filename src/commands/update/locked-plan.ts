@@ -12,17 +12,13 @@ import { installNewTapChild } from "../../install/install-new-tap-child.ts";
 import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import { updateOneEntry } from "../../install/update/entry.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
-import {
-  type CollectionSubject,
-  entryIdentity,
-  refreshCollectionSubjects,
-} from "../../state/collections/index.ts";
+import { type CollectionSubject, entryIdentity } from "../../state/collections/index.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { refreshTaps } from "../tap/refresh.ts";
 import type { CommandContext } from "../types.ts";
 import type { UpdatePlan, UpdateSelector } from "./plan.ts";
 import type { CollectionSummary } from "./render.ts";
-import { chooseEntries, reexpandSelectionFor, withTransitive } from "./selection.ts";
+import { entriesAfterReexpansion, reexpandSelectionFor, withTransitive } from "./selection.ts";
 
 /** Inputs to the locked half of the plan, after selection has run. */
 export interface LockedPlanInput {
@@ -94,14 +90,10 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
   }
   const sourceGone = reexpanded.sourceGone;
 
-  // Refresh membership against the post-re-expansion state WITHOUT
-  // re-resolving the raw strings: re-resolution would let a newly
-  // discovered same-named entry in another tap or scope capture a
-  // selector that was already bound elsewhere (§10.1).
-  const { entries: targetEntries } = chooseEntries(
-    current,
-    refreshCollectionSubjects(current, subjects),
-  );
+  // §10.1 steps 2/2b: new collection members are fresh installs, not
+  // new dependency seeds. Recomputing closure by their names could
+  // adopt an unrelated install's dependencies on a tap we never locked.
+  const targetEntries = entriesAfterReexpansion(current, subjects, initialSelected);
   for (const entry of targetEntries) {
     if (sourceGone.has(entryIdentity(entry))) {
       rows.push(
