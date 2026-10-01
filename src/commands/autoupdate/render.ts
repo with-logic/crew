@@ -44,10 +44,13 @@ export function renderStatus(
   if (loaded) {
     lines.push(style.dim("Logs: `~/.crew/logs/autoupdate.log`."));
   } else {
-    // `doctor --repair` is deliberately not offered here: it reports
-    // scheduler drift but does not reconcile it, so pointing at it
-    // would send the user to a command that changes nothing.
-    lines.push(style.dim("Reset with `crew autoupdate disable` then `crew autoupdate enable`."));
+    // `crew doctor --repair` reconciles scheduler drift (§11.2 check
+    // 7), so it is offered alongside the manual reset.
+    lines.push(
+      style.dim(
+        "Reset with `crew autoupdate disable` then `crew autoupdate enable`, or run `crew doctor --repair`.",
+      ),
+    );
   }
   return lines;
 }

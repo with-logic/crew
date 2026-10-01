@@ -40,6 +40,10 @@ export const installHelp: CommandHelp = {
         "Install from a git source, no guessing. Handy when a bare `owner/repo` would otherwise be read as a tap name — `--from-git acme/skills` means GitHub.",
     },
     { flag: "--json", description: "Machine-readable output." },
+    {
+      flag: "--verbose",
+      description: "Show each git command, store step, and install path on stderr as it happens.",
+    },
   ],
   examples: [
     {

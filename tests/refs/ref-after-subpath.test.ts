@@ -1,5 +1,5 @@
 /**
- * Ref-last git references (§8.2, C-REF-31/32): `url//subpath@ref` parses
+ * Ref-last git references (§8.2, C-REF-34/32): `url//subpath@ref` parses
  * the same as `url@ref//subpath`, across every git-shaped form, and a
  * ref spelled first suppresses the trailing scan.
  */
@@ -31,13 +31,13 @@ const FORMS: readonly [label: string, refFirst: string, refLast: string][] = [
 ];
 
 describe("parseRef: @ref after //subpath", () => {
-  test.each(FORMS)("C-REF-31 %s: ref-last equals ref-first", (_label, refFirst, refLast) => {
+  test.each(FORMS)("C-REF-34 %s: ref-last equals ref-first", (_label, refFirst, refLast) => {
     const expected = parseRef(refFirst);
     expect(expected.type).toBe("git");
     expect(parseRef(refLast)).toEqual(expected);
   });
 
-  test("C-REF-31 ref-last with a single-segment subpath", () => {
+  test("C-REF-34 ref-last with a single-segment subpath", () => {
     expect(parseRef("gh:acme/skills//py@a1b2c3d")).toEqual({
       type: "git",
       url: "https://github.com/acme/skills.git",
@@ -46,7 +46,7 @@ describe("parseRef: @ref after //subpath", () => {
     });
   });
 
-  test("C-REF-31 an @ in an earlier subpath segment is not a ref", () => {
+  test("C-REF-34 an @ in an earlier subpath segment is not a ref", () => {
     expect(parseRef("gh:acme/skills//scoped@pkg/py")).toEqual({
       type: "git",
       url: "https://github.com/acme/skills.git",
@@ -55,7 +55,7 @@ describe("parseRef: @ref after //subpath", () => {
     });
   });
 
-  test("C-REF-31 a trailing @ with nothing after it is left in the subpath", () => {
+  test("C-REF-34 a trailing @ with nothing after it is left in the subpath", () => {
     expect(parseRef("gh:acme/skills//py@")).toEqual({
       type: "git",
       url: "https://github.com/acme/skills.git",
@@ -64,7 +64,7 @@ describe("parseRef: @ref after //subpath", () => {
     });
   });
 
-  test("C-REF-31 a ref containing whitespace is not a ref", () => {
+  test("C-REF-34 a ref containing whitespace is not a ref", () => {
     expect(parseRef("gh:acme/skills//py@v 1")).toEqual({
       type: "git",
       url: "https://github.com/acme/skills.git",
@@ -73,7 +73,7 @@ describe("parseRef: @ref after //subpath", () => {
     });
   });
 
-  test("C-REF-31 a ref containing a colon is not a ref", () => {
+  test("C-REF-34 a ref containing a colon is not a ref", () => {
     // §8.4 excludes `:` from `git-ref`. Reading it as one would produce a ref
     // git cannot resolve and surface as `ref_not_found`, when the text is
     // perfectly legal subpath content — so the tail stays in the subpath.
@@ -85,7 +85,7 @@ describe("parseRef: @ref after //subpath", () => {
     });
   });
 
-  test("C-REF-31 both ref positions reject a colon identically", () => {
+  test("C-REF-34 both ref positions reject a colon identically", () => {
     // The ref-first form already rejected `:`; ref-last must agree, or the
     // same reference means different things depending on where it is spelled.
     expect(parseRef("gh:acme/skills@release:bad//skill")).toMatchObject({
@@ -98,7 +98,7 @@ describe("parseRef: @ref after //subpath", () => {
     });
   });
 
-  test("C-REF-32 a ref spelled first preserves a literal @ in the final segment", () => {
+  test("C-REF-35 a ref spelled first preserves a literal @ in the final segment", () => {
     // The documented escape hatch: ref-first suppresses the trailing scan,
     // so `foo@bar` stays a directory name. This is also the behavior on the
     // parent branch, which the ref-last feature must not regress.
@@ -110,7 +110,7 @@ describe("parseRef: @ref after //subpath", () => {
     });
   });
 
-  test("C-REF-32 without a leading ref the same tail is read as a ref", () => {
+  test("C-REF-35 without a leading ref the same tail is read as a ref", () => {
     expect(parseRef("gh:acme/skills//skills/foo@bar")).toEqual({
       type: "git",
       url: "https://github.com/acme/skills.git",
@@ -119,7 +119,7 @@ describe("parseRef: @ref after //subpath", () => {
     });
   });
 
-  test("C-REF-32 ref-first wins over a trailing tail rather than conflicting", () => {
+  test("C-REF-35 ref-first wins over a trailing tail rather than conflicting", () => {
     expect(parseRef("gh:acme/skills@v1//py@v2")).toEqual({
       type: "git",
       url: "https://github.com/acme/skills.git",
@@ -128,7 +128,7 @@ describe("parseRef: @ref after //subpath", () => {
     });
   });
 
-  test("C-REF-33 a slash-containing ref is ref-first only; ref-last keeps it as subpath", () => {
+  test("C-REF-36 a slash-containing ref is ref-first only; ref-last keeps it as subpath", () => {
     // The two positions are NOT interchangeable for a slash-containing
     // ref, and that asymmetry is deliberate: a subpath may contain `@`,
     // so `//a@b/c` cannot distinguish a ref from a directory named

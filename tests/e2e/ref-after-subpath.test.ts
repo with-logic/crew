@@ -1,5 +1,5 @@
 /**
- * Ref-last git reference through the real CLI (§8.2, C-REF-31):
+ * Ref-last git reference through the real CLI (§8.2, C-REF-34):
  * `file://<repo>//<sub>@<sha>` is recorded exactly like `@<sha>//<sub>`.
  */
 
@@ -36,7 +36,7 @@ afterEach(() => {
   restore = null;
 });
 
-test("C-REF-31 install file://<repo>//<sub>@<sha> records the ref and pins", () => {
+test("C-REF-34 install file://<repo>//<sub>@<sha> records the ref and pins", () => {
   const home = makeCrewHome();
   const repo = makeTempDir("crew-reflast-");
   makeGitRepo(repo);

@@ -20,6 +20,8 @@ import { tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { ensureRepo } from "../../git/repo/index.ts";
 import { displayUrl } from "../../refs/display-url.ts";
+import { progress } from "../../util/progress.ts";
+import { safeUrl } from "../../util/redact.ts";
 
 /** Fields every refresh row carries, whatever its outcome. */
 interface TapRefreshBase {
@@ -55,7 +57,7 @@ export function planRefresh(taps: readonly TapConfig[]): TapRefreshRow[] {
       rows.push(skippedPathRow(tap));
       continue;
     }
-    rows.push({ name: tap.name, url: tap.url, kind: "pending" });
+    rows.push({ name: tap.name, url: displayUrl(tap.url), kind: "pending" });
   }
   return rows;
 }
@@ -69,6 +71,7 @@ export function refreshTaps(taps: readonly TapConfig[], home: string): TapRefres
       continue;
     }
     try {
+      progress(`refreshing tap ${tap.name} from ${safeUrl(tap.url)}`);
       ensureRepo(tap.url, tapPath(tap.name, home));
       // A tap URL may carry credentials (§16.3); rows reach both human and
       // JSON output, so redact once here rather than at each renderer.
