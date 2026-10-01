@@ -60,7 +60,8 @@ export function resolveCollectionSubject(
   const tapNamed = config.taps.some((t) => t.name === lowered);
   const namespaced = namespaceCandidates(state, lowered);
 
-  if (tapNamed && namespaced.length > 0) {
+  const otherTapNamespaces = namespaced.filter((c) => c.tap !== lowered);
+  if (tapNamed && otherTapNamespaces.length > 0) {
     throw ambiguousCollection(raw, [lowered, ...namespaced.map((c) => c.qualified)]);
   }
   if (tapNamed) {

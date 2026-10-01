@@ -9,14 +9,26 @@
  * the selection.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import { commitAll, makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { buildNamespacedTap, bump, freshHome, installedBody, installRoot, run } from "./helpers.ts";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
+import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { buildNamespacedTap, bump, freshHome, installedBody, run } from "./helpers.ts";
 
-const ccRoot = installRoot("upd-coll-b-");
-const body = (name: string) => installedBody(ccRoot(), name);
+const originalUserPath = claudeCodeAdapter.userPath;
+const originalDetect = claudeCodeAdapter.detect;
+let ccRoot = "";
+beforeEach(() => {
+  ccRoot = makeTempDir("upd-coll-b-");
+  claudeCodeAdapter.userPath = () => ccRoot;
+  claudeCodeAdapter.detect = () => true;
+});
+afterEach(() => {
+  claudeCodeAdapter.userPath = originalUserPath;
+  claudeCodeAdapter.detect = originalDetect;
+});
+const body = (name: string) => installedBody(ccRoot, name);
 
 describe("crew update namespace re-expansion bounds", () => {
   test("C-UPD-36 a namespace selector does not install additions from a sibling namespace", () => {
@@ -25,16 +37,17 @@ describe("crew update namespace re-expansion bounds", () => {
     run(home, ["tap", "add", `file://${repo}`, "acme"]);
     expect(run(home, ["install", "acme"]).code).toBe(0);
 
-    // One addition in the named namespace, one in a sibling. The group
-    // spans the whole tap, so an unbounded re-expansion installs both.
+    // Additions in the named namespace, a sibling, and directly under skills/.
     makeSkill(join(repo, "skills", "marketing"), "seo", skillFrontmatter({ name: "seo" }));
     makeSkill(join(repo, "skills", "eng"), "fmt", skillFrontmatter({ name: "fmt" }));
-    commitAll(repo, "add seo and fmt");
+    makeSkill(join(repo, "skills"), "global-tool", skillFrontmatter({ name: "global-tool" }));
+    commitAll(repo, "add seo, fmt and global-tool");
 
     expect(run(home, ["update", "acme/marketing"]).code).toBe(0);
     expect(body("seo")).toContain("name: seo");
     // `fmt` lives under a namespace the user did not name.
     expect(() => body("fmt")).toThrow();
+    expect(() => body("global-tool")).toThrow();
   });
 
   test("C-UPD-36 naming the tap installs additions from every namespace", () => {
@@ -45,12 +58,14 @@ describe("crew update namespace re-expansion bounds", () => {
 
     makeSkill(join(repo, "skills", "marketing"), "seo", skillFrontmatter({ name: "seo" }));
     makeSkill(join(repo, "skills", "eng"), "fmt", skillFrontmatter({ name: "fmt" }));
-    commitAll(repo, "add seo and fmt");
+    makeSkill(join(repo, "skills"), "global-tool", skillFrontmatter({ name: "global-tool" }));
+    commitAll(repo, "add seo, fmt and global-tool");
 
     // Naming the tap asks for the whole tap, so nothing is bounded.
     expect(run(home, ["update", "acme"]).code).toBe(0);
     expect(body("seo")).toContain("name: seo");
     expect(body("fmt")).toContain("name: fmt");
+    expect(body("global-tool")).toContain("name: global-tool");
   });
 });
 
