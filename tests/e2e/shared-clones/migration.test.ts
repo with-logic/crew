@@ -3,9 +3,10 @@
  * shared `repos/` layout (§6, C-TAP-29).
  */
 
-import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { readConfig } from "../../../src/config/load.ts";
 import { legacyTapPath, paths } from "../../../src/core/paths.ts";
 import { migrateTapClone } from "../../../src/sources/migrate-clones.ts";
@@ -13,6 +14,21 @@ import { withTapLocks } from "../../../src/sources/tap-lock.ts";
 import { ensureDir } from "../../../src/util/fs.ts";
 import { cloneDirForTap, cloneDirs, makeTempDir, tagRepo } from "../../helpers/fixtures.ts";
 import { bareHome, run, twoSubpathRepo } from "./helpers.ts";
+
+const originalUserPath = claudeCodeAdapter.userPath;
+const originalDetect = claudeCodeAdapter.detect;
+let agentDir: string;
+
+beforeEach(() => {
+  agentDir = makeTempDir("crew-shared-agent-");
+  claudeCodeAdapter.userPath = () => agentDir;
+  claudeCodeAdapter.detect = () => true;
+});
+
+afterEach(() => {
+  claudeCodeAdapter.userPath = originalUserPath;
+  claudeCodeAdapter.detect = originalDetect;
+});
 
 describe("migration from the per-tap-name clone layout", () => {
   test("C-TAP-29 an old-layout clone is moved on the next command and still works", () => {
@@ -27,6 +43,8 @@ describe("migration from the per-tap-name clone layout", () => {
     renameSync(shared, legacy);
     expect(existsSync(shared)).toBe(false);
 
+    // Offline relocation must reuse the existing clone, not clone it again (§6).
+    rmSync(repo, { recursive: true, force: true });
     const search = run(home, ["search", "--json", "alpha"]);
     expect(search.code).toBe(0);
     const parsed = JSON.parse(search.stdout) as { hits: { name: string }[] };

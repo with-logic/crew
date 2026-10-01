@@ -95,6 +95,7 @@ export function refreshTaps(taps: readonly TapConfig[], home: string): TapRefres
       continue;
     }
     const repoKey = canonicalRepoUrl(tap.url);
+    let fetchStarted = false;
     try {
       migrateTapClone(tap, home);
       const previous = fetched.get(repoKey);
@@ -103,13 +104,15 @@ export function refreshTaps(taps: readonly TapConfig[], home: string): TapRefres
         continue;
       }
       progress(`refreshing tap ${tap.name} from ${safeUrl(tap.url)}`);
+      fetchStarted = true;
       ensureRepo(tap.url, tapClonePath(tap, home));
       fetched.set(repoKey, null);
       // A tap URL may carry credentials (§16.3); rows reach both human and
       // JSON output, so redact once here rather than at each renderer.
       rows.push({ name: tap.name, url: displayUrl(tap.url), kind: "refreshed" });
     } catch (err) {
-      fetched.set(repoKey, err as CrewError);
+      // A migration failure belongs to this alias, not the shared repository (§6).
+      if (fetchStarted) fetched.set(repoKey, err as CrewError);
       const ce = err as CrewError;
       rows.push({
         name: tap.name,
