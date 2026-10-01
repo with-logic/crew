@@ -12,16 +12,16 @@
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { redirectClaudeCode, tapWithUrl } from "./helpers.ts";
+import { redirectClaudeCode, tapWithUrl, useLocalCloneFailures } from "./helpers.ts";
 
 redirectClaudeCode();
+useLocalCloneFailures();
 
 describe("--verbose credential redaction", () => {
   test("C-CLI-06b a credential in a direct install url never reaches stderr", () => {
     const home = makeCrewHome();
-    // An unreachable remote: the clone fails, but not before the argv
-    // has been handed to the progress sink and the URL echoed in the
-    // resulting `source_unreachable` message.
+    // The seam preserves this HTTP input in progress and error metadata,
+    // while delegating the clone to a missing local repository.
     const secret = "ghp_SUPERSECRETVALUE";
     const capture = captureStreams();
     const code = runCli(["install", "--verbose", `https://oauth2:${secret}@127.0.0.1:1/a/b.git`], {

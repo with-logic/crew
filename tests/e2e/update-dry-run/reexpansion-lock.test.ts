@@ -1,4 +1,4 @@
-/** Same-named re-expansion groups outside the selected entry still need locks (§14). */
+/** Collection selection excludes unrelated same-named re-expansion groups (§10.1, §14). */
 
 import { expect, test } from "bun:test";
 import { runCli } from "../../../src/cli/main.ts";
@@ -11,7 +11,7 @@ import { redirectClaudeCode } from "./helpers.ts";
 
 redirectClaudeCode();
 
-test("C-UPD-18d a qualified selection locks another tap consulted by re-expansion", () => {
+test("C-UPD-18d a qualified selection does not consult an unrelated same-named tap", () => {
   const home = makeCrewHome();
   const source = makeTempDir();
   makeSkill(source, "alpha", skillFrontmatter({ name: "alpha" }));
@@ -50,7 +50,7 @@ test("C-UPD-18d a qualified selection locks another tap consulted by re-expansio
   try {
     expect(
       runCli(["update", "first/alpha", "--dry-run"], { home, streams: captureStreams().streams }),
-    ).toBe(7);
+    ).toBe(0);
   } finally {
     held.release();
     if (previous === undefined) delete process.env["CREW_LOCK_TIMEOUT_MS"];
