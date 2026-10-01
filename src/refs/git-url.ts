@@ -16,8 +16,44 @@ import { CrewError } from "../core/errors.ts";
 import type { GitSource } from "../core/types.ts";
 import { normalizeBrowserUrl, stripUrlQueryAndFragment } from "./browser-url.ts";
 import { displayUrl } from "./display-url.ts";
-import { splitGitRef, splitSubpath } from "./git-tails.ts";
+import { splitGitRef, splitSubpath, splitTrailingRef } from "./git-tails.ts";
 import { normalizeSubpath } from "./subpath.ts";
+
+/**
+ * A bare authority: dot-separated DNS labels with an optional numeric
+ * port. Deliberately strict — the scheme-less form prepends `https://`,
+ * so anything `new URL` could reinterpret (userinfo, query, fragment,
+ * a non-numeric port) must never reach it. `github.com@evil.example/o/r`
+ * would otherwise parse as host `evil.example` with `github.com` as
+ * userinfo, letting a GitHub-looking reference clone from elsewhere.
+ */
+const SCHEMELESS_AUTHORITY =
+  /^(?=.*\.)[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:(\d+))?$/i;
+
+/** A port is only a port if it is one TCP can name. */
+function validPort(port: string | undefined): boolean {
+  if (port === undefined) return true;
+  const n = Number(port);
+  return n >= 1 && n <= 65535;
+}
+
+/**
+ * True if `ref` is a scheme-less git host reference (§8.5 rule 4): the
+ * first `/`-segment is a bare `host[:port]` containing a `.` (tap names
+ * can't) and there are at least `host/owner/repo` segments before any
+ * `//subpath` tail.
+ *
+ * An out-of-range port fails here rather than downstream, so the value
+ * falls through to tap parsing and reports `invalid_ref` instead of
+ * surfacing whatever `new URL` happens to throw.
+ */
+export function looksLikeSchemelessHost(ref: string): boolean {
+  const head = ref.split("//", 1)[0]!;
+  const segments = head.split("/");
+  if (segments.length < 3) return false;
+  const match = SCHEMELESS_AUTHORITY.exec(segments[0]!);
+  return match !== null && validPort(match[5]);
+}
 
 /** Shorthand host prefixes known to crew (§8.2). */
 export const SHORTHAND_HOSTS: Record<string, string> = {
@@ -69,8 +105,15 @@ export function looksLikeAtShorthand(ref: string): boolean {
 export function parseGit(ref: string): GitSource {
   // §8.2: `?query` / `#fragment` are dropped before any grammar tail is read,
   // so text inside them can never be mistaken for an `@ref` or `//subpath`.
-  const { head, subpath } = splitSubpath(stripUrlQueryAndFragment(ref));
-  const { url: baseUrl, ref: gitRef } = splitGitRef(head);
+  const { head, subpath: rawSubpath } = splitSubpath(stripUrlQueryAndFragment(ref));
+  const { url: baseUrl, ref: leadingRef } = splitGitRef(head);
+  // §8.2: the ref may sit before or after the subpath. Ref-first wins and
+  // suppresses the trailing scan entirely, so a final path segment
+  // containing a literal `@` survives when the ref is spelled first.
+  const trailing =
+    leadingRef === null ? splitTrailingRef(rawSubpath) : { subpath: rawSubpath, ref: null };
+  const subpath = trailing.subpath;
+  const gitRef = leadingRef ?? trailing.ref;
   // §8.2 "Browser URLs": an explicit `@ref` / `//subpath` tail wins over
   // whatever the pasted URL encoded.
   const browser = normalizeBrowserUrl(baseUrl);
