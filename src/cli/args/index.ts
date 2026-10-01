@@ -96,6 +96,7 @@ export function parseArgs(rawArgv: readonly string[]): ParsedArgs {
 
   const flags: CommandFlags = {
     scope,
+    scopeGiven: parsed["scope"] !== undefined,
     agent,
     dryRun: Boolean(parsed["dry-run"]),
     json: Boolean(parsed["json"]),

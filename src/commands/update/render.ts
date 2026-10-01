@@ -61,7 +61,7 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
       if (parts.detail) tailCells.push(parts.detail);
       if (parts.required) tailCells.push(parts.required);
       const nameCell =
-        r.scope === "project" && r.project_root
+        r.scope === "project" && typeof r.project_root === "string" && r.project_root
           ? `  ${sym} ${style.bold(r.name)} ${style.dim(`(in ${shortenHome(r.project_root)})`)}`
           : `  ${sym} ${style.bold(r.name)}`;
       return [nameCell, parts.status, tailCells.join(" ")];

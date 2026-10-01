@@ -33,6 +33,7 @@ import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { tapPath } from "../../core/paths.ts";
 import type { Config, StateFile } from "../../core/types.ts";
+import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
@@ -40,6 +41,7 @@ import { rmrf } from "../../util/fs.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
+import { narrowSubjectToScope } from "./scope.ts";
 import { findOrphan } from "./state.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
@@ -90,20 +92,33 @@ function runUninstall(
   agentFilter: readonly string[] | null,
 ): UninstallResult {
   const records: UninstallRecord[] = [];
-  let exitCode = 0;
   let state = readState(ctx.home);
-  for (const raw of ctx.positional) {
-    const subject = resolveStateSubject(state, raw);
-    const { updatedState, rec } = removeOne(state, subject, ctx, false, agentFilter);
+  const removedRoots: (string | null)[] = [];
+  const subjects = ctx.positional.map((raw) =>
+    narrowSubjectToScope(
+      resolveStateSubject(state, raw),
+      ctx.flags.scope,
+      ctx.cwd,
+      ctx.flags.force,
+    ),
+  );
+  for (const planned of subjects) {
+    const subject = {
+      ...planned,
+      entries: state.installations.filter((e) =>
+        planned.entries.some((p) => entryKey(p) === entryKey(e)),
+      ),
+    };
+    if (subject.entries.length === 0 && planned.entries.length > 0) continue;
+    const { updatedState, rec, meta } = removeOne(state, subject, ctx, false, agentFilter);
     state = updatedState;
     records.push(rec);
+    removedRoots.push(...meta.fullyRemovedRoots);
   }
-  if (prune) {
-    state = pruneOrphans(state, ctx, records);
+  if (prune && removedRoots.length > 0) {
+    state = pruneOrphans(state, ctx, records, new Set(removedRoots));
   }
-  for (const rec of records) {
-    if (rec.failures.length > 0) exitCode = 1;
-  }
+  const exitCode = records.some((rec) => rec.failures.length > 0) ? 1 : 0;
   return { state, records, exitCode };
 }
 
@@ -129,25 +144,33 @@ function validateAgentFilter(agents: readonly string[]): readonly string[] | nul
 
 /**
  * Recursively remove any skill that is now an autoremovable orphan:
- * `explicit: false` AND empty `required_by`. Runs until a full pass
- * finds no new orphans. Prune never respects `--agent` filters —
- * when we auto-remove a dep, we remove it fully.
+ * `explicit: false` AND empty `required_by`, restricted to the scope and
+ * project roots this run fully removed from (§7.4 step 5). Prune never
+ * respects `--agent` filters — when we auto-remove a dep, we remove it
+ * fully.
+ *
+ * TERMINATION: every candidate is recorded in `attempted` BEFORE it is
+ * removed, and `findOrphan` skips those keys. The loop therefore runs at
+ * most once per entry in state and cannot depend on the entry vanishing —
+ * which matters because an orphan whose removal aborts on a safety check
+ * deliberately keeps its state entry.
  */
 function pruneOrphans(
   state: StateFile,
   ctx: CommandContext,
   records: UninstallRecord[],
+  roots: ReadonlySet<string | null>,
 ): StateFile {
   let current = state;
   const attempted = new Set<string>();
-  let orphan = findOrphan(current, attempted);
+  let orphan = findOrphan(current, ctx.flags.scope, roots, attempted);
   while (orphan) {
-    // A failed safety check retains the orphan; never retry it in this run.
-    attempted.add(orphan.name);
-    const { updatedState, rec } = removeOne(current, orphan.name, ctx, true, null);
+    attempted.add(entryKey(orphan));
+    const subject = { raw: orphan.name, name: orphan.name, entries: [orphan] };
+    const { updatedState, rec } = removeOne(current, subject, ctx, true, null);
     records.push(rec);
     current = updatedState;
-    orphan = findOrphan(current, attempted);
+    orphan = findOrphan(current, ctx.flags.scope, roots, attempted);
   }
   return current;
 }

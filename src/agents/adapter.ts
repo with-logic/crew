@@ -10,7 +10,9 @@
  * behaves identically; each adapter really only supplies the paths.
  */
 
+import { CrewError } from "../core/errors.ts";
 import type { Marker, Scope, StateEntry } from "../core/types.ts";
+import { hasUsableProjectRoot } from "../state/validation.ts";
 
 /** Record returned by `list_installed`: marker plus installed dir. */
 export interface InstalledSkillRecord {
@@ -57,16 +59,19 @@ export function baseFor(adapter: AgentAdapter, scope: Scope, cwd: string): strin
  * time. For user-scope entries the cwd is inert (the adapter's
  * `userPath()` ignores it), so we just pass `fallbackCwd` through.
  *
- * Every project-scope entry is required to carry a `project_root` —
- * it's set at install time and preserved on every upsert. If we ever
- * see one that's missing, that's a state corruption; we treat it the
- * same as `fallbackCwd` so `crew doctor` can still run and surface it
- * as a finding rather than crashing on a missing field.
+ * An unusable project root is corruption, never a reason to guess an
+ * install location from the caller's cwd (§11.1).
  */
 export function cwdForEntry(
   entry: Pick<StateEntry, "scope" | "project_root">,
   fallbackCwd: string,
 ): string {
   if (entry.scope === "user") return fallbackCwd;
-  return entry.project_root ?? fallbackCwd;
+  if (!hasUsableProjectRoot(entry)) {
+    throw new CrewError(
+      "usage_error",
+      "project root is not a nonempty absolute path — correct state.json before accessing this install",
+    );
+  }
+  return entry.project_root;
 }
