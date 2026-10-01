@@ -15,6 +15,8 @@ import type { Styler } from "../../util/term.ts";
 import type { UninstallRecord } from "./core.ts";
 
 const FAIL_REMEDIES: Record<string, string> = {
+  unknown_agent:
+    "this build has no adapter for that owner (use a Crew build with the required adapter)",
   untracked_directory: "something else owns that folder (pass --force to remove anyway)",
   inconsistent_marker: "the install site looks tampered with (pass --force to remove)",
   not_installed_here: "wasn't installed here (pass --force to ignore)",

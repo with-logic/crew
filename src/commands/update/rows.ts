@@ -57,6 +57,13 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
       required,
     };
   }
+  if (o.kind === "tap_missing") {
+    return {
+      status: style.yellow("tap removed"),
+      detail: style.dim(`keeping your copy; re-add \`${o.tap}\` or run \`crew doctor --repair\``),
+      required,
+    };
+  }
   // `failed` is the only remaining variant. `satisfies` makes a newly
   // added `Outcome` kind a compile error here instead of silently
   // rendering as a failure, and costs no unreachable runtime line
@@ -74,7 +81,7 @@ export function symbolFor(row: UpdateRow, style: Styler): string {
   if (o.kind === "updated" || o.kind === "would_update") return style.symbol("ok");
   if (o.kind === "up_to_date") return style.symbol("muted");
   if (o.kind === "skipped" || o.kind === "missing_project_root") return style.symbol("muted");
-  if (o.kind === "source_gone") return style.symbol("warn");
+  if (o.kind === "source_gone" || o.kind === "tap_missing") return style.symbol("warn");
   // Only `failed` remains. `satisfies` makes a newly-added `Outcome`
   // kind a compile error here instead of silently taking the fail
   // symbol, and costs no unreachable runtime line.

@@ -9,7 +9,7 @@
 
 import yargsFactory from "yargs/yargs";
 import { lookup } from "../../util/registry.ts";
-import { aliasFlagKey } from "../aliases.ts";
+import { aliasBooleanFlags, aliasFlagKey } from "../aliases.ts";
 
 /** Global boolean flags. */
 export const BOOLEAN_GLOBALS = ["dry-run", "json", "quiet", "verbose", "yes", "force"] as const;
@@ -19,7 +19,7 @@ export const STRING_GLOBALS = ["scope"] as const;
 export const BOOLEAN_SUB: Readonly<Record<string, readonly string[]>> = {
   doctor: ["verify", "repair"],
   install: ["tap", "bundle", "skill", "recursive"],
-  tap: ["recursive"],
+  tap: ["recursive", "uninstall"],
   uninstall: ["prune", "all"],
   "self-update": ["check"],
 };
@@ -89,7 +89,9 @@ export function withFlagTables(
   command: string | undefined | typeof EVERY_COMMAND,
 ) {
   const booleans =
-    command === EVERY_COMMAND ? Object.values(BOOLEAN_SUB).flat() : subFlags(BOOLEAN_SUB, command);
+    command === EVERY_COMMAND
+      ? Object.values(BOOLEAN_SUB).flat()
+      : [...subFlags(BOOLEAN_SUB, command), ...aliasBooleanFlags(command ?? "")];
   const strings =
     command === EVERY_COMMAND ? Object.values(STRING_SUB).flat() : subFlags(STRING_SUB, command);
   return p

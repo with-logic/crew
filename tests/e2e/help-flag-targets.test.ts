@@ -127,3 +127,18 @@ describe("--help target selection across flag values", () => {
     expect(c.stderr()).not.toContain("undefined");
   });
 });
+
+test("C-CLI-17e prefixed alias flags retain the help target and output mode", () => {
+  for (const json of [false, true]) {
+    const mode = json ? ["--json"] : [];
+    const canonical = run(["help", "untap", ...mode]);
+    for (const argv of [
+      ["--uninstall", "untap", "--help"],
+      ["untap", "--uninstall", "-h"],
+      ["--help", "--uninstall", "untap"],
+      ["--uninstall", "false", "untap", "--help"],
+    ]) {
+      expect(run([...argv, ...mode])).toEqual(canonical);
+    }
+  }
+});

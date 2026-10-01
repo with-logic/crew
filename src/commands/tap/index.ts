@@ -12,33 +12,26 @@
  */
 
 import { statSync } from "node:fs";
-import { DEFAULT_TAP_NAME } from "../../config/defaults.ts";
-import { requireConfiguredTap } from "../../config/find-tap.ts";
-import { readConfig, writeConfig } from "../../config/load.ts";
+import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import { paths, tapPath } from "../../core/paths.ts";
+import { tapPath } from "../../core/paths.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { withTapLocks } from "../../sources/tap-lock.ts";
-import { withStateLock } from "../../state/lock.ts";
-import { rmrfInside } from "../../util/fs.ts";
 import { showCommandHelp } from "../help/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { tapAdd } from "./add.ts";
 import { planRefresh, refreshTaps, type TapRefreshRow } from "./refresh.ts";
-import {
-  renderTapList,
-  renderTapRemove,
-  renderTapUpdate,
-  type TapListRow,
-} from "./render/index.ts";
+import { tapRemove } from "./remove/index.ts";
+import { renderTapList, renderTapUpdate, type TapListRow } from "./render/index.ts";
 import { displayTarget } from "./target.ts";
 
 export function tapCommand(ctx: CommandContext): CommandOutput {
   const sub = ctx.positional[0];
   const rest = ctx.positional.slice(1);
-  if (sub === "add") return tapAdd(ctx, rest);
   if (sub === "remove") return tapRemove(ctx, rest);
+  rejectUninstallFlag(ctx);
+  if (sub === "add") return tapAdd(ctx, rest);
   if (sub === "list") return tapList(ctx, rest);
   if (sub === "update") return tapUpdate(ctx, rest);
   // Shorthand: `crew tap <ref> [<name>]` → `crew tap add <ref> [<name>]`.
@@ -70,56 +63,10 @@ function looksLikeTapSource(ref: string, cwd: string): boolean {
   }
 }
 
-function tapRemove(ctx: CommandContext, args: readonly string[]): CommandOutput {
-  rejectRecursiveFlag(ctx);
-  if (args.length !== 1)
-    throw new CrewError(
-      "usage_error",
-      "`crew tap remove` needs exactly one tap name — see `crew tap list`",
-    );
-  const name = args[0]!;
-  const dryRun = ctx.flags.dryRun;
-  let kind: "git" | "path" = "git";
-  const remove = () => {
-    const config = readConfig(ctx.home);
-    const tap = tapToRemove(config.taps, name, ctx.flags.force);
-    kind = tap.kind;
-    if (dryRun) return; // §16.3: same lookup + guard, nothing written.
-    const updated = { ...config, taps: config.taps.filter((t) => t.name !== name) };
-    withTapLocks([tap], ctx.home, () => {
-      writeConfig(updated, ctx.home);
-      if (tap.kind === "git") rmrfInside(paths(ctx.home).tapsDir, tapPath(name, ctx.home));
-    });
-  };
-  if (dryRun) remove();
-  else withStateLock(remove, ctx.home);
-  return {
-    exitCode: 0,
-    human: renderTapRemove(name, kind, dryRun, ctx.style),
-    json: { name, ...(dryRun ? { dry_run: true } : {}) },
-  };
-}
-
-/** Look up the tap to remove; unknown names and the unforced default tap are usage errors. */
-function tapToRemove(taps: readonly TapConfig[], name: string, force: boolean): TapConfig {
-  const tap = requireConfiguredTap(taps, name);
-  if (name === DEFAULT_TAP_NAME && !force)
-    throw new CrewError(
-      "usage_error",
-      `\`${DEFAULT_TAP_NAME}\` is the default tap — pass \`--force\` if you're sure you want to remove it`,
-    );
-  return tap;
-}
-
 /**
  * `crew tap update [<name>]` — fetch + fast-forward one or every git tap.
  * Path taps are silently skipped (no upstream to fetch). `--dry-run`
  * lists what would be fetched without touching the network.
- *
- * Holds each selected tap's clone lock while fetching: fast-forwarding a
- * working tree concurrently with an install that has already resolved a
- * SHA from it would let that install stage a different commit's bytes
- * than the one it records (§10.1 step 1, §14).
  */
 function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput {
   rejectRecursiveFlag(ctx);
@@ -142,7 +89,16 @@ function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput 
 function tapsMatching(all: readonly TapConfig[], names: readonly string[]): TapConfig[] {
   const out: TapConfig[] = [];
   for (const n of names) {
-    out.push(requireConfiguredTap(all, n));
+    const tap = all.find((t) => t.name === n);
+    if (!tap) {
+      throw new CrewError(
+        "usage_error",
+        `\`${n}\` was not found in your list of taps.`,
+        { name: n },
+        "This may have been a typo. View your configured taps with `crew tap list`.",
+      );
+    }
+    out.push(tap);
   }
   return out;
 }
@@ -180,4 +136,9 @@ function tapList(ctx: CommandContext, args: readonly string[]): CommandOutput {
 function rejectRecursiveFlag(ctx: CommandContext): void {
   if (!ctx.flags.extras["recursive"]) return;
   throw new CrewError("usage_error", "`--recursive` only applies to `crew tap add`");
+}
+
+function rejectUninstallFlag(ctx: CommandContext): void {
+  if (!ctx.flags.extras["uninstall"]) return;
+  throw new CrewError("usage_error", "`--uninstall` only applies to `crew tap remove`");
 }
