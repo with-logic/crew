@@ -97,8 +97,7 @@ describe("--verbose credential redaction", () => {
       expect(all).not.toContain(secret);
       expect(all).toContain("refreshing tap creds from ***");
       expect(all).toContain("source_unreachable");
-      if (json)
-        expect(JSON.parse(capture.stdout()).rows[0].error.code).toBe("source_unreachable");
+      if (json) expect(JSON.parse(capture.stdout()).rows[0].error.code).toBe("source_unreachable");
     }
   });
 });
