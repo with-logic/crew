@@ -113,11 +113,11 @@ jobs:
           repository-path: ${{ github.workspace }}/pipeline-review
           bun-version: latest
       - name: Run centrally maintained review
+        id: review
         # Preparation reports its own errors; this call handles later setup failures.
         if: >-
           always() &&
-          steps.prepare.outcome != 'failure' &&
-          steps.prepare.outcome != 'cancelled' &&
+          steps.prepare.outcome == 'success' &&
           (steps.prepare.outputs.eligible == 'true' || failure() || cancelled())
         timeout-minutes: 75
         uses: ./.pipeline/actions/code-review
@@ -131,3 +131,29 @@ jobs:
           install-caller-dependencies: "false"
           model: ${{ vars.REVIEW_MODEL }}
           auto-approve: "true"
+      - name: Report manual review bootstrap status
+        if: >-
+          always() && github.event_name == 'issue_comment' &&
+          steps.review.outcome == 'skipped' && (failure() || cancelled()) &&
+          steps.prepare.outcome != 'failure' && steps.prepare.outcome != 'cancelled'
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ needs.authorize.outputs.pr-number }}
+          REVIEW_STATUS: ${{ job.status }}
+        with:
+          github-token: ${{ github.token }}
+          retries: 0
+          script: |
+            const issue_number = Number(process.env.PR_NUMBER);
+            if (!Number.isSafeInteger(issue_number) || issue_number < 1) return;
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const status = process.env.REVIEW_STATUS === 'cancelled'
+              ? 'Review cancelled before the shared reviewer started.'
+              : 'Review setup failed before the shared reviewer started.';
+            await github.rest.issues.createComment({
+              owner, repo, issue_number,
+              body: `${status} [View the workflow run](${runUrl}). Comment exactly ` +
+                '`/review` to try again.',
+            });
