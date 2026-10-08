@@ -1,85 +1,83 @@
-# Claude Code PR review + mention responder.
-#
-# On PR open, posts a review grounded in CLAUDE.md's working agreement
-# and standards. On @claude mentions in PR comments/reviews/inline
-# review comments, lets Claude respond to the user's request directly.
+# Keep the interactive Claude mention responder for current repository writers.
+# Check live permissions before secrets; inspect PRs from the trusted default branch.
 name: Claude Code
-
 on:
-  pull_request:
-    types: [opened]
   issue_comment:
     types: [created]
   pull_request_review_comment:
     types: [created]
   pull_request_review:
     types: [submitted]
-
+permissions:
+  contents: read
 jobs:
-  claude-review-pr:
-    name: "Claude: Review new PR"
-    if: github.event_name == 'pull_request' && github.event.action == 'opened'
+  authorize-mention:
+    if: >-
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' &&
+       contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' &&
+       contains(github.event.review.body, '@claude'))
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     permissions:
-      actions: read
       contents: read
-      pull-requests: write
-      issues: write
-      id-token: write
+      pull-requests: read
+      issues: read
+    outputs:
+      eligible: ${{ steps.gate.outputs.eligible }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
+      - name: Check the live PR and mention requester without checking out code
+        id: gate
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Read PR review prompt
-        id: read-prompt
-        run: |
-          {
-            echo 'prompt<<EOF'
-            cat .github/pr-review-prompt.md
-            echo
-            echo 'EOF'
-          } >> $GITHUB_OUTPUT
-
-      - name: Run Claude Code - Review PR
-        id: claude-review
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          allowed_bots: dependabot[bot]
-          prompt: ${{ steps.read-prompt.outputs.prompt }}
-          path_to_bun_executable: ~/.bun/bin/bun
-          track_progress: 'true'
-          claude_args: |
-            --model claude-sonnet-4-6
-            --allowedTools Bash,View,WebFetch,WebSearch,Glob,Grep
-
+          script: |
+            core.setOutput('eligible', 'false');
+            const { owner, repo } = context.repo;
+            const pull_number = context.payload.pull_request?.number ?? context.payload.issue?.number;
+            if (!Number.isSafeInteger(pull_number) || pull_number < 1) return;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+            const repository = `${owner}/${repo}`.toLowerCase();
+            if (pr.head.repo?.full_name?.toLowerCase() !== repository ||
+                pr.base.repo?.full_name?.toLowerCase() !== repository) return;
+            const isWriter = async (user) => {
+              if (user?.type !== 'User' || !user.login) return false;
+              try {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner, repo, username: user.login,
+                });
+                return ['write', 'maintain', 'admin'].includes(data.permission);
+              } catch (error) {
+                if (error.status === 403 || error.status === 404) return false;
+                throw error;
+              }
+            };
+            const dependabot = pr.user?.id === 49699333 &&
+              pr.user?.login === 'dependabot[bot]' && pr.user?.type === 'Bot';
+            if (!dependabot && !await isWriter(pr.user)) return;
+            let message;
+            if (context.eventName === 'issue_comment') {
+              ({ data: message } = await github.rest.issues.getComment({
+                owner, repo, comment_id: context.payload.comment.id,
+              }));
+            } else if (context.eventName === 'pull_request_review_comment') {
+              ({ data: message } = await github.rest.pulls.getReviewComment({
+                owner, repo, comment_id: context.payload.comment.id,
+              }));
+            } else if (context.eventName === 'pull_request_review') {
+              ({ data: message } = await github.rest.pulls.getReview({
+                owner, repo, pull_number, review_id: context.payload.review.id,
+              }));
+            } else {
+              return;
+            }
+            if (!message.body?.includes('@claude') || !await isWriter(message.user)) return;
+            core.setOutput('eligible', 'true');
   claude-mention:
     name: "Claude: Respond to mention"
-    if: |
-      (github.event_name == 'issue_comment' &&
-        github.event.issue.pull_request &&
-        contains(github.event.comment.body, '@claude') &&
-        (github.event.comment.author_association == 'OWNER' ||
-          github.event.comment.author_association == 'MEMBER' ||
-          github.event.comment.author_association == 'COLLABORATOR')) ||
-      (github.event_name == 'pull_request_review_comment' &&
-        contains(github.event.comment.body, '@claude') &&
-        (github.event.comment.author_association == 'OWNER' ||
-          github.event.comment.author_association == 'MEMBER' ||
-          github.event.comment.author_association == 'COLLABORATOR')) ||
-      (github.event_name == 'pull_request_review' &&
-        contains(github.event.review.body, '@claude') &&
-        (github.event.review.author_association == 'OWNER' ||
-          github.event.review.author_association == 'MEMBER' ||
-          github.event.review.author_association == 'COLLABORATOR'))
+    needs: authorize-mention
+    if: needs.authorize-mention.outputs.eligible == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -95,7 +93,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

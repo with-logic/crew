@@ -1,23 +1,23 @@
-# Give every same-repository PR a ticket, even before its title has a LOG number.
-# The shared action reads the live description and reuses an existing ticket.
-name: Create Linear ticket
+# Explain merged changes in the shared channel. The shared action checks approval
+# and existing announcements before posting, so retries reuse the same message.
+name: Merged PR announcement
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    types: [closed]
 permissions:
   contents: read
+  pull-requests: read
 jobs:
-  ticket:
+  announce:
     if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.base.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: write
+    timeout-minutes: 15
     concurrency:
-      group: linear-ticket-${{ github.repository }}-${{ github.event.pull_request.number }}
+      group: pr-announcement-${{ github.repository }}-${{ github.event.pull_request.number }}
       cancel-in-progress: false
     steps:
       - name: Read private automation source
@@ -39,11 +39,15 @@ jobs:
           persist-credentials: false
       - name: Prepare downloaded local actions
         run: node .pipeline/scripts/prepare-local-actions.mjs .pipeline
-      - name: Create or reuse the PR ticket
-        uses: ./.pipeline/actions/linear-ticket
+      - name: Explain the merged change in Slack
+        uses: ./.pipeline/actions/pr-announcement
         with:
           github-token: ${{ github.token }}
-          linear-api-key: ${{ secrets.LINEAR_API_KEY }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          slack-bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          channel-id: ${{ vars.MERGED_CHANNEL_ID }}
           pr-number: ${{ github.event.pull_request.number }}
-          team-key: ${{ vars.LINEAR_TEAM_KEY || 'LOG' }}
-          repo-label: ${{ vars.LINEAR_REPO_LABEL }}
+          base-branch: ${{ github.event.repository.default_branch }}
+          require-approval: "true"
+          repository-emoji: ${{ vars.MERGED_REPOSITORY_EMOJI }}
+          model: ${{ vars.NOTICE_MODEL }}
