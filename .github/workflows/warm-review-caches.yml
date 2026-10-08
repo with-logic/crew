@@ -1,23 +1,18 @@
-# Give every same-repository PR a ticket, even before its title has a LOG number.
-# The shared action reads the live description and reuses an existing ticket.
-name: Create Linear ticket
+# Prepare review tools and dependency caches from the default branch.
+# This runs setup only: it does not call a model or publish a review.
+name: Warm review caches
 on:
-  pull_request:
-    types: [opened, edited, synchronize, reopened]
+  push:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  ticket:
-    if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.base.repo.full_name == github.repository
+  warm:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: write
+    timeout-minutes: 35
     concurrency:
-      group: linear-ticket-${{ github.repository }}-${{ github.event.pull_request.number }}
+      group: pipeline-warm-review-caches-${{ github.repository }}
       cancel-in-progress: false
     steps:
       - name: Read private automation source
@@ -39,11 +34,18 @@ jobs:
           persist-credentials: false
       - name: Prepare downloaded local actions
         run: node .pipeline/scripts/prepare-local-actions.mjs .pipeline
-      - name: Create or reuse the PR ticket
-        uses: ./.pipeline/actions/linear-ticket
+      - name: Prepare installed review tools and main checkout
+        id: prepare
+        uses: ./.pipeline/actions/code-review
         with:
           github-token: ${{ github.token }}
-          linear-api-key: ${{ secrets.LINEAR_API_KEY }}
-          pr-number: ${{ github.event.pull_request.number }}
-          team-key: ${{ vars.LINEAR_TEAM_KEY || 'LOG' }}
-          repo-label: ${{ vars.LINEAR_REPO_LABEL }}
+          warm-cache: "true"
+          setup-only: "true"
+          node-version: ${{ vars.REVIEW_NODE_VERSION || '26' }}
+          install-caller-dependencies: "false"
+      - name: Prepare cached Bun project dependencies
+        if: steps.prepare.outputs.eligible == 'true'
+        uses: ./.pipeline/actions/setup-bun-caller
+        with:
+          repository-path: ${{ github.workspace }}/pipeline-review
+          bun-version: latest

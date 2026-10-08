@@ -1,0 +1,179 @@
+# Review a PR once when it opens, or when a current writer comments /review.
+# Check trust before secrets, then reuse Bun packages for all twelve review skills.
+name: Code review
+on:
+  pull_request:
+    types: [opened]
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+jobs:
+  authorize:
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+       github.event.comment.body == '/review')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      eligible: ${{ steps.gate.outputs.eligible }}
+      pr-number: ${{ steps.gate.outputs.pr-number }}
+    steps:
+      # Only this bootstrap trust check is repeated: private helpers are not available yet.
+      - name: Check the live PR and requester without checking out code
+        id: gate
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            core.setOutput('eligible', 'false');
+            const { owner, repo } = context.repo;
+            const pull_number = context.payload.pull_request?.number ?? context.payload.issue?.number;
+            if (!Number.isSafeInteger(pull_number) || pull_number < 1) return;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+            const repository = `${owner}/${repo}`.toLowerCase();
+            if (pr.head.repo?.full_name?.toLowerCase() !== repository ||
+                pr.base.repo?.full_name?.toLowerCase() !== repository) return;
+            const isWriter = async (user) => {
+              if (user?.type !== 'User' || !user.login) return false;
+              try {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner, repo, username: user.login,
+                });
+                return ['write', 'maintain', 'admin'].includes(data.permission);
+              } catch (error) {
+                if (error.status === 404) return false;
+                throw error;
+              }
+            };
+            const dependabot = pr.user?.id === 49699333 &&
+              pr.user?.login === 'dependabot[bot]' && pr.user?.type === 'Bot';
+            if (!dependabot && !await isWriter(pr.user)) return;
+            if (context.eventName === 'issue_comment') {
+              const { data: comment } = await github.rest.issues.getComment({
+                owner, repo, comment_id: context.payload.comment.id,
+              });
+              if (comment.body !== '/review' || !await isWriter(comment.user)) return;
+            } else if (context.eventName !== 'pull_request' || context.payload.action !== 'opened') {
+              return;
+            }
+            core.setOutput('pr-number', String(pull_number));
+            core.setOutput('eligible', 'true');
+  review:
+    needs: authorize
+    if: needs.authorize.outputs.eligible == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    # An unauthorized comment never reaches this cancellation group.
+    concurrency:
+      group: pipeline-code-review-${{ github.repository }}-${{ needs.authorize.outputs.pr-number }}
+      cancel-in-progress: true
+    steps:
+      - name: Read private automation source
+        id: source
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ vars.PIPELINE_SOURCE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PIPELINE_SOURCE_APP_PRIVATE_KEY }}
+          owner: with-logic
+          repositories: pipeline
+          permission-contents: read
+      - name: Download the shared actions
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: with-logic/pipeline
+          ref: main
+          token: ${{ steps.source.outputs.token }}
+          path: .pipeline
+          persist-credentials: false
+      - name: Prepare downloaded local actions
+        run: node .pipeline/scripts/prepare-local-actions.mjs .pipeline
+      - name: Prepare shared reviewer and eligible checkout
+        id: prepare
+        uses: ./.pipeline/actions/code-review
+        with:
+          github-token: ${{ github.token }}
+          pr-number: ${{ needs.authorize.outputs.pr-number }}
+          comment-id: ${{ github.event_name == 'issue_comment' && github.event.comment.id || '' }}
+          setup-only: "true"
+          install-caller-dependencies: "false"
+          node-version: ${{ vars.REVIEW_NODE_VERSION || '26' }}
+      - name: Prepare cached Bun project dependencies
+        if: steps.prepare.outputs.eligible == 'true'
+        uses: ./.pipeline/actions/setup-bun-caller
+        with:
+          repository-path: ${{ github.workspace }}/pipeline-review
+          bun-version: latest
+      - name: Run centrally maintained review
+        id: review
+        # Preparation reports its own errors; this call handles later setup failures.
+        if: >-
+          always() &&
+          steps.prepare.outcome == 'success' &&
+          (steps.prepare.outputs.eligible == 'true' || failure() || cancelled())
+        timeout-minutes: 75
+        uses: ./.pipeline/actions/code-review
+        with:
+          github-token: ${{ github.token }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          pr-number: ${{ needs.authorize.outputs.pr-number }}
+          comment-id: ${{ github.event_name == 'issue_comment' && github.event.comment.id || '' }}
+          node-version: ${{ vars.REVIEW_NODE_VERSION || '26' }}
+          checkout-caller: "false"
+          install-caller-dependencies: "false"
+          model: ${{ vars.REVIEW_MODEL }}
+          auto-approve: "true"
+      - name: Report manual review bootstrap status
+        if: >-
+          always() && github.event_name == 'issue_comment' &&
+          steps.review.outcome == 'skipped' && (failure() || cancelled()) &&
+          steps.prepare.outcome != 'failure' && steps.prepare.outcome != 'cancelled'
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ needs.authorize.outputs.pr-number }}
+          REVIEW_STATUS: ${{ job.status }}
+        with: &manual-review-status
+          github-token: ${{ github.token }}
+          retries: 0
+          script: |
+            if (context.payload.comment?.body !== '/review') return;
+            const issue_number = Number(process.env.PR_NUMBER);
+            if (!Number.isSafeInteger(issue_number) || issue_number < 1) return;
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const status = process.env.REVIEW_STATUS === 'cancelled'
+              ? 'Review cancelled before the shared reviewer started.'
+              : 'Review setup failed before the shared reviewer started.';
+            await github.rest.issues.createComment({
+              owner, repo, issue_number,
+              body: `${status} [View the workflow run](${runUrl}). Comment exactly ` +
+                '`/review` to try again.',
+            });
+  # A failed trust check never admits review code, but a manual requester still needs a status.
+  report-authorization-status:
+    needs: authorize
+    if: >-
+      always() && github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request && github.event.comment.body == '/review' &&
+      (needs.authorize.result == 'failure' || needs.authorize.result == 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Report manual review authorization status
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REVIEW_STATUS: ${{ needs.authorize.result }}
+        with: *manual-review-status
