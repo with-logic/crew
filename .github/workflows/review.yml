@@ -157,3 +157,37 @@ jobs:
               body: `${status} [View the workflow run](${runUrl}). Comment exactly ` +
                 '`/review` to try again.',
             });
+  # A failed trust check never admits review code, but a manual requester still needs a status.
+  report-authorization-status:
+    needs: authorize
+    if: >-
+      always() && github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request && github.event.comment.body == '/review' &&
+      (needs.authorize.result == 'failure' || needs.authorize.result == 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Report manual review authorization status
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REVIEW_STATUS: ${{ needs.authorize.result }}
+        with:
+          github-token: ${{ github.token }}
+          retries: 0
+          script: |
+            const issue_number = Number(process.env.PR_NUMBER);
+            if (!Number.isSafeInteger(issue_number) || issue_number < 1) return;
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const status = process.env.REVIEW_STATUS === 'cancelled'
+              ? 'Review cancelled before the shared reviewer started.'
+              : 'Review setup failed before the shared reviewer started.';
+            await github.rest.issues.createComment({
+              owner, repo, issue_number,
+              body: `${status} [View the workflow run](${runUrl}). Comment exactly ` +
+                '`/review` to try again.',
+            });
