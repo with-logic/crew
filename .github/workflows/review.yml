@@ -141,10 +141,11 @@ jobs:
         env:
           PR_NUMBER: ${{ needs.authorize.outputs.pr-number }}
           REVIEW_STATUS: ${{ job.status }}
-        with:
+        with: &manual-review-status
           github-token: ${{ github.token }}
           retries: 0
           script: |
+            if (context.payload.comment?.body !== '/review') return;
             const issue_number = Number(process.env.PR_NUMBER);
             if (!Number.isSafeInteger(issue_number) || issue_number < 1) return;
             const { owner, repo } = context.repo;
@@ -175,19 +176,4 @@ jobs:
         env:
           PR_NUMBER: ${{ github.event.issue.number }}
           REVIEW_STATUS: ${{ needs.authorize.result }}
-        with:
-          github-token: ${{ github.token }}
-          retries: 0
-          script: |
-            const issue_number = Number(process.env.PR_NUMBER);
-            if (!Number.isSafeInteger(issue_number) || issue_number < 1) return;
-            const { owner, repo } = context.repo;
-            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
-            const status = process.env.REVIEW_STATUS === 'cancelled'
-              ? 'Review cancelled before the shared reviewer started.'
-              : 'Review setup failed before the shared reviewer started.';
-            await github.rest.issues.createComment({
-              owner, repo, issue_number,
-              body: `${status} [View the workflow run](${runUrl}). Comment exactly ` +
-                '`/review` to try again.',
-            });
+        with: *manual-review-status
