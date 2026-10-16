@@ -6,9 +6,9 @@
 import { readlinkSync, realpathSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { CrewError } from "../../core/errors.ts";
-import { isGoneError } from "../../util/errno.ts";
+import { isGoneError, unreadablePathError } from "../../util/errno.ts";
 import { climbsOut } from "../../util/relative-path.ts";
-import { noLongerASkillError, unreadableError } from "./skill-shape.ts";
+import { noLongerASkillError } from "./skill-shape.ts";
 
 /**
  * The real path of `path`; throws unless it is inside `clone`, already a
@@ -23,7 +23,7 @@ export function resolveInside(clone: string, path: string, tapRelativePath: stri
   } catch (err) {
     if (isGoneError(err)) throw noLongerASkillError(tapRelativePath);
     if (linksOut(clone, path)) throw outsideRepoError(tapRelativePath);
-    throw unreadableError(path, err);
+    throw unreadablePathError(path, err);
   }
   if (climbsOut(relative(clone, resolved))) throw outsideRepoError(tapRelativePath);
   return resolved;

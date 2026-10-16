@@ -5,15 +5,14 @@
  */
 
 import { statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { isGistTap } from "../../core/gist-url.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { UNREADABLE_REMEDY } from "../../skill/load.ts";
 import { isSkillFile } from "../../skill/skill-file.ts";
 import { skillMdLinksOut, skillMdOutsideError } from "../../skill/skill-md-link.ts";
-import { errnoReason, isGoneError } from "../../util/errno.ts";
-import { isDirectory } from "../../util/fs.ts";
+import { isGoneError, unreadablePathError } from "../../util/errno.ts";
+import { isDirectory, listDir } from "../../util/fs.ts";
 import { isOneSkillGist } from "../gist.ts";
 
 /**
@@ -47,7 +46,7 @@ export function assertSkillMdInside(
   try {
     out = skillMdLinksOut(location);
   } catch (err) {
-    throw unreadableError(join(location, "SKILL.md"), err);
+    throw unreadablePathError(join(location, "SKILL.md"), err);
   }
   if (out) throw skillMdOutsideError(location, tapRelativePath || ".");
 }
@@ -58,7 +57,10 @@ function stillASkill(
   tapRelativePath: string,
 ): boolean {
   if (isGistTap(tap)) {
-    return tapRelativePath === "" ? isOneSkillGist(location) : isSkillFile(location);
+    if (tapRelativePath === "") return isOneSkillGist(location);
+    // Named exactly, case included (§9 step 5): on a case-insensitive
+    // filesystem `prd.md` would otherwise still find an upstream `PRD.md`.
+    return listDir(dirname(location)).includes(basename(location)) && isSkillFile(location);
   }
   // A whole-tap root skill's directory is the tap root, which acquisition
   // already proved exists as a directory. Either way it must still hold a
@@ -78,7 +80,7 @@ function skillMdGone(location: string): boolean {
     return false;
   } catch (err) {
     if (isGoneError(err)) return true;
-    throw unreadableError(skillMd, err);
+    throw unreadablePathError(skillMd, err);
   }
 }
 
@@ -87,14 +89,5 @@ export function noLongerASkillError(tapRelativePath: string): CrewError {
     "no_skills_found",
     `\`${tapRelativePath || "."}\` is no longer a skill in the tap`,
     { path: tapRelativePath },
-  );
-}
-
-export function unreadableError(path: string, err: unknown): CrewError {
-  return new CrewError(
-    "source_unreachable",
-    `couldn't look at \`${path}\` — ${errnoReason(err)}`,
-    { path },
-    UNREADABLE_REMEDY,
   );
 }

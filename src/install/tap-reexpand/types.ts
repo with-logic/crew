@@ -1,6 +1,5 @@
 /** Types shared by tap re-expansion passes (§10.1.1). */
 
-import type { CrewErrorName } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 
 /** One re-expansion outcome row. */
@@ -9,7 +8,8 @@ export interface TapReexpandRow {
   readonly scope: Scope;
   readonly kind: "added" | "would_add" | "source_gone" | "tap_error";
   readonly tap: string;
-  readonly error?: { readonly code: CrewErrorName; readonly message: string };
+  /** A §13 name, or an agent folder's errno code (see `agentFailureCode`). */
+  readonly error?: { readonly code: string; readonly message: string };
 }
 
 /** Callback to install one newly-detected child skill. */

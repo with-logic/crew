@@ -18,7 +18,8 @@
  * so state paths remain relative to the tap that owns them.
  */
 
-import { basename, join, posix } from "node:path";
+import { lstatSync } from "node:fs";
+import { join, posix } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { isGistTap } from "../core/gist-url.ts";
 import { tapClonePath } from "../core/repo-path.ts";
@@ -26,6 +27,7 @@ import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../c
 import { hasSkillMd, loadSkill, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
 import { isGistSkillCandidate } from "../sources/gist.ts";
+import { isGoneError, unreadablePathError } from "../util/errno.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 import { attributeRef } from "./tap-attribution.ts";
 
@@ -64,9 +66,16 @@ export function findSiblingDep(
   const matches: { entryName: string; siblingPath: string; loaded: LoadedSkill }[] = [];
   for (const entryName of listDir(siblingParent)) {
     const siblingPath = join(siblingParent, entryName);
+    // §9 step 6: a sibling named for the dependency that crew can't load —
+    // unreadable or invalid — is the dependency failing, never a miss to
+    // look past to other taps.
+    const gist = isGistTap(parent.tap);
+    const namedForDep = (gist ? entryName.replace(/\.md$/i, "") : entryName) === depName;
+    if (namedForDep && !gist) assertCanLook(siblingPath);
     if (!isSiblingSkill(parent.tap, siblingPath)) continue;
-    if (siblingName(siblingPath, depName) !== depName) continue;
-    const loaded = loadSkill(siblingPath);
+    if (!namedForDep && siblingName(siblingPath) !== depName) continue;
+    const loaded = withDependencyContext(depName, siblingPath, () => loadSkill(siblingPath));
+    if (loaded.frontmatter.name !== depName) continue;
     matches.push({ entryName, siblingPath, loaded });
   }
   if (matches.length === 0) return null;
@@ -103,18 +112,33 @@ function isSiblingSkill(tap: TapConfig, path: string): boolean {
   return isDirectory(path) && hasSkillMd(path);
 }
 
-/**
- * The declared name of a sibling, or null when it can't be read. One
- * named for the dependency — its folder, or its file without `.md` —
- * that can't be read is the dependency failing, not a miss to look past
- * to other taps (§9 step 6).
- */
-function siblingName(path: string, depName: string): string | null {
+/** The declared name of a sibling, or null when it can't be read. */
+function siblingName(path: string): string | null {
   try {
     return loadSkillName(path);
-  } catch (err) {
-    if (basename(path).replace(/\.md$/i, "") === depName) throw err;
+  } catch {
     return null;
+  }
+}
+
+/** Throw when crew can't look into the folder at `path` for a `SKILL.md`. */
+function assertCanLook(path: string): void {
+  const skillMd = join(path, "SKILL.md");
+  try {
+    lstatSync(skillMd);
+  } catch (err) {
+    if (!isGoneError(err)) throw unreadablePathError(skillMd, err);
+  }
+}
+
+/** Run `load`, naming the dependency in what it throws (`loadSkill` throws only `CrewError`). */
+function withDependencyContext<T>(depName: string, path: string, load: () => T): T {
+  try {
+    return load();
+  } catch (err) {
+    const ce = err as CrewError;
+    const message = `dependency \`${depName}\` (\`${path}\`): ${ce.message}`;
+    throw new CrewError(ce.code, message, { ...ce.details, path, dependency: depName }, ce.remedy);
   }
 }
 

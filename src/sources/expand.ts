@@ -183,7 +183,12 @@ function pushSoft(candidate: string, valid: LoadedSkill[], skipped: SkippedSkill
     // `SKILL.md` it couldn't read, `invalid_skill` for the rest (§9 step 4).
     const ce = err as CrewError;
     const code = ce.code === "source_unreachable" ? "source_unreachable" : "invalid_skill";
-    const remedy = typeof ce.remedy === "string" ? { remedy: ce.remedy } : {};
-    skipped.push({ path: candidate, message: ce.message, code, ...remedy });
+    skipped.push(skippedFrom(candidate, ce, code));
   }
+}
+
+/** A skipped candidate at `path`, with `err`'s message and its remedy if it has one. */
+export function skippedFrom(path: string, err: CrewError, code: SkipCode): SkippedSkill {
+  const remedy = typeof err.remedy === "string" ? { remedy: err.remedy } : {};
+  return { path, message: err.message, code, ...remedy };
 }

@@ -15,11 +15,15 @@ import { lstatSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
-import { errnoReason } from "../util/errno.ts";
+import { isGoneError, unreadablePathError } from "../util/errno.ts";
 import { readText } from "../util/fs.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 import { isSkillFile } from "./skill-file.ts";
-import { SKILL_MD_REMEDY, skillMdLinksOut, skillMdOutsideError } from "./skill-md-link.ts";
+import {
+  SKILL_MD_NOT_A_FILE_REMEDY,
+  skillMdLinksOut,
+  skillMdOutsideError,
+} from "./skill-md-link.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
 /**
@@ -46,13 +50,6 @@ export function loadSkillName(path: string): string {
 }
 
 /**
- * The next step when crew can't read or look at a skill's path: its
- * `SKILL.md` here, or its location on update (`acquire/skill-shape.ts`).
- */
-export const UNREADABLE_REMEDY =
-  "Check that it is readable by you (its permissions, and its folder's).";
-
-/**
  * True iff `path` has an entry named `SKILL.md` — a link counts, even one
  * that leads nowhere, so validation can say what is wrong with it (§9
  * step 4). A folder crew can't look into has none it can see. Does not
@@ -70,10 +67,10 @@ export function hasSkillMd(path: string): boolean {
  * The text of the `SKILL.md` for the skill at `path` — a skill file, or a
  * directory's own. Every failure is a `CrewError` naming the path, so
  * discovery skips this one candidate (§9 step 4) rather than aborting: a
- * `SKILL.md` that is missing or not a file, or that links out of its
- * skill's folder, is the skill's own fault (`invalid_skill`); one crew
- * can't read is the local filesystem's (`source_unreachable`), and is
- * never blamed on the skill's author.
+ * `SKILL.md` that is missing or not a file — a link that dangles or loops
+ * included — or that links out of its skill's folder, is the skill's own
+ * fault (`invalid_skill`); one crew can't read is the local filesystem's
+ * (`source_unreachable`), and is never blamed on the skill's author.
  */
 function readSkillMd(path: string): string {
   const skillFile = isSkillFile(path);
@@ -86,22 +83,33 @@ function readSkillMd(path: string): string {
     if (statSync(skillMdPath, { throwIfNoEntry: false })?.isFile()) raw = readText(skillMdPath);
   } catch (err) {
     if (err instanceof CrewError) throw err;
-    throw new CrewError(
-      "source_unreachable",
-      `couldn't read \`${skillMdPath}\` — ${errnoReason(err)}`,
-      { path },
-      UNREADABLE_REMEDY,
+    // A link chain that loops is no file either: reported below.
+    if (!isGoneError(err)) throw unreadablePathError(skillMdPath, err, "read");
+  }
+  if (raw === null) throw notAFileError(path, skillMdPath);
+  return raw;
+}
+
+/** `invalid_skill` for a skill whose `SKILL.md` is missing, or isn't a file. */
+function notAFileError(path: string, skillMdPath: string): CrewError {
+  const entry = lstatSync(skillMdPath, { throwIfNoEntry: false });
+  if (entry === undefined) {
+    return new CrewError(
+      "invalid_skill",
+      `no SKILL.md in \`${path}\` — every skill directory needs one`,
+      {
+        path,
+      },
     );
   }
-  if (raw === null) {
-    // A link counts as there: one that leads nowhere isn't a file either.
-    const isThere = lstatSync(skillMdPath, { throwIfNoEntry: false }) !== undefined;
-    const message = isThere
-      ? `\`${skillMdPath}\` isn't a regular file — a skill's SKILL.md must be one`
-      : `no SKILL.md in \`${path}\` — every skill directory needs one`;
-    throw new CrewError("invalid_skill", message, { path }, isThere ? SKILL_MD_REMEDY : undefined);
-  }
-  return raw;
+  // A link counts as there: one that dangles or loops isn't a file either.
+  const what = entry.isSymbolicLink() ? "is a link that leads to no file" : "isn't a regular file";
+  return new CrewError(
+    "invalid_skill",
+    `\`${skillMdPath}\` ${what} — a skill's SKILL.md must be one`,
+    { path },
+    SKILL_MD_NOT_A_FILE_REMEDY,
+  );
 }
 
 /**
@@ -126,6 +134,6 @@ function withSkillFileErrors<T>(path: string, validate: (subject: string) => T):
 }
 
 /** The next step for an invalid skill file: its own frontmatter, not a SKILL.md. */
-export function skillFileRemedy(path: string): string {
+function skillFileRemedy(path: string): string {
   return `Check \`${basename(path)}\`'s frontmatter against the Agent Skills spec: https://agentskills.io/specification. In a gist, that file is the skill's SKILL.md.`;
 }

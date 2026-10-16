@@ -29,7 +29,9 @@ import { assertSkillMdInside, assertStillASkill, noLongerASkillError } from "./s
  *
  * `fn` receives the skill's own location — its directory, or a gist's
  * skill file — not the tap root. A skill that is no longer there, or no
- * longer a skill, is `no_skills_found` or `invalid_ref` (§10.1).
+ * longer a skill, is `no_skills_found` or `invalid_ref` (§10.1); a
+ * `SKILL.md` that links out of its folder is `invalid_skill`, and a path
+ * crew can't look at `source_unreachable`.
  */
 export function withAcquiredSkill<T>(
   tap: TapConfig,

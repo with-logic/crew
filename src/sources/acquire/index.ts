@@ -36,12 +36,11 @@ import { withExportedTree } from "../../git/export.ts";
 import { ensureClone } from "../../git/repo/index.ts";
 import { classifyRef, resolveRef } from "../../git/repo/refs.ts";
 import { displayUrl } from "../../refs/display-url.ts";
-import { isGoneError } from "../../util/errno.ts";
+import { isGoneError, unreadablePathError } from "../../util/errno.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
-import { unreadableError } from "./skill-shape.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
@@ -58,8 +57,9 @@ export interface AcquiredTap {
 
 /**
  * Materialize a tap on disk. Throws `source_unreachable` when the clone
- * cannot be obtained, `no_skills_found` when the subpath doesn't exist,
- * and `invalid_ref` when the stored subpath escapes the clone (see
+ * cannot be obtained or a path tap's directory can't be looked at,
+ * `no_skills_found` when the subpath (or path) isn't a directory, and
+ * `invalid_ref` when the stored subpath escapes the clone (see
  * `tapRootDir`).
  */
 export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredTap {
@@ -92,7 +92,7 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
 }
 
 /**
- * Whether a path tap's directory is there. A failure to look other than
+ * Whether a path tap's path is a directory. A failure to look other than
  * its absence — a folder above it crew can't search — is the local
  * filesystem's, `source_unreachable`, never a source that went away
  * (§10.1).
@@ -102,7 +102,7 @@ function isTapDirectory(path: string): boolean {
     return statSync(path).isDirectory();
   } catch (err) {
     if (isGoneError(err)) return false;
-    throw unreadableError(path, err);
+    throw unreadablePathError(path, err);
   }
 }
 

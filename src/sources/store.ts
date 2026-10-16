@@ -17,12 +17,12 @@ import { join, relative } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { crewHome, paths, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
-import { UNREADABLE_REMEDY } from "../skill/load.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
 import { copyTree } from "../util/copy.ts";
-import { errnoReason } from "../util/errno.ts";
+import { errnoReason, unreadablePathError } from "../util/errno.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
+import { isReadable } from "../util/readable.ts";
 import { safePath } from "../util/redact.ts";
 import { climbsOut } from "../util/relative-path.ts";
 
@@ -96,27 +96,28 @@ function stage(
   return { storePath, contentHash, shortSha, reused: false };
 }
 
+/** True when a `stageIntoStore` failure is crew's own store, not the skill. */
+export function isStoreFault(err: CrewError): boolean {
+  return "store" in err.details;
+}
+
 /**
- * A staging failure as a §13 error. One whose path is in the skill names
- * that file — Node names a failed copy by its source file, so a write
- * failing mid-copy reads the same; anything else is crew's own store.
+ * A staging failure as a §13 error: a file of the skill crew can't read
+ * names that file; anything else is crew's own store. Node names a failed
+ * copy by its source file even when writing failed, so a source file crew
+ * can still read wasn't what broke (a full disk, say).
  */
 function stagingError(err: NodeJS.ErrnoException, skillPath: string, home: string): CrewError {
   const file = err.path ?? skillPath;
-  if (!climbsOut(relative(skillPath, file))) {
-    return new CrewError(
-      "source_unreachable",
-      `couldn't read \`${file}\` — ${errnoReason(err)}`,
-      { path: file },
-      UNREADABLE_REMEDY,
-    );
+  if (!(climbsOut(relative(skillPath, file)) || isReadable(file))) {
+    return unreadablePathError(file, err, "read");
   }
   const store = paths(home).storeDir;
   return new CrewError(
     "source_unreachable",
     `couldn't use crew's store at \`${store}\` — ${errnoReason(err)}`,
     { store },
-    "Check that `~/.crew/store` is writable by you, or run `crew cache clean`.",
+    `Check that \`${store}\` and the folders above it are writable by you, and that the disk has room.`,
   );
 }
 

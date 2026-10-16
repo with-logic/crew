@@ -10,8 +10,9 @@
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
 import { installSkillIntoAgents } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
-import type { CrewError } from "../../core/errors.ts";
+import { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
+import { agentFailureCode } from "../../util/errno.ts";
 import type { PerAgentUpdate } from "./types.ts";
 
 export interface ReinstallInput {
@@ -74,10 +75,13 @@ function installGroup(
       });
     }
   } catch (err) {
-    // `installSkillIntoAgents` only raises `CrewError` (safety-check aborts).
-    const ce = err as CrewError;
-    for (const a of group) {
-      perTarget.push({ agent: a.name, kind: "skipped", reason: ce.code });
+    // A safety check refusing to overwrite (§7.3) skips the agent; an agent
+    // folder crew can't write is a raw filesystem error, and a failure.
+    if (err instanceof CrewError) {
+      for (const a of group) perTarget.push({ agent: a.name, kind: "skipped", reason: err.code });
+      return;
     }
+    const error = { code: agentFailureCode(err), message: (err as Error).message };
+    for (const a of group) perTarget.push({ agent: a.name, kind: "failed", error });
   }
 }

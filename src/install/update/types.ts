@@ -11,7 +11,8 @@ import type { CrewErrorName } from "../../core/errors.ts";
 export interface PerAgentUpdate {
   readonly agent: string;
   readonly kind: "installed" | "up_to_date" | "skipped" | "failed";
-  readonly error?: { code: CrewErrorName; message: string };
+  /** See `agentFailureCode`: a §13 name, or a filesystem errno code. */
+  readonly error?: { code: string; message: string };
   readonly reason?: string;
 }
 

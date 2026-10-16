@@ -117,7 +117,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     json: {
       already_installed: result.alreadyInstalled,
       records: result.summary.records,
-      skipped: result.skipped,
+      skipped: result.skipped.map(({ remedy: _humanOnly, ...skip }) => skip),
       dry_run: ctx.flags.dryRun,
     },
   };

@@ -47,6 +47,7 @@ export function installNewTapChild(
     if (existing) existing.push(adapter);
     else groups.set(dest, [adapter]);
   }
+  let firstFailure: unknown = null;
   for (const group of groups.values()) {
     try {
       installSkillIntoAgents({
@@ -63,10 +64,13 @@ export function installNewTapChild(
         force,
       });
       for (const a of group) successfulTargets.push(a.name);
-    } catch {
-      // Per-group failure is non-fatal.
+    } catch (err) {
+      // One group failing is non-fatal while another installs.
+      firstFailure ??= err;
     }
   }
+  // Every agent failed: report why, rather than dropping the child (§10.1.1).
+  if (successfulTargets.length === 0 && firstFailure !== null) throw firstFailure;
   if (successfulTargets.length === 0) return null;
   return {
     name: args.skillName,

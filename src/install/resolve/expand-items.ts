@@ -5,8 +5,8 @@
 import type { CrewError } from "../../core/errors.ts";
 import type { Source, TapConfig } from "../../core/types.ts";
 import type { AcquiredTap } from "../../sources/acquire/index.ts";
-import { expandTapSkills, type SkippedSkill } from "../../sources/expand.ts";
-import { type StoredSkill, stageIntoStore } from "../../sources/store.ts";
+import { expandTapSkills, type SkippedSkill, skippedFrom } from "../../sources/expand.ts";
+import { isStoreFault, type StoredSkill, stageIntoStore } from "../../sources/store.ts";
 import type { PendingItem } from "./enqueue.ts";
 
 interface ExpansionItems {
@@ -84,9 +84,8 @@ function stageOrSkip(
   } catch (err) {
     // `stageIntoStore` throws only `CrewError`.
     const fault = err as CrewError;
-    if ("store" in fault.details) throw fault;
-    const remedy = typeof fault.remedy === "string" ? { remedy: fault.remedy } : {};
-    skipped.push({ path, message: fault.message, code: "source_unreachable", ...remedy });
+    if (isStoreFault(fault)) throw fault;
+    skipped.push(skippedFrom(path, fault, "source_unreachable"));
     return null;
   }
 }

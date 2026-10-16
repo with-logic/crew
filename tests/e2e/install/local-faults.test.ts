@@ -1,8 +1,11 @@
 /**
- * What `crew install` reports when staging can't finish (§9 steps 6, 8;
- * C-SPEC-16): crew's own store failing is one error naming the store; an agent folder crew can't write is a per-agent
- * `source_unreachable`. A dependency beside its parent that can't be read
- * fails the install with its own reason, never taken from another tap.
+ * What `crew install` reports for local faults (§9 steps 6, 8, 9;
+ * C-SPEC-16): crew's own store failing is one error naming the store; an
+ * agent folder crew can't write fails that agent with its own error. A
+ * dependency beside its parent that crew can't load — a folder it can't
+ * look into, an unreadable or invalid SKILL.md — fails the install with
+ * that reason, naming the dependency, and is never taken from another
+ * tap. A skipped skill's next step is shown, but kept out of `--json`.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -36,7 +39,7 @@ function withMode(path: string, mode: number, fn: () => void): void {
   }
 }
 
-test("crew's own store failing is one error naming the store, not the source", () => {
+test("C-SPEC-16 crew's own store failing is one error naming the store, not the source", () => {
   const src = makeTempDir();
   makeSkill(src, "a", skillFrontmatter({ name: "a" }));
   makeSkill(src, "b", skillFrontmatter({ name: "b" }));
@@ -51,14 +54,16 @@ test("crew's own store failing is one error naming the store, not the source", (
   expect(readdirSync(claude.userRoot)).toEqual([]);
 });
 
-test("an agent folder crew can't write is a per-agent source_unreachable", () => {
+test("an agent folder crew can't write fails that agent, naming the folder", () => {
   const src = makeTempDir();
   makeSkill(src, "a", skillFrontmatter({ name: "a" }));
   withMode(claude.userRoot, 0o555, () => {
     const r = install(makeCrewHome(), [src]);
     expect(r.code).not.toBe(0);
     const [agent] = r.json.records[0].agents;
-    expect([agent.kind, agent.error.code]).toEqual(["failed", "source_unreachable"]);
+    // Not the source's fault: reported by the agent folder's own error.
+    expect([agent.kind, agent.error.code]).toEqual(["failed", "EACCES"]);
+    expect(agent.error.message).toContain(claude.userRoot);
   });
 });
 
@@ -83,7 +88,7 @@ test("C-SPEC-16 a dependency beside its parent that crew can't copy fails, namin
   expect(readdirSync(claude.userRoot)).toEqual([]);
 });
 
-test("a dependency beside its parent that crew can't read is never taken from another tap", () => {
+test("C-SPEC-16 a dependency beside its parent that crew can't read is never taken from another tap", () => {
   const other = makeTempDir();
   makeSkill(join(other, "skills"), "b", skillFrontmatter({ name: "b" }));
   const home = makeCrewHome();
@@ -97,4 +102,52 @@ test("a dependency beside its parent that crew can't read is never taken from an
     expect(r.json.error.message).toMatch(/couldn't read `\S+\/b\/SKILL\.md`/);
   });
   expect(readdirSync(claude.userRoot)).toEqual([]);
+});
+
+/** A home with tap `other` holding a valid `b`, the name `a`'s dependency asks for. */
+function homeWithOtherB(): string {
+  const other = makeTempDir();
+  makeSkill(join(other, "skills"), "b", skillFrontmatter({ name: "b" }));
+  const home = makeCrewHome();
+  runCli(["tap", "add", other, "other"], { home, streams: captureStreams().streams });
+  return home;
+}
+
+test("C-SPEC-16 a dependency folder crew can't look into fails the install, not another tap's", () => {
+  const home = homeWithOtherB();
+  const { src, restore } = parentWithSibling((b) => b);
+  withMode(restore, 0o000, () => {
+    const r = install(home, [join(src, "a")]);
+    expect(r.json.error.name).toBe("source_unreachable");
+    expect(r.json.error.message).toMatch(/couldn't look at `\S+\/b\/SKILL\.md`/);
+  });
+  expect(readdirSync(claude.userRoot)).toEqual([]);
+});
+
+test("C-SPEC-16 an invalid dependency beside its parent fails the install, naming it", () => {
+  const home = homeWithOtherB();
+  const { src } = parentWithSibling((b) => {
+    writeFileSync(join(b, "SKILL.md"), "---\nname: b\n---\nNo description.\n");
+    return b;
+  });
+  const r = install(home, [join(src, "a")]);
+  expect(r.json.error.name).toBe("invalid_skill");
+  expect(r.json.error.message).toMatch(/^dependency `b` \(`\S+\/b`\): /);
+  expect(r.json.error.details).toMatchObject({ dependency: "b", path: join(src, "b") });
+  expect(readdirSync(claude.userRoot)).toEqual([]);
+});
+
+test("a skipped skill's next step is shown, and kept out of --json", () => {
+  const src = makeTempDir();
+  makeSkill(src, "good", skillFrontmatter({ name: "good" }));
+  makeSkill(src, "locked", skillFrontmatter({ name: "locked" }));
+  withMode(join(src, "locked", "SKILL.md"), 0o000, () => {
+    const cap = captureStreams();
+    runCli(["install", src], { home: makeCrewHome(), streams: cap.streams });
+    expect(cap.stdout().replace(/\s+/g, " ")).toContain("Check that it is readable by you");
+    const json = install(makeCrewHome(), [src]).json;
+    expect(json.skipped.map((skip: object) => Object.keys(skip).sort())).toEqual([
+      ["code", "message", "path"],
+    ]);
+  });
 });

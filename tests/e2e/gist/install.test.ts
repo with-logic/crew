@@ -119,7 +119,9 @@ describe("crew install <gist-url>", () => {
     expect(readdirSync(skillsDir())).toEqual(["prd"]);
     expect(r.stdout).toContain("`bad.md`: `name: Not Valid` has invalid characters");
     expect(r.stdout).toContain("`nodesc.md` frontmatter is missing `description`");
-    expect(r.stdout).not.toContain("SKILL.md");
+    // The failures name the files; only the next step explains SKILL.md.
+    expect(r.stdout).not.toMatch(/\[fail\][^\n]*SKILL\.md/);
+    expect(r.stdout).toContain("Check `bad.md`'s frontmatter");
     // A re-run still exits 1 for the bad files, so it still says why.
     const again = run(home, ["install", GIST_PAGE_URL]);
     expect(again.code).toBe(1);

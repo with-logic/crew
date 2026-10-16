@@ -8,7 +8,7 @@
  */
 
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
-import { crewErrorNameOf } from "../../util/errno.ts";
+import { agentFailureCode } from "../../util/errno.ts";
 import {
   type InstalledSourceIndex,
   indexHasSameSource,
@@ -118,10 +118,10 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
         pinned: input.pinned,
       });
     } catch (err) {
-      // A child crew can't stage (a file it can't read, §9 step 8) fails
-      // that child, not the whole run (§10.1 error isolation).
+      // A child crew can't stage (a file it can't read, §9 step 8), or
+      // install into any agent, fails that child, not the whole run.
       hardFailure = true;
-      const error = { code: crewErrorNameOf(err, "usage_error"), message: (err as Error).message };
+      const error = { code: agentFailureCode(err), message: (err as Error).message };
       rows.push({
         name: child.name,
         scope: input.scope,

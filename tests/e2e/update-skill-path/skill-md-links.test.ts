@@ -91,6 +91,22 @@ const OUT: readonly (readonly [string, (demo: string, repo: string) => void])[] 
     },
   ],
   [
+    "linked to a file missing outside its folder",
+    (demo) => {
+      rmSync(join(demo, "SKILL.md"));
+      symlinkSync(join("..", "nowhere.md"), join(demo, "SKILL.md"));
+    },
+  ],
+  [
+    "linked through a second link out of its folder",
+    (demo, repo) => {
+      mkdirSync(join(repo, "shared"));
+      renameSync(join(demo, "SKILL.md"), join(repo, "shared", "SKILL.md"));
+      symlinkSync(join("..", "..", "shared", "SKILL.md"), join(demo, "hop"));
+      symlinkSync("hop", join(demo, "SKILL.md"));
+    },
+  ],
+  [
     "linked out of its folder and back in by name",
     (demo) => {
       renameSync(join(demo, "SKILL.md"), join(demo, "body.md"));

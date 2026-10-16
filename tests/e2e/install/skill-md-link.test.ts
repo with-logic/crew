@@ -131,3 +131,17 @@ test("a folder crew can't look into isn't taken for a skill", () => {
     chmodSync(join(src, "sealed"), 0o755);
   }
 });
+
+test("C-SPEC-15 a SKILL.md that links to itself is invalid at install and in crew info", () => {
+  const src = sourceWithLink(() => "SKILL.md");
+  const r = install(makeCrewHome(), src);
+  expect(r.code).toBe(1);
+  expect(r.out).toContain("is a link that leads to no file");
+  expect(r.out).not.toContain("ELOOP");
+  const cap = captureStreams();
+  const code = runCli(["info", join(src, "linked"), "--json"], {
+    home: makeCrewHome(),
+    streams: cap.streams,
+  });
+  expect([code, JSON.parse(cap.stdout()).error.name]).toEqual([4, "invalid_skill"]);
+});

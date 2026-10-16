@@ -18,8 +18,26 @@ export function errnoReason(err: unknown): string {
  * True for an OS-level error from `node:fs` and the like: only those
  * carry `syscall`, while a library's error may carry a `code` too.
  */
-export function isFsError(err: unknown): boolean {
+function isFsError(err: unknown): boolean {
   return typeof (err as NodeJS.ErrnoException).syscall === "string";
+}
+
+/**
+ * The next step when crew can't read or look at a local path: a skill's
+ * `SKILL.md` or another of its files, a path tap, or a skill's recorded
+ * location on update.
+ */
+export const UNREADABLE_REMEDY =
+  "Check that it is readable by you (its permissions, and its folder's).";
+
+/** `source_unreachable` for a local path crew couldn't look at, or read (§13). */
+export function unreadablePathError(path: string, err: unknown, verb = "look at"): CrewError {
+  return new CrewError(
+    "source_unreachable",
+    `couldn't ${verb} \`${path}\` — ${errnoReason(err)}`,
+    { path },
+    UNREADABLE_REMEDY,
+  );
 }
 
 /**
@@ -29,6 +47,16 @@ export function isFsError(err: unknown): boolean {
 export function isGoneError(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException).code;
   return code === "ENOENT" || code === "ENOTDIR" || code === "ELOOP";
+}
+
+/**
+ * The code a failure installing into, or removing from, one agent
+ * reports: a §13 name for a `CrewError` (a safety check, §7.3), or the
+ * errno code of a filesystem error on the agent's folder (`EACCES`) —
+ * which has no §13 name, and isn't the source's fault.
+ */
+export function agentFailureCode(err: unknown): string {
+  return (err as { code?: string }).code ?? "usage_error";
 }
 
 /**

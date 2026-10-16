@@ -17,6 +17,7 @@ import type { InstallRecord } from "../../../install/perform/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { firstSentences, plural, shortenHome, wrap } from "../../../util/format.ts";
 import type { Styler } from "../../../util/term.ts";
+import { failedLines } from "./failed.ts";
 import { formatVersion, renderAgentLine, type Totals, tallyAgents } from "./helpers.ts";
 
 export interface RenderInstallInput {
@@ -95,20 +96,6 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
   }
 
   lines.push(...failedLines(input, style));
-  return lines;
-}
-
-/** The "Failed (N)" block for skipped candidates; empty when nothing failed. */
-function failedLines(input: RenderInstallInput, style: Styler): string[] {
-  if (input.skipped.length === 0) return [];
-  const lines = ["", style.bold(`Failed (${input.skipped.length}):`)];
-  for (const s of input.skipped) {
-    // `wrap` always returns at least one element for a non-empty
-    // message — `s.message` is a CrewError message, never empty.
-    const wrapped = wrap(s.message, Math.max(40, input.width - 4));
-    lines.push(`  ${style.symbol("fail")} ${style.red(wrapped[0]!)}`);
-    for (let i = 1; i < wrapped.length; i++) lines.push(`    ${style.red(wrapped[i]!)}`);
-  }
   return lines;
 }
 

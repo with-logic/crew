@@ -3,8 +3,9 @@
  * skill holding a file crew can't read, a path crew can't search, and a
  * tracked tap's new child crew can't copy all fail as
  * `source_unreachable` — not an upstream deletion, and not a usage error
- * that stops the rest of the run. A path tap's skill folder that became
- * a looping link is gone.
+ * that stops the rest of the run. An agent folder crew can't write fails
+ * that agent, and a new child no agent took is reported, not dropped. A
+ * path tap's skill folder that became a looping link is gone.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -103,5 +104,41 @@ test("C-UPD-18e C-UPD-40 a tracked tap's new child crew can't copy fails alone; 
     ]);
   } finally {
     chmodSync(join(alpha, "extra.txt"), 0o644);
+  }
+});
+
+test("C-UPD-40 an agent folder crew can't write fails the update, not a clean skip", () => {
+  const home = makeCrewHome();
+  const tapDir = makeTempDir();
+  makeSkill(tapDir, "demo", skillFrontmatter({ name: "demo" }), "Original.\n");
+  expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
+  expect(run(home, ["install", "mine/demo"]).code).toBe(0);
+  makeSkill(tapDir, "demo", skillFrontmatter({ name: "demo" }), "Edited.\n");
+  chmodSync(claude.userRoot, 0o555);
+  try {
+    const r = run(home, ["update", "--json"]);
+    expect(r.code).toBe(1);
+    const [target] = JSON.parse(r.stdout).rows[0].outcome.per_target;
+    expect([target.kind, target.error.code]).toEqual(["failed", "EACCES"]);
+  } finally {
+    chmodSync(claude.userRoot, 0o755);
+  }
+});
+
+test("C-UPD-18e a tracked tap's new child no agent could take is reported, not dropped", () => {
+  const home = makeCrewHome();
+  const tapDir = makeTempDir();
+  makeSkill(join(tapDir, "skills"), "beta", skillFrontmatter({ name: "beta" }));
+  expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
+  expect(run(home, ["install", "mine"]).code).toBe(0);
+  makeSkill(join(tapDir, "skills"), "gamma", skillFrontmatter({ name: "gamma" }));
+  chmodSync(claude.userRoot, 0o555);
+  try {
+    const r = run(home, ["update", "--json"]);
+    expect(r.code).toBe(1);
+    const [added] = JSON.parse(r.stdout).tap_reexpand_rows;
+    expect([added.name, added.kind, added.error.code]).toEqual(["gamma", "tap_error", "EACCES"]);
+  } finally {
+    chmodSync(claude.userRoot, 0o755);
   }
 });

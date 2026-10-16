@@ -24,10 +24,9 @@
 
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
 import { type InstallOutcome, installSkillIntoAgents } from "../../agents/install.ts";
-import type { CrewErrorName } from "../../core/errors.ts";
 import type { ResolvedSkill, Scope, StateFile } from "../../core/types.ts";
 import { upsertEntry } from "../../state/load.ts";
-import { crewErrorNameOf } from "../../util/errno.ts";
+import { agentFailureCode } from "../../util/errno.ts";
 import type { KeptSource } from "../duplicate-rules/index.ts";
 import type { RequiredByMap } from "../resolve/index.ts";
 import { buildStateEntry, rebuildRequiredBy } from "./state-entry.ts";
@@ -36,7 +35,7 @@ import { buildStateEntry, rebuildRequiredBy } from "./state-entry.ts";
 export type PerAgentResult =
   | { kind: "installed"; agent: string }
   | { kind: "up_to_date"; agent: string }
-  | { kind: "failed"; agent: string; error: { code: CrewErrorName; message: string } };
+  | { kind: "failed"; agent: string; error: { code: string; message: string } };
 
 /** Per-skill install record. */
 export interface InstallRecord {
@@ -122,8 +121,7 @@ export function performInstall(
           successfulAgents.push(a.name);
         }
       } catch (err) {
-        // An agent folder crew can't write is a raw filesystem error.
-        const code = crewErrorNameOf(err, "usage_error");
+        const code = agentFailureCode(err);
         const message = (err as Error).message;
         for (const a of group.agents) {
           perAgent.push({ kind: "failed", agent: a.name, error: { code, message } });

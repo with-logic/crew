@@ -10,14 +10,9 @@ import { CrewError } from "../../core/errors.ts";
 import { isGistTap } from "../../core/gist-url.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { isGoneError } from "../../util/errno.ts";
+import { isGoneError, unreadablePathError } from "../../util/errno.ts";
 import { resolveInside } from "./resolve-inside.ts";
-import {
-  assertSkillMdInside,
-  assertStillASkill,
-  noLongerASkillError,
-  unreadableError,
-} from "./skill-shape.ts";
+import { assertSkillMdInside, assertStillASkill, noLongerASkillError } from "./skill-shape.ts";
 
 /**
  * Where an installed skill now lives in a live checkout: `rootDir` joined
@@ -97,6 +92,6 @@ function isGone(path: string): boolean {
     return false;
   } catch (err) {
     if (isGoneError(err)) return true;
-    throw unreadableError(path, err);
+    throw unreadablePathError(path, err);
   }
 }
