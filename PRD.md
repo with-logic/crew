@@ -307,10 +307,13 @@ subscribed to. A moved entry takes `tracks_tap` on those same terms. An
 entry the install finds already installed moves before the install
 runs; one it reinstalls moves with its reinstall, only if that succeeds,
 so a failed reinstall leaves the entry, its subscription, and its tap as
-they were. Its markers in agents the install doesn't target follow the
-move once the reinstall succeeds. A move whose markers can't follow — a
-marker crew can't read, in a folder it can't write — is refused before
-the install writes anything: config, markers, or state.
+they were. The reinstall rewrites the entry's copy in every agent it
+targets — one otherwise up to date included, since its marker names the
+old tap — and reports a copy it can't write for that agent alone; the
+entry's markers in agents it doesn't target follow the move once it
+succeeds. A move whose markers can't follow — a marker crew can't parse,
+or one in a folder crew can't write — is refused before the install
+writes anything: config, markers, or state.
 
 ### 5.5 Help output
 

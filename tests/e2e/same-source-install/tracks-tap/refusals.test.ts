@@ -1,9 +1,10 @@
 /**
- * A move whose markers can't follow (§5.4, §11.1; C-UPD-16b): a copy in an
- * agent the run doesn't target whose folder crew can't write, or whose
- * marker it can't parse, refuses the run before any config, marker, or
- * state is written — an already-installed entry's up-front move included
- * — and a retry completes it.
+ * A move whose markers can't follow (§5.4, §11.1; C-UPD-16b): a copy whose
+ * folder crew can't write, or whose marker it can't parse — in an agent
+ * the run doesn't target, or in any agent for an entry the install finds
+ * already installed — refuses the run before any config, marker, or state
+ * is written, and a retry completes it. A copy whose marker names another
+ * tap isn't the move's.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -85,6 +86,27 @@ for (const [what, spoil, namesCopy] of UNFOLLOWABLE) {
   });
 }
 
+test("C-UPD-16b a copy whose marker names another tap isn't the move's, and doesn't stop it", () => {
+  const home = makeCrewHome();
+  const repo = buildRepo(["a", "b"]);
+  expect(crew(home, ["install", `file://${repo}//skills/a`, ...BOTH])).toBe(0);
+  tagRepo(repo, "v1");
+  const codexCopy = join(codexAdapter.userPath(), "a");
+  const markerPath = join(codexCopy, ".crew.json");
+  writeFileSync(
+    markerPath,
+    JSON.stringify({ ...JSON.parse(readFileSync(markerPath, "utf8")), tap_name: "elsewhere" }),
+  );
+  chmodSync(codexCopy, 0o555);
+  try {
+    expect(crew(home, ["install", `file://${repo}@v1`, ...CLAUDE, "--force"])).toBe(0);
+  } finally {
+    chmodSync(codexCopy, 0o755);
+  }
+  expect(markerTap(codexAdapter.userPath(), "a")).toBe("elsewhere");
+  expect(markerTap(claudeCodeAdapter.userPath(), "a")).toBe(tapOf(home, "a"));
+});
+
 test("C-UPD-16b a refused run leaves an already-installed entry's markers where they were too", () => {
   const home = makeCrewHome();
   const repo = buildRepo(["a", "b"]);
@@ -96,11 +118,13 @@ test("C-UPD-16b a refused run leaves an already-installed entry's markers where 
   const bTap = tapOf(home, "b");
   const geminiCopy = join(geminiCliAdapter.userPath(), "a");
   chmodSync(geminiCopy, 0o555);
+  const cap = captureStreams();
   try {
-    expect(crew(home, ["install", `file://${repo}`, ...BOTH])).toBe(4);
+    expect(runCli(["install", `file://${repo}`, ...BOTH], { home, streams: cap.streams })).toBe(4);
   } finally {
     chmodSync(geminiCopy, 0o755);
   }
+  expect(cap.stderr().replace(/\s+/g, " ")).toContain(geminiCopy);
   expect(tapOf(home, "b")).toBe(bTap);
   for (const root of [claudeCodeAdapter.userPath(), codexAdapter.userPath()])
     expect(markerTap(root, "b")).toBe(bTap);
@@ -113,10 +137,19 @@ test("C-UPD-16b an already-installed entry whose copy can't follow its move refu
   const bTap = tapOf(home, "b");
   const codexCopy = join(codexAdapter.userPath(), "b");
   chmodSync(codexCopy, 0o555);
+  const cap = captureStreams();
   try {
-    expect(crew(home, ["install", `file://${repo}`, ...BOTH])).toBe(4);
+    expect(runCli(["install", `file://${repo}`, ...BOTH], { home, streams: cap.streams })).toBe(4);
   } finally {
     chmodSync(codexCopy, 0o755);
   }
+  expect(cap.stderr().replace(/\s+/g, " ")).toContain(codexCopy);
   expect(markerTap(claudeCodeAdapter.userPath(), "b")).toBe(bTap);
+  // A dry run says so too.
+  chmodSync(codexCopy, 0o555);
+  try {
+    expect(crew(home, ["install", `file://${repo}`, ...BOTH, "--dry-run"])).toBe(4);
+  } finally {
+    chmodSync(codexCopy, 0o755);
+  }
 });

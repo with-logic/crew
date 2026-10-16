@@ -25,12 +25,12 @@ import { assertTapsPresent, mergeAutoTaps } from "./config-merge.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules/index.ts";
 import { type InstallSummary, performInstall } from "./perform/index.ts";
 import { promoteFlags } from "./promote-flags.ts";
+import { applyReattributions, movesMade } from "./reattribute/index.ts";
 import {
-  applyReattributions,
   assertMarkersCanMove,
-  movesMade,
   rewriteReattributedMarkers,
-} from "./reattribute.ts";
+  targetedFolders,
+} from "./reattribute/markers.ts";
 import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
 import type { KindHint } from "./resolve-ref/index.ts";
 import { rewriteDiscoveryUpgradeMarkers } from "./rewrite-tap-markers.ts";
@@ -105,6 +105,12 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       cwd,
       duplicateOptions,
     );
+    // The preview refuses what the run would (§5.4).
+    const targeted = targetedFolders(preview.movesOnSuccess, agents, cwd);
+    assertMarkersCanMove(
+      { upFront: preview.reattributions, onSuccess: preview.movesOnSuccess, targeted },
+      cwd,
+    );
     const summary = performInstall(preview.toInstall, agents, options.scope, cwd, currentState, {
       force: options.force,
       dryRun: true,
@@ -144,8 +150,13 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     const { toInstall, reattributions, keepSource } = analysis;
     alreadyInstalled = analysis.alreadyInstalled;
     // §5.4: a move whose markers can't follow is refused before anything
-    // — config, a marker, state — is written.
-    assertMarkersCanMove(reattributions, analysis.movesOnSuccess, agents, cwd);
+    // — config, a marker, state — is written. Folders the reinstalls
+    // target are theirs to write and report, so neither step touches them.
+    const targeted = targetedFolders(analysis.movesOnSuccess, agents, cwd);
+    assertMarkersCanMove(
+      { upFront: reattributions, onSuccess: analysis.movesOnSuccess, targeted },
+      cwd,
+    );
     if (mergedConfig !== freshConfig) writeConfig(mergedConfig, home);
 
     rewriteDiscoveryUpgradeMarkers(config, configWithAutoTaps, freshState.installations, cwd);
@@ -171,7 +182,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     // the entry's others follow now that it succeeded (§5.4) — before
     // state, so a marker that can't follow leaves the move to a retry.
     const madeMoves = movesMade(analysis.movesOnSuccess, promoted);
-    rewriteReattributedMarkers(madeMoves, configWithAutoTaps.taps, cwd);
+    rewriteReattributedMarkers(madeMoves, configWithAutoTaps.taps, cwd, targeted);
     writeState(promoted, home);
     // An auto tap left with no entries after re-attribution is crew's
     // own bookkeeping and goes away with its clone (§16.5).
