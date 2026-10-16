@@ -11,6 +11,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
   chmodSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -158,22 +159,28 @@ test("C-SPEC-16 a link crew can't look at, its own path to it being too long, is
     outside,
     `---\n${skillFrontmatter({ name: "linked", description: leaked })}\n---\n`,
   );
+  const [inner, link] = ["d".repeat(200), "L".repeat(200)];
+  const tail = join("linked", inner, link);
   let deep = makeTempDir();
-  while (deep.length <= PATH_MAX - 409) deep = join(deep, "x".repeat(199));
+  while (deep.length + 1 + tail.length < PATH_MAX) deep = join(deep, "x".repeat(199));
   const folder = join(deep, "linked");
-  const inner = join(folder, "d".repeat(200));
-  mkdirSync(inner, { recursive: true });
+  mkdirSync(join(folder, inner), { recursive: true });
   // Made from inside, by its own name: crew's path to it is too long.
-  Bun.spawnSync(["ln", "-s", outside, "L".repeat(200)], { cwd: inner });
-  symlinkSync(join("d".repeat(200), "L".repeat(200)), join(folder, "SKILL.md"));
+  const ln = Bun.spawnSync(["ln", "-s", outside, link], { cwd: join(folder, inner) });
+  expect(ln.exitCode).toBe(0);
+  expect(() => lstatSync(join(deep, tail))).toThrow("ENAMETOOLONG");
+  symlinkSync(join(inner, link), join(folder, "SKILL.md"));
 
   const home = makeCrewHome();
   const installed = install(home, folder);
-  expect(installed.code).not.toBe(0);
+  expect(installed.code).toBe(1);
   expect(installed.out).not.toContain(leaked);
+  expect(installed.out).toContain(`couldn't look at \`${join(deep, tail)}\``);
+  expect(installed.out).toContain("Shorten the path");
   const cap = captureStreams();
-  expect(runCli(["info", folder, "--json"], { home, streams: cap.streams })).not.toBe(0);
-  expect(cap.stdout() + cap.stderr()).not.toContain(leaked);
+  expect(runCli(["info", folder, "--json"], { home, streams: cap.streams })).toBe(5);
+  expect(cap.stdout()).not.toContain(leaked);
+  expect(JSON.parse(cap.stdout()).error.name).toBe("source_unreachable");
 });
 
 test("C-SPEC-15 a SKILL.md link whose text isn't UTF-8 is refused, never followed", () => {

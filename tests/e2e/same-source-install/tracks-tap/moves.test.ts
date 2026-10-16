@@ -1,20 +1,28 @@
 /**
- * A subscription follows an entry only where the user subscribed
- * (§5.4, §11.1; C-INST-13h, C-UPD-16b). An entry that tracks its auto tap
- * moves onto another tap covering it only when that install subscribes to
- * the other tap at the entry's ref — carried onto a broader tap, or to the
- * default branch from a tag, it would follow siblings the user never asked
- * for. An install of the entry alone at another ref takes it out of its
- * tracked group, leaving the subscription behind.
+ * A subscription follows an entry only where the user subscribed (§5.4,
+ * §11.1; C-INST-13h, C-UPD-16b). An entry that tracks its auto tap moves
+ * onto another tap covering it only when that install subscribes to the
+ * other tap at the ref the entry ends at: its own when already installed,
+ * the install's when reinstalled. Moved anywhere else, it would follow
+ * siblings the user never asked for. A reinstall that fails leaves it
+ * following nothing; an install that reinstalls the entry alone at
+ * another ref records it there without `tracks_tap`.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
+import { readConfig } from "../../../../src/config/load.ts";
 import { readState } from "../../../../src/state/load.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
-import { commitAll, makeTempDir, tagRepo } from "../../../helpers/fixtures.ts";
+import {
+  commitAll,
+  makeSkill,
+  makeTempDir,
+  skillFrontmatter,
+  tagRepo,
+} from "../../../helpers/fixtures.ts";
 import { buildRepo, install } from "../helpers.ts";
 import { addSiblingAndUpdate, crew, tracking } from "./helpers.ts";
 
@@ -43,21 +51,28 @@ test("C-INST-13h a tracking entry isn't carried onto a broader tap by one skill'
   expect(tracking(home)).toEqual(["a:auto:-:true"]);
 });
 
-test("C-UPD-16b a tracking entry isn't carried to the default branch by a whole install at a tag", () => {
+/** The tap `name`'s entry is attributed to. */
+function tapOf(home: string, name: string): string | undefined {
+  return readState(home).installations.find((e) => e.name === name)?.source.tap;
+}
+
+test("C-UPD-16b a tracking entry isn't moved onto the tap of a whole install at another ref", () => {
   const home = makeCrewHome();
   const repo = buildRepo(["a", "b"]);
   expect(install(home, `file://${repo}//skills/a`).code).toBe(0);
+  const ownTap = tapOf(home, "a");
   tagRepo(repo, "v1");
-  // The whole repo at `v1`, on the same commit: `a` keeps its own tap
-  // and the default branch rather than following the repo there.
+  // The whole repo at `v1`, on the same commit: `a`, already installed,
+  // keeps its own tap and the default branch.
   expect(install(home, `file://${repo}@v1`).code).toBe(0);
+  expect(tapOf(home, "a")).toBe(ownTap);
   expect(tracking(home)).toEqual(["a:auto:-:true", "b:auto:v1:true"]);
 
   expect(addSiblingAndUpdate(home, repo)).toBe(0);
   expect(tracking(home)).toEqual(["a:auto:-:true", "b:auto:v1:true"]);
 });
 
-test("C-UPD-16b an entry moved by a whole install at a tag doesn't take its subscription", () => {
+test("C-UPD-16b an entry moved by a whole install at a tag doesn't take that install's subscription", () => {
   const home = makeCrewHome();
   const repo = buildRepo(["solo", "keep"]);
   // `solo` on its own through the `skills/` auto tap, which `keep` holds.
@@ -75,6 +90,49 @@ test("C-UPD-16b an entry moved by a whole install at a tag doesn't take its subs
     null,
     false,
   ]);
+});
+
+for (const [how, flags] of [
+  ["--force, on the same commit", ["--force"]],
+  ["a new commit", []],
+] as const) {
+  test(`C-UPD-16b a whole install at a tag that reinstalls a tracking entry moves it there, tracking (${how})`, () => {
+    const home = makeCrewHome();
+    const repo = buildRepo(["a", "b"]);
+    expect(install(home, `file://${repo}//skills/a`).code).toBe(0);
+    const ownTap = tapOf(home, "a");
+    if (flags.length === 0) {
+      makeSkill(join(repo, "skills"), "a", skillFrontmatter({ name: "a" }), "Edited.\n");
+      commitAll(repo, "edit a");
+    }
+    tagRepo(repo, "v1");
+    expect(crew(home, ["install", `file://${repo}@v1`, "--agent", "claude-code", ...flags])).toBe(
+      0,
+    );
+    expect(tapOf(home, "a")).not.toBe(ownTap);
+    expect(tracking(home)).toEqual(["a:auto:v1:true", "b:auto:v1:true"]);
+    // Its own one-skill tap, left with nothing, is collected.
+    expect(readConfig(home).taps.some((t) => t.name === ownTap)).toBe(false);
+  });
+}
+
+test("C-UPD-16b a failed reinstall doesn't leave a moved entry following the broader tap", () => {
+  const home = makeCrewHome();
+  const repo = buildRepo(["a", "b"]);
+  expect(install(home, `file://${repo}//skills/a`).code).toBe(0);
+  tagRepo(repo, "v1");
+  // claude-code's folder can't be written, so the reinstall fails.
+  const root = claudeCodeAdapter.userPath();
+  chmodSync(root, 0o555);
+  try {
+    expect(
+      crew(home, ["install", `file://${repo}@v1`, "--agent", "claude-code", "--force"]),
+    ).not.toBe(0);
+  } finally {
+    chmodSync(root, 0o755);
+  }
+  expect(addSiblingAndUpdate(home, repo)).toBe(0);
+  expect(tracking(home).map((e) => e.split(":")[0])).toEqual(["a"]);
 });
 
 test("C-UPD-16b one skill installed alone at a tag leaves the subscription behind", () => {

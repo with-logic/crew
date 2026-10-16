@@ -38,8 +38,8 @@ export interface Reattribution {
 }
 
 /**
- * Attribution retained when a reinstall must preserve a registered tap
- * or a broad subscription (§5.4, §10.1.1). The full descriptor keeps
+ * Attribution retained when a reinstall must preserve a registered tap,
+ * or a subscription the incoming install doesn't take over (§5.4, §10.1.1). The full descriptor keeps
  * authoritative markers consistent with state (§11.1).
  */
 export interface KeptSource {

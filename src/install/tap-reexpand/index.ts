@@ -66,8 +66,8 @@ export function reexpandTaps(
   const sourceGone = new Set<string>();
   const rows: TapReexpandRow[] = [];
   let hardFailure = false;
-  // One tap backs several (scope, project_root) groups; acquire, walk
-  // and validate it once per run rather than once per group.
+  // One tap backs several (scope, project_root, ref) groups; those at the
+  // default branch acquire, walk and validate it once per run.
   const cache = makeTapScanCache();
   const installedIndex = buildInstalledSourceIndex(state, config);
 

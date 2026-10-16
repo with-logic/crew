@@ -107,12 +107,17 @@ function isRefusedSkillMdLink(folder: string): boolean {
   return false;
 }
 
-/** The entry at `path` without following it; undefined when it is gone. Throws any other failure. */
+/**
+ * The entry at `path` without following it; undefined when it is gone.
+ * Throws any other failure, naming `path` — the system leaves it off
+ * when the path itself is too long.
+ */
 function lstatUnlessGone(path: string): Stats | undefined {
   try {
     return lstatSync(path);
   } catch (err) {
     if (isGoneError(err)) return undefined;
+    (err as NodeJS.ErrnoException).path ??= path;
     throw err;
   }
 }

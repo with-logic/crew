@@ -5,8 +5,8 @@
  * folder that held a crew marker naming it, one a safety check refused,
  * or the failing agent's own — and no later agent is written after the
  * first failure. Known gap: when another source's install of that name
- * holds the folder, the child writes over its bytes there; only its
- * removal is covered by C-UPD-18e.
+ * holds the folder, the child writes over that install's bytes there;
+ * C-UPD-18e covers only removing the child.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";

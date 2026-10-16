@@ -51,15 +51,15 @@ export function applyReattributions(
         installLocationKey(entry.name, entry.scope, entry.project_root ?? null),
       );
       if (!move) return entry;
-      // An already-installed entry that moves skips `performInstall`, so
-      // record whole-tap tracking with the move (§10.1.1); `promoteFlags`
-      // covers only entries that stay where they are. Like `explicit`, a
-      // narrower install never clears an existing subscription.
-      const tracksTap = move.tracksTap || (entry.tracks_tap ?? false);
+      // The move decides tracking outright (`./duplicate-rules/classify.ts`):
+      // an already-installed entry skips `performInstall`, so it takes a
+      // subscription here (§10.1.1); a reinstalled one takes it when its
+      // reinstall succeeds, and until then follows nothing.
+      const { tracks_tap: _before, ...rest } = entry;
       return {
-        ...entry,
+        ...rest,
         source: { tap: move.toTap, path: move.toPath },
-        ...(tracksTap ? { tracks_tap: true } : {}),
+        ...(move.tracksTap ? { tracks_tap: true } : {}),
       };
     }),
   };

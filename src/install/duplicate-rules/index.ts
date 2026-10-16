@@ -28,7 +28,7 @@
  */
 
 import type { ResolvedSkill, Scope, StateFile } from "../../core/types.ts";
-import { classifySource } from "./classify.ts";
+import { classifySource, hasSameAttribution } from "./classify.ts";
 import type {
   AlreadyInstalled,
   DuplicateAnalysis,
@@ -71,12 +71,29 @@ export function applyDuplicateRules(
       continue;
     }
 
-    const sameAttribution =
-      existing.source.tap === skill.tap.name && existing.source.path === skill.tapRelativePath;
-    const reattribution = classifySource(existing, skill, options.taps, incomingProjectRoot);
+    // The set of adapters active for this install — if it includes
+    // any adapter the existing entry doesn't, the install still has
+    // work to do (attach ownership to those adapters), even if the
+    // bytes are identical. Similarly with --force.
+    const newAdapters = options.activeAgents.filter((a) => !existing.agents.includes(a));
+    const upToDate =
+      existing.resolved_sha === skill.resolvedSha &&
+      existing.content_hash === skill.contentHash &&
+      newAdapters.length === 0 &&
+      !options.force;
+
+    const sameAttribution = hasSameAttribution(existing, skill);
+    const reattribution = classifySource(
+      existing,
+      skill,
+      options.taps,
+      incomingProjectRoot,
+      !upToDate,
+    );
     if (reattribution) reattributions.push(reattribution);
-    // Registered attribution and broad subscriptions survive reinstalls
-    // as well as duplicate short-circuits (§5.4, §10.1.1).
+    // Registered attribution, and a subscription the incoming install
+    // doesn't take over, survive reinstalls as well as duplicate
+    // short-circuits (§5.4, §10.1.1).
     else if (!sameAttribution) {
       // Successful source classification already proved this tap exists.
       const tap = options.taps.find((row) => row.name === existing.source.tap)!;
@@ -89,19 +106,7 @@ export function applyDuplicateRules(
       });
     }
 
-    // The set of adapters active for this install — if it includes
-    // any adapter the existing entry doesn't, the install still has
-    // work to do (attach ownership to those adapters), even if the
-    // bytes are identical. Similarly with --force.
-    const newAdapters = options.activeAgents.filter((a) => !existing.agents.includes(a));
-    const adaptersChanged = newAdapters.length > 0;
-
-    if (
-      existing.resolved_sha === skill.resolvedSha &&
-      existing.content_hash === skill.contentHash &&
-      !adaptersChanged &&
-      !options.force
-    ) {
+    if (upToDate) {
       alreadyInstalled.push({
         name: skill.name,
         ref: existing.ref,

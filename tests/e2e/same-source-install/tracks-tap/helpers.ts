@@ -17,13 +17,14 @@ export function crew(home: string, args: string[], cwd?: string): number {
 
 /**
  * Each installed skill: its tap, its ref (`-` for the default branch),
- * and whether it tracks the tap — `a:mine:-:false`. Auto taps, whose
- * names derive from temp paths, read as `auto`.
+ * and whether it tracks the tap — `a:mine:-:false`. Any tap but the
+ * registered `mine` reads as `auto`: auto tap names derive from temp
+ * paths. Tests that care which auto tap compare names directly.
  */
-export function tracking(home: string, registered: readonly string[] = ["mine"]): string[] {
+export function tracking(home: string): string[] {
   return readState(home)
     .installations.map((e) => {
-      const tap = registered.includes(e.source.tap) ? e.source.tap : "auto";
+      const tap = e.source.tap === "mine" ? e.source.tap : "auto";
       return `${e.name}:${tap}:${e.ref ?? "-"}:${e.tracks_tap === true}`;
     })
     .sort();

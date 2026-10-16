@@ -14,6 +14,11 @@ import { identityOfStateSource, sameSourceIdentity, sourceIdentityOf } from "../
 import { isTapRootNarrowerThan } from "../tap-breadth.ts";
 import type { Reattribution } from "./types.ts";
 
+/** True when `existing` is already attributed to the tap and path `skill` comes through. */
+export function hasSameAttribution(existing: StateEntry, skill: ResolvedSkill): boolean {
+  return existing.source.tap === skill.tap.name && existing.source.path === skill.tapRelativePath;
+}
+
 /**
  * Decide whether `skill` may land on top of `existing`. Throws
  * `name_conflict` when the two name genuinely different sources.
@@ -21,16 +26,16 @@ import type { Reattribution } from "./types.ts";
  * tap covering the same location, or null when attribution already
  * matches, the existing tap is the user's own, or the move would narrow
  * a whole-tap subscription or carry it where the user never subscribed.
+ * `reinstalls`: the install writes the entry again, at its own ref.
  */
 export function classifySource(
   existing: StateEntry,
   skill: ResolvedSkill,
   taps: readonly TapConfig[],
   projectRoot: string | null,
+  reinstalls: boolean,
 ): Reattribution | null {
-  if (existing.source.tap === skill.tap.name && existing.source.path === skill.tapRelativePath) {
-    return null;
-  }
+  if (hasSameAttribution(existing, skill)) return null;
   const existingIdentity = identityOfStateSource(existing.source, taps);
   const incomingIdentity = sourceIdentityOf(skill.tap, skill.tapRelativePath);
   if (existingIdentity === null || !sameSourceIdentity(existingIdentity, incomingIdentity)) {
@@ -55,10 +60,13 @@ export function classifySource(
   // install sets `tracksTap`, so the test is which tap sees more: the
   // incoming root must not be a strict descendant of the existing one.
   if (existing.tracks_tap === true && isTapRootNarrowerThan(skill.tap, existingTap)) return null;
-  // The subscription moves only to a tap this install subscribes to, at
-  // the entry's ref, which a move keeps: carried onto any other tap, it
-  // would follow that tap's siblings, or another revision's (§11.1).
-  const subscribesHere = skill.tracksTap && existing.ref === skill.ref;
+  // §5.4, §11.1: a tracking entry moves only with its subscription, and
+  // that only to a tap this install subscribes to at the ref the entry
+  // ends at — its own when already installed (a move keeps it), the
+  // install's when reinstalled. Moved without it, the entry would stop
+  // following its own tap; with it anywhere else, it would follow
+  // siblings the user never subscribed to.
+  const subscribesHere = skill.tracksTap && (reinstalls || existing.ref === skill.ref);
   if (existing.tracks_tap === true && !subscribesHere) return null;
   return {
     name: existing.name,
@@ -67,6 +75,8 @@ export function classifySource(
     fromTap: existing.source.tap,
     toTap: skill.tap.name,
     toPath: skill.tapRelativePath,
-    tracksTap: subscribesHere,
+    // A reinstall records the subscription itself, once it succeeds: a
+    // failed one must not leave the entry moved and following the tap.
+    tracksTap: subscribesHere && !reinstalls,
   };
 }

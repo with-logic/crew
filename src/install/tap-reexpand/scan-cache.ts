@@ -3,9 +3,10 @@
  *
  * State entries are grouped by `(tap, scope, project_root, ref)`, so one tap
  * can back several groups — a user install plus two project installs,
- * say. The clone is the same for all of them, so acquiring it, walking
- * its children, and validating each child are identical work repeated
- * per group.
+ * say. The groups at the default branch share one clone, so acquiring
+ * it, walking its children, and validating each child are identical work
+ * repeated per group. (A group at an explicit ref acquires its own export
+ * of that ref, never through `acquire`, which is keyed by tap name alone.)
  *
  * This memoises all three for the lifetime of one update run. Clone
  * locks are held across the run (see `sources/tap-lock.ts`), so the
