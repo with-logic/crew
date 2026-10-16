@@ -13,6 +13,7 @@
  * rebuilding a tap from a marker's `tap_url` gets it back for free.
  */
 
+import { lstatSync } from "node:fs";
 import { basename, join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { isGistUrl } from "../core/gist-url.ts";
@@ -21,7 +22,6 @@ import { displayText, displayUrl } from "../refs/display-url.ts";
 import { opensFrontmatter } from "../skill/frontmatter.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
 import { listDir, readText } from "../util/fs.ts";
-import { assertNoSymlinkEscape } from "../util/symlink-containment.ts";
 import type { AcquiredTap } from "./acquire/index.ts";
 
 /** True when `tap` is backed by a GitHub gist and so uses the gist layout. */
@@ -31,11 +31,12 @@ export function isGistTap(tap: Pick<TapConfig, "kind" | "url">): boolean {
 
 /**
  * True when the gist checked out at `root` has a root `SKILL.md` and so is
- * one skill. Matched by exact name: on a case-insensitive disk a skill
- * file called `skill.md` would otherwise pass for it.
+ * one skill. Matched by exact name — on a case-insensitive disk a skill
+ * file called `skill.md` would otherwise pass for it — and only as a
+ * regular file: a symlink is never part of a gist skill (§9 step 5).
  */
 export function isOneSkillGist(root: string): boolean {
-  return listDir(root).includes("SKILL.md");
+  return listDir(root).includes("SKILL.md") && isSkillFile(join(root, "SKILL.md"));
 }
 
 /** The skill candidates at the root of a gist checkout, in name order. */
@@ -57,8 +58,8 @@ export function isGistSkillCandidate(path: string): boolean {
   return isSkillFile(path) && opensFrontmatter(readText(path));
 }
 
-/** How gist errors name the gist: its URL and the commit read. */
-export function gistWhere(tap: Pick<TapConfig, "url">, sha: string | null): string {
+/** How gist errors name a gist: its URL and the commit read (a gist tap is always git). */
+export function gistLabel(tap: Pick<TapConfig, "url">, sha: string | null): string {
   return `${displayUrl(tap.url)} at ${(sha ?? "").slice(0, 8)}`;
 }
 
@@ -67,15 +68,15 @@ export function gistWhere(tap: Pick<TapConfig, "url">, sha: string | null): stri
  * `//<file>` selected (§8.2), or — with no file selected, as for every
  * non-gist source — the root itself. A gist with a root `SKILL.md` is a
  * single skill whose other files are its resources, so no file of it
- * can be selected on its own. The file must be reached without
- * traversing a symlink (§8.4), and naming a file the gist doesn't have
- * is `no_skills_found` listing the files it does.
+ * can be selected on its own. The file must not be a symlink (§8.4),
+ * and naming a file the gist doesn't have is `no_skills_found` listing
+ * the files it does.
  */
 export function selectGistFile(acquired: AcquiredTap, tap: TapConfig, gistFile: string): string {
   const { rootDir } = acquired;
   if (gistFile === "") return rootDir;
   const shown = displayText(gistFile);
-  const where = gistWhere(tap, acquired.resolvedSha);
+  const where = gistLabel(tap, acquired.resolvedSha);
   if (isOneSkillGist(rootDir)) {
     throw new CrewError(
       "invalid_ref",
@@ -85,7 +86,16 @@ export function selectGistFile(acquired: AcquiredTap, tap: TapConfig, gistFile: 
     );
   }
   const target = join(rootDir, gistFile);
-  assertNoSymlinkEscape(rootDir, target, `gist file \`${shown}\``);
+  // `gistFile` is one top-level name (`splitGistFile`), so the file itself
+  // is the only place a link could be (§8.4).
+  if (lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    throw new CrewError(
+      "invalid_ref",
+      `\`${shown}\` in the gist ${where} is a symlink — crew installs only regular files from a gist`,
+      { file: shown },
+      `Name the file it points to after \`//\`, or install the whole gist: \`crew install ${displayUrl(tap.url)}\`.`,
+    );
+  }
   // Matched by exact name: a case-insensitive disk would also find `PRD.md`.
   if (!(listDir(rootDir).includes(gistFile) && isSkillFile(target))) {
     const files = gistSkillCandidates(rootDir).map((path) => basename(path));
@@ -108,7 +118,7 @@ export function selectGistFile(acquired: AcquiredTap, tap: TapConfig, gistFile: 
  * standard layout, but a gist's skills are always its top-level `.md`
  * files — recording it would claim a discovery mode that never applies.
  */
-export function rejectRecursiveGist(url: string): void {
+export function assertNoRecursiveGist(url: string): void {
   if (!isGistUrl(url)) return;
   throw new CrewError(
     "usage_error",

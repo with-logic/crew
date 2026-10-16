@@ -11,7 +11,8 @@
  * namespace fallback can search every tap at the requested ref.
  */
 
-import { CrewError } from "../../core/errors.ts";
+import { relative } from "node:path";
+import { CrewError, type CrewErrorName } from "../../core/errors.ts";
 import type { Config, LoadedSkill, TapConfig, TapSource } from "../../core/types.ts";
 import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
@@ -19,7 +20,8 @@ import { loadSkill, skillFileRemedy } from "../../skill/load.ts";
 import { isSkillFile } from "../../skill/skill-file.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import { discoveryOf, expandSkills } from "../../sources/expand.ts";
-import { gistWhere, selectGistFile } from "../../sources/gist.ts";
+import { gistLabel, selectGistFile } from "../../sources/gist.ts";
+import { toPosix } from "../../util/fs.ts";
 import type { SkillInfo } from "./render.ts";
 
 export interface TapPreview {
@@ -55,7 +57,7 @@ export function skillsAtRef(
   gistFile = "",
 ): SkillInfo[] {
   return withAcquiredTap(tap, ref, home, (acq) =>
-    previewSkills(selectGistFile(acq, tap, gistFile), tap, gistWhere(tap, acq.resolvedSha)),
+    previewSkills(selectGistFile(acq, tap, gistFile), tap, acq.resolvedSha),
   );
 }
 
@@ -83,21 +85,28 @@ function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
 }
 
 /**
- * The valid skills at `location`. When it holds candidates but none is
+ * The valid skills at `root`. When it holds candidates but none is
  * valid, the preview fails with the reason, as an install of the same
  * reference would (§9.1, C-INST-21): "No skills here" would hide why.
  */
-function previewSkills(location: string, tap: TapConfig, where: string): SkillInfo[] {
-  const { valid, skipped } = expandSkills(location, discoveryOf(tap), where);
+function previewSkills(root: string, tap: TapConfig, sha: string | null): SkillInfo[] {
+  const mode = discoveryOf(tap);
+  const label = mode === "gist" ? gistLabel(tap, sha) : undefined;
+  const { valid, skipped } = expandSkills(root, mode, label);
   const [first] = skipped;
   if (valid.length === 0 && first) {
+    // A gist file's message already names it; a folder skill's doesn't.
+    const rel = toPosix(relative(root, first.path));
+    const reason =
+      rel === "" || isSkillFile(first.path) ? first.message : `\`${rel}\`: ${first.message}`;
     const message =
       skipped.length === 1
-        ? first.message
-        : `none of the ${skipped.length} skills here is valid — ${first.message}`;
+        ? reason
+        : `none of the ${skipped.length} skills here is valid — ${reason}`;
     const remedy = isSkillFile(first.path) ? skillFileRemedy(first.path) : undefined;
+    // The first skip's own code: an unreadable file stays `source_unreachable`.
     throw new CrewError(
-      "invalid_skill",
+      first.code as CrewErrorName,
       message,
       { path: first.path, invalid: skipped.length },
       remedy,

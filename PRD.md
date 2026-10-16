@@ -513,10 +513,10 @@ name (Homecrew before 0.11 used `taps/<tap-name>/`) MUST relocate them
 on first use rather than re-cloning: move the old directory to the
 repository's shared location when that location is free, and discard the
 old directory when the shared clone already exists. Migration holds the same shared-clone lock as acquisition and refresh, and only relocates or deletes paths contained in crew-owned clone roots. The step is
-idempotent and leaves no `taps/` entries for configured git taps. The
-same rule moves the clone of a gist tap recorded with its owner
-(`https://gist.github.com/<owner>/<id>`), which before 0.11 was keyed by
-that spelling, to the gist's identity (§5.4).
+idempotent and leaves no `taps/` entries for configured git taps. A gist
+tap recorded with its owner (`https://gist.github.com/<owner>/<id>`)
+moves like any other, to the shared location for the gist's identity
+(§5.4).
 
 ### 6.1 `config.yaml` schema
 
@@ -1263,7 +1263,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
 
    **The materialized tree is a boundary.** The resolved location MUST be reached without traversing a symlink. A repository can commit a symlink at the very path a reference names; following it would read content from outside the requested commit — potentially from anywhere on the host filesystem.
 4. **Validate each candidate skill** against the Agent Skills specification:
-   - `SKILL.md` exists at the expected location.
+   - `SKILL.md` exists at the expected location, as a file. One that exists but can't be read (its permissions, say) is not the skill's fault: it is reported as `source_unreachable` naming the file, and skipped like an invalid candidate.
    - Frontmatter parses as YAML.
    - `name` matches `[a-z0-9][a-z0-9-]*`, length 1–64, no leading/trailing hyphen, and no consecutive hyphens. It MAY begin with a digit and need not match the parent directory name.
    - `description` is present, non-empty, length ≤ 1024 characters.
@@ -1460,9 +1460,11 @@ always explicit (`crew uninstall <selector>`). A skill read from the
 default branch whose recorded path in a git source now leads outside the
 repository through a symlink is treated the same way: crew never follows
 it (§8.4), so as far as the source is concerned the skill is gone. A
-symlink that stays inside the repository is followed, as discovery
-follows it at install. (A skill read at an explicit `@<ref>` is held to
-the export rule of §9 step 3 instead.)
+symlink to a skill directory that stays inside the repository is
+followed, as discovery follows skill-directory links at install; a gist skill file that
+becomes a symlink is gone, since a symlink is never a gist skill (§9 step
+5, "Gists"). (A skill read at an explicit `@<ref>` is held to the export
+rule of §9 step 3 instead.)
 
 This rule also applies when a whole source becomes unresolvable: a
 tap's clone URL 404s, or a git repo is gone. Those produce
@@ -2663,7 +2665,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
 | C-UPD-38 | §9 step 5, §10.1.1 | For a gist installed whole: an edited skill file is updated by `crew update`; a new skill file added upstream is installed by tap re-expansion; a deleted skill file reports `source_gone` and its local install is left in place. For one skill installed with `//<file>`, a deleted file is likewise `source_gone`. |
-| C-UPD-39 | §8.4, §10.1 | When the recorded path of an installed skill that doesn't track its git tap (`<tap>/<skill>`, a gist `//<file>`) is replaced upstream by a symlink leading outside the repository, `crew update` reports `source_gone` and leaves the installed bytes unchanged; nothing is read through the link. A symlink that stays inside the repository updates normally. |
+| C-UPD-39 | §8.4, §10.1 | When the recorded path of an installed skill that doesn't track its git tap (`<tap>/<skill>`, a gist `//<file>`) is replaced upstream by a symlink leading outside the repository, `crew update` reports `source_gone` and leaves the installed bytes unchanged; nothing is read through the link. So does a gist `//<file>` replaced by a symlink to another file of the gist. A symlink to a skill directory that stays inside the repository updates normally. |
 
 #### C-INFO: Info (§9.1)
 
@@ -2767,7 +2769,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-25 | §6.1 / §16.5 | A tap name in `config.yaml` that is not a single directory component (contains `/` or `\`, or is `.`/`..`) is rejected with `config_invalid`, and no clone-directory deletion ever targets a path resolving outside crew-owned `repos/` or legacy `taps/` roots. |
 | C-TAP-27 | §8.2, §16.3 | `crew tap add` with a `//<file>` tail on a gist URL is a `usage_error` and writes nothing. |
 | C-TAP-30 | §16.3, §16.5 | The tap derived for a gist is named `gist-` plus the first 8 characters of the gist ID, whether it is created by `crew install` or `crew tap add`. |
-| C-TAP-31 | §5.4, §6, §8.2 | A gist tap recorded with its owner segment (`https://gist.github.com/<owner>/<id>`) is the tap for every `https` spelling of that gist: installing the gist again, or `crew tap add` of it, reuses that tap rather than creating a second one, and its clone under the old owner-keyed directory is moved to the gist's identity rather than cloned again. |
+| C-TAP-31 | §5.4, §6, §8.2 | A gist tap recorded with its owner segment (`https://gist.github.com/<owner>/<id>`) is the tap for every `https` spelling of that gist: installing the gist again, or `crew tap add` of it, reuses that tap rather than creating a second one, and its pre-0.11 `taps/<tap-name>/` clone is moved to the gist's shared clone rather than cloned again. |
 
 #### C-STATE: State and markers (§11)
 

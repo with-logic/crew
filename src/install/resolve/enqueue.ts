@@ -25,7 +25,7 @@ import { expandSkillsAsItems } from "./expand-items.ts";
  * path keeps this independent of which root produced the location
  * (§9 step 3).
  */
-function memberLocation(
+function memberPath(
   rootDir: string,
   location: { readonly path: string; readonly tapRelativePath: string },
   ref: string | null,
@@ -102,7 +102,7 @@ export function enqueueTapRef(
       const run = (acq: AcquiredTap): void => {
         for (const member of candidate.members) {
           const expansion = expandSkillsAsItems(
-            memberLocation(acq.rootDir, member, source.ref),
+            memberPath(acq.rootDir, member, source.ref),
             candidate.tap,
             acq,
             {
@@ -125,7 +125,7 @@ export function enqueueTapRef(
     const skill = candidate as Extract<typeof candidate, { kind: "skill" }>;
     const expand = (acq: AcquiredTap) =>
       expandSkillsAsItems(
-        memberLocation(acq.rootDir, skill.location, source.ref),
+        memberPath(acq.rootDir, skill.location, source.ref),
         skill.tap,
         acq,
         {

@@ -40,7 +40,7 @@ export interface SiblingHit {
  * Look for `depName` as a sibling skill of `parentTapPath`. Returns
  * null if not found (the dep walker will try cross-tap resolution next).
  *
- * `parent.parentLocation`, when set, is the parent skill's own location (its
+ * `parent.parentPath`, when set, is the parent skill's own location (its
  * directory, or a gist's skill file) inside an already-materialized
  * export of a pinned commit. Siblings
  * must be discovered there, not in the live clone: staging HEAD's bytes
@@ -48,23 +48,20 @@ export interface SiblingHit {
  * provenance the content doesn't have (§9 step 3).
  */
 export function findSiblingDep(
-  parent: { tap: TapConfig; tapRelativePath: string; parentLocation?: string | undefined },
+  parent: { tap: TapConfig; tapRelativePath: string; parentPath?: string | undefined },
   depName: string,
   home: string,
   config: Config,
 ): SiblingHit | null {
   const tapClone = tapClonePath(parent.tap, home);
   const tapRoot = tapRootDir(tapClone, parent.tap);
-  if (
-    parent.parentLocation === undefined &&
-    parent.tap.kind === "git" &&
-    parent.tap.subpath === "" &&
-    parent.tapRelativePath === ""
-  ) {
+  // A whole-repo root skill has no siblings: beside it is crew's own clone
+  // or scratch-export directory, not the source.
+  if (parent.tap.kind === "git" && parent.tap.subpath === "" && parent.tapRelativePath === "") {
     return null;
   }
   // The parent's own location inside the tap; its siblings share its parent directory.
-  const parentPath = parent.parentLocation ?? join(tapRoot, parent.tapRelativePath);
+  const parentPath = parent.parentPath ?? join(tapRoot, parent.tapRelativePath);
   const siblingParent = join(parentPath, "..");
   const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
   const matches: { entryName: string; siblingPath: string; loaded: LoadedSkill }[] = [];

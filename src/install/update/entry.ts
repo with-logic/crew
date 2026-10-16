@@ -142,8 +142,8 @@ function updateOne(
   // Only this entry's own subtree is read, so only it is exported —
   // otherwise every entry sharing a whole-repo tap materializes the
   // whole repository again (§10.1).
-  return withAcquiredSkill(tap, entry.ref, entry.source.path, home, (acquired, skillLocation) =>
-    applyUpdate(entry, acquired, skillLocation, tap, home, force, entryCwd, dryRun),
+  return withAcquiredSkill(tap, entry.ref, entry.source.path, home, (acquired, skillPath) =>
+    applyUpdate(entry, acquired, skillPath, tap, home, force, entryCwd, dryRun),
   );
 }
 
@@ -151,8 +151,10 @@ function updateOne(
 function applyUpdate(
   entry: StateEntry,
   acquired: AcquiredTap,
-  // Tap re-expansion has already marked missing children `source_gone`.
-  skillLocation: string,
+  // Exists: tap re-expansion marks tracked children gone upstream, and
+  // `withAcquiredSkill` raises `no_skills_found`/`invalid_ref` (soft
+  // `source_gone`, above) for the rest.
+  skillPath: string,
   tap: TapConfig,
   home: string,
   force: boolean,
@@ -165,13 +167,13 @@ function applyUpdate(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
-  const sourceHash = newSha === null ? hashDirectory(skillLocation) : undefined;
+  const sourceHash = newSha === null ? hashDirectory(skillPath) : undefined;
   if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
     if (newSha !== null) return { kind: "up_to_date" };
     if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
   }
 
-  const loaded = loadSkill(skillLocation);
+  const loaded = loadSkill(skillPath);
   if (dryRun) return { kind: "would_update", new_sha: newSha };
   const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash);
   const perTarget = reinstallIntoAgents({

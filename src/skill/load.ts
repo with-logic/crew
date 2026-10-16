@@ -11,6 +11,7 @@
  * `path` IS the skill's `SKILL.md`, and its errors name that file.
  */
 
+import { statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
@@ -21,11 +22,11 @@ import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
 /** Load and validate the skill at `path`. Throws `invalid_skill` on any failure. */
 export function loadSkill(path: string): LoadedSkill {
-  // Read outside the wrapper: an I/O failure stays the plain error it is.
+  // Read outside the wrapper: a read failure already names its path.
   const raw = readSkillMd(path);
-  return withSkillFileErrors(path, () => ({
+  return withSkillFileErrors(path, (subject) => ({
     path,
-    frontmatter: validateFrontmatter(extractFrontmatter(raw).data),
+    frontmatter: validateFrontmatter(extractFrontmatter(raw, subject).data, subject),
     skillMd: raw,
   }));
 }
@@ -33,7 +34,9 @@ export function loadSkill(path: string): LoadedSkill {
 /** Load only the declared skill name from `SKILL.md`, for tap indexing. */
 export function loadSkillName(path: string): string {
   const raw = readSkillMd(path);
-  return withSkillFileErrors(path, () => validateFrontmatterName(extractFrontmatter(raw).data));
+  return withSkillFileErrors(path, (subject) =>
+    validateFrontmatterName(extractFrontmatter(raw, subject).data, subject),
+  );
 }
 
 /** True iff `path` contains a `SKILL.md`. Does not validate. */
@@ -41,49 +44,55 @@ export function hasSkillMd(path: string): boolean {
   return exists(join(path, "SKILL.md"));
 }
 
-/** The text of the `SKILL.md` for the skill at `path` — a skill file, or a directory's own. */
+/**
+ * The text of the `SKILL.md` for the skill at `path` — a skill file, or a
+ * directory's own. Every failure is a `CrewError` naming the path, so
+ * discovery skips this one candidate (§9 step 4) rather than aborting: a
+ * `SKILL.md` that is missing or not a file is the skill's own fault
+ * (`invalid_skill`); one crew can't read is the local filesystem's
+ * (`source_unreachable`), and is never blamed on the skill's author.
+ */
 function readSkillMd(path: string): string {
   const skillMdPath = isSkillFile(path) ? path : join(path, "SKILL.md");
-  if (!exists(skillMdPath)) {
+  let raw: string | null = null;
+  try {
+    if (statSync(skillMdPath, { throwIfNoEntry: false })?.isFile()) raw = readText(skillMdPath);
+  } catch (err) {
+    throw new CrewError(
+      "source_unreachable",
+      `couldn't read \`${skillMdPath}\` — ${(err as Error).message}`,
+      { path },
+      "Check that the file is readable by you (its permissions, and its folder's).",
+    );
+  }
+  if (raw === null) {
     throw new CrewError(
       "invalid_skill",
       `no SKILL.md in \`${path}\` — every skill directory needs one`,
       { path },
     );
   }
-  return readText(skillMdPath);
+  return raw;
 }
 
 /**
- * How `frontmatter.ts` and `validate.ts` name the file a message is about.
- * Messages that start with it are re-subjected to a skill file's name;
- * any other message gets the name as a `<file>: ` prefix.
+ * Run `validate` with the name its messages give the file. A skill file
+ * is `prd.md`, not a `SKILL.md`, so "SKILL.md is missing …" would send
+ * the user looking for a file they don't have; and a message that names
+ * no file at all ("`name: X` has invalid characters") gets the file's
+ * name in front, or it wouldn't say which of a gist's files is wrong.
  */
-const SKILL_MD_SUBJECT = "SKILL.md ";
-
-/**
- * Run `validate`, naming a skill file in any error it raises. The user's
- * file is `prd.md`, not a `SKILL.md`, so "SKILL.md is missing …" would
- * send them looking for a file they don't have, and a bare "`name: X` has
- * invalid characters" wouldn't say which of a gist's files is wrong.
- */
-function withSkillFileErrors<T>(path: string, validate: () => T): T {
-  if (!isSkillFile(path)) return validate();
+function withSkillFileErrors<T>(path: string, validate: (subject: string) => T): T {
+  if (!isSkillFile(path)) return validate("SKILL.md");
+  const subject = `\`${basename(path)}\``;
   try {
-    return validate();
+    return validate(subject);
   } catch (err) {
     // Parsing and validating frontmatter throw only `CrewError`.
     const ce = err as CrewError;
-    const file = `\`${basename(path)}\``;
-    const message = ce.message.startsWith(SKILL_MD_SUBJECT)
-      ? `${file} ${ce.message.slice(SKILL_MD_SUBJECT.length)}`
-      : `${file}: ${ce.message}`;
-    throw new CrewError(
-      ce.code,
-      message,
-      { ...ce.details, path },
-      ce.remedy ?? skillFileRemedy(path),
-    );
+    const message = ce.message.startsWith(subject) ? ce.message : `${subject}: ${ce.message}`;
+    const remedy = ce.remedy === undefined ? skillFileRemedy(path) : ce.remedy;
+    throw new CrewError(ce.code, message, { ...ce.details, path }, remedy);
   }
 }
 

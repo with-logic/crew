@@ -20,9 +20,11 @@ const MAX_COMPATIBILITY_LENGTH = 500;
  * Delegates name-only checks to `validateFrontmatterName`.
  *
  * @param data - YAML-decoded frontmatter object.
+ * @param subject - How messages name the file: a gist's skill file is
+ *   `prd.md`, not a SKILL.md (§9 step 5, "Gists").
  */
-export function validateFrontmatter(data: YamlValue): SkillFrontmatter {
-  const name = validateFrontmatterName(data);
+export function validateFrontmatter(data: YamlValue, subject = "SKILL.md"): SkillFrontmatter {
+  const name = validateFrontmatterName(data, subject);
   const map = data as Record<string, YamlValue>;
 
   // description
@@ -30,7 +32,7 @@ export function validateFrontmatter(data: YamlValue): SkillFrontmatter {
   if (typeof description !== "string" || description.length === 0) {
     throw new CrewError(
       "invalid_skill",
-      "SKILL.md frontmatter is missing `description` — add a non-empty one-line summary the agent will read to decide whether to use this skill",
+      `${subject} frontmatter is missing \`description\` — add a non-empty one-line summary the agent will read to decide whether to use this skill`,
     );
   }
   if (description.length > MAX_DESCRIPTION_LENGTH) {
@@ -128,11 +130,11 @@ export function validateFrontmatter(data: YamlValue): SkillFrontmatter {
 }
 
 /** Validate and return only the declared skill name from SKILL.md frontmatter. */
-export function validateFrontmatterName(data: YamlValue): string {
+export function validateFrontmatterName(data: YamlValue, subject = "SKILL.md"): string {
   if (data === null || typeof data !== "object" || Array.isArray(data)) {
     throw new CrewError(
       "invalid_skill",
-      "SKILL.md frontmatter must be a YAML mapping (`key: value` pairs), not a scalar or list",
+      `${subject} frontmatter must be a YAML mapping (\`key: value\` pairs), not a scalar or list`,
     );
   }
   const map = data as Record<string, YamlValue>;
@@ -142,7 +144,7 @@ export function validateFrontmatterName(data: YamlValue): string {
   if (typeof name !== "string" || name.length === 0) {
     throw new CrewError(
       "invalid_skill",
-      "SKILL.md frontmatter is missing `name` — add a non-empty string, e.g. `name: my-skill`",
+      `${subject} frontmatter is missing \`name\` — add a non-empty string, e.g. \`name: my-skill\``,
     );
   }
   if (name.length > MAX_NAME_LENGTH) {

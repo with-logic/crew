@@ -13,7 +13,7 @@ export interface TapReexpandRow {
 
 /** Callback to install one newly-detected child skill. */
 export type InstallNewChild = (args: {
-  readonly skillLocation: string;
+  readonly skillPath: string;
   readonly skillName: string;
   readonly tapRelativePath: string;
   readonly scope: Scope;

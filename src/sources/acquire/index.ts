@@ -139,7 +139,7 @@ export function withAcquiredSkill<T>(
   ref: string | null,
   tapRelativePath: string,
   home: string,
-  fn: (acquired: AcquiredTap, skillLocation: string) => T,
+  fn: (acquired: AcquiredTap, skillPath: string) => T,
 ): T {
   if (ref === null || tap.kind === "path") {
     const acquired = acquireTap(tap, home);
@@ -157,8 +157,8 @@ export function withAcquiredSkill<T>(
       : tap.subpath.length > 0
         ? posix.join(tap.subpath, tapRelativePath)
         : tapRelativePath;
-  return withExportedTree(clonePath, sha, exportPath, home, (skillLocation) =>
-    fn({ rootDir: skillLocation, resolvedSha: sha, pinned }, skillLocation),
+  return withExportedTree(clonePath, sha, exportPath, home, (skillPath) =>
+    fn({ rootDir: skillPath, resolvedSha: sha, pinned }, skillPath),
   );
 }
 

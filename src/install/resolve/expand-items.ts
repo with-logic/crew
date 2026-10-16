@@ -5,7 +5,7 @@
 import type { Source, TapConfig } from "../../core/types.ts";
 import type { AcquiredTap } from "../../sources/acquire/index.ts";
 import { discoveryOf, expandSkills, type SkippedSkill } from "../../sources/expand.ts";
-import { gistWhere } from "../../sources/gist.ts";
+import { gistLabel } from "../../sources/gist.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import type { PendingItem } from "./enqueue.ts";
 
@@ -27,28 +27,29 @@ export interface ItemOptions {
 }
 
 /**
- * Expand `location` — a skill directory, a directory of skills, or a
- * gist's skill file — and produce one PendingItem per skill found.
+ * Expand `root` — a skill directory, a directory of skills, or a gist's
+ * skill file — and produce one PendingItem per skill found.
  *
  * Each skill is staged into the store here rather than later in the
- * resolver loop: when the reference carried an `@ref`, `location` is in
- * a scratch export that is deleted as soon as acquisition scope ends
+ * resolver loop: when the reference carried an `@ref`, `root` is in a
+ * scratch export that is deleted as soon as acquisition scope ends
  * (§9 step 3), so the bytes must be captured while it still exists.
  */
 export function expandSkillsAsItems(
-  location: string,
+  root: string,
   tap: TapConfig,
   acquired: AcquiredTap,
   options: ItemOptions,
   home: string,
 ): ExpansionItems {
   const { resolvedSha, pinned } = acquired;
-  const where = gistWhere(tap, resolvedSha);
-  const { valid, skipped } = expandSkills(location, discoveryOf(tap), where);
+  const mode = discoveryOf(tap);
+  const label = mode === "gist" ? gistLabel(tap, resolvedSha) : undefined;
+  const { valid, skipped } = expandSkills(root, mode, label);
   const { baseTapPath, requestedRef, explicit, tracksTap } = options;
   const items: PendingItem[] = [];
   for (const l of valid) {
-    const subSegment = l.path === location ? "" : l.path.slice(location.length + 1);
+    const subSegment = l.path === root ? "" : l.path.slice(root.length + 1);
     const tapRelativePath = baseTapPath
       ? subSegment
         ? `${baseTapPath}/${subSegment}`

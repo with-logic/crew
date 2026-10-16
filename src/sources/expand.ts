@@ -72,10 +72,15 @@ export function isRootSkill(root: string, mode: DiscoveryMode): boolean {
  * Validation failures (at any level) are recorded in `skipped`
  * rather than thrown — the caller decides exit code and output.
  * `no_skills_found` is still thrown when neither a valid skill nor
- * a validation failure is present (zero candidates); `where` names the
- * source in that error when the caller knows more than its path.
+ * a validation failure is present (zero candidates). For a gist,
+ * `gistLabel` (`sources/gist.ts`) names it in that error; other sources
+ * are named by their path.
  */
-export function expandSkills(root: string, mode: DiscoveryMode, where?: string): ExpansionResult {
+export function expandSkills(
+  root: string,
+  mode: DiscoveryMode,
+  gistLabel?: string,
+): ExpansionResult {
   // A gist's `//<file>` selection resolves to the skill file itself (§8.2).
   if (isRootSkill(root, mode) || (mode === "gist" && isSkillFile(root))) {
     return loadCandidates([root]);
@@ -85,7 +90,7 @@ export function expandSkills(root: string, mode: DiscoveryMode, where?: string):
     if (hasCandidates(gistResult)) return gistResult;
     throw new CrewError(
       "no_skills_found",
-      `the gist ${where ?? `at \`${root}\``} has no skills — expected a root SKILL.md, or \`.md\` files that open with YAML frontmatter (\`---\`)`,
+      `the gist ${gistLabel ?? `at \`${root}\``} has no skills — expected a root SKILL.md, or \`.md\` files that open with YAML frontmatter (\`---\`)`,
       { path: root },
       "Each skill in a gist is one `.md` file whose frontmatter declares its `name` and `description`.",
     );
@@ -161,9 +166,9 @@ function pushSoft(candidate: string, valid: LoadedSkill[], skipped: SkippedSkill
   try {
     valid.push(loadSkill(candidate));
   } catch (err) {
-    // Only a validation failure is a skipped skill; a file crew couldn't
-    // read is not the skill author's mistake, so it isn't reported as one.
-    if (!(err instanceof CrewError)) throw err;
-    skipped.push({ path: candidate, message: err.message, code: err.code });
+    // `loadSkill` throws only `CrewError` — read failures included — whose
+    // `code` is typed as a non-null `CrewErrorName`. No fallback needed.
+    const ce = err as CrewError;
+    skipped.push({ path: candidate, message: ce.message, code: ce.code });
   }
 }

@@ -1,18 +1,25 @@
 /**
- * Commands that read or record a gist tap: search, tap add, and doctor
- * (§16.3, §16.5, §17; C-TAP-27, C-TAP-30).
+ * A gist's tap: its identity across spellings and releases, and the
+ * commands that read or record it — search, tap add, doctor (§5.4,
+ * §16.3, §16.5, §17; C-TAP-27, C-TAP-30, C-TAP-31).
  *
  * The gist is served from a local repo by `useGistFixture`; nothing here
  * touches the network.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
+import { legacyTapPath } from "../../../src/core/paths.ts";
+import { repoClonePath } from "../../../src/core/repo-path.ts";
+import { runGit } from "../../../src/git/exec.ts";
+import { readState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 import {
   GIST_CLONE_URL,
+  GIST_ID,
   GIST_PAGE_URL,
   GIST_TAP,
   json,
@@ -29,6 +36,50 @@ beforeEach(() => {
 });
 afterEach(() => restoreClaudeCode(claude.originals));
 const skillsDir = (): string => claude.userRoot;
+
+describe("gist tap identity", () => {
+  test("C-TAP-30 every https spelling of the gist records one tap named gist-<id8>", () => {
+    fx.gist({ "prd.md": skillFile("prd") });
+    const home = makeCrewHome();
+    expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
+    expect(run(home, ["install", GIST_CLONE_URL]).code).toBe(0);
+    expect(run(home, ["install", `https://gist.github.com/${GIST_ID.toUpperCase()}`]).code).toBe(0);
+    const gistTaps = readConfig(home).taps.filter((t) => t.url === GIST_CLONE_URL);
+    expect(gistTaps.map((t) => [t.name, t.subpath, t.registered])).toEqual([[GIST_TAP, "", false]]);
+  });
+
+  test("C-TAP-31 a gist tap recorded with its owner keeps serving that gist, from its 0.10 clone", () => {
+    // Recorded by crew 0.10: the tap's URL names the owner, and its clone
+    // sits in that release's per-tap `taps/<name>/` layout.
+    const { dir } = fx.gist({ "prd.md": skillFile("prd") }, [GIST_PAGE_URL]);
+    const home = makeCrewHome();
+    const config = readConfig(home);
+    const legacy = { name: GIST_ID, kind: "git" as const, registered: false, url: GIST_PAGE_URL };
+    writeConfig({ ...config, taps: [...config.taps, { ...legacy, subpath: "", path: "" }] }, home);
+    runGit(["clone", "--quiet", `file://${dir}`, legacyTapPath(GIST_ID, home)]);
+    // A marker only the old clone has, to tell a move from a fresh clone.
+    writeFileSync(join(legacyTapPath(GIST_ID, home), ".git", "crew-moved"), "");
+
+    expect(run(home, ["install", GIST_CLONE_URL]).code).toBe(0);
+    expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
+    expect(readState(home).installations.map((e) => [e.name, e.source.tap])).toEqual([
+      ["prd", GIST_ID],
+    ]);
+    // Moved to the gist's shared clone, not cloned again beside a stranded copy.
+    const shared = repoClonePath(GIST_CLONE_URL, home);
+    expect(readdirSync(join(home, "repos"))).toEqual([basename(shared)]);
+    expect(existsSync(join(shared, ".git", "crew-moved"))).toBe(true);
+    expect(existsSync(legacyTapPath(GIST_ID, home))).toBe(false);
+
+    const added = run(home, ["tap", "add", GIST_PAGE_URL]);
+    expect(added.code).toBe(0);
+    // Reported under the name it was recorded with, not a derived `gist-<id8>`.
+    expect(added.stdout).toContain(GIST_ID);
+    expect(added.stdout).not.toContain(GIST_TAP);
+    const gistTaps = readConfig(home).taps.filter((t) => t.url.includes(GIST_ID));
+    expect(gistTaps.map((t) => [t.name, t.registered])).toEqual([[GIST_ID, true]]);
+  });
+});
 
 describe("reading a gist tap", () => {
   test("crew search finds a gist's valid skills and doesn't fail on an invalid file", () => {

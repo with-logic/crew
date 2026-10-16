@@ -19,7 +19,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { crewHome, paths } from "./paths.ts";
-import { canonicalRepoUrl, canonicalRepoUrlAsWritten } from "./repo-url.ts";
+import { canonicalRepoUrl } from "./repo-url.ts";
 import type { TapConfig } from "./types.ts";
 
 /** True when both URLs address the same repository (§16.3). */
@@ -60,21 +60,7 @@ function readablePrefix(canonical: string): string {
 
 /** Directory name for a repository's shared clone. */
 export function repoDirName(url: string): string {
-  return dirNameFor(canonicalRepoUrl(url));
-}
-
-/**
- * Where a gist tap recorded with its owner (`/<owner>/<id>`) was cloned
- * before gist identity dropped the owner (§8.2), or null when that is
- * where it is cloned today.
- */
-export function ownerKeyedGistClonePath(url: string, home: string = crewHome()): string | null {
-  const asWritten = canonicalRepoUrlAsWritten(url);
-  if (asWritten === canonicalRepoUrl(url)) return null;
-  return join(paths(home).reposDir, dirNameFor(asWritten));
-}
-
-function dirNameFor(canonical: string): string {
+  const canonical = canonicalRepoUrl(url);
   const hash = createHash("sha256").update(canonical).digest("hex");
   return `${readablePrefix(canonical).slice(0, 160)}-${hash}`;
 }

@@ -98,6 +98,22 @@ describe("crew update on a gist", () => {
   });
 });
 
+describe("crew update of a gist //<file> that became a link", () => {
+  test("C-UPD-39 a skill file replaced by a link inside the gist is source_gone, never read", () => {
+    const { dir } = fx.gist({ "prd.md": skillFile("prd"), "real.md": skillFile("real") });
+    const home = makeCrewHome();
+    expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
+    rmSync(join(dir, "prd.md"));
+    symlinkSync("real.md", join(dir, "prd.md"));
+    commitAll(dir, "link prd to real");
+
+    const r = run(home, ["update", "--json"]);
+    expect(r.code).toBe(0);
+    expect(outcomes(r)).toEqual(["prd:source_gone"]);
+    expect(installed("prd")).toBe(skillFile("prd"));
+  });
+});
+
 describe("a gist revision page", () => {
   test("C-REF-38 installs that revision's bytes, pinned, even after the gist moved", () => {
     const first = fx.gist({ "prd.md": skillFile("prd", "First PRD.\n") });

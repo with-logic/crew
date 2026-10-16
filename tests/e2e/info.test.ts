@@ -108,6 +108,20 @@ describe("crew info", () => {
     expect(capture.stdout()).toContain("Root skill");
   });
 
+  test("C-INFO-03 a folder of invalid skills names the one it reports", () => {
+    const home = makeInfoHome();
+    const src = makeTempDir();
+    makeSkill(src, "alpha", "name: alpha");
+    makeSkill(src, "beta", "name: beta");
+
+    const capture = captureStreams();
+    const code = runCli(["info", src, "--json"], { home, streams: capture.streams });
+
+    expect(code).toBe(4);
+    const { error } = JSON.parse(capture.stdout());
+    expect(error.message).toMatch(/^none of the 2 skills here is valid — `(alpha|beta)`: /);
+  });
+
   test("C-INFO-03 a folder whose one skill is invalid reports why instead of no skills", () => {
     const home = makeInfoHome();
     const src = makeTempDir();

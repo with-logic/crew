@@ -71,7 +71,8 @@ function gistPage(segments: readonly string[]): GistPage | null {
  */
 export function assertNoGistFileAnchor(raw: string): void {
   const hash = raw.indexOf("#");
-  if (hash < 0 || !raw.slice(hash + 1).startsWith("file-") || !isGistUrl(raw)) return;
+  const linksToOneFile = hash >= 0 && raw.slice(hash + 1).startsWith("file-");
+  if (!(linksToOneFile && isGistUrl(raw))) return;
   const shown = displayUrl(raw);
   throw new CrewError(
     "invalid_ref",

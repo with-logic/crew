@@ -12,7 +12,7 @@
  * snapshot cannot go stale underneath us.
  */
 
-import { CrewError } from "../../core/errors.ts";
+import type { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
@@ -38,8 +38,8 @@ export interface TapScanCache {
    * tap being unreachable.
    */
   children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[];
-  /** Full validation (§9 step 4) for one child directory, memoised. */
-  validate(skillLocation: string): CrewError | null;
+  /** Full validation (§9 step 4) for one child — a directory, or a gist's skill file — memoised. */
+  validate(skillPath: string): CrewError | null;
 }
 
 export function makeTapScanCache(): TapScanCache {
@@ -69,11 +69,11 @@ export function makeTapScanCache(): TapScanCache {
       return walked;
     },
 
-    validate(skillLocation: string): CrewError | null {
-      const hit = validations.get(skillLocation);
+    validate(skillPath: string): CrewError | null {
+      const hit = validations.get(skillPath);
       if (hit !== undefined) return hit;
-      const result = validationErrorFor(skillLocation);
-      validations.set(skillLocation, result);
+      const result = validationErrorFor(skillPath);
+      validations.set(skillPath, result);
       return result;
     },
   };
@@ -84,18 +84,16 @@ export function makeTapScanCache(): TapScanCache {
  * the failure instead of throwing. `loadSkill` is the same validator
  * the install flow uses.
  *
- * It reads from disk, so an I/O failure (EACCES, EIO) can surface here
- * as a plain `Error`. Reporting that as `invalid_skill` would blame the
- * skill author for a local filesystem problem, so only `CrewError`s —
- * the validator's own verdicts — are returned; anything else rethrows
- * and is handled as a run-level failure by the caller.
+ * `loadSkill` throws only `CrewError`: `invalid_skill` for the author's
+ * mistakes, and `source_unreachable` for a file crew couldn't read — an
+ * I/O failure (EACCES, EIO) is reported under that code, naming the
+ * file, so it is never blamed on the skill's author.
  */
-function validationErrorFor(skillLocation: string): CrewError | null {
+function validationErrorFor(skillPath: string): CrewError | null {
   try {
-    loadSkill(skillLocation);
+    loadSkill(skillPath);
     return null;
   } catch (err) {
-    if (err instanceof CrewError) return err;
-    throw err;
+    return err as CrewError;
   }
 }

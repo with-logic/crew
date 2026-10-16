@@ -13,6 +13,7 @@ import { detectCollision } from "../../install/collision-check.ts";
 import { runInstall } from "../../install/flow.ts";
 import type { KindHint } from "../../install/resolve-ref/index.ts";
 import { parseRef } from "../../refs/parse.ts";
+import { assertNoRecursiveGist } from "../../sources/gist.ts";
 import { withTapLocks } from "../../sources/tap-lock.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promptBareNameAmbiguity } from "./ambiguity-prompt.ts";
@@ -53,6 +54,8 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const refs = resolveCollisions(ctx, config);
   // §5.3: `--from-git` is never bare, so it skips collision resolution.
   if (typeof fromGit === "string") refs.push(normalizeFromGit(fromGit, ctx.cwd));
+  // Checked before any source is touched, with `--from-git` among the refs (§8.2).
+  if (ctx.flags.extras["recursive"]) rejectRecursiveGists(refs, ctx.cwd);
   const installOptions = {
     refs,
     scope: ctx.flags.scope,
@@ -117,6 +120,14 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       dry_run: ctx.flags.dryRun,
     },
   };
+}
+
+/** §8.2 "Gists": `--recursive` never applies to a gist, however it was named. */
+function rejectRecursiveGists(refs: readonly string[], cwd: string): void {
+  for (const raw of refs) {
+    const source = parseRef(raw, cwd);
+    if (source.type === "git") assertNoRecursiveGist(source.url);
+  }
 }
 
 function rejectRecursiveTapRefs(ctx: CommandContext): void {

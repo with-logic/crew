@@ -1,9 +1,10 @@
 /**
- * GitHub gist recognition (§8.2 "Gists").
+ * GitHub gist recognition (§8.2 "Gists"), and the name rule for a gist's
+ * skill files (§9 step 5).
  *
  * Whether a source is a gist is derived from its URL alone and never
- * stored (§9 step 5), so reference parsing, repository identity, and
- * discovery all ask the same questions here.
+ * stored, so reference parsing, repository identity, and discovery all
+ * ask the same questions here. It is a leaf module so every layer can.
  */
 
 /** The only host whose repositories use the gist layout (§8.2). */

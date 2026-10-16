@@ -7,15 +7,14 @@
  * bytes and the recorded SHA both come from that commit (§9 step 3) —
  * and expand what is there. A gist's `//<file>` narrows the whole-gist
  * tap to that one skill and, like `<tap>/<skill>`, never subscribes to
- * the tap (§8.2). `--recursive` is checked here, where every direct
- * reference arrives however it was spelled (positional or `--from-git`).
+ * the tap (§8.2).
  */
 
 import type { Config, GitSource, PathSource, TapConfig, TapDiscovery } from "../../core/types.ts";
 import { splitGistFile } from "../../refs/gist.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
-import { rejectRecursiveGist, selectGistFile } from "../../sources/gist.ts";
+import { selectGistFile } from "../../sources/gist.ts";
 import { attributeRef } from "../tap-attribution.ts";
 import type { PendingItem } from "./enqueue.ts";
 import { expandSkillsAsItems, sourceRequestedRef } from "./expand-items.ts";
@@ -38,7 +37,6 @@ export function enqueueDirectRef(
   requireTap: (tap: TapConfig) => void,
   options: DirectRefOptions,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
-  if (source.type === "git" && options.discovery === "recursive") rejectRecursiveGist(source.url);
   const { tapSource, gistFile } = splitGistFile(source);
   const attrib = attributeRef(tapSource, config, options.discovery);
   requireTap(attrib.tap);

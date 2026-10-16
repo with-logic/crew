@@ -76,7 +76,7 @@ describe("crew install <gist-url>//<file>", () => {
           `^the gist https://gist\\.github\\.com/\\S+ at [0-9a-f]{8} has no file \`${file}\`$`,
         ),
       );
-      expect(error.details.files).toEqual(["build.md", "prd.md"]);
+      expect(error.details["files"]).toEqual(["build.md", "prd.md"]);
     }
     const human = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//missing.md`]);
     expect(human.stderr + human.stdout).toContain("Its skill files are `build.md`, `prd.md`");
@@ -89,7 +89,7 @@ describe("crew install <gist-url>//<file>", () => {
     expect(r.stderr + r.stdout).toContain("The gist has no skill files");
   });
 
-  test("C-INST-26 a skill file crew can't read fails loudly, not as a skill error", () => {
+  test("a skill file crew can't read says so, naming the file", () => {
     fx.gist({ "prd.md": skillFile("prd") });
     const home = makeCrewHome();
     expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
@@ -97,8 +97,9 @@ describe("crew install <gist-url>//<file>", () => {
     chmodSync(join(home, "repos", clone, "prd.md"), 0o000);
     try {
       const r = run(home, ["info", `${GIST_PAGE_URL}//prd.md`, "--json"]);
-      expect(r.code).not.toBe(0);
-      expect(json(r).error.name).not.toBe("invalid_skill");
+      expect(r.code).toBe(5);
+      expect(json(r).error.name).toBe("source_unreachable");
+      expect(json(r).error.message).toMatch(/^couldn't read `\S+\/prd\.md` — EACCES/);
     } finally {
       chmodSync(join(home, "repos", clone, "prd.md"), 0o644);
     }
@@ -129,6 +130,8 @@ describe("crew install <gist-url>//<file>", () => {
     const r = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//alias.md`, "--json"]);
     expect(r.code).toBe(4);
     expect(json(r).error.name).toBe("invalid_ref");
+    expect(json(r).error.message).toContain("`alias.md` in the gist");
+    expect(json(r).error.message).toContain("is a symlink");
   });
 
   test("C-INST-26 a gist with a root SKILL.md takes no //<file>", () => {

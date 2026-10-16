@@ -5,12 +5,12 @@
  * An entry that doesn't track its tap (`<tap>/<skill>`) is updated by
  * reading its recorded path straight out of the tap's clone, with no
  * re-expansion first. That path must still be the skill: gone upstream
- * is the soft `source_gone`, and in a git tap a path that now leads
- * through a symlink is never followed.
+ * is the soft `source_gone`, and in a git tap a symlink that now leads
+ * outside the repository is never followed.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -100,6 +100,23 @@ describe("crew update of a <tap>/<skill> install", () => {
     expect(r.code).toBe(0);
     expect(outcomes(r)).toEqual(["demo:updated"]);
     expect(installed()).toContain("Edited.");
+  });
+
+  test("a skill crew can't look at fails the update rather than reading as removed", () => {
+    const home = makeCrewHome();
+    const tapDir = makeTempDir();
+    makeSkill(join(tapDir, "skills"), "demo", skillFrontmatter({ name: "demo" }), "Original.\n");
+    expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
+    expect(run(home, ["install", "mine/demo"]).code).toBe(0);
+    makeSkill(join(tapDir, "skills"), "demo", skillFrontmatter({ name: "demo" }), "Edited.\n");
+    chmodSync(join(tapDir, "skills"), 0o000);
+    try {
+      const r = run(home, ["update", "--json"]);
+      expect(r.code).toBe(1);
+      expect(outcomes(r)).not.toContain("demo:source_gone");
+    } finally {
+      chmodSync(join(tapDir, "skills"), 0o755);
+    }
   });
 
   test("a path tap is the user's own directory, so a symlinked skill there still updates", () => {

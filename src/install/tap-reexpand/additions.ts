@@ -103,7 +103,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       continue;
     }
     const entry = input.installOne({
-      skillLocation: child.path,
+      skillPath: child.path,
       skillName: child.name,
       tapRelativePath: child.tapRelativePath,
       scope: input.scope,

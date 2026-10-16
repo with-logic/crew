@@ -18,6 +18,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isSkillFileName } from "../src/core/gist-url.ts";
 import { opensFrontmatter } from "../src/skill/frontmatter.ts";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
@@ -84,7 +85,7 @@ function git(dir: string, args: string[]): string {
 function skillFilesAt(dir: string, rev: string): Map<string, string> {
   const files = new Map<string, string>();
   for (const name of git(dir, ["ls-tree", "--name-only", rev]).split("\n")) {
-    if (!/\.md$/i.test(name)) continue;
+    if (!isSkillFileName(name)) continue;
     const text = git(dir, ["show", `${rev}:${name}`]);
     if (opensFrontmatter(text)) files.set(name, text);
   }
@@ -110,6 +111,11 @@ const clone = exec(["git", "clone", "--quiet", `https://gist.github.com/${id}.gi
 if (clone.code !== 0) fail(`git clone failed\n${clone.stderr}`);
 const revisions = git(direct, ["rev-list", "HEAD"]).trim().split("\n");
 const head = revisions[0]!;
+if (git(direct, ["ls-tree", "--name-only", head]).split("\n").includes("SKILL.md")) {
+  fail(
+    `${page} has a root SKILL.md, so it is one skill — point this script at a gist of skill files`,
+  );
+}
 const files = skillFilesAt(direct, head);
 if (files.size === 0) fail(`${page} has no skill files to check against`);
 process.stdout.write(`gist ${id} at ${head.slice(0, 8)}: ${namesOf(files).join(", ")}\n`);

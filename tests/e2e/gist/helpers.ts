@@ -94,7 +94,16 @@ export function run(
   return { code, stdout: cap.stdout(), stderr: cap.stderr() };
 }
 
+/** The fields of crew's `--json` output these tests read. */
+export interface CliJson {
+  readonly error: { name: string; message: string; details: Record<string, unknown> };
+  readonly skills: { name: string }[];
+  readonly rows: { name: string; outcome: { kind: string } }[];
+  readonly records: unknown[];
+  readonly skipped: { message: string; code: string; path: string }[];
+}
+
 /** The `--json` body of a run. */
-export function json(r: { stdout: string }): any {
-  return JSON.parse(r.stdout);
+export function json(r: { stdout: string }): CliJson {
+  return JSON.parse(r.stdout) as CliJson;
 }

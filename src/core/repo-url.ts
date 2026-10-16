@@ -24,18 +24,6 @@ import { gistIdentityPath, isGistUrl } from "./gist-url.ts";
  * other.
  */
 export function canonicalRepoUrl(url: string): string {
-  return canonicalize(url, true);
-}
-
-/**
- * `canonicalRepoUrl` as it was before gist identity: a gist URL's path
- * kept as written. Only the migration of clones keyed that way needs it.
- */
-export function canonicalRepoUrlAsWritten(url: string): string {
-  return canonicalize(url, false);
-}
-
-function canonicalize(url: string, gistIdentity: boolean): string {
   const trimmed = trimTrailingSlashes(url.trim());
   const withoutGit = trimmed.endsWith(".git") ? trimmed.slice(0, -4) : trimmed;
   const stripped = trimTrailingSlashes(withoutGit);
@@ -48,7 +36,7 @@ function canonicalize(url: string, gistIdentity: boolean): string {
   const path = slash < 0 ? "" : rest.slice(slash);
   const canonical = `${scheme}://${lowercaseHostOnly(authority)}`;
   // §8.2 "Gists": a gist is one repository whether or not its URL names the owner.
-  const gist = gistIdentity && scheme.startsWith("http") && isGistUrl(stripped);
+  const gist = scheme.startsWith("http") && isGistUrl(stripped);
   return gist ? `${canonical}${gistIdentityPath(path)}` : `${canonical}${path}`;
 }
 

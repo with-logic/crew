@@ -14,9 +14,10 @@
  */
 
 import { lstatSync } from "node:fs";
+import { isSkillFileName } from "../core/gist-url.ts";
 
 /** True iff `path` is a skill file: a regular `.md` file. */
 export function isSkillFile(path: string): boolean {
-  if (!/\.md$/i.test(path)) return false;
+  if (!isSkillFileName(path)) return false;
   return lstatSync(path, { throwIfNoEntry: false })?.isFile() ?? false;
 }

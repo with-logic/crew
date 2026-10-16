@@ -26,14 +26,18 @@ export function opensFrontmatter(raw: string): boolean {
   return openingDelimiter(linesOf(raw)) >= 0;
 }
 
-/** Extract frontmatter from a raw SKILL.md string. Throws `invalid_skill` if malformed. */
-export function extractFrontmatter(raw: string): Frontmatter {
+/**
+ * Extract frontmatter from a raw SKILL.md string. Throws `invalid_skill`
+ * if malformed, naming the file as `subject` — a gist's skill file is
+ * `prd.md`, not a SKILL.md (§9 step 5, "Gists").
+ */
+export function extractFrontmatter(raw: string, subject = "SKILL.md"): Frontmatter {
   const lines = linesOf(raw);
   const opening = openingDelimiter(lines);
   if (opening < 0) {
     throw new CrewError(
       "invalid_skill",
-      "SKILL.md is missing its YAML frontmatter — the first line should be `---`",
+      `${subject} is missing its YAML frontmatter — the first line should be \`---\``,
     );
   }
   const start = opening + 1;
@@ -47,7 +51,7 @@ export function extractFrontmatter(raw: string): Frontmatter {
   if (end < 0) {
     throw new CrewError(
       "invalid_skill",
-      "SKILL.md frontmatter never closes — add a `---` line after the last YAML field",
+      `${subject} frontmatter never closes — add a \`---\` line after the last YAML field`,
     );
   }
   const yamlSource = lines.slice(start, end).join("\n");
@@ -57,7 +61,7 @@ export function extractFrontmatter(raw: string): Frontmatter {
   } catch (err) {
     throw new CrewError(
       "invalid_skill",
-      `SKILL.md frontmatter isn't valid YAML — ${(err as Error).message}`,
+      `${subject} frontmatter isn't valid YAML — ${(err as Error).message}`,
     );
   }
   const body = lines.slice(end + 1).join("\n");

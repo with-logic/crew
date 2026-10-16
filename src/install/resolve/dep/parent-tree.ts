@@ -18,7 +18,8 @@ import type { SiblingHit } from "../../dep-resolution.ts";
 import type { PendingItem } from "../enqueue.ts";
 
 /**
- * Run `fn` against the tap root the parent's own content came from.
+ * Run `fn` with the parent skill's location in the commit its content
+ * came from — or `undefined` when that is the live clone.
  *
  * A parent installed at `@<ref>` was read from a scratch export of that
  * commit, which has since been deleted, so it is re-exported for the
@@ -34,7 +35,7 @@ import type { PendingItem } from "../enqueue.ts";
 export function withParentSkill<T>(
   parent: PendingItem,
   home: string,
-  fn: (parentLocation: string | undefined) => T,
+  fn: (parentPath: string | undefined) => T,
 ): T {
   if (parent.requestedRef === null || parent.resolvedSha === null || parent.tap.kind !== "git")
     return fn(undefined);

@@ -34,6 +34,7 @@ export function enqueueRoot(
 
   // Git URL or path: a whole-tap install — the user pointed at a folder
   // (or repo) and said "install this", so future additions should follow.
+  // (A gist `//<file>` is the exception; `enqueueDirectRef` narrows it.)
   return enqueueDirectRef(source, config, home, requireTap, {
     explicit: true,
     tracksTap: true,
