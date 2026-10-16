@@ -5,13 +5,14 @@
  * records these flags. A skill first pulled in as a dependency has
  * `explicit: false`, and is promoted when the user later names it
  * directly; one installed on its own has no `tracks_tap`, and is promoted
- * when the user later installs its whole tap (§10.1.1). Neither flag ever
- * demotes.
+ * when the user later installs its whole tap, on that tap at the same ref
+ * (decided in `./duplicate-rules/index.ts`, §10.1.1). Neither flag ever
+ * demotes here.
  */
 
 import type { Scope, StateFile } from "../core/types.ts";
 
-/** The (name, scope) entries to promote, by flag. */
+/** Names to promote at the install's scope and project root, by flag. */
 export interface Promotions {
   readonly explicit: readonly string[];
   readonly tracksTap: readonly string[];

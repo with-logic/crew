@@ -12,12 +12,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
-import { runCli } from "../../../src/cli/main.ts";
-import { readState } from "../../../src/state/load.ts";
-import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { makeTempDir } from "../../helpers/fixtures.ts";
-import { buildRepo, install } from "./helpers.ts";
+import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
+import { runCli } from "../../../../src/cli/main.ts";
+import { readState } from "../../../../src/state/load.ts";
+import { captureStreams, makeCrewHome } from "../../../helpers/env.ts";
+import { makeTempDir } from "../../../helpers/fixtures.ts";
+import { buildRepo, install } from "../helpers.ts";
 
 let cc: { root: string };
 let ccOriginal: { userPath: () => string; detect: () => boolean };

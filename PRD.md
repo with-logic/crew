@@ -296,7 +296,12 @@ entry is re-attributed: `state.source` and the install-site markers are
 rewritten to the incoming tap, and the installed bytes are left alone.
 Implementations SHOULD say so in human output. An entry attributed to a
 **registered** tap is never re-attributed — the user named that tap
-deliberately — and is simply reported as already installed.
+deliberately — and is simply reported as already installed. Nor is an
+entry that tracks its tap (§11.1) re-attributed unless the incoming
+install subscribes to the other tap at the entry's ref: a move keeps the
+entry's ref, and carried onto a broader tap, or another revision's, the
+subscription would follow siblings the user never asked for. An entry
+that moves takes `tracks_tap` only on those same terms.
 
 ### 5.5 Help output
 
@@ -1389,7 +1394,7 @@ individually. `--json` output carries `selectors: [{ raw, kind, name }]` where
 `kind` is `skill`, `tap`, or `namespace`.
 
 **A namespace selector bounds which additions are installed.** Re-expansion
-groups are keyed by `(tap, scope, project_root)`, so the group behind
+groups are keyed by `(tap, scope, project_root, ref)`, so the group behind
 `<tap>/<namespace>` spans the whole tap — but the user asked about one part of
 it. When every selector in a run is a namespace, step 2b MUST install only
 newly-added children that live under one of the named namespaces
@@ -1417,7 +1422,7 @@ between resolution and targeting:
   name alone. Re-expansion installs new entries mid-run, so a run that re-reads
   its selection by name can adopt a same-named skill from a different tap, or
   the same skill at a different scope, that the user never selected. The same
-  rule governs which `(tap, scope, project_root)` groups step 2b re-expands: a
+  rule governs which `(tap, scope, project_root, ref)` groups step 2b re-expands: a
   group is re-expanded only when the selection contains one of *its* entries,
   or the user named its tap as a tap.
 
@@ -2037,7 +2042,9 @@ doesn't opt into this; `tracks_tap` is absent on those entries, and
 the tap's later additions don't pull into their setup. Like
 `explicit`, `tracks_tap` never demotes: once a user installed the
 whole tap, a later `crew install <tap>/<one-skill>` doesn't flip it
-off. It promotes instead: a whole-tap install that reaches an entry
+off — at the same ref. One at another ref (`<tap>/<one-skill>@v2`)
+takes the entry out of its tracked group, and the subscription stays
+behind: carried along, it would follow that revision's siblings. It promotes instead: a whole-tap install that reaches an entry
 already installed on its own sets `tracks_tap` on it, even when the
 entry is otherwise up to date — but only when the entry is attributed
 to that tap at the same `ref`. An entry that keeps another tap (a
@@ -2589,7 +2596,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-13e | §10.1.1, §5.4 | Tap re-expansion does not "add" a child that is already installed at the same scope from the same canonical location through another tap. |
 | C-INST-13f | §5.4, §16.5 | A re-attribution in one project rewrites only that project's marker; a sibling project's install of the same skill is left alone. |
 | C-INST-13g | §5.4, §11.1 | Re-attribution writes the destination tap's discovery mode into the marker rather than inheriting the old tap's, so a marker-only rebuild lands on the destination. |
-| C-INST-13h | §5.4, §10.1.1 | An entry subscribed to a whole tap is NOT re-attributed onto a tap rooted strictly deeper in the same source, which would lose the sibling subscription. |
+| C-INST-13h | §5.4, §10.1.1 | An entry subscribed to a whole tap is NOT re-attributed onto a tap rooted strictly deeper in the same source, which would lose the sibling subscription — nor onto any tap the incoming install doesn't subscribe to at the entry's ref (`crew install <tap>/<skill>` through a broader tap, say), which would widen it. |
 | C-INST-13i | §5.4 | Canonical URL comparison folds host case only. Userinfo and the path are compared as written, so `ssh://Alice@host/a/B` and `ssh://alice@host/a/b` are different sources. |
 | C-INST-13j | §5.4 | Path taps use the same rule with the directory in place of the repo: installing `/src/skills/foo` and then `/src` reaches one canonical location, so the second install is a duplicate, not a `name_conflict`. |
 | C-INST-13k | §10.1.1, §5.4 | When two tap rows cover one source, a child installed while re-expanding the first is not installed again by the second in the same run. |
@@ -2689,7 +2696,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-14 | §16.5 | `crew install <git-url>` against a source with no matching configured tap creates an auto tap (`registered: false`) in `config.yaml`. Every resulting state entry's `source.tap` names that tap. |
 | C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). A later `crew install <tap>` subscribes such an entry, already installed and up to date, at that install's scope and project root only (§11.1). |
 | C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. One whose folder and `SKILL.md` (or gist skill file) are still there but that discovery can't index is not gone: its own update reports why — `invalid_skill` for a `SKILL.md` reached through a link crew won't follow. For an entry that tracks the gist, a file that no longer opens frontmatter is no longer a skill, and is gone. A gist entry that doesn't track it (`//<file>`, by name, a dependency) is judged by its own update at its recorded file, whatever else is installed from the gist: a file that lost its frontmatter fails as `invalid_skill`, and one deleted or renamed — even only in case — is `source_gone`. |
-| C-UPD-16b | §10.1.1 | A whole-tap install at an explicit `@<ref>` is re-expanded against that ref: a child added to the tap's default branch but absent at the ref is NOT installed, and a child present at the ref is installed carrying that ref and the group's `pinned` value. An entry installed on its own at the default branch doesn't start tracking the tap when a whole-tap install at a ref reaches it on the same commit (§11.1). |
+| C-UPD-16b | §10.1.1 | A whole-tap install at an explicit `@<ref>` is re-expanded against that ref: a child added to the tap's default branch but absent at the ref is NOT installed, and a child present at the ref is installed carrying that ref and the group's `pinned` value. An entry at the default branch that a whole-tap install at a ref finds already installed on the same commit stays there, and doesn't start tracking the tap — moved onto that tap or not (§5.4, §11.1); one the install reinstalls (`--force`, a new agent) moves to the ref and tracks it there. An install of a tracking entry alone at another ref leaves the subscription behind. |
 | C-UPD-16c | §10.1, §13 | A `crew update` run in which any skill failed for a reason outside the soft set (`source_gone` / `no_skills_found` / `invalid_ref`) exits 1. A failure crew cannot classify MUST NOT be reported as a `failed` row on a run that exits 0. An agent whose skills folder crew can't write is such a failure: the skill's row reads as failed in human output, its entry keeps its previous state, and the next run tries again. |
 | C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`; its clone is deleted only when no remaining configured tap references that repository. Registered taps are NOT garbage-collected by uninstall. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps — the one thing it does change — then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, store entries, and state are byte-identical before and after; `--json` carries `dry_run: true`. |

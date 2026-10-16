@@ -113,6 +113,27 @@ for (const [what, renamed] of [
   });
 }
 
+test("C-UPD-16 a one-skill gist's root SKILL.md installed on its own is never moved to a file", () => {
+  const { dir } = fx.gist({ "SKILL.md": skillFile("whole") });
+  const home = makeCrewHome();
+  run(home, ["tap", "add", GIST_PAGE_URL]);
+  run(home, ["install", `${GIST_TAP}/whole`]);
+  // The gist turns into files; the whole of it is then installed.
+  runGit(["rm", "--quiet", "SKILL.md"], { cwd: dir });
+  writeGistFiles(dir, { "build.md": skillFile("build") });
+  run(home, ["tap", "update", GIST_TAP]);
+  run(home, ["install", GIST_PAGE_URL]);
+  expect(tracking(home)).toEqual(["build:true", "whole:false"]);
+  writeGistFiles(dir, { "whole.md": skillFile("whole", "Moved.\n") });
+
+  const r = run(home, ["update", "--json"]);
+  const row = json(r).rows.find((each) => each.name === "whole");
+  expect([r.code, row?.outcome.kind]).toEqual([0, "source_gone"]);
+  const entry = readState(home).installations.find((e) => e.name === "whole");
+  expect(entry?.source.path).toBe("");
+  expect(readFileSync(join(claude.userRoot, "whole", "SKILL.md"), "utf8")).toBe(skillFile("whole"));
+});
+
 for (const flags of [[], ["--force"]]) {
   test(`C-INST-26 C-UPD-16 installing the whole gist makes a file installed on its own track it (${flags.join(" ") || "no flags"})`, () => {
     const { dir } = fx.gist({ "prd.md": skillFile("prd"), "build.md": skillFile("build") });

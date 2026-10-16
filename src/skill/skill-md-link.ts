@@ -56,7 +56,8 @@ export function assertSkillMdLinkAllowed(folder: string, shown = folder): void {
  * a file is the caller's check (`invalid_skill` at install, gone on
  * update). Any other failure to look — a name too long to look up, say,
  * or a link swapped out between looking at it and reading it — is thrown
- * as the raw filesystem error, so the skill is refused, never read.
+ * as the raw filesystem error; the caller reports it as
+ * `source_unreachable`, so nothing is read through the link.
  */
 function isRefusedSkillMdLink(folder: string): boolean {
   if (lstatUnlessGone(join(folder, "SKILL.md"))?.isSymbolicLink() !== true) return false;

@@ -20,7 +20,7 @@ import type { Reattribution } from "./types.ts";
  * Returns a `Reattribution` when the entry should move to the incoming
  * tap covering the same location, or null when attribution already
  * matches, the existing tap is the user's own, or the move would narrow
- * a whole-tap subscription.
+ * a whole-tap subscription or carry it where the user never subscribed.
  */
 export function classifySource(
   existing: StateEntry,
@@ -55,6 +55,11 @@ export function classifySource(
   // install sets `tracksTap`, so the test is which tap sees more: the
   // incoming root must not be a strict descendant of the existing one.
   if (existing.tracks_tap === true && isTapRootNarrowerThan(skill.tap, existingTap)) return null;
+  // The subscription moves only to a tap this install subscribes to, at
+  // the entry's ref, which a move keeps: carried onto any other tap, it
+  // would follow that tap's siblings, or another revision's (§11.1).
+  const subscribesHere = skill.tracksTap && existing.ref === skill.ref;
+  if (existing.tracks_tap === true && !subscribesHere) return null;
   return {
     name: existing.name,
     scope: existing.scope,
@@ -62,6 +67,6 @@ export function classifySource(
     fromTap: existing.source.tap,
     toTap: skill.tap.name,
     toPath: skill.tapRelativePath,
-    tracksTap: skill.tracksTap,
+    tracksTap: subscribesHere,
   };
 }

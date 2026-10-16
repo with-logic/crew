@@ -1,7 +1,7 @@
 /**
  * Per-run tap scan cache (§10.1.1).
  *
- * State entries are grouped by `(tap, scope, project_root)`, so one tap
+ * State entries are grouped by `(tap, scope, project_root, ref)`, so one tap
  * can back several groups — a user install plus two project installs,
  * say. The clone is the same for all of them, so acquiring it, walking
  * its children, and validating each child are identical work repeated

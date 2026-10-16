@@ -4,8 +4,9 @@
  * was just installed into, so it is installed nowhere — but never from a
  * folder that held a crew marker naming it, one a safety check refused,
  * or the failing agent's own — and no later agent is written after the
- * first failure. (Another source's install of that name keeps its
- * folder, but the child has written over it: a known gap, not fixed here.)
+ * first failure. Known gap: when another source's install of that name
+ * holds the folder, the child writes over its bytes there; only its
+ * removal is covered by C-UPD-18e.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";

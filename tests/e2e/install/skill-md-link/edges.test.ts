@@ -18,8 +18,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { runCli } from "../../../../src/cli/main.ts";
 import { assertSkillMdLinkAllowed } from "../../../../src/skill/skill-md-link.ts";
-import { makeCrewHome } from "../../../helpers/env.ts";
+import { captureStreams, makeCrewHome } from "../../../helpers/env.ts";
+import { makeTempDir, skillFrontmatter } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import { install, sourceWithLink } from "./helpers.ts";
 
@@ -130,10 +132,9 @@ test("C-SPEC-16 a path on the way crew can't look into is named, not SKILL.md", 
   }
 });
 
-test("C-SPEC-16 a name on the way too long to look up refuses the skill, naming it", () => {
-  // Never taken for a missing part, which would end the walk's checks: a
-  // path crew builds can be too long where the one the system follows,
-  // from the folder, is not.
+test("C-SPEC-16 a name on the way too long to look up fails the skill as unreachable, naming it", () => {
+  // Pins that a name too long to look up is never taken for a missing
+  // part, which would end the walk's checks (the case below).
   const long = "a".repeat(300);
   const src = sourceWithLink(() => `${long}/../body.md`);
   const r = install(makeCrewHome(), src);
@@ -141,6 +142,38 @@ test("C-SPEC-16 a name on the way too long to look up refuses the skill, naming 
   expect(readdirSync(claude.userRoot)).toEqual(["good"]);
   expect(r.out).toContain(`couldn't look at \``);
   expect(r.out).toContain(`/linked/${long}\``);
+  expect(r.out).toContain("Shorten the path");
+});
+
+/** The system's limit on a path crew builds (bytes, with its terminating NUL). */
+const PATH_MAX = process.platform === "linux" ? 4096 : 1024;
+
+test("C-SPEC-16 a link crew can't look at, its own path to it being too long, is never read through", () => {
+  // The system follows SKILL.md from the folder a part at a time, while
+  // crew looks at each link by an absolute path, which here runs past the
+  // limit: taken for a missing part, the link out would be read through.
+  const outside = join(makeTempDir(), "secret.md");
+  const leaked = "LEAKED-FROM-OUTSIDE";
+  writeFileSync(
+    outside,
+    `---\n${skillFrontmatter({ name: "linked", description: leaked })}\n---\n`,
+  );
+  let deep = makeTempDir();
+  while (deep.length <= PATH_MAX - 409) deep = join(deep, "x".repeat(199));
+  const folder = join(deep, "linked");
+  const inner = join(folder, "d".repeat(200));
+  mkdirSync(inner, { recursive: true });
+  // Made from inside, by its own name: crew's path to it is too long.
+  Bun.spawnSync(["ln", "-s", outside, "L".repeat(200)], { cwd: inner });
+  symlinkSync(join("d".repeat(200), "L".repeat(200)), join(folder, "SKILL.md"));
+
+  const home = makeCrewHome();
+  const installed = install(home, folder);
+  expect(installed.code).not.toBe(0);
+  expect(installed.out).not.toContain(leaked);
+  const cap = captureStreams();
+  expect(runCli(["info", folder, "--json"], { home, streams: cap.streams })).not.toBe(0);
+  expect(cap.stdout() + cap.stderr()).not.toContain(leaked);
 });
 
 test("C-SPEC-15 a SKILL.md link whose text isn't UTF-8 is refused, never followed", () => {

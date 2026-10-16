@@ -29,17 +29,22 @@ function isFsError(err: unknown): boolean {
  */
 const UNREADABLE_REMEDY = "Check that it is readable by you (its permissions, and its folder's).";
 
+/** The next step when a path, or a name on the way to it, is too long to look up. */
+const TOO_LONG_REMEDY =
+  "Shorten the path: a name on the way — a link's text included — or the whole path is too long for the system to look up.";
+
 /** `source_unreachable` for a local path crew couldn't look at, or read (§13). */
 export function unreadablePathError(
   path: string,
   err: unknown,
   verb: "look at" | "read" = "look at",
 ): CrewError {
+  const tooLong = (err as NodeJS.ErrnoException).code === "ENAMETOOLONG";
   return new CrewError(
     "source_unreachable",
     `couldn't ${verb} \`${path}\` — ${errnoReason(err)}`,
     { path },
-    UNREADABLE_REMEDY,
+    tooLong ? TOO_LONG_REMEDY : UNREADABLE_REMEDY,
   );
 }
 

@@ -7,7 +7,7 @@
  * decide which names are ambiguous upstream, which installed entries
  * have vanished, which have merely moved, and which are still there but
  * weren't indexed — left to their own update to report why. A gist entry
- * installed on its own is never surveyed: its own update judges it.
+ * that doesn't track the gist is never surveyed: its own update judges it.
  */
 
 import { lstatSync } from "node:fs";
@@ -68,9 +68,9 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
   for (const locs of childrenByName.values())
     for (const c of locs) childPaths.add(c.tapRelativePath);
   for (const member of members) {
-    // A gist entry installed on its own (`//<file>`, by name, as a
+    // A gist entry that doesn't track the gist (`//<file>`, by name, a
     // dependency) is judged by its own update, at its recorded file
-    // exactly (§10.1, C-UPD-39), as when nothing beside it tracks the gist.
+    // exactly (§10.1.1 step 3, C-UPD-16), as when nothing beside it tracks it.
     if (isGistTap(tap) && member.tracks_tap !== true) continue;
     if (conflictedNames.has(member.name)) continue;
     const child = childrenByName.get(member.name)?.[0];

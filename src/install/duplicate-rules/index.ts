@@ -1,5 +1,5 @@
 /**
- * Duplicate-install detection (§5.4).
+ * Duplicate-install detection and flag promotion (§5.4, §11.1).
  *
  * Compares the resolved install set against current state, putting each
  * entry in one of two buckets:
@@ -10,7 +10,8 @@
  * An already-installed entry may also need a one-way flag set without
  * re-staging (`promotions`, applied by `../promote-flags.ts`): `explicit`
  * for one first pulled in as a dependency and now named, `tracks_tap` for
- * one installed on its own and now reached by a whole install of its tap.
+ * one installed on its own and now reached by a whole install of its tap,
+ * on that tap at the same ref.
  *
  * A different-source install of the same name throws `name_conflict`
  * (never overridden by --force — per §13). "Same source" means the same
@@ -53,7 +54,7 @@ export function applyDuplicateRules(
 ): DuplicateAnalysis {
   const toInstall: ResolvedSkill[] = [];
   const alreadyInstalled: AlreadyInstalled[] = [];
-  const promotions = { explicit: [] as string[], tracksTap: [] as string[] };
+  const promotions: { explicit: string[]; tracksTap: string[] } = { explicit: [], tracksTap: [] };
   const reattributions: Reattribution[] = [];
   const keepSource: KeptSource[] = [];
 
@@ -70,14 +71,13 @@ export function applyDuplicateRules(
       continue;
     }
 
+    const sameAttribution =
+      existing.source.tap === skill.tap.name && existing.source.path === skill.tapRelativePath;
     const reattribution = classifySource(existing, skill, options.taps, incomingProjectRoot);
     if (reattribution) reattributions.push(reattribution);
     // Registered attribution and broad subscriptions survive reinstalls
     // as well as duplicate short-circuits (§5.4, §10.1.1).
-    else if (
-      existing.source.tap !== skill.tap.name ||
-      existing.source.path !== skill.tapRelativePath
-    ) {
+    else if (!sameAttribution) {
       // Successful source classification already proved this tap exists.
       const tap = options.taps.find((row) => row.name === existing.source.tap)!;
       keepSource.push({
@@ -114,12 +114,9 @@ export function applyDuplicateRules(
       // §11.1: only onto the tap, path, and ref this install subscribes
       // to — an entry that keeps another tap, or sits at another ref,
       // would follow siblings the user never asked for. (A moved entry
-      // carries the flag with the move, `../reattribute.ts`.)
-      const subscribed =
-        existing.source.tap === skill.tap.name &&
-        existing.source.path === skill.tapRelativePath &&
-        existing.ref === skill.ref;
-      if (skill.tracksTap && existing.tracks_tap !== true && subscribed)
+      // takes it with the move, by the same rule: `./classify.ts`.)
+      const onIncomingTapAtRef = sameAttribution && existing.ref === skill.ref;
+      if (skill.tracksTap && existing.tracks_tap !== true && onIncomingTapAtRef)
         promotions.tracksTap.push(skill.name);
       continue;
     }

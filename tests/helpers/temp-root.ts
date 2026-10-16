@@ -19,8 +19,9 @@ process.env["TMPDIR"] = root;
 // the root, and never on a run that is interrupted. The watcher ignores
 // the Ctrl-C sent to the whole terminal. Should `rm -rf` fail on a folder
 // an interrupted test left at mode 000, it makes what's left writable and
-// removes it again. "crew-temp-root" fills `$0` (the name `ps` shows); the
-// pid and root are `$1` and `$2`.
+// removes it again. "crew-temp-root" fills `$0`, a label in the watcher's
+// command line (`pgrep -f crew-temp-root` finds it); the pid and root are
+// `$1` and `$2`.
 const WATCHER = [
   'trap "" INT HUP TERM',
   'while kill -0 "$1" 2>/dev/null; do sleep 1; done',
