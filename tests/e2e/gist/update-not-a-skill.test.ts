@@ -3,15 +3,16 @@
  * (§9 step 5, §10.1.1 step 3; C-UPD-16): the file is no longer a skill,
  * so its skill is gone — `source_gone`, the installed bytes kept — not an
  * invalid skill failing every update. One that still opens frontmatter
- * but whose name can't be read is still there: its update fails, naming
- * why.
+ * but whose `name` is invalid, or that crew can't read, is still there:
+ * its update fails, naming why. So does a `//<file>` install's file,
+ * which is its skill whether or not it opens frontmatter.
  *
  * The gist is served from a local repo by `useGistFixture`; nothing here
  * touches the network.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { chmodSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
@@ -41,7 +42,7 @@ test("C-UPD-16 a gist file that no longer opens frontmatter is gone, not failing
   expect(readFileSync(join(claude.userRoot, "prd", "SKILL.md"), "utf8")).toBe(skillFile("prd"));
 });
 
-test("C-UPD-16 a gist file whose name can't be read is still there, so its update fails", () => {
+test("C-UPD-16 a gist file whose frontmatter `name` is invalid is still there, so its update fails", () => {
   const { dir } = fx.gist({ "prd.md": skillFile("prd"), "build.md": skillFile("build") });
   const home = makeCrewHome();
   expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
@@ -49,8 +50,47 @@ test("C-UPD-16 a gist file whose name can't be read is still there, so its updat
 
   const r = run(home, ["update", "--json"]);
   expect(r.code).toBe(1);
-  const body = json(r) as ReturnType<typeof json> & { tap_reexpand_rows: unknown[] };
+  const body = json(r);
   expect(body.tap_reexpand_rows).toEqual([]);
-  const prd = body.rows.find((row) => row.name === "prd");
-  expect(prd?.outcome.kind).toBe("failed");
+  expect(body.rows.map((row) => `${row.name}:${row.outcome.kind}`).sort()).toEqual([
+    "build:updated",
+    "prd:failed",
+  ]);
+  const prd = body.rows.find((row) => row.name === "prd")!;
+  expect(prd.outcome.error?.code).toBe("invalid_skill");
+  expect(prd.outcome.error?.message).toContain("name");
+  expect(readFileSync(join(claude.userRoot, "prd", "SKILL.md"), "utf8")).toBe(skillFile("prd"));
+});
+
+test("C-UPD-16 a gist file crew can't read is still there, so its update fails", () => {
+  const { dir } = fx.gist({ "prd.md": skillFile("prd"), "build.md": skillFile("build") });
+  const home = makeCrewHome();
+  expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
+  const prd = join(home, "repos", readdirSync(join(home, "repos"))[0]!, "prd.md");
+  chmodSync(prd, 0o000);
+  try {
+    writeGistFiles(dir, { "build.md": skillFile("build", "Edited.\n") });
+    const r = run(home, ["update", "--json"]);
+    expect(r.code).toBe(1);
+    const body = json(r);
+    expect(body.tap_reexpand_rows).toEqual([]);
+    const row = body.rows.find((row) => row.name === "prd")!;
+    expect([row.outcome.kind, row.outcome.error?.code]).toEqual(["failed", "source_unreachable"]);
+  } finally {
+    chmodSync(prd, 0o644);
+  }
+});
+
+test("C-UPD-16 a //<file> install's file that no longer opens frontmatter fails, beside the whole gist", () => {
+  const { dir } = fx.gist({ "prd.md": skillFile("prd"), "build.md": skillFile("build") });
+  const home = makeCrewHome();
+  // `prd` is installed on its own first, so it doesn't track the gist.
+  expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
+  expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
+  writeGistFiles(dir, { "prd.md": "Just notes now, no frontmatter.\n" });
+
+  const r = run(home, ["update", "--json"]);
+  expect(r.code).toBe(1);
+  const row = json(r).rows.find((row) => row.name === "prd")!;
+  expect([row.outcome.kind, row.outcome.error?.code]).toEqual(["failed", "invalid_skill"]);
 });

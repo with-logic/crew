@@ -46,38 +46,42 @@ export function assertSkillMdLinkAllowed(folder: string, shown = folder): void {
  * True when `folder`'s `SKILL.md` is reached through a link crew won't
  * follow: absolute text, text that isn't UTF-8, a `..` that climbs above
  * the folder, a chain that loops, or one that leads to the folder's
- * `.crew.json`. A
- * `SKILL.md` that is no link, or a chain of allowed links that dangles —
- * judged by its text past the missing part — is not refused: whether it
- * is a file is the caller's check
- * (`invalid_skill` at install, gone on update). Any other failure to
- * look is thrown as the raw filesystem error.
+ * `.crew.json`. A `SKILL.md` that is no link, or a chain of allowed links
+ * that dangles, is not refused: whether it is a file is the caller's
+ * check (`invalid_skill` at install, gone on update). Any other failure
+ * to look is thrown as the raw filesystem error — a link swapped out
+ * between looking at it and reading it, too.
  */
 function isRefusedSkillMdLink(folderPath: string): boolean {
-  // Normalized once, so `dir === folder` holds however the caller spelled it.
+  // Normalized once, so `dir` is built from the same spelling throughout.
   const folder = resolve(folderPath);
-  if (entryAt(join(folder, "SKILL.md"))?.isSymbolicLink() !== true) return false;
-  // `dir` is where the walk stands: reached from `folder` through real
+  if (lstatUnlessGone(join(folder, "SKILL.md"))?.isSymbolicLink() !== true) return false;
+  // `dir` is where the walk stands, reached from `folder` through real
   // entries, so a `..` from it is exact here and in a copy, which keeps
-  // every link. Once a part is missing, the rest is judged by its text.
+  // every link; `depth` is how far below `folder` it is. Past a missing
+  // part the system would stop, so no entry is looked at again: the rest
+  // is judged by its text alone, and a link it names is not followed.
   let dir = folder;
-  let rest = ["SKILL.md"];
+  let depth = 0;
+  let pastMissing = false;
+  // The parts still to walk, the next one last.
+  const todo = ["SKILL.md"];
   let hops = 0;
-  let missing = false;
-  while (rest.length > 0) {
-    const part = rest[0]!;
-    rest = rest.slice(1);
+  while (todo.length > 0) {
+    const part = todo.pop()!;
     if (part === "..") {
-      if (dir === folder) return true;
-      dir = dirname(dir);
+      if (depth === 0) return true;
+      depth--;
+      if (!pastMissing) dir = dirname(dir);
       continue;
     }
-    if (dir === folder && isMarkerName(part)) return true;
+    if (depth === 0 && isMarkerName(part)) return true;
     const at = join(dir, part);
-    const entry: Stats | undefined = missing ? undefined : entryAt(at);
-    if (entry === undefined || !entry.isSymbolicLink()) {
-      missing ||= entry === undefined;
-      dir = at;
+    const entry: Stats | undefined = pastMissing ? undefined : lstatUnlessGone(at);
+    if (entry?.isSymbolicLink() !== true) {
+      pastMissing ||= entry === undefined;
+      if (!pastMissing) dir = at;
+      depth++;
       continue;
     }
     hops++;
@@ -86,13 +90,14 @@ function isRefusedSkillMdLink(folderPath: string): boolean {
     const raw = readlinkSync(at, { encoding: "buffer" });
     const text = raw.toString("utf8");
     if (isAbsolute(text) || !Buffer.from(text).equals(raw) || hops > MAX_HOPS) return true;
-    rest = [...text.split(sep).filter((p) => p !== "" && p !== "."), ...rest];
+    const parts = text.split(sep).filter((p) => p !== "" && p !== ".");
+    for (let i = parts.length - 1; i >= 0; i--) todo.push(parts[i]!);
   }
   return false;
 }
 
-/** The entry at `path` without following it; undefined when nothing usable is there. */
-function entryAt(path: string): Stats | undefined {
+/** The entry at `path` without following it; undefined when it is gone. Throws any other failure. */
+function lstatUnlessGone(path: string): Stats | undefined {
   try {
     return lstatSync(path);
   } catch (err) {
@@ -102,13 +107,14 @@ function entryAt(path: string): Stats | undefined {
 }
 
 /**
- * The folder's `.crew.json`, as any disk crew installs to might find it:
- * case- and form-insensitive (APFS), or ignoring invisible format
- * characters such as U+200C (HFS+), as git does for `.git`.
+ * True when `part` names the folder's `.crew.json` as any disk crew
+ * installs to might find it: case- and form-insensitive (APFS), or
+ * ignoring invisible format characters such as U+200C (HFS+), as git
+ * does for `.git`.
  */
 function isMarkerName(part: string): boolean {
-  const folded = part.normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "");
-  return folded.toLowerCase() === ".crew.json";
+  const visible = part.normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "");
+  return visible.toLowerCase() === ".crew.json";
 }
 
 /** `invalid_skill` for a `SKILL.md` reached through a link crew won't follow. */

@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { resetGitRunner, setGitRunner } from "../../../src/git/exec.ts";
+import type { TapReexpandRow } from "../../../src/install/tap-reexpand/types.ts";
 import { captureStreams } from "../../helpers/env.ts";
 import { commitAll, makeGitRepo, skillFrontmatter } from "../../helpers/fixtures.ts";
 
@@ -98,7 +99,12 @@ export function run(
 export interface CliJson {
   readonly error: { name: string; message: string; details: Record<string, unknown> };
   readonly skills: { name: string }[];
-  readonly rows: { name: string; outcome: { kind: string } }[];
+  readonly rows: {
+    name: string;
+    outcome: { kind: string; error?: { code: string; message: string } };
+  }[];
+  /** `crew update`: rows for a tracked tap's children. */
+  readonly tap_reexpand_rows: readonly TapReexpandRow[];
   readonly records: unknown[];
   readonly skipped: { message: string; code: string; path: string }[];
   /** `crew tap add`: the tap as recorded. */

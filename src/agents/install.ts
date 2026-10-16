@@ -40,8 +40,14 @@ export interface InstallInput {
   readonly force: boolean;
 }
 
-/** Outcome of one physical install (one `dest`). */
-export type InstallOutcome = { kind: "installed" } | { kind: "up_to_date" };
+/**
+ * Outcome of one physical install (one `dest`). `replacedSameSkill`: the
+ * folder already held crew's marker for this skill, so it was an install
+ * crew had recorded, not one this call created.
+ */
+export type InstallOutcome =
+  | { kind: "installed"; replacedSameSkill: boolean }
+  | { kind: "up_to_date" };
 
 /**
  * Install a staged skill into one physical `dest`, performing all
@@ -59,12 +65,14 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
 
   const incomingAdapters = [...new Set(input.agents.map((a) => a.name))].sort();
   let priorAdapters: readonly string[] = [];
+  let replacedSameSkill = false;
 
   if (existsSync(dest)) {
     const existingMarker = tryReadJson<Marker>(join(dest, ".crew.json"));
     if (existingMarker) {
       priorAdapters = existingMarker.agents ?? [];
       if (existingMarker.name === input.skillName) {
+        replacedSameSkill = true;
         const currentHash = hashDirectory(dest);
         if (currentHash !== existingMarker.content_hash) {
           if (!input.force)
@@ -136,7 +144,7 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
   writeJson(join(staging, ".crew.json"), marker);
 
   atomicReplace(staging, dest);
-  return { kind: "installed" };
+  return { kind: "installed", replacedSameSkill };
 }
 
 /** Union of two adapter-name lists, sorted and deduplicated. */

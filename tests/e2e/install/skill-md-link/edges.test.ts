@@ -1,9 +1,10 @@
 /**
  * Edges of the SKILL.md link rule at install (§9 step 4; C-SPEC-15): a
  * source named with a trailing slash is held to it the same; link text
- * that isn't UTF-8 is refused, never followed; a chain
- * longer than crew's limit is refused; and a failure to look on the way
- * names the path that failed, not SKILL.md (§13; C-SPEC-16).
+ * that isn't UTF-8 is refused, never followed; a chain at crew's limit
+ * installs and one longer is refused; past a missing part the rest is
+ * judged by its text, quickly however long; and a failure to look on the
+ * way names the path that failed, not SKILL.md (§13; C-SPEC-16).
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -12,10 +13,12 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { assertSkillMdLinkAllowed } from "../../../../src/skill/skill-md-link.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import { install, sourceWithLink } from "./helpers.ts";
@@ -39,20 +42,61 @@ test("C-SPEC-15 a skill named with a trailing slash is held to the .crew.json ru
   expect(r.out).toContain("reached through a link crew won't follow");
 });
 
-test("C-SPEC-15 a chain longer than crew's limit is refused", () => {
-  const src = sourceWithLink((folder) => {
+/** A source whose `linked/SKILL.md` reaches `body.md` through `links` links, SKILL.md included. */
+function chainOf(links: number): string {
+  return sourceWithLink((folder) => {
     let target = "body.md";
-    // SKILL.md plus 32 more: 33 links, one over crew's limit of 32.
-    for (let i = 0; i < 32; i++) {
+    for (let i = 1; i < links; i++) {
       symlinkSync(target, join(folder, `hop${i}`));
       target = `hop${i}`;
     }
     return target;
   });
-  const r = install(makeCrewHome(), src);
+}
+
+test("C-SPEC-15 a chain at crew's limit installs", () => {
+  // At the temp folder's real path: on macOS `/var` is a link too, which
+  // the system counts against the same limit of 32 when it reads the file.
+  const r = install(makeCrewHome(), realpathSync(chainOf(32)));
+  expect(r.code).toBe(0);
+  expect(readdirSync(claude.userRoot).sort()).toEqual(["good", "linked"]);
+});
+
+test("C-SPEC-15 a chain longer than crew's limit is refused", () => {
+  const r = install(makeCrewHome(), chainOf(33));
   expect(r.code).toBe(1);
   expect(readdirSync(claude.userRoot)).toEqual(["good"]);
   expect(r.out).toContain("reached through a link crew won't follow");
+});
+
+test("C-SPEC-15 past a missing part, a link the rest names is judged by its text", () => {
+  // Followed, `lnk` would lead down (`a/b`), so the `..`s after it stay
+  // inside; as text they climb above the folder. The system would stop at
+  // `missing`, so following would be judging a path no one reads.
+  const src = sourceWithLink((folder) => {
+    symlinkSync(join("a", "b"), join(folder, "lnk"));
+    return "missing/../lnk/../../x.md";
+  });
+  const r = install(makeCrewHome(), src);
+  expect(r.code).toBe(1);
+  expect(r.out).toContain("reached through a link crew won't follow");
+});
+
+test("C-SPEC-15 a long chain past a missing part is judged quickly", () => {
+  // 32 links of the longest text macOS allows, the last into a missing
+  // folder: ~16,000 parts left to judge by text, which must stay linear.
+  const long = (head: string) => `${head}${"/a".repeat(500)}`;
+  const folder = join(
+    sourceWithLink((f) => {
+      for (let i = 1; i < 32; i++)
+        symlinkSync(long(i === 31 ? "missing" : `L${i + 1}`), join(f, `L${i}`));
+      return long("L1");
+    }),
+    "linked",
+  );
+  const started = performance.now();
+  assertSkillMdLinkAllowed(folder);
+  expect(performance.now() - started).toBeLessThan(250);
 });
 
 test("C-SPEC-16 a path on the way crew can't look into is named, not SKILL.md", () => {

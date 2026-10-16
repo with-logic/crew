@@ -7,7 +7,7 @@
  * write fails the skill's update, which keeps its entry and is retried;
  * a new child no agent could take is reported, not dropped, while one a
  * safety check refuses is left out. A path tap's skill folder that
- * became a looping link is gone.
+ * became a looping link is gone; one crew can't search is not.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -62,6 +62,26 @@ test("C-UPD-40 a path tap's skill folder that became a looping link is source_go
   expect(
     JSON.parse(r.stdout).rows.map((row: { outcome: { kind: string } }) => row.outcome.kind),
   ).toEqual(["source_gone"]);
+});
+
+test("C-UPD-16 C-UPD-40 a tracked tap's skill folder crew can't search fails, not gone", () => {
+  const home = makeCrewHome();
+  const tapDir = makeTempDir();
+  const skill = makeSkill(join(tapDir, "skills"), "demo", skillFrontmatter({ name: "demo" }));
+  expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
+  expect(run(home, ["install", "mine"]).code).toBe(0);
+  // Listable, so re-expansion still sees the folder, but not searchable.
+  chmodSync(skill, 0o666);
+  try {
+    const r = run(home, ["update", "--json"]);
+    expect(r.code).toBe(1);
+    const out = JSON.parse(r.stdout);
+    expect(out.tap_reexpand_rows).toEqual([]);
+    const [row] = out.rows;
+    expect([row.outcome.kind, row.outcome.error.code]).toEqual(["failed", "source_unreachable"]);
+  } finally {
+    chmodSync(skill, 0o755);
+  }
 });
 
 test("C-UPD-40 a skill installed by path under a folder crew can't search fails, not gone", () => {
