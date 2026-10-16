@@ -133,8 +133,6 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
         ? freshConfig
         : mergeAutoTaps(freshConfig, config, configWithAutoTaps);
     assertTapsPresent(mergedConfig, resolvedAll);
-    if (mergedConfig !== freshConfig) writeConfig(mergedConfig, home);
-
     const freshState = readState(home);
     const analysis = applyDuplicateRules(
       resolvedAll,
@@ -145,12 +143,16 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     );
     const { toInstall, reattributions, keepSource } = analysis;
     alreadyInstalled = analysis.alreadyInstalled;
+    // §5.4: a move whose markers can't follow is refused before anything
+    // — config, a marker, state — is written.
+    assertMarkersCanMove(reattributions, analysis.movesOnSuccess, agents, cwd);
+    if (mergedConfig !== freshConfig) writeConfig(mergedConfig, home);
+
     rewriteDiscoveryUpgradeMarkers(config, configWithAutoTaps, freshState.installations, cwd);
     // §5.4: entries the install finds already installed skip
     // `performInstall`, so their moves (state and markers) apply here;
     // moves of reinstalled entries wait for the reinstall to succeed.
     rewriteReattributedMarkers(reattributions, configWithAutoTaps.taps, cwd);
-    assertMarkersCanMove(analysis.movesOnSuccess, cwd);
     const reattributed = applyReattributions(freshState, reattributions);
     const result = performInstall(toInstall, agents, options.scope, cwd, reattributed, {
       force: options.force,

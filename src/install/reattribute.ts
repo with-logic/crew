@@ -11,22 +11,12 @@
 
 import { accessSync, constants } from "node:fs";
 import { join } from "node:path";
-import { baseFor } from "../agents/adapter.ts";
+import { type AgentAdapter, baseFor } from "../agents/adapter.ts";
 import { ALL_AGENTS } from "../agents/registry.ts";
-import type { Marker, Scope, StateFile, TapConfig } from "../core/types.ts";
+import type { Marker, StateFile, TapConfig } from "../core/types.ts";
 import { entryKey, installLocationKey } from "../state/identity.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
 import type { Reattribution } from "./duplicate-rules/index.ts";
-
-/** Marker key: a move only claims markers still naming its old tap. */
-function markerMoveKey(
-  name: string,
-  scope: Scope,
-  projectRoot: string | null,
-  fromTap: string,
-): string {
-  return JSON.stringify([name, scope, projectRoot ?? "", fromTap]);
-}
 
 function movesByLocation(
   reattributions: readonly Reattribution[],
@@ -44,6 +34,7 @@ function movesByLocation(
  * agent left its entry where it was.
  */
 export function movesMade(moves: readonly Reattribution[], state: StateFile): Reattribution[] {
+  if (moves.length === 0) return [];
   const byLocation = movesByLocation(moves);
   const made: Reattribution[] = [];
   for (const entry of state.installations) {
@@ -94,76 +85,93 @@ export function rewriteReattributedMarkers(
 ): void {
   if (reattributions.length === 0) return;
   const tapsByName = new Map(taps.map((t) => [t.name, t]));
-  // Markers additionally match on the tap they came FROM: the old tap
-  // may still own other skills, so only markers naming it move.
-  const movesByMarker = new Map<string, Reattribution>();
-  for (const r of reattributions) {
-    movesByMarker.set(markerMoveKey(r.name, r.scope, r.projectRoot, r.fromTap), r);
-  }
-  for (const m of movedMarkers(reattributions, cwd)) {
-    maybeRewrite(m.installDir, m.marker, movesByMarker, tapsByName, m.scope, m.projectRoot);
-  }
+  for (const m of markersToMove(reattributions, cwd)) rewriteMarker(m, tapsByName);
 }
 
 /**
- * Throw, before anything is written, when a marker `moves` would rewrite
- * after the install can't be read or written: failing then would leave
- * the reinstalled copies and the rest apart (§5.4, §11.1).
+ * Throw, before any config, marker, or state is written, when a marker a
+ * move will rewrite can't be read, or sits in a folder crew can't write
+ * (`writeJson` renames a new marker into place) (§5.4, §11.1). `upFront`
+ * moves rewrite every marker still naming their old tap before the
+ * install; a reinstall's move rewrites, after it, those in agents the
+ * run doesn't target — the targeted ones are the install's to write, and
+ * to report agent by agent.
  */
-export function assertMarkersCanMove(moves: readonly Reattribution[], cwd: string): void {
-  for (const m of movedMarkers(moves, cwd)) accessSync(m.installDir, constants.W_OK);
+export function assertMarkersCanMove(
+  upFront: readonly Reattribution[],
+  onSuccess: readonly Reattribution[],
+  targeted: readonly AgentAdapter[],
+  cwd: string,
+): void {
+  const reinstalled = new Set<string>();
+  for (const r of onSuccess) {
+    const root = rootOf(r, cwd);
+    for (const adapter of targeted) {
+      const base = root === null ? "" : baseFor(adapter, r.scope, root);
+      if (base !== "") reinstalled.add(join(base, r.name));
+    }
+  }
+  const markers = [...markersToMove(upFront, cwd), ...markersToMove(onSuccess, cwd)];
+  for (const m of markers) {
+    if (!reinstalled.has(m.installDir)) accessSync(m.installDir, constants.W_OK);
+  }
 }
 
-interface MovedMarker {
+/** A marker a move claims: one still naming the move's old tap. */
+interface MarkerToMove {
   readonly installDir: string;
   readonly marker: Marker;
-  readonly scope: Scope;
-  readonly projectRoot: string | null;
+  readonly move: Reattribution;
 }
 
-/** The markers of the skills `moves` name, in every agent that owns one. */
-function movedMarkers(moves: readonly Reattribution[], cwd: string): MovedMarker[] {
-  const found: MovedMarker[] = [];
+/** Where `move`'s skill is installed from; null for a project move with no recorded root. */
+function rootOf(move: Reattribution, cwd: string): string | null {
+  return move.scope === "user" ? cwd : move.projectRoot;
+}
+
+/**
+ * The markers `moves` claim, once per folder: agents sharing a skills
+ * folder (§7.2) share its one marker.
+ */
+function markersToMove(moves: readonly Reattribution[], cwd: string): MarkerToMove[] {
+  const found: MarkerToMove[] = [];
+  const seen = new Set<string>();
   // Go straight to the directories the moves name. Listing every
   // adapter's whole marker tree and filtering afterwards would walk
   // unrelated skills (and unrelated projects) under the state lock; a
   // move knows its own skill name, scope and project root, and the
   // install path is a pure function of those plus the adapter.
-  for (const r of moves) {
-    const root = r.scope === "user" ? cwd : r.projectRoot;
+  for (const move of moves) {
     // A project-scope move with no recorded root has nothing to rewrite:
     // the marker's location is exactly what we'd be guessing at.
+    const root = rootOf(move, cwd);
     if (root === null) continue;
     for (const adapter of ALL_AGENTS) {
-      const base = baseFor(adapter, r.scope, root);
-      if (base === "") continue;
-      const installDir = join(base, r.name);
+      const base = baseFor(adapter, move.scope, root);
+      const installDir = join(base, move.name);
+      if (base === "" || seen.has(installDir)) continue;
       const marker = tryReadJson<Marker>(join(installDir, ".crew.json"));
-      // No marker, or one this adapter doesn't own: not ours to rewrite.
+      // No marker, one this adapter doesn't own, or one for another
+      // skill or tap: not this move's. The old tap may still own other
+      // skills, so only markers naming it move.
       if (!marker?.agents?.includes(adapter.name)) continue;
-      found.push({ installDir, marker, scope: r.scope, projectRoot: r.projectRoot });
+      seen.add(installDir);
+      if (marker.name === move.name && marker.tap_name === move.fromTap) {
+        found.push({ installDir, marker, move });
+      }
     }
   }
   return found;
 }
 
-function maybeRewrite(
-  installDir: string,
-  marker: Marker,
-  movesByMarker: ReadonlyMap<string, Reattribution>,
-  tapsByName: ReadonlyMap<string, TapConfig>,
-  scope: "user" | "project",
-  projectRoot: string | null,
-): void {
-  const move = movesByMarker.get(markerMoveKey(marker.name, scope, projectRoot, marker.tap_name));
-  if (!move) return;
-  const tap = tapsByName.get(move.toTap);
+function rewriteMarker(m: MarkerToMove, tapsByName: ReadonlyMap<string, TapConfig>): void {
+  const tap = tapsByName.get(m.move.toTap);
   if (!tap) return;
   // `tap_discovery` describes the DESTINATION tap, so it can't be
   // inherited from the old marker: a move onto a non-recursive tap that
   // kept the old flag would mislead `doctor --repair`.
-  const { tap_discovery: _dropped, ...rest } = marker;
-  writeJson(join(installDir, ".crew.json"), {
+  const { tap_discovery: _dropped, ...rest } = m.marker;
+  writeJson(join(m.installDir, ".crew.json"), {
     ...rest,
     tap_name: tap.name,
     tap_kind: tap.kind,
@@ -171,6 +179,6 @@ function maybeRewrite(
     tap_subpath: tap.subpath,
     tap_path: tap.path,
     ...(tap.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
-    path: move.toPath,
+    path: m.move.toPath,
   });
 }

@@ -1,10 +1,10 @@
 /**
  * The edges of a whole install's reinstall that moves a tracking entry
- * (§5.4, §11.1; C-UPD-16b). The entry's markers in agents the run didn't
- * touch follow the move, at user and project scope; one that couldn't
- * fails the run before anything is written, leaving the move to a retry,
- * which completes it. A reinstall that fails on every agent leaves the
- * entry, its subscription, its markers, and its tap as they were.
+ * (§5.4, §11.1; C-UPD-16b). The entry's markers in agents the run doesn't
+ * target follow the move, at user and project scope. A targeted agent's
+ * own folder is the install's to report, agent by agent; a reinstall that
+ * fails on every agent leaves the entry, its subscription, markers, and
+ * tap as they were. (A copy that can't follow: `./refusals.test.ts`.)
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -16,29 +16,20 @@ import { readConfig } from "../../../../src/config/load.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { makeTempDir, tagRepo } from "../../../helpers/fixtures.ts";
 import { buildRepo, install } from "../helpers.ts";
-import { addSiblingAndUpdate, crew, markerTap, tapOf, tracking } from "./helpers.ts";
+import {
+  addSiblingAndUpdate,
+  crew,
+  markerTap,
+  redirectAgents,
+  tapOf,
+  tracking,
+} from "./helpers.ts";
 
-type Redirect = Pick<typeof codexAdapter, "userPath" | "projectPath" | "detect">;
-let originals: (readonly [Redirect, Redirect])[] = [];
+let agents: ReturnType<typeof redirectAgents>;
 beforeEach(() => {
-  originals = [];
-  // Every install names its agents, so codex takes part only where a test
-  // names it.
-  for (const [adapter, dot] of [
-    [claudeCodeAdapter, ".claude"],
-    [codexAdapter, ".codex"],
-  ] as const) {
-    const { userPath, projectPath, detect } = adapter;
-    originals.push([adapter, { userPath, projectPath, detect }]);
-    const root = makeTempDir("crew-agent-");
-    adapter.userPath = () => root;
-    adapter.projectPath = (cwd: string) => join(cwd, dot, "skills");
-    adapter.detect = () => true;
-  }
+  agents = redirectAgents();
 });
-afterEach(() => {
-  for (const [adapter, original] of originals) Object.assign(adapter, original);
-});
+afterEach(() => agents.restore());
 
 const CLAUDE = ["--agent", "claude-code"];
 const BOTH = [...CLAUDE, "--agent", "codex"];
@@ -47,14 +38,16 @@ for (const scope of ["user", "project"] as const) {
   test(`C-UPD-16b a reinstall that moves an entry moves its markers in agents it didn't touch (${scope})`, () => {
     const home = makeCrewHome();
     const repo = buildRepo(["a", "b"]);
-    const project = makeTempDir("crew-project-");
-    const cwd = scope === "project" ? project : undefined;
-    const at = scope === "project" ? ["--scope", "project"] : [];
-    expect(crew(home, ["install", `file://${repo}//skills/a`, ...at, ...BOTH], cwd)).toBe(0);
+    const cwd = scope === "project" ? makeTempDir("crew-project-") : undefined;
+    const scopeFlags = cwd ? ["--scope", "project"] : [];
+    expect(crew(home, ["install", `file://${repo}//skills/a`, ...scopeFlags, ...BOTH], cwd)).toBe(
+      0,
+    );
     const ownTap = tapOf(home, "a");
     tagRepo(repo, "v1");
     // Reinstalled into claude-code only; codex's copy stays as it was.
-    expect(crew(home, ["install", `file://${repo}@v1`, ...at, ...CLAUDE, "--force"], cwd)).toBe(0);
+    const reinstall = ["install", `file://${repo}@v1`, ...scopeFlags, ...CLAUDE, "--force"];
+    expect(crew(home, reinstall, cwd)).toBe(0);
     expect(tapOf(home, "a")).not.toBe(ownTap);
     const codexRoot = cwd ? codexAdapter.projectPath(cwd) : codexAdapter.userPath();
     expect(markerTap(codexRoot, "a")).toBe(tapOf(home, "a"));
@@ -62,28 +55,21 @@ for (const scope of ["user", "project"] as const) {
   });
 }
 
-test("C-UPD-16b a marker that couldn't follow the move fails the run before anything is written; a retry completes it", () => {
+test("C-UPD-16b a targeted agent's own folder that can't be written fails that agent, not the run", () => {
   const home = makeCrewHome();
   const repo = buildRepo(["a", "b"]);
-  expect(crew(home, ["install", `file://${repo}//skills/a`, ...BOTH])).toBe(0);
+  expect(install(home, `file://${repo}//skills/a`).code).toBe(0);
   const ownTap = tapOf(home, "a");
   tagRepo(repo, "v1");
-  const theirs = join(codexAdapter.userPath(), "a");
-  chmodSync(theirs, 0o555);
+  const ownCopy = join(claudeCodeAdapter.userPath(), "a");
+  chmodSync(ownCopy, 0o555);
   try {
-    expect(crew(home, ["install", `file://${repo}@v1`, ...CLAUDE, "--force"])).not.toBe(0);
+    expect(crew(home, ["install", `file://${repo}@v1`, ...CLAUDE, "--force"])).toBe(1);
   } finally {
-    chmodSync(theirs, 0o755);
+    chmodSync(ownCopy, 0o755);
   }
-  // Refused before anything was written: no copy reinstalled, no sibling.
   expect(tapOf(home, "a")).toBe(ownTap);
-  expect(markerTap(claudeCodeAdapter.userPath(), "a")).toBe(ownTap);
-  expect(existsSync(join(claudeCodeAdapter.userPath(), "b"))).toBe(false);
-
-  expect(crew(home, ["install", `file://${repo}@v1`, ...CLAUDE, "--force"])).toBe(0);
-  expect(tapOf(home, "a")).not.toBe(ownTap);
-  for (const root of [claudeCodeAdapter.userPath(), codexAdapter.userPath()])
-    expect(markerTap(root, "a")).toBe(tapOf(home, "a"));
+  expect(existsSync(join(claudeCodeAdapter.userPath(), "b", "SKILL.md"))).toBe(true);
 });
 
 for (const at of ["@v1", ""]) {

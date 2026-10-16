@@ -9,7 +9,6 @@
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../../src/agents/codex.ts";
