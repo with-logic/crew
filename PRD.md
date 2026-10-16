@@ -1272,7 +1272,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Every other spec rule from the Agent Skills specification.
 
    A skill that fails validation is recorded as a failed skill with its message and path; the run continues. No validation failure aborts the whole command. See the exit-code rules in step 9.
-5. **Expand directories.** Four cases, checked in order:
+5. **Expand skills.** Four cases, checked in order:
    1. If the resolved source location has a `SKILL.md` at its root, it is one skill.
    2. Else, if the resolved source location has a `skills/` subdirectory, crew walks under `skills/` and collects skills:
       - Every immediate child of `skills/` that contains a `SKILL.md` is a skill (as before).
@@ -1465,13 +1465,18 @@ default branch whose recorded path in a git source now leads outside the
 repository through a symlink is treated the same way: crew never follows
 it (§8.4), so as far as the source is concerned the skill is gone. A
 symlink to a skill directory that stays inside the repository is
-followed, as discovery follows skill-directory links at install. (A
-skill read at an explicit `@<ref>` is held to the export rule of §9 step
-3 for symlinks instead.) At the default branch or a ref, a skill that is
+followed, as discovery follows skill-directory links at install. The
+same rule holds for the skill's own `SKILL.md`, and for a link crew can't
+resolve: one that dangles or loops is gone, and one that can't be
+resolved is judged by where it points — out of the repository it is
+never read (gone); inside, the failure is a local one. (At an explicit
+`@<ref>`, the recorded path itself is held to the export rule of §9 step
+3 instead; its `SKILL.md` is still never read through a link out of the
+skill.) At the default branch or a ref, a skill that is
 now the wrong kind of thing is gone too: a gist skill file, or a
 one-skill gist's root `SKILL.md`, that is no longer a regular file (a
-symlink is never a gist skill, §9 step 5 "Gists"), or a skill directory
-replaced by a file. A failure to look that isn't a missing path — a
+symlink is never a gist skill, §9 step 5 "Gists"), a skill directory
+replaced by a file, or one left without a `SKILL.md`. A failure to look that isn't a missing path — a
 permission error, say — is `source_unreachable`, not `source_gone`.
 
 This rule also applies when a whole source becomes unresolvable: a
@@ -2072,7 +2077,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 |---|---|---|
 | `invalid_ref` | 4 | The skill reference failed to parse (§8.4). |
 | `invalid_skill` | 4 | A skill (directory, or gist skill file) failed spec validation. Message names the failing field. |
-| `no_skills_found` | 4 | A directory source expanded to zero valid skills. |
+| `no_skills_found` | 4 | A directory source expanded to zero valid skills, or a gist has no skill files (or no file a `//<file>` named). |
 | `source_unreachable` | 5 | Network or git failure acquiring a source, or a local file in it crew can't read (§9 step 4, §10.1). |
 | `ref_not_found` | 5 | Ref doesn't exist in the repo. |
 | `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
@@ -2560,7 +2565,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-25 | §9 step 5, step 9 | A gist candidate that fails validation, or that crew can't read, is reported as a failed skill, named by its file, while its valid siblings install; a gist with no candidates is `no_skills_found`. A symlink in a gist is never a candidate. |
 | C-INST-26 | §8.2, §9 step 5 | `crew install <gist-url>//<file>` installs only that file's skill, attributed to the tap for the whole gist with `source.path` `<file>` and `tracks_tap` absent. A file the gist doesn't have is `no_skills_found` naming the file; a named file is validated whether or not it opens with frontmatter; a file reached through a symlink, or any file of a gist with a root `SKILL.md`, is `invalid_ref`. A gist dependency spelled `<gist-url>//<file>` installs only that file's skill. |
 | C-INST-27 | §9 step 6 | A bare-name dependency of a gist skill resolves to the sibling skill file in the same gist, read at the same commit. |
-| C-INST-28 | §5.3, §6.1, §8.2, §16.3 | `crew install --recursive` (with the gist as a positional or `--from-git`) and `crew tap add --recursive` with a gist URL are `usage_error` and write nothing. A gist tap row or marker recorded with recursive discovery by an older crew reads as standard discovery, and `discovery: recursive` is never written back for it (config writes, `doctor --repair`). |
+| C-INST-28 | §5.3, §6.1, §7.5, §8.2, §16.3 | `crew install --recursive` (with the gist as a positional or `--from-git`) and `crew tap add --recursive` with a gist URL are `usage_error` and write nothing. A gist tap row or marker recorded with recursive discovery by an older crew reads as standard discovery, and `discovery: recursive` is never written back for it (config writes, `doctor --repair`). |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
 
@@ -2674,6 +2679,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
 | C-UPD-38 | §9 step 5, §10.1.1 | For a gist installed whole: an edited skill file is updated by `crew update`; a new skill file added upstream is installed by tap re-expansion; a deleted skill file reports `source_gone` and its local install is left in place. For one skill installed with `//<file>`, a deleted file is likewise `source_gone`. |
 | C-UPD-39 | §8.4, §10.1 | When the recorded path of an installed skill that doesn't track its git tap (`<tap>/<skill>`, a gist `//<file>`) is replaced upstream by a symlink leading outside the repository, `crew update` reports `source_gone` and leaves the installed bytes unchanged; nothing is read through the link. So does a gist `//<file>` replaced by a symlink to another file of the gist, and a one-skill gist (installed as `<tap>/<skill>`) whose root `SKILL.md` becomes a symlink. A symlink to a skill directory that stays inside the repository updates normally. |
+| C-UPD-40 | §8.4, §10.1 | On `crew update` of a skill that doesn't track its git tap: a recorded path that dangles or loops, a skill directory left without a `SKILL.md`, and a `SKILL.md` or path that is a symlink out of the repository (even one crew can't resolve) report `source_gone` — the `SKILL.md` rule at an `@<ref>` too; a path crew can't look at for any other reason (permissions) fails the update with `source_unreachable`, as does a file it can't read while staging. |
 
 #### C-INFO: Info (§9.1)
 

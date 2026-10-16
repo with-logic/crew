@@ -44,7 +44,10 @@ export function loadSkillName(path: string): string {
   );
 }
 
-/** The next step for a `SKILL.md` crew couldn't read. */
+/**
+ * The next step when crew can't read or look at a skill's path: its
+ * `SKILL.md` here, or its location on update (`acquire/live-skill-path.ts`).
+ */
 export const UNREADABLE_REMEDY =
   "Check that it is readable by you (its permissions, and its folder's).";
 

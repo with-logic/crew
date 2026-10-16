@@ -56,8 +56,12 @@ export function updateOneEntry(
         outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed"),
     };
   } catch (err) {
-    const ce = err as CrewError;
-    const soft = ce.code === "no_skills_found" || ce.code === "invalid_ref";
+    // A raw `node:fs` error can land here too (a file crew can't read while
+    // hashing or staging); its errno `.code` is no §13 name (§13: a local
+    // file crew can't read is `source_unreachable`).
+    const errno = typeof (err as NodeJS.ErrnoException).syscall === "string";
+    const code = err instanceof CrewError ? err.code : errno ? "source_unreachable" : "usage_error";
+    const soft = code === "no_skills_found" || code === "invalid_ref";
     if (soft) {
       return {
         row: rowFor(entry, { kind: "source_gone" }),
@@ -73,8 +77,7 @@ export function updateOneEntry(
     return {
       row: rowFor(entry, {
         kind: "failed",
-        // A raw `node:fs` error has its own errno `.code`, which is no §13 name.
-        error: { code: err instanceof CrewError ? err.code : "usage_error", message: ce.message },
+        error: { code, message: (err as Error).message },
       }),
       updatedState: state,
       bumpHardFailure: true,

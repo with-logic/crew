@@ -1,6 +1,6 @@
 /**
  * `liveSkillPath`: finding an installed skill again in a live checkout
- * (§8.4, §10.1; C-UPD-11, C-UPD-39).
+ * (§8.4, §10.1; C-UPD-11, C-UPD-39, C-UPD-40).
  *
  * Each case lays out the tap's clone by hand, so the link and permission
  * shapes upstream could leave behind are exact. Gone — including a link
@@ -52,7 +52,7 @@ describe("liveSkillPath in a git tap", () => {
     expect(liveSkillPath(TAP, home, root, "skills/demo")).toBe(join(skills, "demo"));
   });
 
-  test("a looping link is gone", () => {
+  test("C-UPD-40 a looping link is gone", () => {
     const { home, root, skills } = clone();
     symlinkSync("demo", join(skills, "demo"));
     expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe(
@@ -60,22 +60,42 @@ describe("liveSkillPath in a git tap", () => {
     );
   });
 
-  test("a link into somewhere crew can't read is gone, not a local fault", () => {
+  test("C-UPD-40 a link out of the repository is never read, even one crew can't resolve", () => {
     const { home, root, skills } = clone();
     const outside = makeTempDir("crew-live-outside-");
     makeSkill(join(outside, "locked"), "demo", skillFrontmatter({ name: "demo" }));
     symlinkSync(join(outside, "locked", "demo"), join(skills, "demo"));
     chmodSync(join(outside, "locked"), 0o000);
     try {
-      expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe(
-        "no_skills_found",
-      );
+      expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe("invalid_ref");
     } finally {
       chmodSync(join(outside, "locked"), 0o755);
     }
   });
 
-  test("a SKILL.md relinked out of the repository is never read", () => {
+  test("C-UPD-40 an in-repository link to a folder crew can't read is a local fault", () => {
+    const { home, root, skills } = clone();
+    makeSkill(join(root, "shared", "locked"), "demo", skillFrontmatter({ name: "demo" }));
+    symlinkSync(join("..", "shared", "locked", "demo"), join(skills, "demo"));
+    chmodSync(join(root, "shared", "locked"), 0o000);
+    try {
+      expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe(
+        "source_unreachable",
+      );
+    } finally {
+      chmodSync(join(root, "shared", "locked"), 0o755);
+    }
+  });
+
+  test("C-UPD-40 a skill folder left without a SKILL.md is gone", () => {
+    const { home, root, skills } = clone();
+    mkdirSync(join(skills, "demo"));
+    expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe(
+      "no_skills_found",
+    );
+  });
+
+  test("C-UPD-40 a SKILL.md relinked out of the repository is never read", () => {
     const { home, root, skills } = clone();
     const outside = makeTempDir("crew-live-outside-");
     writeFileSync(join(outside, "SKILL.md"), `---\n${skillFrontmatter({ name: "demo" })}\n---\n`);
@@ -84,7 +104,7 @@ describe("liveSkillPath in a git tap", () => {
     expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe("invalid_ref");
   });
 
-  test("a dangling SKILL.md link is gone", () => {
+  test("C-UPD-40 a dangling SKILL.md link is gone", () => {
     const { home, root, skills } = clone();
     mkdirSync(join(skills, "demo"));
     symlinkSync("nowhere.md", join(skills, "demo", "SKILL.md"));
@@ -93,7 +113,7 @@ describe("liveSkillPath in a git tap", () => {
     );
   });
 
-  test("a folder crew can't look into is a local fault, named with its reason", () => {
+  test("C-UPD-40 a folder crew can't look into is a local fault, named with its reason", () => {
     const { home, root, skills } = clone();
     makeSkill(skills, "demo", skillFrontmatter({ name: "demo" }));
     chmodSync(skills, 0o000);

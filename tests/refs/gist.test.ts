@@ -46,7 +46,7 @@ describe("gist URLs", () => {
     });
   }
 
-  test("C-REF-37 an SSH gist remote is kept as typed", () => {
+  test("an SSH gist remote is kept as typed (§8.2)", () => {
     const ssh = `git@gist.github.com:${ID}.git`;
     expect(parseRef(ssh)).toEqual({ type: "git", url: ssh, ref: null, subpath: "" });
   });
@@ -73,6 +73,7 @@ describe("gist URLs", () => {
     `https://gist.github.com/acme/${ID}/revisions`,
     `https://gist.github.com/acme/${ID}/not-a-revision`,
     `https://gist.github.com/acme/${ID}/raw/${REVISION}/prd.md`,
+    `https://gist.github.com/acme/${ID}/${REVISION}/extra`,
   ]) {
     test(`C-REF-39 ${raw} is invalid_ref, with the gist forms as the hint`, () => {
       const err = rejection(() => parseRef(raw));

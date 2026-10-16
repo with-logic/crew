@@ -13,17 +13,11 @@ interface ExpansionItems {
   readonly skipped: readonly SkippedSkill[];
 }
 
-/** How the items expanded from one location are recorded. */
-export interface ItemOptions {
+/** How the items expanded from one location are recorded: as `PendingItem`s, under `baseTapPath`. */
+export type ItemOptions = Pick<PendingItem, "requestedRef" | "explicit" | "tracksTap"> & {
   /** Tap-relative path of the expanded location itself (`""` for the tap root). */
   readonly baseTapPath: string;
-  /** The `@<ref>` the reference asked for, if any. */
-  readonly requestedRef: string | null;
-  /** True for a skill the user named; false for a dependency. */
-  readonly explicit: boolean;
-  /** See `ResolvedSkill.tracksTap` / `StateEntry.tracks_tap`. */
-  readonly tracksTap: boolean;
-}
+};
 
 /**
  * Expand `root` — a skill directory, a directory of skills, or a gist's

@@ -4,12 +4,12 @@
  * export too.
  */
 
-import { lstatSync, realpathSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { lstatSync, readlinkSync, realpathSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { UNREADABLE_REMEDY } from "../../skill/load.ts";
+import { hasSkillMd, UNREADABLE_REMEDY } from "../../skill/load.ts";
 import { isSkillFile } from "../../skill/skill-file.ts";
 import { errnoReason } from "../../util/errno.ts";
 import { isDirectory } from "../../util/fs.ts";
@@ -62,23 +62,56 @@ export function liveSkillPath(
   return location;
 }
 
-/** Throw unless `path` resolves to somewhere inside `clone` (already a real path). */
+/**
+ * At an `@<ref>`, a folder skill's `SKILL.md` is held to the same rule
+ * against the skill's own scratch export (§9 step 3): a link out of it is
+ * never read. A gist's files are already judged without following links.
+ */
+export function assertExportedSkillMdInside(
+  tap: Pick<TapConfig, "kind" | "url">,
+  location: string,
+  tapRelativePath: string,
+): void {
+  if (isGistTap(tap)) return;
+  const skillMd = join(location, "SKILL.md");
+  if (isLink(skillMd)) assertResolvesInside(realpathSync(location), skillMd, tapRelativePath);
+}
+
+/**
+ * Throw unless `path` resolves to somewhere inside `clone` (already a real
+ * path). Missing — deleted, or a dangling or looping link — is gone. A
+ * link crew can't resolve is judged by where it points: out of the
+ * repository it is never read; inside, the failure is a local one.
+ */
 function assertResolvesInside(clone: string, path: string, tapRelativePath: string): void {
   let resolved: string;
   try {
     resolved = realpathSync(path);
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR" || isLink(path))
+    if (isMissingPathError(err) || (err as NodeJS.ErrnoException).code === "ELOOP") {
       throw noLongerASkill(tapRelativePath);
+    }
+    const target = linkTarget(path);
+    if (target !== null && climbsOut(relative(clone, target))) throw outsideRepo(tapRelativePath);
     throw unreadable(path, err);
   }
-  if (climbsOut(relative(clone, resolved))) {
-    throw new CrewError(
-      "invalid_ref",
-      `\`${tapRelativePath || "."}\` now leads outside the repository through a symlink, so crew won't read it`,
-      { path: tapRelativePath },
-    );
+  if (climbsOut(relative(clone, resolved))) throw outsideRepo(tapRelativePath);
+}
+
+function outsideRepo(tapRelativePath: string): CrewError {
+  return new CrewError(
+    "invalid_ref",
+    `\`${tapRelativePath || "."}\` now leads outside the repository through a symlink, so crew won't read it`,
+    { path: tapRelativePath },
+  );
+}
+
+/** Where the link at `path` points, from its real parent directory; null when it isn't a readable link. */
+function linkTarget(path: string): string | null {
+  try {
+    return resolve(realpathSync(dirname(path)), readlinkSync(path));
+  } catch {
+    return null;
   }
 }
 
@@ -100,10 +133,15 @@ function isGone(path: string): boolean {
     statSync(path);
     return false;
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") return true;
+    if (isMissingPathError(err)) return true;
     throw unreadable(path, err);
   }
+}
+
+/** Nothing at the path, or a path through something that isn't a folder. */
+function isMissingPathError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ENOTDIR";
 }
 
 function unreadable(path: string, err: unknown): CrewError {
@@ -120,7 +158,7 @@ function unreadable(path: string, err: unknown): CrewError {
  * commit's export — is now the wrong kind of thing: a gist skill file
  * that isn't a regular file, a one-skill gist whose root `SKILL.md` isn't
  * (a symlink is never a gist skill file or root SKILL.md, §9 step 5), or a
- * folder skill that isn't a folder.
+ * folder skill that isn't a folder or no longer holds a `SKILL.md`.
  */
 export function assertStillASkill(
   tap: Pick<TapConfig, "kind" | "url">,
@@ -139,8 +177,9 @@ function stillASkill(
     return tapRelativePath === "" ? isOneSkillGist(location) : isSkillFile(location);
   }
   // A whole-tap root skill's directory is the tap root, which acquisition
-  // already proved exists as a directory.
-  return tapRelativePath === "" || isDirectory(location);
+  // already proved exists as a directory. Either way it must still hold a
+  // SKILL.md — a deleted one and a link to nowhere alike.
+  return (tapRelativePath === "" || isDirectory(location)) && hasSkillMd(location);
 }
 
 function noLongerASkill(tapRelativePath: string): CrewError {

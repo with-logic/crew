@@ -15,7 +15,7 @@ import { legacyTapPath } from "../../../src/core/paths.ts";
 import { repoClonePath } from "../../../src/core/repo-path.ts";
 import { runGit } from "../../../src/git/exec.ts";
 import { readState } from "../../../src/state/load.ts";
-import { parseYaml, stringifyYaml } from "../../../src/yaml/parse.ts";
+import { parseYaml, stringifyYaml, type YamlValue } from "../../../src/yaml/parse.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 import {
@@ -92,15 +92,28 @@ describe("a gist tap recorded with recursive discovery", () => {
     const home = makeCrewHome();
     // As crew 0.10 could write it: raw YAML, since crew itself no longer does.
     const file = join(home, "config.yaml");
-    const raw = parseYaml(readFileSync(file, "utf8")) as { taps: unknown[] };
+    const raw = parseYaml(readFileSync(file, "utf8")) as { taps: YamlValue[] };
     const row = { name: GIST_TAP, kind: "git", registered: true, url: GIST_CLONE_URL };
     raw.taps.push({ ...row, discovery: "recursive" });
-    writeFileSync(file, stringifyYaml(raw as never));
+    writeFileSync(file, stringifyYaml(raw));
 
     expect(readConfig(home).taps.find((t) => t.name === GIST_TAP)?.discovery).toBeUndefined();
     expect(run(home, ["tap", "list"]).stdout).not.toContain("recursive");
     writeConfig(readConfig(home), home);
     expect(readFileSync(file, "utf8")).not.toContain("recursive");
+  });
+
+  test("C-INST-28 renaming a gist tap drops an old marker's recursive discovery", () => {
+    fx.gist({ "prd.md": skillFile("prd") });
+    const home = makeCrewHome();
+    expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
+    const marker = join(skillsDir(), "prd", ".crew.json");
+    const old = JSON.parse(readFileSync(marker, "utf8"));
+    writeFileSync(marker, JSON.stringify({ ...old, tap_discovery: "recursive" }));
+
+    expect(run(home, ["tap", "add", GIST_PAGE_URL, "renamed"]).code).toBe(0);
+    const rewritten = JSON.parse(readFileSync(marker, "utf8"));
+    expect([rewritten.tap_name, rewritten.tap_discovery]).toEqual(["renamed", undefined]);
   });
 
   test("C-INST-28 doctor --repair doesn't rebuild a gist tap as recursive from an old marker", () => {
@@ -119,7 +132,8 @@ describe("a gist tap recorded with recursive discovery", () => {
     writeConfig({ ...config, taps: config.taps.filter((t) => t.name !== GIST_TAP) }, home);
 
     expect(run(home, ["doctor", "--repair"]).code).toBe(0);
-    expect(readConfig(home).taps.find((t) => t.name === GIST_TAP)?.discovery).toBeUndefined();
+    const rebuilt = readConfig(home).taps.find((t) => t.name === GIST_TAP);
+    expect([rebuilt?.url, rebuilt?.discovery]).toEqual([GIST_CLONE_URL, undefined]);
     expect(readFileSync(join(home, "config.yaml"), "utf8")).not.toContain("recursive");
   });
 });

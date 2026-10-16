@@ -117,12 +117,21 @@ function previewSkills(root: string, tap: TapConfig, sha: string | null): SkillI
         : isSkillFile(first.path)
           ? skillFileRemedy(first.path)
           : undefined;
-    const candidates = skipped.map((s) =>
-      s.path === root ? basename(s.path) : toPosix(relative(root, s.path)),
-    );
+    const candidates = skipped.map((s) => candidateName(root, s.path));
     throw new CrewError(first.code, message, { path: first.path, candidates }, remedy);
   }
   return valid.map(skillInfoOf);
+}
+
+/**
+ * How `details.candidates` names a skipped candidate: a gist skill file by
+ * its file name (the root may be that file itself); anything else by its
+ * path under `root`, `.` for the root skill — never crew's own clone or
+ * scratch-export folder name.
+ */
+function candidateName(root: string, path: string): string {
+  if (isSkillFile(path)) return basename(path);
+  return toPosix(relative(root, path)) || ".";
 }
 
 function buildSkillInfosAt(locations: readonly { readonly path: string }[]): SkillInfo[] {

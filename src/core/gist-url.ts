@@ -8,7 +8,7 @@
  */
 
 /** The only host whose repositories use the gist layout (§8.2). */
-export const GIST_HOST = "gist.github.com";
+const GIST_HOST = "gist.github.com";
 
 /** Gist IDs are hex — at most 32 characters; the oldest are short and all-digit. */
 export const GIST_ID_PATTERN = /^[0-9a-f]+$/i;
@@ -52,7 +52,11 @@ export function gistIdentityPath(path: string): string {
   return `/${id.toLowerCase()}`;
 }
 
-/** A gist skill file's name: it ends in `.md`, in any case (§9 step 5, "Gists"). */
-export function isSkillFileName(name: string): boolean {
+/**
+ * True when a file name or path ends in `.md`, in any case — the extension
+ * a gist skill file has (§9 step 5, "Gists"). A `//<file>` selection must
+ * also be top-level: see `isGistSkillFileName` (`refs/gist.ts`).
+ */
+export function hasMarkdownExtension(name: string): boolean {
   return /\.md$/i.test(name);
 }

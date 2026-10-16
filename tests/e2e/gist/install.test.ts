@@ -120,6 +120,10 @@ describe("crew install <gist-url>", () => {
     expect(r.stdout).toContain("`bad.md`: `name: Not Valid` has invalid characters");
     expect(r.stdout).toContain("`nodesc.md` frontmatter is missing `description`");
     expect(r.stdout).not.toContain("SKILL.md");
+    // A re-run still exits 1 for the bad files, so it still says why.
+    const again = run(home, ["install", GIST_PAGE_URL]);
+    expect(again.code).toBe(1);
+    expect(again.stdout).toContain("Failed (2):");
   });
 
   test("C-INST-25 an unreadable gist file fails alone; its siblings install", () => {

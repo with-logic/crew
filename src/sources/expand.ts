@@ -99,10 +99,9 @@ function expandGist(root: string, label: string): ExpansionResult {
 
 /**
  * Expand a non-gist `root` into loaded skills plus any skipped candidates.
- * Validation failures (at any level) are recorded in `skipped`
- * rather than thrown — the caller decides exit code and output.
- * `no_skills_found` is still thrown when neither a valid skill nor
- * a validation failure is present (zero candidates).
+ * Candidates that fail to load (invalid or unreadable) are recorded in
+ * `skipped` rather than thrown — the caller decides exit code and output.
+ * `no_skills_found` is thrown only when there are zero candidates.
  */
 export function expandSkills(root: string, mode: Exclude<DiscoveryMode, "gist">): ExpansionResult {
   if (hasSkillMd(root)) return loadCandidates([root]);

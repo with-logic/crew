@@ -44,9 +44,10 @@ export function parseTapEntry(entry: YamlValue): TapConfig {
 }
 
 /**
- * The `discovery` a git tap row records. §8.2 "Gists": recursive discovery
+ * The `discovery` a tap row records. §8.2 "Gists": recursive discovery
  * never applies to a gist, so a gist row never records it — whether an
- * older crew wrote it to config or to a marker `doctor --repair` reads.
+ * older crew wrote it to config or to a marker `doctor --repair` reads. (A
+ * path tap has no URL, so it is never a gist.)
  */
 export function recordedDiscovery(
   url: string,
@@ -64,7 +65,7 @@ export function serializeTap(t: TapConfig): YamlValue {
       registered: t.registered,
       url: t.url,
       ...(t.subpath.length > 0 ? { subpath: t.subpath } : {}),
-      ...recordedDiscovery(t.url, t.discovery),
+      ...(t.discovery === "recursive" ? { discovery: "recursive" } : {}),
     };
   }
   return {

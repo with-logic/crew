@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -122,6 +122,24 @@ describe("crew info", () => {
     expect(error.message).toMatch(/^none of the 2 skills here is valid — `(alpha|beta)`: /);
   });
 
+  test("C-INFO-03 a folder whose one skill can't be read says so, exit 5", () => {
+    const home = makeInfoHome();
+    const src = makeTempDir();
+    makeSkill(src, "locked", skillFrontmatter({ name: "locked" }));
+    chmodSync(join(src, "locked", "SKILL.md"), 0o000);
+    try {
+      const capture = captureStreams();
+      const code = runCli(["info", src, "--json"], { home, streams: capture.streams });
+      expect(code).toBe(5);
+      const { error } = JSON.parse(capture.stdout());
+      expect(error.name).toBe("source_unreachable");
+      // The read failure already names the file; no `locked`: prefix.
+      expect(error.message).toStartWith("couldn't read `");
+    } finally {
+      chmodSync(join(src, "locked", "SKILL.md"), 0o644);
+    }
+  });
+
   test("C-INFO-03 a folder whose one skill is invalid reports why instead of no skills", () => {
     const home = makeInfoHome();
     const src = makeTempDir();
@@ -134,6 +152,8 @@ describe("crew info", () => {
     const { error } = JSON.parse(capture.stdout());
     expect(error.name).toBe("invalid_skill");
     expect(error.message).toContain("frontmatter is missing `description`");
+    // The root skill is `.`, never crew's own clone or export folder name.
+    expect(error.details.candidates).toEqual(["."]);
   });
 });
 

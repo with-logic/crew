@@ -8,6 +8,7 @@
 import { join } from "node:path";
 import { listInstalledForAgent } from "../agents/list.ts";
 import { ALL_AGENTS } from "../agents/registry.ts";
+import { recordedDiscovery } from "../config/taps.ts";
 import type { Marker, StateEntry, TapDiscovery } from "../core/types.ts";
 import { writeJson } from "../util/json.ts";
 
@@ -41,9 +42,12 @@ export function rewriteTapMarkers(
 
 function maybeRewrite(installDir: string, marker: Marker, rewrite: TapMarkerRewrite): void {
   if (marker.tap_name !== rewrite.oldName) return;
+  // Recomputed, not inherited: a gist never records recursive discovery (§8.2).
+  const { tap_discovery: previous, ...rest } = marker;
+  const discovery = recordedDiscovery(marker.tap_url, rewrite.discovery ?? previous).discovery;
   writeJson(join(installDir, ".crew.json"), {
-    ...marker,
+    ...rest,
     tap_name: rewrite.newName,
-    ...(rewrite.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
+    ...(discovery === undefined ? {} : { tap_discovery: discovery }),
   });
 }

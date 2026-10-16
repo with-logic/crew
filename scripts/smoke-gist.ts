@@ -18,7 +18,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isSkillFileName } from "../src/core/gist-url.ts";
+import { hasMarkdownExtension } from "../src/core/gist-url.ts";
 import { opensFrontmatter } from "../src/skill/frontmatter.ts";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
@@ -89,7 +89,7 @@ function git(dir: string, args: string[]): string {
 function skillFilesAt(dir: string, rev: string): Map<string, string> {
   const files = new Map<string, string>();
   for (const name of git(dir, ["ls-tree", "--name-only", rev]).split("\n")) {
-    if (!isSkillFileName(name)) continue;
+    if (!hasMarkdownExtension(name)) continue;
     const text = git(dir, ["show", `${rev}:${name}`]);
     if (opensFrontmatter(text)) files.set(name, text);
   }

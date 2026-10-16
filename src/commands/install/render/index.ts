@@ -53,6 +53,8 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
         ),
       );
     }
+    // A re-run still exits non-zero for a sibling that failed, so say why.
+    lines.push(...failedLines(input, style));
     return lines;
   }
 
@@ -92,18 +94,21 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
     lines.push(style.dim(totalsText));
   }
 
-  if (input.skipped.length > 0) {
-    lines.push("");
-    lines.push(style.bold(`Failed (${input.skipped.length}):`));
-    for (const s of input.skipped) {
-      // `wrap` always returns at least one element for a non-empty
-      // message — `s.message` is a CrewError message, never empty.
-      const wrapped = wrap(s.message, Math.max(40, input.width - 4));
-      lines.push(`  ${style.symbol("fail")} ${style.red(wrapped[0]!)}`);
-      for (let i = 1; i < wrapped.length; i++) lines.push(`    ${style.red(wrapped[i]!)}`);
-    }
-  }
+  lines.push(...failedLines(input, style));
+  return lines;
+}
 
+/** The "Failed (N)" block for skipped candidates; empty when nothing failed. */
+function failedLines(input: RenderInstallInput, style: Styler): string[] {
+  if (input.skipped.length === 0) return [];
+  const lines = ["", style.bold(`Failed (${input.skipped.length}):`)];
+  for (const s of input.skipped) {
+    // `wrap` always returns at least one element for a non-empty
+    // message — `s.message` is a CrewError message, never empty.
+    const wrapped = wrap(s.message, Math.max(40, input.width - 4));
+    lines.push(`  ${style.symbol("fail")} ${style.red(wrapped[0]!)}`);
+    for (let i = 1; i < wrapped.length; i++) lines.push(`    ${style.red(wrapped[i]!)}`);
+  }
   return lines;
 }
 

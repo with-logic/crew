@@ -20,7 +20,25 @@ beforeEach(() => {
 });
 afterEach(() => restoreClaudeCode(claude.originals));
 
-describe("crew info <gist-url>//<file>", () => {
+describe("crew info of a gist", () => {
+  test("C-INFO-03 a skill file crew can't read says so, naming the file (exit 5)", () => {
+    fx.gist({ "prd.md": skillFile("prd") });
+    const home = makeCrewHome();
+    expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
+    const clone = readdirSync(join(home, "repos"))[0]!;
+    chmodSync(join(home, "repos", clone, "prd.md"), 0o000);
+    try {
+      const r = run(home, ["info", `${GIST_PAGE_URL}//prd.md`, "--json"]);
+      expect(r.code).toBe(5);
+      expect(json(r).error.name).toBe("source_unreachable");
+      expect(json(r).error.message).toMatch(/^couldn't read `\S+\/prd\.md` — EACCES/);
+      const human = run(home, ["info", `${GIST_PAGE_URL}//prd.md`]);
+      expect(human.stdout + human.stderr).toContain("Check that it is readable by you");
+    } finally {
+      chmodSync(join(home, "repos", clone, "prd.md"), 0o644);
+    }
+  });
+
   for (const configured of [false, true]) {
     const when = configured ? "once the gist's tap exists" : "for a gist crew hasn't seen";
     test(`previews just the named file, ${when}`, () => {
@@ -81,6 +99,25 @@ describe("crew info <gist-url>//<file>", () => {
       );
     } finally {
       chmodSync(locked, 0o644);
+    }
+  });
+
+  test("C-INFO-03 a gist whose skill files are all unreadable says crew couldn't read them", () => {
+    fx.gist({ "a.md": skillFile("a"), "b.md": skillFile("b") });
+    const home = makeCrewHome();
+    expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
+    const clone = join(home, "repos", readdirSync(join(home, "repos"))[0]!);
+    for (const f of ["a.md", "b.md"]) chmodSync(join(clone, f), 0o000);
+    try {
+      const r = run(home, ["info", GIST_PAGE_URL, "--json"]);
+      expect(r.code).toBe(5);
+      expect(json(r).error.name).toBe("source_unreachable");
+      expect(json(r).error.message).toStartWith(
+        "crew couldn't read any of the 2 skills here — couldn't read `",
+      );
+      expect(json(r).error.details["candidates"]).toEqual(["a.md", "b.md"]);
+    } finally {
+      for (const f of ["a.md", "b.md"]) chmodSync(join(clone, f), 0o644);
     }
   });
 

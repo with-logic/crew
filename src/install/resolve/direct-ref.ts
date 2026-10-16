@@ -17,17 +17,16 @@ import type { SkippedSkill } from "../../sources/expand.ts";
 import { selectGistFile } from "../../sources/gist.ts";
 import { attributeRef } from "../tap-attribution.ts";
 import type { PendingItem } from "./enqueue.ts";
-import { expandSkillsAsItems, sourceRequestedRef } from "./expand-items.ts";
+import { expandSkillsAsItems, type ItemOptions, sourceRequestedRef } from "./expand-items.ts";
 
-/** How a direct reference's skills are recorded. */
-export interface DirectRefOptions {
-  /** True for a reference the user typed; false for a dependency edge. */
-  readonly explicit: boolean;
-  /** Whether naming the whole source subscribes to its tap (§10.1.1). */
-  readonly tracksTap: boolean;
-  /** Recorded on a newly created tap (`--recursive`, §16.3). */
+/**
+ * How a direct reference's skills are recorded: `explicit` for a
+ * reference the user typed; `tracksTap` when naming the whole source
+ * subscribes to its tap (§10.1.1); `discovery` on a newly created tap.
+ */
+export type DirectRefOptions = Pick<ItemOptions, "explicit" | "tracksTap"> & {
   readonly discovery?: TapDiscovery;
-}
+};
 
 /** Resolve a git URL or path reference into pending items. */
 export function enqueueDirectRef(

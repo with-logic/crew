@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readState } from "../../../src/state/load.ts";
@@ -65,7 +65,7 @@ describe("crew update on a gist", () => {
     expect(r.code).toBe(0);
     expect(outcomes(r)).toContain("build:source_gone");
     expect(outcomes(r).filter((o) => o.endsWith(":source_gone"))).toEqual(["build:source_gone"]);
-    expect(existsSync(join(skillsDir(), "build", "SKILL.md"))).toBe(true);
+    expect(installed("build")).toBe(skillFile("build"));
   });
 
   test("C-UPD-38 a //<file> skill whose file is deleted is source_gone", () => {

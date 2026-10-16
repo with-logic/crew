@@ -38,12 +38,16 @@ import { displayUrl } from "../../refs/display-url.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
-import { assertStillASkill, liveSkillPath } from "./live-skill-path.ts";
+import {
+  assertExportedSkillMdInside,
+  assertStillASkill,
+  liveSkillPath,
+} from "./live-skill-path.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
-  /** The tap's root directory: the clone (or path) with `subpath` applied. */
+  /** The tap's root directory: the clone (or path), or at a ref its scratch export, with `subpath` applied. */
   readonly rootDir: string;
   /** Full 40-char SHA for git taps; null for path taps. */
   readonly resolvedSha: string | null;
@@ -156,6 +160,7 @@ export function withAcquiredSkill<T>(
         : tapRelativePath;
   return withExportedTree(clonePath, sha, exportPath, home, (skillPath) => {
     assertStillASkill(tap, skillPath, tapRelativePath);
+    assertExportedSkillMdInside(tap, skillPath, tapRelativePath);
     return fn({ resolvedSha: sha, pinned }, skillPath);
   });
 }

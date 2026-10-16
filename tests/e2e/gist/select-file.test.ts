@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, readdirSync, symlinkSync } from "node:fs";
+import { readdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { readConfig } from "../../../src/config/load.ts";
 import { readState } from "../../../src/state/load.ts";
@@ -88,24 +88,6 @@ describe("crew install <gist-url>//<file>", () => {
     const r = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//prd.md`]);
     expect(r.code).toBe(4);
     expect(r.stderr + r.stdout).toContain("The gist has no skills:");
-  });
-
-  test("C-INFO-03 a skill file crew can't read says so, naming the file (exit 5)", () => {
-    fx.gist({ "prd.md": skillFile("prd") });
-    const home = makeCrewHome();
-    expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
-    const clone = readdirSync(join(home, "repos"))[0]!;
-    chmodSync(join(home, "repos", clone, "prd.md"), 0o000);
-    try {
-      const r = run(home, ["info", `${GIST_PAGE_URL}//prd.md`, "--json"]);
-      expect(r.code).toBe(5);
-      expect(json(r).error.name).toBe("source_unreachable");
-      expect(json(r).error.message).toMatch(/^couldn't read `\S+\/prd\.md` — EACCES/);
-      const human = run(home, ["info", `${GIST_PAGE_URL}//prd.md`]);
-      expect(human.stdout + human.stderr).toContain("Check that it is readable by you");
-    } finally {
-      chmodSync(join(home, "repos", clone, "prd.md"), 0o644);
-    }
   });
 
   test("C-INST-26 a named file is validated even without frontmatter", () => {

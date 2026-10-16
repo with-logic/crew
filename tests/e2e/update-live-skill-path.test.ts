@@ -46,13 +46,13 @@ const installed = (): string => readFileSync(join(claude.userRoot, "demo", "SKIL
  * A git tap `acme` holding `skills/demo`, with `acme/demo` installed.
  * Callers assert on `installed()`, which fails if either step did.
  */
-function installFromGitTap(): { home: string; repo: string } {
+function installFromGitTap(ref = ""): { home: string; repo: string } {
   const home = makeCrewHome();
   const repo = makeTempDir();
   makeSkill(join(repo, "skills"), "demo", skillFrontmatter({ name: "demo" }), "Original.\n");
   makeGitRepo(repo);
   run(home, ["tap", "add", `file://${repo}`, "acme"]);
-  run(home, ["install", "acme/demo"]);
+  run(home, ["install", `acme/demo${ref}`]);
   return { home, repo };
 }
 
@@ -84,31 +84,27 @@ describe("crew update of a <tap>/<skill> install", () => {
     expect(installed()).toContain("Original.");
   });
 
-  test("C-UPD-11 a skill whose parent folder became a file upstream is source_gone", () => {
-    const { home, repo } = installFromGitTap();
-    expect(installed()).toContain("Original.");
-    rmSync(join(repo, "skills"), { recursive: true });
-    writeFileSync(join(repo, "skills"), "now a file\n");
-    commitAll(repo, "skills is a file now");
+  for (const ref of ["", "@main"]) {
+    for (const [what, replaced] of [
+      ["its parent folder", "skills"],
+      ["its folder", "skills/demo"],
+    ] as const) {
+      test(`C-UPD-11 a skill whose ${what} became a file upstream is source_gone (${ref || "no ref"})`, () => {
+        const { home, repo } = installFromGitTap(ref);
+        expect(installed()).toContain("Original.");
+        rmSync(join(repo, replaced), { recursive: true });
+        writeFileSync(join(repo, replaced), "now a file\n");
+        commitAll(repo, "a file now");
 
-    const r = run(home, ["update", "--json"]);
-    expect(r.code).toBe(0);
-    expect(outcomes(r)).toEqual(["demo:source_gone"]);
-  });
+        const r = run(home, ["update", "--json"]);
+        expect(r.code).toBe(0);
+        expect(outcomes(r)).toEqual(["demo:source_gone"]);
+        expect(installed()).toContain("Original.");
+      });
+    }
+  }
 
-  test("C-UPD-11 a skill folder replaced by a file upstream is source_gone", () => {
-    const { home, repo } = installFromGitTap();
-    expect(installed()).toContain("Original.");
-    rmSync(join(repo, "skills", "demo"), { recursive: true });
-    writeFileSync(join(repo, "skills", "demo"), "now a file\n");
-    commitAll(repo, "demo is a file now");
-
-    const r = run(home, ["update", "--json"]);
-    expect(r.code).toBe(0);
-    expect(outcomes(r)).toEqual(["demo:source_gone"]);
-  });
-
-  test("C-UPD-11 a skill folder whose name starts with `..` is inside the repository", () => {
+  test("C-UPD-39 a skill folder whose name starts with `..` is inside the repository", () => {
     const home = makeCrewHome();
     const repo = makeTempDir();
     makeSkill(repo, "..foo", skillFrontmatter({ name: "demo" }), "Original.\n");

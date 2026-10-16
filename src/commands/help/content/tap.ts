@@ -23,7 +23,7 @@ export const tapHelp: CommandHelp = {
     {
       flag: "--recursive",
       description:
-        "With `tap add`, enable bounded recursive fallback when standard layouts find no skills.",
+        "With `tap add`, enable bounded recursive fallback when standard layouts find no skills (not for gists).",
     },
     {
       flag: "--dry-run",

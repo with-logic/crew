@@ -109,7 +109,7 @@ export function withExportedTree<T>(
   sha: string,
   subpath: string,
   home: string,
-  fn: (rootDir: string) => T,
+  fn: (root: string) => T,
 ): T {
   const dest = makeScratchDir(paths(home).gitCacheDir, sha);
   try {

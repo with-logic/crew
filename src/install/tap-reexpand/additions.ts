@@ -88,7 +88,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
         scope: input.scope,
         tap: input.tap.name,
         kind: "tap_error",
-        error: { code: loadError.code ?? "invalid_skill", message: loadError.message },
+        error: { code: loadError.code, message: loadError.message },
       });
       continue;
     }

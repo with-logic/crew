@@ -60,11 +60,7 @@ export function repairStateUnderLock(markers: readonly MarkerEntry[], home: stri
         url: marker.tap_url,
         subpath: marker.tap_subpath,
         path: marker.tap_path,
-        ...(marker.tap_kind === "git"
-          ? recordedDiscovery(marker.tap_url, marker.tap_discovery)
-          : marker.tap_discovery === "recursive"
-            ? { discovery: "recursive" }
-            : {}),
+        ...recordedDiscovery(marker.tap_url, marker.tap_discovery),
       };
       taps.set(reconstructed.name, reconstructed);
     }
