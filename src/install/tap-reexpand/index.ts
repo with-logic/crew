@@ -8,8 +8,8 @@
  *      in full (§9 step 4) and install via the caller-provided
  *      `installNewChild` callback. A child that fails validation is
  *      reported as a `tap_error` and never installed.
- *   2. SOURCE_GONE — entries in state attributed to this tap whose
- *      directory is no longer present upstream: report; preserve local
+ *   2. SOURCE_GONE — entries in state attributed to this tap whose skill
+ *      is no longer upstream (§10.1.1 step 3): report; preserve local
  *      install.
  *
  * Existing-and-still-present children are handled by the regular

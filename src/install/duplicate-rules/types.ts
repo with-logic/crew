@@ -52,6 +52,8 @@ export interface DuplicateAnalysis {
   readonly toInstall: ResolvedSkill[];
   readonly alreadyInstalled: AlreadyInstalled[];
   readonly promoteToExplicit: string[];
+  /** Already installed on its own, now reached by a whole-tap install. */
+  readonly promoteToTracking: string[];
   readonly reattributions: Reattribution[];
   readonly keepSource: KeptSource[];
 }

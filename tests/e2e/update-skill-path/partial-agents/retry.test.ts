@@ -12,7 +12,7 @@ import { readState } from "../../../../src/state/load.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../../helpers/fixtures.ts";
 import { run } from "../helpers.ts";
-import { redirectAgents, trackedTap, whileReadOnly } from "./helpers.ts";
+import { installTrackedTap, redirectAgents, whileReadOnly } from "./helpers.ts";
 
 let agents: ReturnType<typeof redirectAgents>;
 beforeEach(() => {
@@ -22,16 +22,16 @@ afterEach(() => agents.restore());
 
 test("C-UPD-18e a new child one agent's folder can't take is retried, not recorded without it", () => {
   const home = makeCrewHome();
-  const tapDir = trackedTap(home);
+  const tapDir = installTrackedTap(home);
   makeSkill(join(tapDir, "skills"), "gamma", skillFrontmatter({ name: "gamma" }));
-  whileReadOnly(agents.roots["claude-code"]!, () => {
+  whileReadOnly(agents.roots["claude-code"], () => {
     const r = run(home, ["update", "--json"]);
     expect(r.code).toBe(1);
     const [row] = JSON.parse(r.stdout).tap_reexpand_rows;
     expect([row.name, row.kind, row.error.code]).toEqual(["gamma", "tap_error", "EACCES"]);
     expect(readState(home).installations.map((e) => e.name)).toEqual(["beta"]);
     // Installed nowhere, so nothing is left that state doesn't know.
-    expect(existsSync(join(agents.roots["gemini-cli"]!, "gamma"))).toBe(false);
+    expect(existsSync(join(agents.roots["gemini-cli"], "gamma"))).toBe(false);
   });
 
   expect(run(home, ["update"]).code).toBe(0);
@@ -49,7 +49,7 @@ test("C-UPD-16c one of two agents failing an update keeps the entry, and reads a
   expect(run(home, ["install", "mine/demo"]).code).toBe(0);
   const before = readState(home).installations[0]!.content_hash;
   makeSkill(tapDir, "demo", skillFrontmatter({ name: "demo" }), "Edited.\n");
-  whileReadOnly(agents.roots["claude-code"]!, () => {
+  whileReadOnly(agents.roots["claude-code"], () => {
     const r = run(home, ["update"]);
     expect(r.code).toBe(1);
     expect(r.stdout).toMatch(/\[fail\] demo\s+failed\s+claude-code: EACCES/);

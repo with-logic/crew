@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { resetGitRunner, setGitRunner } from "../../../src/git/exec.ts";
 import type { TapReexpandRow } from "../../../src/install/tap-reexpand/types.ts";
+import type { Outcome } from "../../../src/install/update/types.ts";
 import { captureStreams } from "../../helpers/env.ts";
 import { commitAll, makeGitRepo, skillFrontmatter } from "../../helpers/fixtures.ts";
 
@@ -99,9 +100,10 @@ export function run(
 export interface CliJson {
   readonly error: { name: string; message: string; details: Record<string, unknown> };
   readonly skills: { name: string }[];
+  /** `crew update`: each row's outcome kind, and a failure's error. */
   readonly rows: {
     name: string;
-    outcome: { kind: string; error?: { code: string; message: string } };
+    outcome: { kind: Outcome["kind"]; error?: Extract<Outcome, { kind: "failed" }>["error"] };
   }[];
   /** `crew update`: rows for a tracked tap's children. */
   readonly tap_reexpand_rows: readonly TapReexpandRow[];

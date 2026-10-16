@@ -2,9 +2,10 @@
  * Edges of the SKILL.md link rule at install (§9 step 4; C-SPEC-15): a
  * source named with a trailing slash is held to it the same; link text
  * that isn't UTF-8 is refused, never followed; a chain at crew's limit
- * installs and one longer is refused; past a missing part the rest is
- * judged by its text, quickly however long; and a failure to look on the
- * way names the path that failed, not SKILL.md (§13; C-SPEC-16).
+ * installs, readable, and one longer is refused; past a missing part no
+ * link is read and the rest is judged as written, quickly however long;
+ * and a failure to look on the way names the path that failed, not
+ * SKILL.md (§13; C-SPEC-16).
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -13,7 +14,6 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  realpathSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -43,7 +43,7 @@ test("C-SPEC-15 a skill named with a trailing slash is held to the .crew.json ru
 });
 
 /** A source whose `linked/SKILL.md` reaches `body.md` through `links` links, SKILL.md included. */
-function chainOf(links: number): string {
+function sourceWithChain(links: number): string {
   return sourceWithLink((folder) => {
     let target = "body.md";
     for (let i = 1; i < links; i++) {
@@ -54,25 +54,28 @@ function chainOf(links: number): string {
   });
 }
 
-test("C-SPEC-15 a chain at crew's limit installs", () => {
-  // At the temp folder's real path: on macOS `/var` is a link too, which
-  // the system counts against the same limit of 32 when it reads the file.
-  const r = install(makeCrewHome(), realpathSync(chainOf(32)));
+test("C-SPEC-15 a chain at crew's limit installs, readable where it is installed", () => {
+  const src = sourceWithChain(8);
+  const r = install(makeCrewHome(), src);
   expect(r.code).toBe(0);
-  expect(readdirSync(claude.userRoot).sort()).toEqual(["good", "linked"]);
+  // Read through the install path as it is, links in it included (on
+  // macOS the temp folder sits under `/var`, itself a link).
+  expect(readFileSync(join(claude.userRoot, "linked", "SKILL.md"), "utf8")).toBe(
+    readFileSync(join(src, "linked", "body.md"), "utf8"),
+  );
 });
 
 test("C-SPEC-15 a chain longer than crew's limit is refused", () => {
-  const r = install(makeCrewHome(), chainOf(33));
+  const r = install(makeCrewHome(), sourceWithChain(9));
   expect(r.code).toBe(1);
   expect(readdirSync(claude.userRoot)).toEqual(["good"]);
   expect(r.out).toContain("reached through a link crew won't follow");
 });
 
-test("C-SPEC-15 past a missing part, a link the rest names is judged by its text", () => {
-  // Followed, `lnk` would lead down (`a/b`), so the `..`s after it stay
-  // inside; as text they climb above the folder. The system would stop at
-  // `missing`, so following would be judging a path no one reads.
+test("C-SPEC-15 past a missing part, a link is never read: the rest is judged as written", () => {
+  // Read, `lnk` would lead down (`a/b`), so the `..`s after it stay
+  // inside; as written they climb above the folder. The system would stop
+  // at `missing`, so reading on would judge a path no one follows.
   const src = sourceWithLink((folder) => {
     symlinkSync(join("a", "b"), join(folder, "lnk"));
     return "missing/../lnk/../../x.md";
@@ -82,21 +85,27 @@ test("C-SPEC-15 past a missing part, a link the rest names is judged by its text
   expect(r.out).toContain("reached through a link crew won't follow");
 });
 
+/** The longest link text the system allows: 1023 bytes on macOS, 4095 on Linux. */
+const MAX_LINK_TEXT = process.platform === "linux" ? 4095 : 1023;
+/** Far above the linear walk (a few ms), far below the quadratic one it replaced (~0.7 s on Linux). */
+const QUICK_MS = 250;
+
 test("C-SPEC-15 a long chain past a missing part is judged quickly", () => {
-  // 32 links of the longest text macOS allows, the last into a missing
-  // folder: ~16,000 parts left to judge by text, which must stay linear.
-  const long = (head: string) => `${head}${"/a".repeat(500)}`;
+  // Every link crew allows at the longest text, the last into a missing
+  // folder: thousands of parts left to judge as written, in linear time.
+  const longLinkText = (head: string) =>
+    `${head}${"/a".repeat(Math.floor((MAX_LINK_TEXT - head.length) / 2))}`;
   const folder = join(
     sourceWithLink((f) => {
-      for (let i = 1; i < 32; i++)
-        symlinkSync(long(i === 31 ? "missing" : `L${i + 1}`), join(f, `L${i}`));
-      return long("L1");
+      for (let i = 1; i < 8; i++)
+        symlinkSync(longLinkText(i === 7 ? "missing" : `L${i + 1}`), join(f, `L${i}`));
+      return longLinkText("L1");
     }),
     "linked",
   );
   const started = performance.now();
   assertSkillMdLinkAllowed(folder);
-  expect(performance.now() - started).toBeLessThan(250);
+  expect(performance.now() - started).toBeLessThan(QUICK_MS);
 });
 
 test("C-SPEC-16 a path on the way crew can't look into is named, not SKILL.md", () => {

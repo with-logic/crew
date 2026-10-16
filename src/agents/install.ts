@@ -41,12 +41,13 @@ export interface InstallInput {
 }
 
 /**
- * Outcome of one physical install (one `dest`). `replacedSameSkill`: the
- * folder already held crew's marker for this skill, so it was an install
- * crew had recorded, not one this call created.
+ * Outcome of one physical install (one `dest`). `replacedSameName`: `dest`
+ * already held a crew marker naming this skill, from any source, which
+ * this call replaced; false when `dest` was new, or `--force` replaced a
+ * folder without such a marker.
  */
 export type InstallOutcome =
-  | { kind: "installed"; replacedSameSkill: boolean }
+  | { kind: "installed"; replacedSameName: boolean }
   | { kind: "up_to_date" };
 
 /**
@@ -65,14 +66,14 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
 
   const incomingAdapters = [...new Set(input.agents.map((a) => a.name))].sort();
   let priorAdapters: readonly string[] = [];
-  let replacedSameSkill = false;
+  let replacedSameName = false;
 
   if (existsSync(dest)) {
     const existingMarker = tryReadJson<Marker>(join(dest, ".crew.json"));
     if (existingMarker) {
       priorAdapters = existingMarker.agents ?? [];
       if (existingMarker.name === input.skillName) {
-        replacedSameSkill = true;
+        replacedSameName = true;
         const currentHash = hashDirectory(dest);
         if (currentHash !== existingMarker.content_hash) {
           if (!input.force)
@@ -144,7 +145,7 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
   writeJson(join(staging, ".crew.json"), marker);
 
   atomicReplace(staging, dest);
-  return { kind: "installed", replacedSameSkill };
+  return { kind: "installed", replacedSameName };
 }
 
 /** Union of two adapter-name lists, sorted and deduplicated. */

@@ -24,7 +24,7 @@ import { computeAgentSet } from "./agent-set.ts";
 import { assertTapsPresent, mergeAutoTaps } from "./config-merge.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules/index.ts";
 import { type InstallSummary, performInstall } from "./perform/index.ts";
-import { promoteExplicit } from "./promote-explicit.ts";
+import { promoteFlags } from "./promote-flags.ts";
 import { applyReattributions, rewriteReattributedMarkers } from "./reattribute.ts";
 import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
 import type { KindHint } from "./resolve-ref/index.ts";
@@ -138,7 +138,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       cwd,
       duplicateOptions,
     );
-    const { toInstall, promoteToExplicit, reattributions, keepSource } = analysis;
+    const { toInstall, reattributions, keepSource } = analysis;
     alreadyInstalled = analysis.alreadyInstalled;
     rewriteDiscoveryUpgradeMarkers(config, configWithAutoTaps, freshState.installations, cwd);
     // §5.4: entries that reached the same source through a narrower
@@ -153,9 +153,9 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       allResolved: resolvedAll,
       keepSource,
     });
-    const promoted = promoteExplicit(
+    const promoted = promoteFlags(
       result.newState,
-      promoteToExplicit,
+      { explicit: analysis.promoteToExplicit, tracksTap: analysis.promoteToTracking },
       options.scope,
       options.scope === "project" ? cwd : null,
     );

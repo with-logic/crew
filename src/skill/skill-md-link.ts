@@ -8,13 +8,14 @@
  * through — must have relative text that never climbs above the skill's
  * folder: such a chain resolves the same inside the skill here and in
  * every copy. It must also not lead to the folder's `.crew.json`, which a
- * copy drops and replaces with crew's marker (§7.5), and must not loop.
+ * copy drops and replaces with crew's marker (§7.5), and must not loop or
+ * run longer than crew's limit.
  * The chain is resolved by hand from each link's text, never followed,
  * so it reads the same in a live clone and in an export of the folder.
  */
 
 import { lstatSync, readlinkSync, type Stats } from "node:fs";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, sep } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { isGoneError, unreadablePathError } from "../util/errno.ts";
 
@@ -22,8 +23,12 @@ import { isGoneError, unreadablePathError } from "../util/errno.ts";
 export const SKILL_MD_NOT_A_FILE_REMEDY =
   "Make the skill's SKILL.md a regular file, or a link to another file inside the skill's folder (not `.crew.json`), with every link on the way relative and never climbing above the folder.";
 
-/** crew's limit on a chain, set at macOS's 32 (Linux allows 40). */
-const MAX_HOPS = 32;
+/**
+ * crew's limit on a chain, well under the system's own (32 links on macOS,
+ * 40 on Linux), which also counts any link in the path to wherever the
+ * skill is installed — so a chain crew allows reads there too.
+ */
+const MAX_HOPS = 8;
 
 /**
  * Throw `invalid_skill` when `folder`'s `SKILL.md` is reached through a
@@ -45,30 +50,28 @@ export function assertSkillMdLinkAllowed(folder: string, shown = folder): void {
 /**
  * True when `folder`'s `SKILL.md` is reached through a link crew won't
  * follow: absolute text, text that isn't UTF-8, a `..` that climbs above
- * the folder, a chain that loops, or one that leads to the folder's
- * `.crew.json`. A `SKILL.md` that is no link, or a chain of allowed links
+ * the folder, a chain that loops or runs past `MAX_HOPS` links, or one
+ * that leads to the folder's `.crew.json`. A `SKILL.md` that is no link, or a chain of allowed links
  * that dangles, is not refused: whether it is a file is the caller's
  * check (`invalid_skill` at install, gone on update). Any other failure
  * to look is thrown as the raw filesystem error — a link swapped out
  * between looking at it and reading it, too.
  */
-function isRefusedSkillMdLink(folderPath: string): boolean {
-  // Normalized once, so `dir` is built from the same spelling throughout.
-  const folder = resolve(folderPath);
+function isRefusedSkillMdLink(folder: string): boolean {
   if (lstatUnlessGone(join(folder, "SKILL.md"))?.isSymbolicLink() !== true) return false;
-  // `dir` is where the walk stands, reached from `folder` through real
-  // entries, so a `..` from it is exact here and in a copy, which keeps
-  // every link; `depth` is how far below `folder` it is. Past a missing
-  // part the system would stop, so no entry is looked at again: the rest
-  // is judged by its text alone, and a link it names is not followed.
+  // `depth` counts the parts the walk stands below `folder`. `dir` is the
+  // last folder it reached through real entries, so a `..` from it is
+  // exact here and in a copy, which keeps every link. Past a missing part
+  // the system would stop, so nothing more is looked up: each later name
+  // is judged as written, and a link there is never read.
   let dir = folder;
   let depth = 0;
   let pastMissing = false;
   // The parts still to walk, the next one last.
-  const todo = ["SKILL.md"];
+  const pending = ["SKILL.md"];
   let hops = 0;
-  while (todo.length > 0) {
-    const part = todo.pop()!;
+  while (pending.length > 0) {
+    const part = pending.pop()!;
     if (part === "..") {
       if (depth === 0) return true;
       depth--;
@@ -76,14 +79,20 @@ function isRefusedSkillMdLink(folderPath: string): boolean {
       continue;
     }
     if (depth === 0 && isMarkerName(part)) return true;
+    depth++;
+    if (pastMissing) continue;
     const at = join(dir, part);
-    const entry: Stats | undefined = pastMissing ? undefined : lstatUnlessGone(at);
-    if (entry?.isSymbolicLink() !== true) {
-      pastMissing ||= entry === undefined;
-      if (!pastMissing) dir = at;
-      depth++;
+    const entry = lstatUnlessGone(at);
+    if (entry === undefined) {
+      pastMissing = true;
       continue;
     }
+    if (!entry.isSymbolicLink()) {
+      dir = at;
+      continue;
+    }
+    // The link is replaced by its text, which starts from `dir`.
+    depth--;
     hops++;
     // Read as bytes: text that isn't UTF-8 decodes lossily, and the
     // kernel would follow a different name than the one checked.
@@ -91,7 +100,7 @@ function isRefusedSkillMdLink(folderPath: string): boolean {
     const text = raw.toString("utf8");
     if (isAbsolute(text) || !Buffer.from(text).equals(raw) || hops > MAX_HOPS) return true;
     const parts = text.split(sep).filter((p) => p !== "" && p !== ".");
-    for (let i = parts.length - 1; i >= 0; i--) todo.push(parts[i]!);
+    for (let i = parts.length - 1; i >= 0; i--) pending.push(parts[i]!);
   }
   return false;
 }
@@ -101,7 +110,8 @@ function lstatUnlessGone(path: string): Stats | undefined {
   try {
     return lstatSync(path);
   } catch (err) {
-    if (isGoneError(err)) return undefined;
+    if (isGoneError(err) || (err as NodeJS.ErrnoException).code === "ENAMETOOLONG")
+      return undefined;
     throw err;
   }
 }
@@ -121,7 +131,7 @@ function isMarkerName(part: string): boolean {
 function refusedSkillMdLinkError(folder: string, shown: string): CrewError {
   return new CrewError(
     "invalid_skill",
-    `the SKILL.md of \`${shown}\` is reached through a link crew won't follow — every link on the way must be relative and never climb above the skill's folder, and must not lead to its \`.crew.json\` or loop`,
+    `the SKILL.md of \`${shown}\` is reached through a link crew won't follow — every link on the way must be relative and never climb above the skill's folder, and must not lead to its \`.crew.json\`, loop, or run past ${MAX_HOPS} links`,
     { path: folder },
     SKILL_MD_NOT_A_FILE_REMEDY,
   );

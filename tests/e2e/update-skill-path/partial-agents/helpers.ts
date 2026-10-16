@@ -13,14 +13,15 @@ import { makeSkill, makeTempDir, skillFrontmatter } from "../../../helpers/fixtu
 import { run } from "../helpers.ts";
 
 type Redirectable = { userPath: () => string; detect: () => boolean };
-const ADAPTERS: readonly (readonly [string, Redirectable])[] = [
-  ["claude-code", claudeCodeAdapter],
-  ["gemini-cli", geminiCliAdapter],
-];
+const ADAPTERS = [
+  ["claude-code", claudeCodeAdapter as Redirectable],
+  ["gemini-cli", geminiCliAdapter as Redirectable],
+] as const;
+type AgentName = (typeof ADAPTERS)[number][0];
 
 /** Point both agents at fresh skills folders; returns them by agent name and an undo. */
-export function redirectAgents(): { roots: Record<string, string>; restore: () => void } {
-  const roots: Record<string, string> = {};
+export function redirectAgents(): { roots: Record<AgentName, string>; restore: () => void } {
+  const roots = {} as Record<AgentName, string>;
   const saved = ADAPTERS.map(([, a]) => [a, { userPath: a.userPath, detect: a.detect }] as const);
   for (const [name, adapter] of ADAPTERS) {
     const root = makeTempDir(`crew-${name}-`);
@@ -41,7 +42,7 @@ export function redirectAgents(): { roots: Record<string, string>; restore: () =
  * agents; returns the tap's folder. Throws unless installs go to
  * claude-code first, which every rollback test depends on.
  */
-export function trackedTap(home: string): string {
+export function installTrackedTap(home: string): string {
   const tapDir = makeTempDir();
   makeSkill(join(tapDir, "skills"), "beta", skillFrontmatter({ name: "beta" }));
   const codes = [run(home, ["tap", "add", tapDir, "mine"]), run(home, ["install", "mine"])];

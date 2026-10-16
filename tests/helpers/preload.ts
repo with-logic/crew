@@ -28,8 +28,7 @@
  *    `./no-network.ts`.
  *
  * 4. Give the run its own temp root, removed after it exits
- *    (`./temp-root.ts`). Imported first: `./env.ts` reads `tmpdir()` as
- *    it loads.
+ *    (`./temp-root.ts`).
  */
 
 // First: `./env.ts` reads `tmpdir()` as it loads.

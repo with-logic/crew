@@ -6,9 +6,10 @@
  *
  *   - `toInstall` — no existing entry, OR same source at a different SHA.
  *   - `alreadyInstalled` — same source + same SHA + same content hash.
- *   - `promoteToExplicit` — was-a-dep, now-explicitly-named. Handled
- *      separately so the install loop can flip the flag without
- *      re-staging.
+ *   - `promoteToExplicit` — was-a-dep, now-explicitly-named; and
+ *     `promoteToTracking` — installed on its own, now reached by a
+ *     whole-tap install. Handled separately so the install loop can flip
+ *     the flag without re-staging.
  *
  * A different-source install of the same name throws `name_conflict`
  * (never overridden by --force — per §13). "Same source" means the same
@@ -52,6 +53,7 @@ export function applyDuplicateRules(
   const toInstall: ResolvedSkill[] = [];
   const alreadyInstalled: AlreadyInstalled[] = [];
   const promoteToExplicit: string[] = [];
+  const promoteToTracking: string[] = [];
   const reattributions: Reattribution[] = [];
   const keepSource: KeptSource[] = [];
 
@@ -111,11 +113,19 @@ export function applyDuplicateRules(
       if (skill.explicit && !existing.explicit) {
         promoteToExplicit.push(skill.name);
       }
+      if (skill.tracksTap && existing.tracks_tap !== true) promoteToTracking.push(skill.name);
       continue;
     }
     // Same source, different SHA, or a new active adapter, or --force
     // → install (possibly as no-op byte-copy but with marker rewrite).
     toInstall.push(skill);
   }
-  return { toInstall, alreadyInstalled, promoteToExplicit, reattributions, keepSource };
+  return {
+    toInstall,
+    alreadyInstalled,
+    promoteToExplicit,
+    promoteToTracking,
+    reattributions,
+    keepSource,
+  };
 }

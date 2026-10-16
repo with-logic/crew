@@ -6,9 +6,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, readdirSync } from "node:fs";
+import { chmodSync } from "node:fs";
 import { join } from "node:path";
 import { makeCrewHome } from "../../helpers/env.ts";
+import { cloneDirForTap } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 import { GIST_PAGE_URL, GIST_TAP, json, run, skillFile, useGistFixture } from "./helpers.ts";
 
@@ -25,8 +26,8 @@ describe("crew info of a gist", () => {
     fx.gist({ "prd.md": skillFile("prd") });
     const home = makeCrewHome();
     expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
-    const clone = readdirSync(join(home, "repos"))[0]!;
-    chmodSync(join(home, "repos", clone, "prd.md"), 0o000);
+    const locked = join(cloneDirForTap(GIST_TAP, home)!, "prd.md");
+    chmodSync(locked, 0o000);
     try {
       const r = run(home, ["info", `${GIST_PAGE_URL}//prd.md`, "--json"]);
       expect(r.code).toBe(5);
@@ -35,7 +36,7 @@ describe("crew info of a gist", () => {
       const human = run(home, ["info", `${GIST_PAGE_URL}//prd.md`]);
       expect(human.stdout + human.stderr).toContain("Check that it is readable by you");
     } finally {
-      chmodSync(join(home, "repos", clone, "prd.md"), 0o644);
+      chmodSync(locked, 0o644);
     }
   });
 
@@ -89,7 +90,7 @@ describe("crew info of a gist", () => {
     fx.gist({ "a.md": skillFile("a"), "b.md": "---\nname: b\n---\n" });
     const home = makeCrewHome();
     expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
-    const locked = join(home, "repos", readdirSync(join(home, "repos"))[0]!, "a.md");
+    const locked = join(cloneDirForTap(GIST_TAP, home)!, "a.md");
     chmodSync(locked, 0o000);
     try {
       const r = run(home, ["info", GIST_PAGE_URL, "--json"]);
@@ -107,7 +108,7 @@ describe("crew info of a gist", () => {
     fx.gist({ "a.md": skillFile("a"), "b.md": skillFile("b") });
     const home = makeCrewHome();
     expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
-    const clone = join(home, "repos", readdirSync(join(home, "repos"))[0]!);
+    const clone = cloneDirForTap(GIST_TAP, home)!;
     for (const f of ["a.md", "b.md"]) chmodSync(join(clone, f), 0o000);
     try {
       const r = run(home, ["info", GIST_PAGE_URL, "--json"]);

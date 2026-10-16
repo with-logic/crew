@@ -54,10 +54,10 @@ export function installNewTapChild(
     else groups.set(dest, [adapter]);
   }
   let fsFailure: unknown = null;
-  // A folder that already held crew's marker for this skill is a recorded
-  // install, and is kept; any other this call installed into — new, or
-  // replaced by `--force` — is removed if the child fails.
-  const destsToUndo: string[] = [];
+  // A folder that already held a crew marker naming this skill is a
+  // recorded install, and is kept; any other this call installed into —
+  // new, or replaced by `--force` — is removed if the child fails.
+  const destsToRemove: string[] = [];
   for (const [dest, group] of groups) {
     try {
       const res = installSkillIntoAgents({
@@ -74,7 +74,7 @@ export function installNewTapChild(
         force,
       });
       for (const a of group) successfulTargets.push(a.name);
-      if (res.kind === "installed" && !res.replacedSameSkill) destsToUndo.push(dest);
+      if (res.kind === "installed" && !res.replacedSameName) destsToRemove.push(dest);
     } catch (err) {
       // A safety check refusing one agent (§7.3) leaves the child out of
       // it, as on an install; an agent folder crew can't write fails the
@@ -87,7 +87,7 @@ export function installNewTapChild(
   if (fsFailure !== null) {
     // Not recorded means installed nowhere: the copies this child just
     // made in other agents go, so nothing is left that state doesn't know.
-    for (const dest of destsToUndo) rmrf(dest);
+    for (const dest of destsToRemove) rmrf(dest);
     throw fsFailure;
   }
   if (successfulTargets.length === 0) return null;

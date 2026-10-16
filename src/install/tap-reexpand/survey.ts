@@ -13,7 +13,6 @@ import { lstatSync } from "node:fs";
 import { join } from "node:path";
 import { isGistTap } from "../../core/gist-url.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
-import { isSkillFile } from "../../skill/skill-file.ts";
 import { isGistSkillCandidate } from "../../sources/gist.ts";
 import { entryIdentity } from "../../state/collections/index.ts";
 import { isGoneError } from "../../util/errno.ts";
@@ -67,25 +66,29 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
   const childPaths = new Set<string>();
   for (const locs of childrenByName.values())
     for (const c of locs) childPaths.add(c.tapRelativePath);
-  for (const m of members) {
-    if (conflictedNames.has(m.name)) continue;
-    const child = childrenByName.get(m.name)?.[0];
+  for (const member of members) {
+    // A gist file installed on its own (`//<file>`, by name, as a
+    // dependency) is judged by its own update, at its recorded file
+    // exactly (§10.1, C-UPD-39), as when nothing beside it tracks the gist.
+    if (isGistTap(tap) && member.tracks_tap !== true && member.source.path !== "") continue;
+    if (conflictedNames.has(member.name)) continue;
+    const child = childrenByName.get(member.name)?.[0];
     // §10.1.1 step 3: gone only when its skill is no longer there. One the
     // index dropped — no child at its path, though its SKILL.md is (one crew
     // won't follow, say) — is left to the per-skill update, which reports
     // why (§10.1). A child at its path under another name was renamed.
-    const indexedHere = child !== undefined || childPaths.has(m.source.path);
-    if (!indexedHere && skillStillThere(rootDir, m, tap)) continue;
+    const indexedHere = child !== undefined || childPaths.has(member.source.path);
+    if (!indexedHere && skillStillThere(rootDir, member.source.path, tap)) continue;
     if (!child) {
       // Keyed by identity, not name: the same name can be installed
       // from another tap or at another scope, and that install is a
       // different thing that may still be present upstream.
-      sourceGone.add(entryIdentity(m));
-      rows.push({ name: m.name, scope: m.scope, tap: tap.name, kind: "source_gone" });
+      sourceGone.add(entryIdentity(member));
+      rows.push({ name: member.name, scope: member.scope, tap: tap.name, kind: "source_gone" });
       continue;
     }
-    if (child.tapRelativePath !== m.source.path) {
-      relocated.push({ ...m, source: { ...m.source, path: child.tapRelativePath } });
+    if (child.tapRelativePath !== member.source.path) {
+      relocated.push({ ...member, source: { ...member.source, path: child.tapRelativePath } });
     }
   }
 
@@ -98,14 +101,11 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
  * Only a gone error says a folder's isn't: one crew can't search is still
  * there, for its own update to report.
  */
-function skillStillThere(rootDir: string, m: StateEntry, tap: TapConfig): boolean {
-  const location = join(rootDir, m.source.path);
-  if (isGistTap(tap) && m.source.path !== "") {
-    // In a gist installed whole, a file is a skill only while it opens
-    // frontmatter, though one crew can't read still counts; a `//<file>`
-    // entry's file is its skill either way (§9 step 5).
-    return m.tracks_tap === true ? isGistSkillCandidate(location) : isSkillFile(location);
-  }
+function skillStillThere(rootDir: string, tapRelativePath: string, tap: TapConfig): boolean {
+  const location = join(rootDir, tapRelativePath);
+  // A file of a gist tracked whole is a skill only while it opens
+  // frontmatter (§9 step 5), though one crew can't read still counts.
+  if (isGistTap(tap) && tapRelativePath !== "") return isGistSkillCandidate(location);
   try {
     lstatSync(join(location, "SKILL.md"));
     return true;
