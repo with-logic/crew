@@ -43,7 +43,10 @@ import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
-  /** Materialized tap root, or the narrowed root returned by skill acquisition. */
+  /**
+   * Materialized tap root, or — from `withAcquiredSkill` at a ref — the
+   * one skill's narrowed location, which is a file for a gist skill.
+   */
   readonly rootDir: string;
   /** Full 40-char SHA for git taps; null for path taps. */
   readonly resolvedSha: string | null;
@@ -131,16 +134,16 @@ export function withAcquiredTap<T>(
  * `fn` receives the skill's own location — its directory, or a gist's
  * skill file — not the tap root.
  */
-export function withAcquiredSkillDir<T>(
+export function withAcquiredSkill<T>(
   tap: TapConfig,
   ref: string | null,
-  skillPath: string,
+  tapRelativePath: string,
   home: string,
-  fn: (acquired: AcquiredTap, skillDir: string) => T,
+  fn: (acquired: AcquiredTap, skillLocation: string) => T,
 ): T {
   if (ref === null || tap.kind === "path") {
     const acquired = acquireTap(tap, home);
-    return fn(acquired, liveSkillPath(tap, acquired.rootDir, skillPath));
+    return fn(acquired, liveSkillPath(tap, acquired.rootDir, tapRelativePath));
   }
   migrateTapClone(tap, home);
   const clonePath = tapClonePath(tap, home);
@@ -149,13 +152,13 @@ export function withAcquiredSkillDir<T>(
   const kind = classifyRef(clonePath, ref);
   const pinned = kind === "sha" || kind === "tag";
   const exportPath =
-    skillPath.length === 0
+    tapRelativePath.length === 0
       ? tap.subpath
       : tap.subpath.length > 0
-        ? posix.join(tap.subpath, skillPath)
-        : skillPath;
-  return withExportedTree(clonePath, sha, exportPath, home, (skillDir) =>
-    fn({ rootDir: skillDir, resolvedSha: sha, pinned }, skillDir),
+        ? posix.join(tap.subpath, tapRelativePath)
+        : tapRelativePath;
+  return withExportedTree(clonePath, sha, exportPath, home, (skillLocation) =>
+    fn({ rootDir: skillLocation, resolvedSha: sha, pinned }, skillLocation),
   );
 }
 

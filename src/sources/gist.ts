@@ -5,20 +5,20 @@
  * match one. Instead each top-level `.md` file that opens with YAML
  * frontmatter is a skill candidate in its own right: the file is that
  * skill's SKILL.md. A gist with a root `SKILL.md` is still one skill
- * (case 1), which callers check before reaching for anything here.
+ * (case 1): discovery checks `isOneSkillGist` first, and `selectGistFile`
+ * refuses a `//<file>` on such a gist.
  *
  * Whether a tap is a gist is derived from its URL (§8.2), so the layout
  * is never recorded in config, state, or markers — `doctor --repair`
  * rebuilding a tap from a marker's `tap_url` gets it back for free.
  */
 
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { isGistUrl } from "../core/gist-url.ts";
 import type { TapConfig } from "../core/types.ts";
 import { displayText, displayUrl } from "../refs/display-url.ts";
 import { opensFrontmatter } from "../skill/frontmatter.ts";
-import { hasSkillMd } from "../skill/load.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
 import { listDir, readText } from "../util/fs.ts";
 import { assertNoSymlinkEscape } from "../util/symlink-containment.ts";
@@ -29,35 +29,54 @@ export function isGistTap(tap: Pick<TapConfig, "kind" | "url">): boolean {
   return tap.kind === "git" && isGistUrl(tap.url);
 }
 
-/** The skill-file candidates at the root of a gist checkout, in name order. */
-export function gistSkillFiles(rootDir: string): string[] {
+/**
+ * True when the gist checked out at `root` has a root `SKILL.md` and so is
+ * one skill. Matched by exact name: on a case-insensitive disk a skill
+ * file called `skill.md` would otherwise pass for it.
+ */
+export function isOneSkillGist(root: string): boolean {
+  return listDir(root).includes("SKILL.md");
+}
+
+/** The skill candidates at the root of a gist checkout, in name order. */
+export function gistSkillCandidates(root: string): string[] {
   const paths: string[] = [];
-  for (const name of listDir(rootDir).sort()) {
-    const path = join(rootDir, name);
-    if (isGistSkillFile(path)) paths.push(path);
+  for (const name of listDir(root).sort()) {
+    const path = join(root, name);
+    if (isGistSkillCandidate(path)) paths.push(path);
   }
   return paths;
 }
 
-/** A skill file whose first non-blank line opens frontmatter. A symlink never is. */
-export function isGistSkillFile(path: string): boolean {
+/**
+ * A skill file whose first non-blank line opens frontmatter: what
+ * discovery treats as a skill. A file named by `//<file>` only has to be
+ * a skill file — it is validated whether or not it opens frontmatter.
+ */
+export function isGistSkillCandidate(path: string): boolean {
   return isSkillFile(path) && opensFrontmatter(readText(path));
 }
 
+/** How gist errors name the gist: its URL and the commit read. */
+export function gistWhere(tap: Pick<TapConfig, "url">, sha: string | null): string {
+  return `${displayUrl(tap.url)} at ${(sha ?? "").slice(0, 8)}`;
+}
+
 /**
- * Where to expand inside an acquired gist: its root, or the one file a
- * `//<file>` reference selected (§8.2). A gist with a root `SKILL.md` is
- * a single skill whose other files are its resources, so no file of it
- * can be selected on its own. Like any resolved subpath, the file must
- * be reached without traversing a symlink (§8.4), and naming a file the
- * gist doesn't have is `no_skills_found` naming that file.
+ * Where to expand inside an acquired source: the one skill file a gist
+ * `//<file>` selected (§8.2), or — with no file selected, as for every
+ * non-gist source — the root itself. A gist with a root `SKILL.md` is a
+ * single skill whose other files are its resources, so no file of it
+ * can be selected on its own. The file must be reached without
+ * traversing a symlink (§8.4), and naming a file the gist doesn't have
+ * is `no_skills_found` listing the files it does.
  */
-export function selectGistFile(acquired: AcquiredTap, tap: TapConfig, file: string): string {
+export function selectGistFile(acquired: AcquiredTap, tap: TapConfig, gistFile: string): string {
   const { rootDir } = acquired;
-  if (file === "") return rootDir;
-  const shown = displayText(file);
-  const where = `${displayUrl(tap.url)} at ${(acquired.resolvedSha ?? "").slice(0, 8)}`;
-  if (hasSkillMd(rootDir)) {
+  if (gistFile === "") return rootDir;
+  const shown = displayText(gistFile);
+  const where = gistWhere(tap, acquired.resolvedSha);
+  if (isOneSkillGist(rootDir)) {
     throw new CrewError(
       "invalid_ref",
       `the gist ${where} is one skill (it has a root SKILL.md), so \`//${shown}\` can't select a file of it`,
@@ -65,16 +84,36 @@ export function selectGistFile(acquired: AcquiredTap, tap: TapConfig, file: stri
       `Install the whole gist: \`crew install ${displayUrl(tap.url)}\`.`,
     );
   }
-  const target = join(rootDir, file);
+  const target = join(rootDir, gistFile);
   assertNoSymlinkEscape(rootDir, target, `gist file \`${shown}\``);
   // Matched by exact name: a case-insensitive disk would also find `PRD.md`.
-  if (!(listDir(rootDir).includes(file) && isSkillFile(target))) {
+  if (!(listDir(rootDir).includes(gistFile) && isSkillFile(target))) {
+    const files = gistSkillCandidates(rootDir).map((path) => basename(path));
+    const remedy =
+      files.length === 0
+        ? "The gist has no skill files: each skill is a top-level `.md` file that opens with frontmatter."
+        : `Its skill files are ${files.map((f) => `\`${displayText(f)}\``).join(", ")} (names are case-sensitive).`;
     throw new CrewError(
       "no_skills_found",
       `the gist ${where} has no file \`${shown}\``,
-      { file: shown },
-      "Gist file names are case-sensitive. `crew info <gist-url>` lists the gist's skills.",
+      { file: shown, files },
+      remedy,
     );
   }
   return target;
+}
+
+/**
+ * Reject `--recursive` (§16.3) for a gist. It widens discovery past the
+ * standard layout, but a gist's skills are always its top-level `.md`
+ * files — recording it would claim a discovery mode that never applies.
+ */
+export function rejectRecursiveGist(url: string): void {
+  if (!isGistUrl(url)) return;
+  throw new CrewError(
+    "usage_error",
+    "`--recursive` doesn't apply to a gist — its skills are always the `.md` files at its top level",
+    { url: displayUrl(url) },
+    "Drop `--recursive` and try again.",
+  );
 }

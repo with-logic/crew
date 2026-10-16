@@ -11,13 +11,15 @@
  * namespace fallback can search every tap at the requested ref.
  */
 
+import { CrewError } from "../../core/errors.ts";
 import type { Config, LoadedSkill, TapConfig, TapSource } from "../../core/types.ts";
 import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
-import { loadSkill } from "../../skill/load.ts";
+import { loadSkill, skillFileRemedy } from "../../skill/load.ts";
+import { isSkillFile } from "../../skill/skill-file.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
-import { expandSkills, layoutOf } from "../../sources/expand.ts";
-import { selectGistFile } from "../../sources/gist.ts";
+import { discoveryOf, expandSkills } from "../../sources/expand.ts";
+import { gistWhere, selectGistFile } from "../../sources/gist.ts";
 import type { SkillInfo } from "./render.ts";
 
 export interface TapPreview {
@@ -42,22 +44,19 @@ export function tapCandidate(
 }
 
 /**
- * Expand a tap's skills, reading at `ref` when one was requested. `file`
- * narrows a gist tap to the one skill file a `//<file>` named (§8.2).
- * That file is the whole input, so its validation error is the answer —
- * as it is for `crew install` — rather than an empty preview.
+ * Expand a tap's skills, reading at `ref` when one was requested.
+ * `gistFile` narrows a gist tap to the one skill file a `//<file>` named
+ * (§8.2).
  */
 export function skillsAtRef(
   tap: TapConfig,
   ref: string | null,
   home: string,
-  file = "",
+  gistFile = "",
 ): SkillInfo[] {
-  return withAcquiredTap(tap, ref, home, (acq) => {
-    const location = selectGistFile(acq, tap, file);
-    if (file !== "") return [skillInfoOf(loadSkill(location))];
-    return buildSkillInfos(location, tap);
-  });
+  return withAcquiredTap(tap, ref, home, (acq) =>
+    previewSkills(selectGistFile(acq, tap, gistFile), tap, gistWhere(tap, acq.resolvedSha)),
+  );
 }
 
 /**
@@ -78,18 +77,37 @@ function narrowAtRoots(
 /** Preview only the selected locations while their acquisition scope is live. */
 function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
   if (candidate.kind === "skill") {
-    return { tap: candidate.tap, skills: buildSkillInfosFromDirs([candidate.location]) };
+    return { tap: candidate.tap, skills: buildSkillInfosAt([candidate.location]) };
   }
-  return { tap: candidate.tap, skills: buildSkillInfosFromDirs(candidate.members) };
+  return { tap: candidate.tap, skills: buildSkillInfosAt(candidate.members) };
 }
 
-function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
-  const { valid } = expandSkills(dir, layoutOf(tap));
+/**
+ * The valid skills at `location`. When it holds candidates but none is
+ * valid, the preview fails with the reason, as an install of the same
+ * reference would (§9.1, C-INST-21): "No skills here" would hide why.
+ */
+function previewSkills(location: string, tap: TapConfig, where: string): SkillInfo[] {
+  const { valid, skipped } = expandSkills(location, discoveryOf(tap), where);
+  const [first] = skipped;
+  if (valid.length === 0 && first) {
+    const message =
+      skipped.length === 1
+        ? first.message
+        : `none of the ${skipped.length} skills here is valid — ${first.message}`;
+    const remedy = isSkillFile(first.path) ? skillFileRemedy(first.path) : undefined;
+    throw new CrewError(
+      "invalid_skill",
+      message,
+      { path: first.path, invalid: skipped.length },
+      remedy,
+    );
+  }
   return valid.map(skillInfoOf);
 }
 
-function buildSkillInfosFromDirs(dirs: readonly { readonly path: string }[]): SkillInfo[] {
-  return dirs.map((dir) => skillInfoOf(loadSkill(dir.path)));
+function buildSkillInfosAt(locations: readonly { readonly path: string }[]): SkillInfo[] {
+  return locations.map((l) => skillInfoOf(loadSkill(l.path)));
 }
 
 function skillInfoOf(s: LoadedSkill): SkillInfo {

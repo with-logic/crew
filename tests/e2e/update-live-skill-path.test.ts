@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { readFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -84,6 +84,24 @@ describe("crew update of a <tap>/<skill> install", () => {
     expect(installed()).toContain("Original.");
   });
 
+  test("C-UPD-39 a symlink that stays inside the repository updates normally", () => {
+    const home = makeCrewHome();
+    const repo = makeTempDir();
+    makeSkill(join(repo, "packages"), "demo", skillFrontmatter({ name: "demo" }), "Original.\n");
+    mkdirSync(join(repo, "skills"));
+    symlinkSync(join("..", "packages", "demo"), join(repo, "skills", "demo"));
+    makeGitRepo(repo);
+    run(home, ["tap", "add", `file://${repo}`, "acme"]);
+    expect(run(home, ["install", "acme/demo"]).code).toBe(0);
+    makeSkill(join(repo, "packages"), "demo", skillFrontmatter({ name: "demo" }), "Edited.\n");
+    commitAll(repo, "edit demo");
+
+    const r = run(home, ["update", "--json"]);
+    expect(r.code).toBe(0);
+    expect(outcomes(r)).toEqual(["demo:updated"]);
+    expect(installed()).toContain("Edited.");
+  });
+
   test("a path tap is the user's own directory, so a symlinked skill there still updates", () => {
     const home = makeCrewHome();
     const tapDir = makeTempDir();
@@ -92,9 +110,11 @@ describe("crew update of a <tap>/<skill> install", () => {
     symlinkSync(join(elsewhere, "demo"), join(tapDir, "demo"));
     expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
     expect(run(home, ["install", "mine/demo"]).code).toBe(0);
+    makeSkill(elsewhere, "demo", skillFrontmatter({ name: "demo" }), "Edited.\n");
 
     const r = run(home, ["update", "--json"]);
     expect(r.code).toBe(0);
-    expect(outcomes(r)).not.toContain("demo:source_gone");
+    expect(outcomes(r)).toEqual(["demo:updated"]);
+    expect(installed()).toContain("Edited.");
   });
 });

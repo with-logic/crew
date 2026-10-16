@@ -17,6 +17,7 @@ import { isGistUrl } from "../core/gist-url.ts";
 import type { GitSource } from "../core/types.ts";
 import { normalizeBrowserUrl, stripUrlQueryAndFragment } from "./browser-url.ts";
 import { displayUrl } from "./display-url.ts";
+import { assertNoGistFileAnchor } from "./gist.ts";
 import { splitGitRef, splitSubpath, splitTrailingRef } from "./git-tails.ts";
 import { normalizeSubpath } from "./subpath.ts";
 
@@ -105,7 +106,9 @@ export function looksLikeAtShorthand(ref: string): boolean {
 /** Parse a git source per §8.2. Handles URL, ref, subpath, and browser URLs. */
 export function parseGit(ref: string): GitSource {
   // §8.2: `?query` / `#fragment` are dropped before any grammar tail is read,
-  // so text inside them can never be mistaken for an `@ref` or `//subpath`.
+  // so text inside them can never be mistaken for an `@ref` or `//subpath` —
+  // except a gist's per-file anchor, which dropping would widen to the whole gist.
+  assertNoGistFileAnchor(ref);
   const { head, subpath: rawSubpath } = splitSubpath(stripUrlQueryAndFragment(ref));
   const { url: baseUrl, ref: leadingRef } = splitGitRef(head);
   // §8.2: the ref may sit before or after the subpath. Ref-first wins and

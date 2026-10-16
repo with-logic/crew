@@ -107,6 +107,20 @@ describe("crew info", () => {
     expect(capture.stdout()).toContain("declared-root");
     expect(capture.stdout()).toContain("Root skill");
   });
+
+  test("C-INFO-03 a folder whose one skill is invalid reports why instead of no skills", () => {
+    const home = makeInfoHome();
+    const src = makeTempDir();
+    makeSkill(src, "demo", "name: demo");
+
+    const capture = captureStreams();
+    const code = runCli(["info", join(src, "demo"), "--json"], { home, streams: capture.streams });
+
+    expect(code).toBe(4);
+    const { error } = JSON.parse(capture.stdout());
+    expect(error.name).toBe("invalid_skill");
+    expect(error.message).toContain("frontmatter is missing `description`");
+  });
 });
 
 function makeInfoHome(): string {

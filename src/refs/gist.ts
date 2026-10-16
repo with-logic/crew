@@ -10,13 +10,10 @@
  */
 
 import { CrewError } from "../core/errors.ts";
-import { isGistUrl } from "../core/gist-url.ts";
+import { GIST_ID_PATTERN, isGistUrl, isSkillFileName } from "../core/gist-url.ts";
 import type { GitSource, PathSource } from "../core/types.ts";
 import type { BrowserUrlParts } from "./browser-url.ts";
 import { displayText, displayUrl } from "./display-url.ts";
-
-/** Gist IDs are hex — at most 32 characters; the oldest are short and all-digit. */
-const GIST_ID_PATTERN = /^[0-9a-f]+$/i;
 
 /** A revision page names a full commit SHA, which no gist ID is long enough to be. */
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/i;
@@ -61,8 +58,9 @@ function gistPage(segments: readonly string[]): GistPage | null {
   const id = (rest[0] ?? "").replace(/\.git$/, "").toLowerCase();
   const revision = rest[1]?.toLowerCase() ?? null;
   const isGist = rest.length <= 2 && GIST_ID_PATTERN.test(id);
-  const isRevision = revision === null || FULL_SHA_PATTERN.test(revision);
-  return isGist && isRevision ? { id, revision } : null;
+  // No revision at all is fine; one that is present must be a full SHA.
+  const revisionOk = revision === null || FULL_SHA_PATTERN.test(revision);
+  return isGist && revisionOk ? { id, revision } : null;
 }
 
 /**
@@ -83,12 +81,20 @@ export function assertNoGistFileAnchor(raw: string): void {
   );
 }
 
-/** A gist reference with its `//<file>` selection split off. */
+/** A reference with any gist `//<file>` selection split off. */
 export interface GistSelection {
-  /** The source naming the whole gist (or the input itself, for anything else). */
-  readonly whole: GitSource | PathSource;
-  /** The selected skill file, or `""` when the whole source was named. */
-  readonly file: string;
+  /**
+   * The source the tap is found or created for: the whole gist, or —
+   * for every non-gist source — the input itself, subpath included.
+   */
+  readonly tapSource: GitSource | PathSource;
+  /** The selected gist skill file, or `""` when none was selected. */
+  readonly gistFile: string;
+}
+
+/** True when `name` can be a gist `//<file>`: one top-level `.md` file name. */
+export function isGistFileName(name: string): boolean {
+  return !name.includes("/") && isSkillFileName(name);
 }
 
 /**
@@ -101,10 +107,10 @@ export interface GistSelection {
  */
 export function splitGistFile(source: GitSource | PathSource): GistSelection {
   if (source.type === "path" || source.subpath === "" || !isGistUrl(source.url)) {
-    return { whole: source, file: "" };
+    return { tapSource: source, gistFile: "" };
   }
   const file = source.subpath;
-  if (file.includes("/") || !/\.md$/i.test(file)) {
+  if (!isGistFileName(file)) {
     const shown = `${displayUrl(source.url)}//${displayText(file)}`;
     throw new CrewError(
       "invalid_ref",
@@ -113,18 +119,5 @@ export function splitGistFile(source: GitSource | PathSource): GistSelection {
       GIST_FORMS,
     );
   }
-  return { whole: { ...source, subpath: "" }, file };
-}
-
-/**
- * Reject `--recursive` (§16.3) for a gist. It widens discovery past the
- * standard layout, but a gist's skills are always its top-level `.md`
- * files — recording it would claim a discovery mode that never applies.
- */
-export function rejectRecursiveGist(url: string): void {
-  if (!isGistUrl(url)) return;
-  throw new CrewError(
-    "usage_error",
-    "`--recursive` doesn't apply to a gist — its skills are always the `.md` files at its top level. Drop `--recursive` and try again.",
-  );
+  return { tapSource: { ...source, subpath: "" }, gistFile: file };
 }

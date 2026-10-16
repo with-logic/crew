@@ -96,8 +96,9 @@ function exportFailure(
  * directory when `fn` returns or throws. Cleanup IO errors propagate;
  * `crew cache clean` can remove any leftover scratch directories.
  *
- * `fn` receives the directory matching the source root: the export root
- * when `subpath` is empty, otherwise the subpath inside it. That root is
+ * `fn` receives the location matching the source root: the export root
+ * when `subpath` is empty, otherwise the subpath inside it — a directory,
+ * or the file itself when the subpath names a gist skill file. That root is
  * checked for symlink escapes first, because §9 step 3 requires every
  * byte crew reads to come from the requested commit: a repository can
  * commit a symlink at the subpath itself, and following it would read

@@ -6,13 +6,14 @@
  * touches the network.
  */
 
-import { describe, expect, test } from "bun:test";
-import { readdirSync, symlinkSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { chmodSync, readdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { readConfig } from "../../../src/config/load.ts";
 import { readState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { commitAll } from "../../helpers/fixtures.ts";
+import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 import {
   GIST_CLONE_URL,
   GIST_PAGE_URL,
@@ -25,12 +26,19 @@ import {
 
 const fx = useGistFixture();
 
+let claude: ReturnType<typeof redirectClaudeCode>;
+beforeEach(() => {
+  claude = redirectClaudeCode();
+});
+afterEach(() => restoreClaudeCode(claude.originals));
+const skillsDir = (): string => claude.userRoot;
+
 describe("crew install <gist-url>//<file>", () => {
   test("C-INST-26 installs only that skill, attributed to the whole-gist tap", () => {
     fx.gist({ "prd.md": skillFile("prd"), "build.md": skillFile("build") });
     const home = makeCrewHome();
     expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
-    expect(readdirSync(fx.skills())).toEqual(["prd"]);
+    expect(readdirSync(skillsDir())).toEqual(["prd"]);
     const [entry] = readState(home).installations;
     expect([entry!.source.tap, entry!.source.path]).toEqual([GIST_TAP, "prd.md"]);
     expect(entry!.tracks_tap).toBeUndefined();
@@ -39,7 +47,7 @@ describe("crew install <gist-url>//<file>", () => {
 
     // The whole-gist tap now backs qualified references too.
     expect(run(home, ["install", `${GIST_TAP}/build`]).code).toBe(0);
-    expect(readdirSync(fx.skills()).sort()).toEqual(["build", "prd"]);
+    expect(readdirSync(skillsDir()).sort()).toEqual(["build", "prd"]);
   });
 
   test("C-LIST-09 the label crew list shows installs the same skill again", () => {
@@ -56,8 +64,8 @@ describe("crew install <gist-url>//<file>", () => {
     ]);
   });
 
-  test("C-INST-26 a file the gist doesn't have is no_skills_found naming that file", () => {
-    fx.gist({ "prd.md": skillFile("prd") });
+  test("C-INST-26 a file the gist doesn't have is no_skills_found naming it and the gist's files", () => {
+    fx.gist({ "prd.md": skillFile("prd"), "build.md": skillFile("build") });
     for (const file of ["missing.md", "PRD.md"]) {
       const r = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//${file}`, "--json"]);
       expect(r.code).toBe(4);
@@ -68,6 +76,31 @@ describe("crew install <gist-url>//<file>", () => {
           `^the gist https://gist\\.github\\.com/\\S+ at [0-9a-f]{8} has no file \`${file}\`$`,
         ),
       );
+      expect(error.details.files).toEqual(["build.md", "prd.md"]);
+    }
+    const human = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//missing.md`]);
+    expect(human.stderr + human.stdout).toContain("Its skill files are `build.md`, `prd.md`");
+  });
+
+  test("C-INST-26 a gist with no skill files says so when a file is missing", () => {
+    fx.gist({ "README.md": "# Notes\n" });
+    const r = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//prd.md`]);
+    expect(r.code).toBe(4);
+    expect(r.stderr + r.stdout).toContain("The gist has no skill files");
+  });
+
+  test("C-INST-26 a skill file crew can't read fails loudly, not as a skill error", () => {
+    fx.gist({ "prd.md": skillFile("prd") });
+    const home = makeCrewHome();
+    expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
+    const clone = readdirSync(join(home, "repos"))[0]!;
+    chmodSync(join(home, "repos", clone, "prd.md"), 0o000);
+    try {
+      const r = run(home, ["info", `${GIST_PAGE_URL}//prd.md`, "--json"]);
+      expect(r.code).not.toBe(0);
+      expect(json(r).error.name).not.toBe("invalid_skill");
+    } finally {
+      chmodSync(join(home, "repos", clone, "prd.md"), 0o644);
     }
   });
 
@@ -86,7 +119,7 @@ describe("crew install <gist-url>//<file>", () => {
         ],
       ],
     );
-    expect(readdirSync(fx.skills())).toEqual([]);
+    expect(readdirSync(skillsDir())).toEqual([]);
   });
 
   test("C-INST-26 a named file reached through a symlink is invalid_ref", () => {
@@ -106,7 +139,7 @@ describe("crew install <gist-url>//<file>", () => {
       expect(json(r).error.name).toBe("invalid_ref");
       expect(json(r).error.message).toContain("is one skill (it has a root SKILL.md)");
     }
-    expect(readdirSync(fx.skills())).toEqual([]);
+    expect(readdirSync(skillsDir())).toEqual([]);
   });
 
   test("C-REF-39 a //<file> that isn't a top-level .md name is invalid_ref", () => {
@@ -120,20 +153,43 @@ describe("crew install <gist-url>//<file>", () => {
 });
 
 describe("crew info <gist-url>//<file>", () => {
-  test("previews just the named file", () => {
-    fx.gist({ "prd.md": skillFile("prd"), "build.md": skillFile("build") });
-    const home = makeCrewHome();
-    const whole = json(run(home, ["info", GIST_PAGE_URL, "--json"]));
-    expect(whole.skills.map((s: { name: string }) => s.name).sort()).toEqual(["build", "prd"]);
-    const one = json(run(home, ["info", `${GIST_PAGE_URL}//build.md`, "--json"]));
-    expect(one.skills.map((s: { name: string }) => s.name)).toEqual(["build"]);
-  });
+  for (const configured of [false, true]) {
+    const when = configured ? "once the gist's tap exists" : "for a gist crew hasn't seen";
+    test(`previews just the named file, ${when}`, () => {
+      fx.gist({ "prd.md": skillFile("prd"), "build.md": skillFile("build") });
+      const home = makeCrewHome();
+      if (configured) expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
+      const whole = json(run(home, ["info", GIST_PAGE_URL, "--json"]));
+      expect(whole.skills.map((s: { name: string }) => s.name).sort()).toEqual(["build", "prd"]);
+      const one = json(run(home, ["info", `${GIST_PAGE_URL}//build.md`, "--json"]));
+      expect(one.skills.map((s: { name: string }) => s.name)).toEqual(["build"]);
+    });
 
-  test("an invalid named file reports why, as install does", () => {
-    fx.gist({ "prd.md": skillFile("prd"), "bad.md": "---\nname: Not Valid\n---\n" });
-    const r = run(makeCrewHome(), ["info", `${GIST_PAGE_URL}//bad.md`, "--json"]);
+    test(`C-INFO-03 an invalid named file reports why, as install does, ${when}`, () => {
+      fx.gist({ "prd.md": skillFile("prd"), "bad.md": "---\nname: Not Valid\n---\n" });
+      const home = makeCrewHome();
+      if (configured) expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
+      const r = run(home, ["info", `${GIST_PAGE_URL}//bad.md`]);
+      expect(r.code).toBe(4);
+      expect(r.stderr + r.stdout).toContain("`bad.md`: `name: Not Valid`");
+      expect(r.stderr + r.stdout).toContain("Check `bad.md`'s frontmatter");
+    });
+  }
+
+  test("C-INFO-03 a gist whose only skill file is invalid reports why", () => {
+    fx.gist({ "prd.md": "---\nname: prd\n---\n" });
+    const r = run(makeCrewHome(), ["info", GIST_PAGE_URL, "--json"]);
     expect(r.code).toBe(4);
     expect(json(r).error.name).toBe("invalid_skill");
-    expect(json(r).error.message).toStartWith("`bad.md`: `name: Not Valid`");
+    expect(json(r).error.message).toBe(
+      "`prd.md` frontmatter is missing `description` — add a non-empty one-line summary the agent will read to decide whether to use this skill",
+    );
+  });
+
+  test("C-INFO-03 a gist with several invalid files says how many", () => {
+    fx.gist({ "a.md": "---\nname: a\n---\n", "b.md": "---\nname: b\n---\n" });
+    const r = run(makeCrewHome(), ["info", GIST_PAGE_URL, "--json"]);
+    expect(r.code).toBe(4);
+    expect(json(r).error.message).toStartWith("none of the 2 skills here is valid — `a.md`");
   });
 });

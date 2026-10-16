@@ -31,10 +31,10 @@ import type { PendingItem } from "../enqueue.ts";
  * parent directory the export has to widen to the enclosing directory;
  * exporting the subpath alone would contain no siblings at all.
  */
-export function withParentSkillDir<T>(
+export function withParentSkill<T>(
   parent: PendingItem,
   home: string,
-  fn: (parentDir: string | undefined) => T,
+  fn: (parentLocation: string | undefined) => T,
 ): T {
   if (parent.requestedRef === null || parent.resolvedSha === null || parent.tap.kind !== "git")
     return fn(undefined);

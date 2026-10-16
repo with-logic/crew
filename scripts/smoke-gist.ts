@@ -14,10 +14,11 @@
  * Needs network access; it is never part of `bun test`.
  */
 
-import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { opensFrontmatter } from "../src/skill/frontmatter.ts";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const DEFAULT_GIST = "https://gist.github.com/stevekrenzel/7489027d2d93c185f48a628547c043d8";
@@ -26,6 +27,12 @@ interface Run {
   readonly code: number;
   readonly stdout: string;
   readonly stderr: string;
+}
+
+interface Scratch {
+  readonly env: Record<string, string>;
+  readonly skills: string;
+  readonly state: () => { installations: { name: string; resolved_sha: string }[] };
 }
 
 function exec(cmd: string[], env: Record<string, string> = {}): Run {
@@ -37,17 +44,20 @@ function exec(cmd: string[], env: Record<string, string> = {}): Run {
   };
 }
 
-/** A scratch user: HOME and CREW_HOME, so nothing touches the real ones. */
-function scratchHome(): { env: Record<string, string>; skills: string } {
+/** A scratch user, with claude-code detectable, so nothing touches the real home. */
+function scratchHome(): Scratch {
   const home = mkdtempSync(join(tmpdir(), "crew-smoke-gist-"));
+  mkdirSync(join(home, ".claude"));
+  const crewHome = join(home, ".crew");
   return {
-    env: { HOME: home, CREW_HOME: join(home, ".crew"), CREW_NO_UPDATE_CHECK: "1" },
+    env: { HOME: home, CREW_HOME: crewHome, CREW_NO_UPDATE_CHECK: "1" },
     skills: join(home, ".claude", "skills"),
+    state: () => JSON.parse(readFileSync(join(crewHome, "state.json"), "utf8")),
   };
 }
 
-function crew(env: Record<string, string>, args: string[]): Run {
-  const r = exec(["bun", "run", "src/index.ts", ...args, "--agent", "claude-code"], env);
+function crew(scratch: Scratch, args: string[]): Run {
+  const r = exec(["bun", "run", "src/index.ts", ...args, "--agent", "claude-code"], scratch.env);
   if (r.code !== 0) fail(`crew ${args.join(" ")} exited ${r.code}\n${r.stdout}${r.stderr}`);
   return r;
 }
@@ -57,77 +67,102 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function check(ok: boolean, message: string): void {
-  if (!ok) fail(message);
-  process.stdout.write(`ok  ${message}\n`);
+/** Pass when `actual` equals `expected`; otherwise fail showing both. */
+function check(what: string, actual: unknown, expected: unknown): void {
+  const [a, e] = [JSON.stringify(actual), JSON.stringify(expected)];
+  if (a !== e) fail(`${what}\n  expected ${e}\n  actual   ${a}`);
+  process.stdout.write(`ok  ${what}\n`);
 }
 
-/** The gist's skill files, from a clone crew had no part in: name → bytes. */
-function expectedSkills(cloneUrl: string): { sha: string; files: Map<string, string> } {
-  const dir = mkdtempSync(join(tmpdir(), "crew-smoke-gist-direct-"));
-  const clone = exec(["git", "clone", "--quiet", cloneUrl, dir]);
-  if (clone.code !== 0) fail(`git clone ${cloneUrl} failed\n${clone.stderr}`);
-  const sha = exec(["git", "-C", dir, "rev-parse", "HEAD"]).stdout.trim();
+function git(dir: string, args: string[]): string {
+  const r = exec(["git", "-C", dir, ...args]);
+  if (r.code !== 0) fail(`git ${args.join(" ")} failed\n${r.stderr}`);
+  return r.stdout;
+}
+
+/** The gist's skill files at `rev`, by crew's own candidate rule: file → bytes. */
+function skillFilesAt(dir: string, rev: string): Map<string, string> {
   const files = new Map<string, string>();
-  for (const name of readdirSync(dir)) {
+  for (const name of git(dir, ["ls-tree", "--name-only", rev]).split("\n")) {
     if (!/\.md$/i.test(name)) continue;
-    const text = readFileSync(join(dir, name), "utf8");
-    if (text.trimStart().startsWith("---")) files.set(name, text);
+    const text = git(dir, ["show", `${rev}:${name}`]);
+    if (opensFrontmatter(text)) files.set(name, text);
   }
-  if (files.size === 0) fail(`${cloneUrl} has no skill files to check against`);
-  return { sha, files };
+  return files;
 }
 
 function declaredName(skillMd: string): string {
   return /^name:\s*["']?([a-z0-9-]+)/m.exec(skillMd)?.[1] ?? fail("a skill file has no name");
 }
 
-function installedSkills(skills: string): string[] {
-  return readdirSync(skills).sort();
+function namesOf(files: Map<string, string>): string[] {
+  return [...files.values()].map(declaredName).sort();
 }
+
+const installedNames = (scratch: Scratch): string[] => readdirSync(scratch.skills).sort();
 
 const page = (process.argv[2] ?? DEFAULT_GIST).replace(/\/+$/, "");
 const id = page.split("/").pop() ?? fail(`can't read a gist ID from ${page}`);
-const { sha, files } = expectedSkills(`https://gist.github.com/${id}.git`);
-const names = [...files.values()].map(declaredName).sort();
-process.stdout.write(`gist ${id} at ${sha.slice(0, 8)}: ${names.join(", ")}\n`);
+
+// An independent clone: the gist as GitHub serves it, with no crew involved.
+const direct = mkdtempSync(join(tmpdir(), "crew-smoke-gist-direct-"));
+const clone = exec(["git", "clone", "--quiet", `https://gist.github.com/${id}.git`, direct]);
+if (clone.code !== 0) fail(`git clone failed\n${clone.stderr}`);
+const revisions = git(direct, ["rev-list", "HEAD"]).trim().split("\n");
+const head = revisions[0]!;
+const files = skillFilesAt(direct, head);
+if (files.size === 0) fail(`${page} has no skill files to check against`);
+process.stdout.write(`gist ${id} at ${head.slice(0, 8)}: ${namesOf(files).join(", ")}\n`);
 
 // The page URL installs every skill, byte for byte, under the derived tap.
 const whole = scratchHome();
-crew(whole.env, ["install", page]);
+crew(whole, ["install", page]);
+check("the page URL installs every skill", installedNames(whole), namesOf(files));
+const shas = whole.state().installations.map((e) => e.resolved_sha);
 check(
-  JSON.stringify(installedSkills(whole.skills)) === JSON.stringify(names),
-  `${page} installs ${names.join(", ")}`,
+  "every skill is recorded at the gist's HEAD (rerun if the gist moved)",
+  [...new Set(shas)],
+  [head],
 );
 for (const text of files.values()) {
-  const installed = readFileSync(join(whole.skills, declaredName(text), "SKILL.md"), "utf8");
-  check(installed === text, `${declaredName(text)}/SKILL.md matches the gist byte for byte`);
+  const name = declaredName(text);
+  check(
+    `${name}/SKILL.md matches the gist`,
+    readFileSync(join(whole.skills, name, "SKILL.md"), "utf8"),
+    text,
+  );
 }
-const state = JSON.parse(readFileSync(join(whole.env["CREW_HOME"]!, "state.json"), "utf8"));
-const taps = new Set(state.installations.map((e: { source: { tap: string } }) => e.source.tap));
-check(
-  taps.size === 1 && taps.has(`gist-${id.slice(0, 8)}`),
-  `recorded under tap gist-${id.slice(0, 8)}`,
-);
-crew(whole.env, ["update"]);
-check(true, "crew update on the installed gist exits 0");
-
-// A revision page pins that revision.
-const pinned = scratchHome();
-crew(pinned.env, ["install", `${page}/${sha}`]);
-const pinnedState = JSON.parse(readFileSync(join(pinned.env["CREW_HOME"]!, "state.json"), "utf8"));
-check(
-  pinnedState.installations.every((e: { resolved_sha: string }) => e.resolved_sha === sha),
-  `${page}/${sha.slice(0, 8)}… installs that revision`,
-);
+const update = JSON.parse(crew(whole, ["update", "--json"]).stdout);
+const outcomes = update.rows.map((r: { outcome: { kind: string } }) => r.outcome.kind);
+check("crew update reports every skill up to date", [...new Set(outcomes)], ["up_to_date"]);
 
 // `//<file>` installs just that file's skill.
 const [file, text] = [...files.entries()][0]!;
 const one = scratchHome();
-crew(one.env, ["install", `${page}//${file}`]);
+crew(one, ["install", `${page}//${file}`]);
+check(`${page}//${file} installs only that skill`, installedNames(one), [declaredName(text)]);
+
+// A revision page installs that revision — an older one, when the gist has
+// one; otherwise HEAD's page, which only shows the page URL resolves.
+const oldest = revisions[revisions.length - 1]!;
+const label = oldest === head ? "(the gist's only revision)" : "(an older revision)";
+const pinned = scratchHome();
+crew(pinned, ["install", `${page}/${oldest}`]);
+const then = skillFilesAt(direct, oldest);
 check(
-  JSON.stringify(installedSkills(one.skills)) === JSON.stringify([declaredName(text)]),
-  `${page}//${file} installs only ${declaredName(text)}`,
+  `a revision page installs that revision's skills ${label}`,
+  installedNames(pinned),
+  namesOf(then),
 );
+const pinnedShas = pinned.state().installations.map((e) => e.resolved_sha);
+check("…recorded at that revision", [...new Set(pinnedShas)], [oldest]);
+for (const bytes of then.values()) {
+  const name = declaredName(bytes);
+  check(
+    `…with ${name} as it was`,
+    readFileSync(join(pinned.skills, name, "SKILL.md"), "utf8"),
+    bytes,
+  );
+}
 
 process.stdout.write("smoke:gist passed\n");

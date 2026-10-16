@@ -21,18 +21,19 @@ import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
 /** Load and validate the skill at `path`. Throws `invalid_skill` on any failure. */
 export function loadSkill(path: string): LoadedSkill {
-  return namingSkillFile(path, () => {
-    const raw = readSkillMd(path);
-    const frontmatter = validateFrontmatter(extractFrontmatter(raw).data);
-    return { path, frontmatter, skillMd: raw };
-  });
+  // Read outside the wrapper: an I/O failure stays the plain error it is.
+  const raw = readSkillMd(path);
+  return withSkillFileErrors(path, () => ({
+    path,
+    frontmatter: validateFrontmatter(extractFrontmatter(raw).data),
+    skillMd: raw,
+  }));
 }
 
 /** Load only the declared skill name from `SKILL.md`, for tap indexing. */
 export function loadSkillName(path: string): string {
-  return namingSkillFile(path, () =>
-    validateFrontmatterName(extractFrontmatter(readSkillMd(path)).data),
-  );
+  const raw = readSkillMd(path);
+  return withSkillFileErrors(path, () => validateFrontmatterName(extractFrontmatter(raw).data));
 }
 
 /** True iff `path` contains a `SKILL.md`. Does not validate. */
@@ -53,26 +54,40 @@ function readSkillMd(path: string): string {
   return readText(skillMdPath);
 }
 
-/** How validation messages name the file they are about. */
+/**
+ * How `frontmatter.ts` and `validate.ts` name the file a message is about.
+ * Messages that start with it are re-subjected to a skill file's name;
+ * any other message gets the name as a `<file>: ` prefix.
+ */
 const SKILL_MD_SUBJECT = "SKILL.md ";
 
 /**
- * Run `load`, naming a skill file in any error it raises. The user's file
- * is `prd.md`, not a `SKILL.md`, so "SKILL.md is missing …" would send
- * them looking for a file they don't have, and a bare "`name: X` has
+ * Run `validate`, naming a skill file in any error it raises. The user's
+ * file is `prd.md`, not a `SKILL.md`, so "SKILL.md is missing …" would
+ * send them looking for a file they don't have, and a bare "`name: X` has
  * invalid characters" wouldn't say which of a gist's files is wrong.
  */
-function namingSkillFile<T>(path: string, load: () => T): T {
-  if (!isSkillFile(path)) return load();
+function withSkillFileErrors<T>(path: string, validate: () => T): T {
+  if (!isSkillFile(path)) return validate();
   try {
-    return load();
+    return validate();
   } catch (err) {
-    // Reading a regular file and validating it throw only `CrewError`.
+    // Parsing and validating frontmatter throw only `CrewError`.
     const ce = err as CrewError;
     const file = `\`${basename(path)}\``;
     const message = ce.message.startsWith(SKILL_MD_SUBJECT)
       ? `${file} ${ce.message.slice(SKILL_MD_SUBJECT.length)}`
       : `${file}: ${ce.message}`;
-    throw new CrewError(ce.code, message, { ...ce.details, path }, ce.remedy);
+    throw new CrewError(
+      ce.code,
+      message,
+      { ...ce.details, path },
+      ce.remedy ?? skillFileRemedy(path),
+    );
   }
+}
+
+/** The next step for an invalid skill file: its own frontmatter, not a SKILL.md. */
+export function skillFileRemedy(path: string): string {
+  return `Check \`${basename(path)}\`'s frontmatter against the Agent Skills spec: https://agentskills.io/specification. In a gist, that file is the skill's SKILL.md.`;
 }

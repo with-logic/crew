@@ -11,7 +11,7 @@
  * network guard.
  */
 
-import { afterEach, beforeEach } from "bun:test";
+import { afterEach } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +19,6 @@ import { runCli } from "../../../src/cli/main.ts";
 import { resetGitRunner, setGitRunner } from "../../../src/git/exec.ts";
 import { captureStreams } from "../../helpers/env.ts";
 import { commitAll, makeGitRepo, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 
 export const GIST_ID = "7489027d2d93c185f48a628547c043d8";
 /** The URL crew records for the gist: owner dropped, `.git` added. */
@@ -49,8 +48,6 @@ function writeFiles(dir: string, files: Record<string, string>): void {
 
 /** What a test gets from `useGistFixture`. */
 export interface GistFixture {
-  /** claude-code's (redirected) user skills directory for the current test. */
-  readonly skills: () => string;
   /**
    * Serve a new gist holding `files` at its clone URL — and at any
    * `alsoAt` URLs, for a tap recorded under another spelling. Returns
@@ -63,22 +60,14 @@ export interface GistFixture {
 }
 
 /**
- * Per-test gist plumbing: claude-code redirected to a temp dir, and
- * `gist(files)` to lay out and serve a gist. Each test's routing is
- * dropped in `afterEach` by resetting to the network-guarded runner, so
- * a test that serves twice can't leak a route into the next.
+ * Per-test gist serving: `gist(files)` lays out a gist and routes its URL
+ * to it. Each test's routing is dropped in `afterEach` by resetting to the
+ * network-guarded runner, so a test that serves twice can't leak a route
+ * into the next. (Adapters are redirected by each test file itself.)
  */
 export function useGistFixture(): GistFixture {
-  let redirected: ReturnType<typeof redirectClaudeCode> | null = null;
-  beforeEach(() => {
-    redirected = redirectClaudeCode();
-  });
-  afterEach(() => {
-    resetGitRunner();
-    restoreClaudeCode(redirected!.originals);
-  });
+  afterEach(() => resetGitRunner());
   return {
-    skills: () => redirected!.userRoot,
     gist(files, alsoAt = []) {
       const dir = mkdtempSync(join(tmpdir(), "crew-gist-"));
       writeFiles(dir, files);

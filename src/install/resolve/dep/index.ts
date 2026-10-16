@@ -10,9 +10,9 @@ import type { Config, TapConfig, TapSource } from "../../../core/types.ts";
 import { parseRef } from "../../../refs/parse.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { findSiblingDep } from "../../dep-resolution.ts";
+import { enqueueDirectRef } from "../direct-ref.ts";
 import { enqueueTapRef, type PendingItem } from "../enqueue.ts";
-import { enqueueSourceRef } from "../source-ref.ts";
-import { siblingItems, withParentSkillDir } from "./parent-tree.ts";
+import { siblingItems, withParentSkill } from "./parent-tree.ts";
 
 /**
  * Resolve and enqueue items for every dependency of one parent.
@@ -59,11 +59,11 @@ export function enqueueDeps(
     // `findSiblingDep` can register an auto tap, so each hit carries the
     // config to carry forward; threading it through the loop is what
     // keeps a batched walk equivalent to resolving one at a time.
-    const found = withParentSkillDir(parent, home, (parentDir) => {
+    const found = withParentSkill(parent, home, (parentLocation) => {
       const hits: PendingItem[] = [];
       for (const dep of bare) {
         const sibling = findSiblingDep(
-          { tap: parent.tap, tapRelativePath: parent.tapRelativePath, parentDir },
+          { tap: parent.tap, tapRelativePath: parent.tapRelativePath, parentLocation },
           dep.source.name,
           home,
           current,
@@ -106,5 +106,5 @@ export function enqueueDep(
 
   // Git or path dep ref. Dep edges don't subscribe the user to every
   // sibling of the dep's source.
-  return enqueueSourceRef(source, config, home, requireTap, { explicit: false, tracksTap: false });
+  return enqueueDirectRef(source, config, home, requireTap, { explicit: false, tracksTap: false });
 }

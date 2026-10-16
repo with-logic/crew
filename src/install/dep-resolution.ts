@@ -24,7 +24,7 @@ import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkill, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
-import { isGistSkillFile, isGistTap } from "../sources/gist.ts";
+import { isGistSkillCandidate, isGistTap } from "../sources/gist.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 import { attributeRef } from "./tap-attribution.ts";
 
@@ -40,7 +40,7 @@ export interface SiblingHit {
  * Look for `depName` as a sibling skill of `parentTapPath`. Returns
  * null if not found (the dep walker will try cross-tap resolution next).
  *
- * `parent.parentDir`, when set, is the parent skill's own location (its
+ * `parent.parentLocation`, when set, is the parent skill's own location (its
  * directory, or a gist's skill file) inside an already-materialized
  * export of a pinned commit. Siblings
  * must be discovered there, not in the live clone: staging HEAD's bytes
@@ -48,7 +48,7 @@ export interface SiblingHit {
  * provenance the content doesn't have (§9 step 3).
  */
 export function findSiblingDep(
-  parent: { tap: TapConfig; tapRelativePath: string; parentDir?: string | undefined },
+  parent: { tap: TapConfig; tapRelativePath: string; parentLocation?: string | undefined },
   depName: string,
   home: string,
   config: Config,
@@ -56,7 +56,7 @@ export function findSiblingDep(
   const tapClone = tapClonePath(parent.tap, home);
   const tapRoot = tapRootDir(tapClone, parent.tap);
   if (
-    parent.parentDir === undefined &&
+    parent.parentLocation === undefined &&
     parent.tap.kind === "git" &&
     parent.tap.subpath === "" &&
     parent.tapRelativePath === ""
@@ -64,7 +64,7 @@ export function findSiblingDep(
     return null;
   }
   // The parent's own location inside the tap; its siblings share its parent directory.
-  const parentPath = parent.parentDir ?? join(tapRoot, parent.tapRelativePath);
+  const parentPath = parent.parentLocation ?? join(tapRoot, parent.tapRelativePath);
   const siblingParent = join(parentPath, "..");
   const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
   const matches: { entryName: string; siblingPath: string; loaded: LoadedSkill }[] = [];
@@ -97,7 +97,7 @@ export function findSiblingDep(
 
 /** A sibling is a skill directory — or, in a gist, a skill file (§9 step 5). */
 function isSiblingSkill(tap: TapConfig, path: string): boolean {
-  if (isGistTap(tap)) return isGistSkillFile(path);
+  if (isGistTap(tap)) return isGistSkillCandidate(path);
   return isDirectory(path) && hasSkillMd(path);
 }
 

@@ -26,11 +26,11 @@
 
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
-import type { LoadedSkill, TapConfig } from "../core/types.ts";
+import type { LoadedSkill, TapConfig, TapDiscovery } from "../core/types.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
-import { gistSkillFiles, isGistTap } from "./gist.ts";
+import { gistSkillCandidates, isGistTap, isOneSkillGist } from "./gist.ts";
 import { findRecursiveSkillDirs } from "./recursive.ts";
 
 /** A skill candidate that couldn't be loaded. */
@@ -50,16 +50,21 @@ export interface ExpansionResult {
 }
 
 /**
- * How a source's skills are laid out (§9 step 5): the standard cases;
- * the standard cases with a recursive fallback (§16.3 `--recursive`);
- * or a gist's skill files.
+ * How a source's skills are discovered (§9 step 5): the standard cases;
+ * the standard cases with a recursive fallback (a tap's `discovery`,
+ * §16.3 `--recursive`); or a gist's skill files.
  */
-export type SkillLayout = "standard" | "recursive" | "gist";
+export type DiscoveryMode = "standard" | "gist" | TapDiscovery;
 
-/** The layout `tap`'s skills are discovered with. A gist is never walked recursively. */
-export function layoutOf(tap: Pick<TapConfig, "kind" | "url" | "discovery">): SkillLayout {
+/** How `tap`'s skills are discovered. A gist is never walked recursively. */
+export function discoveryOf(tap: Pick<TapConfig, "kind" | "url" | "discovery">): DiscoveryMode {
   if (isGistTap(tap)) return "gist";
-  return tap.discovery === "recursive" ? "recursive" : "standard";
+  return tap.discovery ?? "standard";
+}
+
+/** Case 1: `root` is itself one skill. */
+export function isRootSkill(root: string, mode: DiscoveryMode): boolean {
+  return mode === "gist" ? isOneSkillGist(root) : hasSkillMd(root);
 }
 
 /**
@@ -67,19 +72,20 @@ export function layoutOf(tap: Pick<TapConfig, "kind" | "url" | "discovery">): Sk
  * Validation failures (at any level) are recorded in `skipped`
  * rather than thrown — the caller decides exit code and output.
  * `no_skills_found` is still thrown when neither a valid skill nor
- * a validation failure is present (zero candidates).
+ * a validation failure is present (zero candidates); `where` names the
+ * source in that error when the caller knows more than its path.
  */
-export function expandSkills(root: string, layout: SkillLayout = "standard"): ExpansionResult {
+export function expandSkills(root: string, mode: DiscoveryMode, where?: string): ExpansionResult {
   // A gist's `//<file>` selection resolves to the skill file itself (§8.2).
-  if (hasSkillMd(root) || (layout === "gist" && isSkillFile(root))) {
+  if (isRootSkill(root, mode) || (mode === "gist" && isSkillFile(root))) {
     return loadCandidates([root]);
   }
-  if (layout === "gist") {
-    const gistResult = loadCandidates(gistSkillFiles(root));
+  if (mode === "gist") {
+    const gistResult = loadCandidates(gistSkillCandidates(root));
     if (hasCandidates(gistResult)) return gistResult;
     throw new CrewError(
       "no_skills_found",
-      "the gist has no skills — expected a root SKILL.md, or `.md` files that open with YAML frontmatter (`---`)",
+      `the gist ${where ?? `at \`${root}\``} has no skills — expected a root SKILL.md, or \`.md\` files that open with YAML frontmatter (\`---\`)`,
       { path: root },
       "Each skill in a gist is one `.md` file whose frontmatter declares its `name` and `description`.",
     );
@@ -89,7 +95,7 @@ export function expandSkills(root: string, layout: SkillLayout = "standard"): Ex
     ? collectWithNamespaces(skillsDir)
     : collectSkillChildren(root);
   if (hasCandidates(result)) return result;
-  if (layout === "recursive") {
+  if (mode === "recursive") {
     const recursive = loadCandidates(findRecursiveSkillDirs(root));
     if (hasCandidates(recursive)) return recursive;
   }
@@ -155,9 +161,9 @@ function pushSoft(candidate: string, valid: LoadedSkill[], skipped: SkippedSkill
   try {
     valid.push(loadSkill(candidate));
   } catch (err) {
-    // `loadSkill` throws only `CrewError`, whose `code` is typed as
-    // a non-null `CrewErrorName`. No fallback needed.
-    const ce = err as CrewError;
-    skipped.push({ path: candidate, message: ce.message, code: ce.code });
+    // Only a validation failure is a skipped skill; a file crew couldn't
+    // read is not the skill author's mistake, so it isn't reported as one.
+    if (!(err instanceof CrewError)) throw err;
+    skipped.push({ path: candidate, message: err.message, code: err.code });
   }
 }

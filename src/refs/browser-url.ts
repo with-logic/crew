@@ -20,7 +20,7 @@
 import { CrewError } from "../core/errors.ts";
 import { GIST_HOST } from "../core/gist-url.ts";
 import { displayUrl } from "./display-url.ts";
-import { assertNoGistFileAnchor, fromGistPage } from "./gist.ts";
+import { fromGistPage } from "./gist.ts";
 
 /** Clone URL plus whatever ref / subpath the browser URL encoded. */
 export interface BrowserUrlParts {
@@ -35,13 +35,10 @@ const PASSTHROUGH = (url: string): BrowserUrlParts => ({ url, ref: null, subpath
  * Strip `?query` and `#fragment` from an `http(s)` URL before any grammar
  * tail is parsed (§8.2). Without this, `?x=@v9` or `#//evil` would be read
  * as an explicit `@ref` / `//subpath` tail — see C-REF-26. Returns the input
- * unchanged when it is not an `http(s)` URL crew can parse. A gist's
- * per-file anchor is the one fragment that can't be dropped: it would
- * widen the reference from one file to the whole gist.
+ * unchanged when it is not an `http(s)` URL crew can parse.
  */
 export function stripUrlQueryAndFragment(raw: string): string {
   if (!isHttpUrl(raw)) return raw;
-  assertNoGistFileAnchor(raw);
   const cut = Math.min(indexOrEnd(raw, "?"), indexOrEnd(raw, "#"));
   return raw.slice(0, cut);
 }

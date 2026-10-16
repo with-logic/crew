@@ -18,24 +18,13 @@
 
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { isGistUrl } from "./gist-url.ts";
 import { crewHome, paths } from "./paths.ts";
-import { canonicalRepoUrl } from "./repo-url.ts";
+import { canonicalRepoUrl, canonicalRepoUrlAsWritten } from "./repo-url.ts";
 import type { TapConfig } from "./types.ts";
 
 /** True when both URLs address the same repository (§16.3). */
 export function sameRepoUrl(a: string, b: string): boolean {
   return canonicalRepoUrl(a) === canonicalRepoUrl(b);
-}
-
-/**
- * True when a configured tap's URL is the one an incoming reference
- * names. Tap URLs match exactly — except a gist's, which GitHub serves
- * with or without its owner: a gist tap recorded before crew rewrote gist
- * pages (`/<owner>/<id>`) is still the tap for `/<id>.git` (§8.2).
- */
-export function sameTapUrl(recorded: string, incoming: string): boolean {
-  return recorded === incoming || (isGistUrl(incoming) && sameRepoUrl(recorded, incoming));
 }
 
 /** Lowercase alphanumerics and hyphens; everything else becomes a hyphen. */
@@ -71,7 +60,21 @@ function readablePrefix(canonical: string): string {
 
 /** Directory name for a repository's shared clone. */
 export function repoDirName(url: string): string {
-  const canonical = canonicalRepoUrl(url);
+  return dirNameFor(canonicalRepoUrl(url));
+}
+
+/**
+ * Where a gist tap recorded with its owner (`/<owner>/<id>`) was cloned
+ * before gist identity dropped the owner (§8.2), or null when that is
+ * where it is cloned today.
+ */
+export function ownerKeyedGistClonePath(url: string, home: string = crewHome()): string | null {
+  const asWritten = canonicalRepoUrlAsWritten(url);
+  if (asWritten === canonicalRepoUrl(url)) return null;
+  return join(paths(home).reposDir, dirNameFor(asWritten));
+}
+
+function dirNameFor(canonical: string): string {
   const hash = createHash("sha256").update(canonical).digest("hex");
   return `${readablePrefix(canonical).slice(0, 160)}-${hash}`;
 }

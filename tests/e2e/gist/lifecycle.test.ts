@@ -1,20 +1,21 @@
 /**
- * A gist after install: update, re-expansion, dependencies, and the
- * commands that read a gist tap (§9 step 6, §10.1, §10.1.1, §16.3;
- * C-UPD-38, C-UPD-39, C-INST-26, C-INST-27, C-TAP-27, C-TAP-30).
+ * A gist after install: update, re-expansion, revision pages, and
+ * dependencies (§8.2, §9 step 6, §10.1, §10.1.1; C-UPD-38, C-UPD-39,
+ * C-REF-38, C-INST-26, C-INST-27). Commands that read a gist tap are in
+ * `tap.test.ts`.
  *
  * The gist is served from a local repo by `useGistFixture`; nothing here
  * touches the network.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readConfig, writeConfig } from "../../../src/config/load.ts";
 import { readState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { commitAll, makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 import {
   GIST_CLONE_URL,
   GIST_PAGE_URL,
@@ -28,8 +29,15 @@ import {
 
 const fx = useGistFixture();
 
+let claude: ReturnType<typeof redirectClaudeCode>;
+beforeEach(() => {
+  claude = redirectClaudeCode();
+});
+afterEach(() => restoreClaudeCode(claude.originals));
+const skillsDir = (): string => claude.userRoot;
+
 const installed = (name: string): string =>
-  readFileSync(join(fx.skills(), name, "SKILL.md"), "utf8");
+  readFileSync(join(skillsDir(), name, "SKILL.md"), "utf8");
 
 /** `name:outcome` for every row of a `crew update --json` run. */
 function outcomes(r: { stdout: string }): string[] {
@@ -57,7 +65,7 @@ describe("crew update on a gist", () => {
     expect(r.code).toBe(0);
     expect(outcomes(r)).toContain("build:source_gone");
     expect(outcomes(r).filter((o) => o.endsWith(":source_gone"))).toEqual(["build:source_gone"]);
-    expect(existsSync(join(fx.skills(), "build", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(skillsDir(), "build", "SKILL.md"))).toBe(true);
   });
 
   test("C-UPD-38 a //<file> skill whose file is deleted is source_gone", () => {
@@ -90,6 +98,18 @@ describe("crew update on a gist", () => {
   });
 });
 
+describe("a gist revision page", () => {
+  test("C-REF-38 installs that revision's bytes, pinned, even after the gist moved", () => {
+    const first = fx.gist({ "prd.md": skillFile("prd", "First PRD.\n") });
+    writeGistFiles(first.dir, { "prd.md": skillFile("prd", "Later PRD.\n") });
+    const home = makeCrewHome();
+    expect(run(home, ["install", `${GIST_PAGE_URL}/${first.sha}`]).code).toBe(0);
+    expect(installed("prd")).toBe(skillFile("prd", "First PRD.\n"));
+    const [entry] = readState(home).installations;
+    expect([entry?.ref, entry?.resolved_sha, entry?.pinned]).toEqual([first.sha, first.sha, true]);
+  });
+});
+
 describe("dependencies between gist skills", () => {
   test("C-INST-27 a bare dependency is the sibling file, read at the parent's commit", () => {
     const first = fx.gist({
@@ -119,7 +139,7 @@ describe("dependencies between gist skills", () => {
     });
     const home = makeCrewHome();
     expect(run(home, ["install", `${GIST_PAGE_URL}//build.md`]).code).toBe(0);
-    expect(readdirSync(fx.skills()).sort()).toEqual(["build", "prd"]);
+    expect(readdirSync(skillsDir()).sort()).toEqual(["build", "prd"]);
     const prd = readState(home).installations.find((e) => e.name === "prd");
     expect([prd?.source.tap, prd?.source.path, prd?.explicit, prd?.tracks_tap]).toEqual([
       GIST_TAP,
@@ -127,50 +147,5 @@ describe("dependencies between gist skills", () => {
       false,
       undefined,
     ]);
-  });
-});
-
-describe("reading a gist tap", () => {
-  test("crew search finds a gist's valid skills and doesn't fail on an invalid file", () => {
-    fx.gist({ "prd.md": skillFile("prd"), "bad.md": "---\nname: Not Valid\n---\n" });
-    const home = makeCrewHome();
-    expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
-    const r = run(home, ["search", "prd", "--json"]);
-    expect(r.code).toBe(0);
-    expect(r.stdout).toContain(GIST_TAP);
-    expect(r.stdout).not.toContain("Not Valid");
-  });
-
-  test("C-TAP-30 crew tap add names a gist tap gist-<id8>", () => {
-    fx.gist({ "prd.md": skillFile("prd") });
-    const home = makeCrewHome();
-    expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
-    const tap = readConfig(home).taps.find((t) => t.url === GIST_CLONE_URL);
-    expect([tap?.name, tap?.registered]).toEqual([GIST_TAP, true]);
-    expect(run(home, ["install", "prd"]).code).toBe(0);
-    expect(readdirSync(fx.skills())).toEqual(["prd"]);
-  });
-
-  test("C-TAP-27 crew tap add rejects a gist's //<file>, suggests installing it, and writes nothing", () => {
-    const home = makeCrewHome();
-    const before = readConfig(home);
-    const r = run(home, ["tap", "add", `${GIST_PAGE_URL}//prd.md`, "--json"]);
-    expect(r.code).toBe(4);
-    expect(json(r).error.name).toBe("usage_error");
-    expect(json(r).error.message).toContain(`crew install ${GIST_PAGE_URL}//prd.md`);
-    expect(readConfig(home)).toEqual(before);
-  });
-
-  test("doctor --repair rebuilds a missing gist tap from its markers", () => {
-    fx.gist({ "prd.md": skillFile("prd") });
-    const home = makeCrewHome();
-    expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
-    const config = readConfig(home);
-    writeConfig({ ...config, taps: config.taps.filter((t) => t.name !== GIST_TAP) }, home);
-
-    expect(run(home, ["doctor", "--repair"]).code).toBe(0);
-    const tap = readConfig(home).taps.find((t) => t.name === GIST_TAP);
-    expect(tap?.url).toBe(GIST_CLONE_URL);
-    expect(run(home, ["update"]).code).toBe(0);
   });
 });

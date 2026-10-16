@@ -27,8 +27,8 @@ import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
-import { layoutOf, type SkillLayout } from "../sources/expand.ts";
-import { gistSkillFiles } from "../sources/gist.ts";
+import { type DiscoveryMode, discoveryOf, isRootSkill } from "../sources/expand.ts";
+import { gistSkillCandidates } from "../sources/gist.ts";
 import { migrateTapClone } from "../sources/migrate-clones.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
 import { isDirectory, listDir, toPosix } from "../util/fs.ts";
@@ -93,16 +93,16 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
     }
   };
 
-  if (hasSkillMd(root)) {
+  const mode = discoveryOf(tap);
+  if (isRootSkill(root, mode)) {
     const skillName = skillNameForIndex(root);
     if (skillName !== null)
       addSkill({ name: skillName, namespace: null, path: root, tapRelativePath: "" });
     return { skills, namespaces };
   }
 
-  const layout = layoutOf(tap);
-  if (layout === "gist") {
-    for (const path of gistSkillFiles(root)) {
+  if (mode === "gist") {
+    for (const path of gistSkillCandidates(root)) {
       const skillName = skillNameForIndex(path);
       if (skillName === null) continue;
       addSkill({ name: skillName, namespace: null, path, tapRelativePath: basename(path) });
@@ -142,7 +142,7 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
         });
       }
     }
-    return maybeRecursiveIndex(layout, root, skills, namespaces, addSkill);
+    return maybeRecursiveIndex(mode, root, skills, namespaces, addSkill);
   }
 
   // Case 3: walk one level under root.
@@ -154,17 +154,17 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
     if (skillName === null) continue;
     addSkill({ name: skillName, namespace: null, path: child, tapRelativePath: name });
   }
-  return maybeRecursiveIndex(layout, root, skills, namespaces, addSkill);
+  return maybeRecursiveIndex(mode, root, skills, namespaces, addSkill);
 }
 
 function maybeRecursiveIndex(
-  layout: SkillLayout,
+  mode: DiscoveryMode,
   root: string,
   skills: Map<string, SkillLocation[]>,
   namespaces: Map<string, SkillLocation[]>,
   addSkill: (loc: SkillLocation) => void,
 ): TapIndex {
-  if (skills.size > 0 || layout !== "recursive") return { skills, namespaces };
+  if (skills.size > 0 || mode !== "recursive") return { skills, namespaces };
   for (const dir of findRecursiveSkillDirs(root)) {
     const tapRelativePath = toPosix(relative(root, dir));
     const skillName = skillNameForIndex(dir);

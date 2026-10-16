@@ -1,5 +1,5 @@
 /**
- * Gist references (§8.2 "Gists"; C-REF-37..39, C-TAP-30).
+ * Gist references (§8.2 "Gists"; C-REF-28, C-REF-37..39, C-TAP-30).
  *
  * Everything here is decided by the parser before any clone, so nothing
  * touches the network.
@@ -89,8 +89,9 @@ describe("gist URLs", () => {
     expect(err.message).toContain("//<file>.md");
   });
 
-  test("C-REF-39 a rejected gist URL never prints its credentials", () => {
+  test("C-REF-28 a rejected gist URL never prints its credentials", () => {
     const err = rejection(() => parseRef("https://oauth2:ghp_secretvalue@gist.github.com/acme"));
+    expect(err.code).toBe("invalid_ref");
     expect(err.message).not.toContain("ghp_secretvalue");
     expect(JSON.stringify(err.details)).not.toContain("ghp_secretvalue");
   });
@@ -98,8 +99,11 @@ describe("gist URLs", () => {
 
 describe("gist //<file> selections", () => {
   test("splitGistFile moves the file off the whole-gist source", () => {
-    expect(splitGistFile(gistSource("prd.md"))).toEqual({ whole: gistSource(""), file: "prd.md" });
-    expect(splitGistFile(gistSource("NOTES.MD")).file).toBe("NOTES.MD");
+    expect(splitGistFile(gistSource("prd.md"))).toEqual({
+      tapSource: gistSource(""),
+      gistFile: "prd.md",
+    });
+    expect(splitGistFile(gistSource("NOTES.MD")).gistFile).toBe("NOTES.MD");
   });
 
   for (const file of ["sub/prd.md", "notes.txt", ".git/HEAD", "SKILL"]) {
@@ -117,10 +121,10 @@ describe("gist //<file> selections", () => {
       ref: null,
       subpath: "x",
     };
-    expect(splitGistFile(repo)).toEqual({ whole: repo, file: "" });
+    expect(splitGistFile(repo)).toEqual({ tapSource: repo, gistFile: "" });
     const path: PathSource = { type: "path", path: "/tmp/skills" };
-    expect(splitGistFile(path)).toEqual({ whole: path, file: "" });
-    expect(splitGistFile(gistSource(""))).toEqual({ whole: gistSource(""), file: "" });
+    expect(splitGistFile(path)).toEqual({ tapSource: path, gistFile: "" });
+    expect(splitGistFile(gistSource(""))).toEqual({ tapSource: gistSource(""), gistFile: "" });
   });
 });
 
@@ -146,6 +150,7 @@ describe("isGistUrl", () => {
     `ssh://gist.github.com:22@evil.example/${ID}.git`,
     `git@evil.example:gist.github.com/${ID}.git`,
     `file:///tmp/gist.github.com/${ID}`,
+    `file://gist.github.com/tmp/${ID}`,
     "https://[gist.github.com",
     "",
   ]) {
@@ -161,11 +166,15 @@ describe("gist repository identity", () => {
     expect(canonicalRepoUrl(`https://gist.github.com/Acme/${ID.toUpperCase()}.git`)).toBe(
       canonical,
     );
+    // An SSH remote is kept as written, like any other.
+    const ssh = `ssh://git@gist.github.com/acme/${ID}`;
+    expect(canonicalRepoUrl(`${ssh}.git`)).toBe(ssh);
   });
 
-  test("only a gist's one- and two-segment paths reduce to the ID", () => {
+  test("only a gist's one- and two-segment paths ending in an ID reduce to it", () => {
     expect(gistIdentityPath("")).toBe("");
     expect(gistIdentityPath("/a/b/c")).toBe("/a/b/c");
+    expect(gistIdentityPath("/acme/raw")).toBe("/acme/raw");
     expect(canonicalRepoUrl("https://github.com/acme/skills")).toBe(
       "https://github.com/acme/skills",
     );

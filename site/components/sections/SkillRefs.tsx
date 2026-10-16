@@ -36,7 +36,8 @@ const CARDS: readonly {
         containing <code>/</code> (<code>{"@feature/python//engineers/founding"}</code>) or a final
         folder containing a literal <code>@</code> (<code>{"@main//skills/foo@bar"}</code>). Or just
         paste the link from your browser. A GitHub gist works too: each <code>.md</code> file that
-        starts with frontmatter is one skill, and <code>{"//<file>.md"}</code> installs just one.
+        starts with frontmatter is one skill (or the whole gist, if it has a root{" "}
+        <code>SKILL.md</code>), and <code>{"//<file>.md"}</code> installs just one.
       </>
     ),
     examples: [

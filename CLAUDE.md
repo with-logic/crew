@@ -621,6 +621,7 @@ bun run lint                           # biome check (lint + format check)
 bun run lint:fix                       # biome check --write (auto-fix)
 bun run format                         # biome format --write
 bun run check                          # typecheck + lint + test (the full gate)
+bun run smoke:gist                     # live gist install against GitHub (needs network; not in bun test)
 bun run install-bin                    # build + copy to ~/.local/bin/crew
 bun run uninstall-bin                  # remove the installed binary
 ```
@@ -654,7 +655,8 @@ on `$PATH`.
   source crew recognises by its host (a GitHub gist —
   `tests/e2e/gist/helpers.ts`), may substitute a local source through
   the git runner seam while retaining the original CLI input and real
-  local git diagnostics. The preload tripwire fails
+  local git diagnostics. What only the real host can answer is checked
+  by hand with `bun run smoke:gist` (`scripts/smoke-gist.ts`). The preload tripwire fails
   any actual remote transport attempt — see
   "Tests never contact the network" above.
 - **Don't write to `~/.claude/skills/`, `~/.codex/skills/`, or

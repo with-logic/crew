@@ -1,5 +1,9 @@
 /**
- * Configured-tap lookup for commands whose argument is a tap NAME and
+ * Configured-tap lookups. `gitTapMatches` is the one rule for whether a
+ * configured git tap is the tap a source names (§16.3, §16.5), shared by
+ * install's auto-tap attribution and `crew tap add`.
+ *
+ * `requireConfiguredTap` is for commands whose argument is a tap NAME and
  * nothing else: §16.3 `crew tap remove` / `crew tap update`, §16.6
  * `crew search --tap`. For those, an unrecognized name is a `usage_error`
  * — the user named a tap that is not configured, and `crew tap list`
@@ -20,7 +24,20 @@
  */
 
 import { CrewError } from "../core/errors.ts";
+import { isGistUrl } from "../core/gist-url.ts";
+import { sameRepoUrl } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
+
+/**
+ * True when `tap` is the git tap for `url` + `subpath`. URLs match exactly
+ * — except a gist's, which GitHub serves with or without its owner: a
+ * gist tap recorded before crew rewrote gist pages (`/<owner>/<id>`) is
+ * still the tap for `/<id>.git` (§8.2).
+ */
+export function gitTapMatches(tap: TapConfig, url: string, subpath: string): boolean {
+  if (tap.kind !== "git" || tap.subpath !== subpath) return false;
+  return tap.url === url || (isGistUrl(url) && sameRepoUrl(tap.url, url));
+}
 
 /** Resolve a tap name against the configured taps, or throw `usage_error`. */
 export function requireConfiguredTap(taps: readonly TapConfig[], name: string): TapConfig {

@@ -2,11 +2,12 @@
  * Tap-add source parsing and target display helpers (§16.3).
  */
 
+import { gitTapMatches } from "../../config/find-tap.ts";
 import { CrewError } from "../../core/errors.ts";
 import { isGistUrl } from "../../core/gist-url.ts";
-import { sameTapUrl } from "../../core/repo-path.ts";
 import type { Source, TapConfig, TapSource } from "../../core/types.ts";
 import { displayText, displayUrl } from "../../refs/display-url.ts";
+import { isGistFileName } from "../../refs/gist.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { shellQuote } from "../../util/format.ts";
 
@@ -46,10 +47,14 @@ export function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {
   if (source.subpath.length > 0 && isGistUrl(source.url)) {
     const shown = displayText(raw);
     const file = displayText(source.subpath);
+    const remedy = isGistFileName(source.subpath)
+      ? `Drop the \`//${file}\` to add the gist, or install just that skill with \`crew install ${shellQuote(shown)}\`.`
+      : `Drop the \`//${file}\` to add the gist. A gist's skills are the \`.md\` files at its top level.`;
     throw new CrewError(
       "usage_error",
-      `\`${shown}\` names one file of a gist, but a gist is added as a tap whole. Drop the \`//${file}\` to add the gist, or install just that skill with \`crew install ${shellQuote(shown)}\`.`,
+      `\`${shown}\` names one file of a gist, but a gist is added as a tap whole`,
       { raw: shown, subpath: file },
+      remedy,
     );
   }
   return { kind: "git", url: source.url, subpath: source.subpath, path: "" };
@@ -73,7 +78,7 @@ function ownerRepoRemedy(source: TapSource): string | undefined {
 
 export function sameTap(a: TapConfig, t: TapAddTarget): boolean {
   if (a.kind !== t.kind) return false;
-  if (a.kind === "git") return sameTapUrl(a.url, t.url) && a.subpath === t.subpath;
+  if (a.kind === "git") return gitTapMatches(a, t.url, t.subpath);
   return a.path === t.path;
 }
 

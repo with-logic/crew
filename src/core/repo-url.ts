@@ -1,4 +1,4 @@
-/** Canonical repository URL identity, preserving credentials and path case (§5.4, §6). */
+/** Canonical repository URL identity, preserving credentials and path case — gists aside (§5.4, §6). */
 
 import { gistIdentityPath, isGistUrl } from "./gist-url.ts";
 
@@ -18,10 +18,24 @@ import { gistIdentityPath, isGistUrl } from "./gist-url.ts";
  * Anything crew can't parse as a URL (`git@host:owner/repo`) goes
  * through the same rule via `canonicalScpUrl`.
  *
- * A gist is the one exception: its path reduces to its hex ID, because
- * GitHub serves the same gist with or without the owner segment.
+ * An `http(s)` gist URL is the one exception: its path reduces to its
+ * lowercased hex ID, because GitHub serves the same gist with or without
+ * the owner segment (§8.2). Gist SSH remotes are kept as typed, like any
+ * other.
  */
 export function canonicalRepoUrl(url: string): string {
+  return canonicalize(url, true);
+}
+
+/**
+ * `canonicalRepoUrl` as it was before gist identity: a gist URL's path
+ * kept as written. Only the migration of clones keyed that way needs it.
+ */
+export function canonicalRepoUrlAsWritten(url: string): string {
+  return canonicalize(url, false);
+}
+
+function canonicalize(url: string, gistIdentity: boolean): string {
   const trimmed = trimTrailingSlashes(url.trim());
   const withoutGit = trimmed.endsWith(".git") ? trimmed.slice(0, -4) : trimmed;
   const stripped = trimTrailingSlashes(withoutGit);
@@ -34,7 +48,8 @@ export function canonicalRepoUrl(url: string): string {
   const path = slash < 0 ? "" : rest.slice(slash);
   const canonical = `${scheme}://${lowercaseHostOnly(authority)}`;
   // §8.2 "Gists": a gist is one repository whether or not its URL names the owner.
-  return isGistUrl(stripped) ? `${canonical}${gistIdentityPath(path)}` : `${canonical}${path}`;
+  const gist = gistIdentity && scheme.startsWith("http") && isGistUrl(stripped);
+  return gist ? `${canonical}${gistIdentityPath(path)}` : `${canonical}${path}`;
 }
 
 /**

@@ -15,7 +15,7 @@ import { nowIso } from "../util/time.ts";
 
 export function installNewTapChild(
   args: {
-    readonly skillDir: string;
+    readonly skillLocation: string;
     readonly skillName: string;
     readonly tapRelativePath: string;
     readonly scope: Scope;
@@ -32,7 +32,7 @@ export function installNewTapChild(
   fallbackCwd: string,
 ): StateEntry | null {
   const childCwd = args.scope === "project" ? (args.projectRoot ?? fallbackCwd) : fallbackCwd;
-  const staged = stageIntoStore(args.skillDir, args.skillName, args.resolvedSha, home);
+  const staged = stageIntoStore(args.skillLocation, args.skillName, args.resolvedSha, home);
   const successfulTargets: string[] = [];
   // Group adapters by resolved install path (path sharing, §7.2) so
   // shared-path targets install once but both get marked successful.

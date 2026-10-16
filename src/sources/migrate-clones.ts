@@ -14,12 +14,17 @@
  *
  * Idempotent: once `taps/` holds no directory for a configured git tap,
  * every call is a no-op.
+ *
+ * The same move covers a gist tap recorded with its owner
+ * (`https://gist.github.com/<owner>/<id>`): before gist identity dropped
+ * the owner (§8.2) its clone was keyed by that spelling, so it is moved to
+ * the gist's identity rather than cloned again and stranded.
  */
 
 import { renameSync } from "node:fs";
 import { dirname } from "node:path";
 import { legacyTapPath, paths } from "../core/paths.ts";
-import { repoClonePath } from "../core/repo-path.ts";
+import { ownerKeyedGistClonePath, repoClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureDir, isDirectory, isInside, rmrfInside } from "../util/fs.ts";
 import { assertNoSymlinkEscape } from "../util/symlink-containment.ts";
@@ -32,8 +37,18 @@ import { assertNoSymlinkEscape } from "../util/symlink-containment.ts";
  */
 export function migrateTapClone(tap: TapConfig, home: string): boolean {
   if (tap.kind !== "git") return false;
-  const old = legacyTapPath(tap.name, home);
-  if (!isInside(paths(home).tapsDir, old)) return false;
+  const fromTaps = legacyTapPath(tap.name, home);
+  const moved = isInside(paths(home).tapsDir, fromTaps)
+    ? relocate(fromTaps, paths(home).tapsDir, tap, home)
+    : false;
+  const ownerKeyed = ownerKeyedGistClonePath(tap.url, home);
+  return ownerKeyed === null
+    ? moved
+    : relocate(ownerKeyed, paths(home).reposDir, tap, home) || moved;
+}
+
+/** Move `old` (inside `oldRoot`) to `tap`'s shared clone, or drop it if that exists. */
+function relocate(old: string, oldRoot: string, tap: TapConfig, home: string): boolean {
   assertNoSymlinkEscape(home, old, "legacy tap clone");
   if (!isDirectory(old)) return false;
   const shared = repoClonePath(tap.url, home);
@@ -41,7 +56,7 @@ export function migrateTapClone(tap: TapConfig, home: string): boolean {
   if (isDirectory(shared)) {
     // Another tap on this repo already claimed the shared clone; this
     // copy is redundant.
-    rmrfInside(paths(home).tapsDir, old);
+    rmrfInside(oldRoot, old);
     return true;
   }
   // Both paths live under the crew home, so this is always a

@@ -16,7 +16,7 @@ import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { hashDirectory } from "../../hash/content.ts";
 import { loadSkill } from "../../skill/load.ts";
-import { type AcquiredTap, withAcquiredSkillDir } from "../../sources/acquire/index.ts";
+import { type AcquiredTap, withAcquiredSkill } from "../../sources/acquire/index.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
@@ -142,8 +142,8 @@ function updateOne(
   // Only this entry's own subtree is read, so only it is exported —
   // otherwise every entry sharing a whole-repo tap materializes the
   // whole repository again (§10.1).
-  return withAcquiredSkillDir(tap, entry.ref, entry.source.path, home, (acquired, skillDir) =>
-    applyUpdate(entry, acquired, skillDir, tap, home, force, entryCwd, dryRun),
+  return withAcquiredSkill(tap, entry.ref, entry.source.path, home, (acquired, skillLocation) =>
+    applyUpdate(entry, acquired, skillLocation, tap, home, force, entryCwd, dryRun),
   );
 }
 
@@ -152,7 +152,7 @@ function applyUpdate(
   entry: StateEntry,
   acquired: AcquiredTap,
   // Tap re-expansion has already marked missing children `source_gone`.
-  skillDir: string,
+  skillLocation: string,
   tap: TapConfig,
   home: string,
   force: boolean,
@@ -165,13 +165,13 @@ function applyUpdate(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
-  const sourceHash = newSha === null ? hashDirectory(skillDir) : undefined;
+  const sourceHash = newSha === null ? hashDirectory(skillLocation) : undefined;
   if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
     if (newSha !== null) return { kind: "up_to_date" };
     if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
   }
 
-  const loaded = loadSkill(skillDir);
+  const loaded = loadSkill(skillLocation);
   if (dryRun) return { kind: "would_update", new_sha: newSha };
   const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash);
   const perTarget = reinstallIntoAgents({

@@ -4,7 +4,8 @@
 
 import type { Source, TapConfig } from "../../core/types.ts";
 import type { AcquiredTap } from "../../sources/acquire/index.ts";
-import { expandSkills, layoutOf, type SkippedSkill } from "../../sources/expand.ts";
+import { discoveryOf, expandSkills, type SkippedSkill } from "../../sources/expand.ts";
+import { gistWhere } from "../../sources/gist.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import type { PendingItem } from "./enqueue.ts";
 
@@ -41,9 +42,10 @@ export function expandSkillsAsItems(
   options: ItemOptions,
   home: string,
 ): ExpansionItems {
-  const { valid, skipped } = expandSkills(location, layoutOf(tap));
-  const { baseTapPath, requestedRef, explicit, tracksTap } = options;
   const { resolvedSha, pinned } = acquired;
+  const where = gistWhere(tap, resolvedSha);
+  const { valid, skipped } = expandSkills(location, discoveryOf(tap), where);
+  const { baseTapPath, requestedRef, explicit, tracksTap } = options;
   const items: PendingItem[] = [];
   for (const l of valid) {
     const subSegment = l.path === location ? "" : l.path.slice(location.length + 1);

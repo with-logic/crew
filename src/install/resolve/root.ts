@@ -5,15 +5,15 @@
  * `enqueueTapRef`; a git URL or path is a whole-tap install, because
  * pointing at a repository or folder means "install what is here", and
  * §10.1.1 then keeps that set current. A gist's `//<file>` is the one
- * narrower git form (§8.2); `enqueueSourceRef` handles both.
+ * narrower git form (§8.2); `enqueueDirectRef` handles both.
  */
 
 import type { Config, ResolvedSkill, TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
+import { enqueueDirectRef } from "./direct-ref.ts";
 import { enqueueTapRef, type PendingItem } from "./enqueue.ts";
-import { enqueueSourceRef } from "./source-ref.ts";
 
 /** Resolve and enqueue the items produced by a single root reference. */
 export function enqueueRoot(
@@ -34,7 +34,7 @@ export function enqueueRoot(
 
   // Git URL or path: a whole-tap install — the user pointed at a folder
   // (or repo) and said "install this", so future additions should follow.
-  return enqueueSourceRef(source, config, home, requireTap, {
+  return enqueueDirectRef(source, config, home, requireTap, {
     explicit: true,
     tracksTap: true,
     ...(recursive ? { discovery: "recursive" } : {}),
