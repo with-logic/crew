@@ -130,3 +130,24 @@ test("C-UPD-18e undoing a failed child never removes a folder the user owns", ()
   }
   expect(readFileSync(join(mine, "mine.txt"), "utf8")).toBe("the user's");
 });
+
+test("C-UPD-18e a failed child that --force wrote over a user's folder is installed nowhere", () => {
+  const home = makeCrewHome();
+  const tapDir = makeTempDir();
+  makeSkill(join(tapDir, "skills"), "beta", skillFrontmatter({ name: "beta" }));
+  expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
+  expect(run(home, ["install", "mine"]).code).toBe(0);
+  makeSkill(join(tapDir, "skills"), "gamma", skillFrontmatter({ name: "gamma" }));
+  // `--force` lets the child replace claude-code's unmanaged `gamma`;
+  // gemini-cli's folder then can't be written, so the child is undone.
+  mkdirSync(join(roots["claude-code"]!, "gamma"));
+  const gemini = roots["gemini-cli"]!;
+  chmodSync(gemini, 0o555);
+  try {
+    expect(run(home, ["update", "--force"]).code).toBe(1);
+  } finally {
+    chmodSync(gemini, 0o755);
+  }
+  expect(existsSync(join(roots["claude-code"]!, "gamma"))).toBe(false);
+  expect(run(home, ["doctor"]).code).toBe(0);
+});

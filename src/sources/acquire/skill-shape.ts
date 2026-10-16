@@ -37,7 +37,7 @@ export function assertStillASkill(
  * and a one-skill gist's root `SKILL.md` — are judged without following
  * links instead (`assertStillASkill`).
  */
-export function assertFolderSkillMdLink(
+export function assertFolderSkillMdLinkAllowed(
   tap: Pick<TapConfig, "kind" | "url">,
   location: string,
   tapRelativePath: string,

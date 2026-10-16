@@ -2,7 +2,7 @@
  * A skill installed by tracking its whole tap, whose SKILL.md upstream
  * becomes a link crew won't follow, fails its update as `invalid_skill`
  * — it is still there, so not "removed upstream" (§10.1, §10.1.1 step 3;
- * C-UPD-40). An absolute link worked before this rule (main, v0.10.1).
+ * C-UPD-16). An absolute link worked before this rule (main, v0.10.1).
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 afterEach(() => restoreClaudeCode(claude.originals));
 
-test("C-UPD-40 a tracked skill whose SKILL.md became an absolute link fails, not gone", () => {
+test("C-UPD-16 a tracked skill whose SKILL.md became an absolute link fails, not gone", () => {
   const home = makeCrewHome();
   const tapDir = makeTempDir();
   const demo = makeSkill(

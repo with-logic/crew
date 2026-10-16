@@ -73,6 +73,15 @@ for (const [what, link] of [
       return ".CREW.JSON";
     },
   ],
+  ["past a missing folder, with a `..` that climbs out", () => "missing/../../x.md"],
+  ["past a missing folder, back to the folder's .crew.json", () => "missing/../.crew.json"],
+  // APFS folds the long s (U+017F) to `s`, so it finds the marker.
+  ["to `.crew.jſon`, which a case-insensitive disk finds as crew's marker", () => ".crew.jſon"],
+  [
+    // HFS+ ignores invisible format characters, so it finds the marker.
+    "to `.crew\u200c.json`, which HFS+ finds as crew's marker",
+    () => ".crew\u200c.json",
+  ],
   [
     "past a folder link with `..`",
     (folder: string) => {
@@ -152,7 +161,7 @@ test("C-SPEC-15 a SKILL.md link whose text isn't UTF-8 is refused, never followe
   // On Linux a folder could carry those very bytes as its name and lead
   // anywhere; the text crew would check decodes to a different name.
   const notUtf8 = Buffer.from([0xff, 0x2f, 0x78, 0x2e, 0x6d, 0x64]); // "\xff/x.md"
-  const src = sourceWithLink(() => notUtf8 as unknown as string);
+  const src = sourceWithLink(() => notUtf8);
   const r = install(makeCrewHome(), src);
   expect(r.code).toBe(1);
   expect(readdirSync(claude.userRoot)).toEqual(["good"]);

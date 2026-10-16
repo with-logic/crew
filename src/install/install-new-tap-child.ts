@@ -10,7 +10,7 @@
  * installed into, so it is installed nowhere.
  */
 
-import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { type AgentAdapter, baseFor } from "../agents/adapter.ts";
 import { installSkillIntoAgents } from "../agents/install.ts";
 import { agentByName } from "../agents/registry.ts";
@@ -18,6 +18,7 @@ import { CrewError } from "../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../core/types.ts";
 import { stageIntoStore } from "../sources/store.ts";
 import { rmrf } from "../util/fs.ts";
+import { tryReadJson } from "../util/json.ts";
 import { nowIso } from "../util/time.ts";
 
 export function installNewTapChild(
@@ -55,11 +56,14 @@ export function installNewTapChild(
     else groups.set(dest, [adapter]);
   }
   let fsFailure: unknown = null;
-  // Only folders this call created: one that was already there belongs
-  // to whatever crew recorded for it, and is never this child's to remove.
+  // Only folders this call wrote: one already holding a marker for this
+  // skill belongs to what crew recorded there, never this child's to remove.
   const createdDests: string[] = [];
   for (const [dest, group] of groups) {
-    const existed = existsSync(dest);
+    // Already this child's to undo if crew's marker there isn't for this
+    // skill: a folder `--force` just replaced holds nothing else.
+    const ownedBefore =
+      tryReadJson<{ name?: unknown }>(join(dest, ".crew.json"))?.name === args.skillName;
     try {
       const res = installSkillIntoAgents({
         agents: group,
@@ -75,7 +79,7 @@ export function installNewTapChild(
         force,
       });
       for (const a of group) successfulTargets.push(a.name);
-      if (!existed && res.kind === "installed") createdDests.push(dest);
+      if (!ownedBefore && res.kind === "installed") createdDests.push(dest);
     } catch (err) {
       // A safety check refusing one agent (§7.3) leaves the child out of
       // it, as on an install; an agent folder crew can't write fails the

@@ -15,7 +15,11 @@ import { migrateTapClone } from "../migrate-clones.ts";
 import { type AcquiredTap, acquireTap } from "./index.ts";
 import { liveSkillPath } from "./live-skill-path.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
-import { assertFolderSkillMdLink, assertStillASkill, noLongerASkillError } from "./skill-shape.ts";
+import {
+  assertFolderSkillMdLinkAllowed,
+  assertStillASkill,
+  noLongerASkillError,
+} from "./skill-shape.ts";
 
 /**
  * Acquire only ONE skill's subtree of a tap at `ref`.
@@ -66,7 +70,7 @@ export function withAcquiredSkill<T>(
     return withExportedTree(clonePath, sha, exportPath, home, (skillPath) => {
       exported = true;
       // The link check first: `assertStillASkill` looks through the link.
-      assertFolderSkillMdLink(tap, skillPath, tapRelativePath);
+      assertFolderSkillMdLinkAllowed(tap, skillPath, tapRelativePath);
       assertStillASkill(tap, skillPath, tapRelativePath);
       return fn({ resolvedSha: sha, pinned }, skillPath);
     });

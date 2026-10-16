@@ -1,19 +1,21 @@
 /**
  * Per-group survey of a tap's current children during re-expansion
- * (§10.1.1 step 2).
+ * (§10.1.1 steps 2–3).
  *
  * Split from `./index.ts` (200-line cap). Given the children a tap now
- * exposes and the entries installed from it, decide three things:
- * which names are ambiguous upstream, which installed entries have
- * vanished, and which have merely moved.
+ * exposes, the entries installed from it, and the materialized tree,
+ * decide which names are ambiguous upstream, which installed entries
+ * have vanished, which have merely moved, and which are still there but
+ * weren't indexed — left to their own update to report why.
  */
 
 import { lstatSync } from "node:fs";
 import { join } from "node:path";
 import { isGistTap } from "../../core/gist-url.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
-import { hasSkillMd } from "../../skill/load.ts";
+import { isGistSkillCandidate } from "../../sources/gist.ts";
 import { entryIdentity } from "../../state/collections/index.ts";
+import { isGoneError } from "../../util/errno.ts";
 import type { CurrentTapChild } from "../tap-children.ts";
 import type { TapReexpandRow } from "./index.ts";
 
@@ -71,9 +73,8 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
     // index dropped — no child at its path, though its SKILL.md is (one crew
     // won't follow, say) — is left to the per-skill update, which reports
     // why (§10.1). A child at its path under another name was renamed.
-    if (!(child || childPaths.has(m.source.path)) && stillThere(rootDir, m.source.path, tap)) {
-      continue;
-    }
+    const indexedHere = child !== undefined || childPaths.has(m.source.path);
+    if (!indexedHere && hasSkillEntry(rootDir, m.source.path, tap)) continue;
     if (!child) {
       // Keyed by identity, not name: the same name can be installed
       // from another tap or at another scope, and that install is a
@@ -90,17 +91,21 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
   return { conflictedNames, sourceGone, relocated, rows, hardFailure };
 }
 
-/** True when the member's recorded skill file, or its folder's `SKILL.md`, still has an entry. */
-function stillThere(rootDir: string, tapRelativePath: string, tap: TapConfig): boolean {
+/**
+ * True when the member's recorded skill is still there to update: a gist
+ * skill file, or a folder's `SKILL.md` entry. Only a gone error says a
+ * folder's isn't: one crew can't look into is still there, for its own
+ * update to report.
+ */
+function hasSkillEntry(rootDir: string, tapRelativePath: string, tap: TapConfig): boolean {
   const location = join(rootDir, tapRelativePath);
-  return isGistTap(tap) && tapRelativePath !== "" ? entryExists(location) : hasSkillMd(location);
-}
-
-function entryExists(path: string): boolean {
+  // A gist file is a skill only while it opens frontmatter (§9 step 5);
+  // one crew can't read still counts.
+  if (isGistTap(tap) && tapRelativePath !== "") return isGistSkillCandidate(location);
   try {
-    lstatSync(path);
+    lstatSync(join(location, "SKILL.md"));
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    return !isGoneError(err);
   }
 }

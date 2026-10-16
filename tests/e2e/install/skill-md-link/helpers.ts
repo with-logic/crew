@@ -17,7 +17,7 @@ export function install(home: string, source: string): { code: number; out: stri
 }
 
 /** A source holding `good` and a `linked` skill whose SKILL.md is `link(folder)`. */
-export function sourceWithLink(link: (folder: string) => string): string {
+export function sourceWithLink(link: (folder: string) => string | Buffer): string {
   const src = makeTempDir();
   makeSkill(src, "good", skillFrontmatter({ name: "good" }));
   makeSkill(src, "linked", skillFrontmatter({ name: "linked" }));

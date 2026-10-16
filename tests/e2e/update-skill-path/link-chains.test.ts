@@ -95,7 +95,7 @@ for (const ref of ["", "@main"]) {
   });
 }
 
-test("C-UPD-40 a folder on the way crew can't look into is named in the failure", () => {
+test("C-UPD-40 a path on the way crew can't look into is named in the failure", () => {
   const home = makeCrewHome();
   const tapDir = makeTempDir();
   const demo = makeSkill(tapDir, "demo", skillFrontmatter({ name: "demo" }), "Original.\n");

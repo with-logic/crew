@@ -1,8 +1,8 @@
 /**
  * Edges of the SKILL.md link rule at install (§9 step 4; C-SPEC-15): a
  * source named with a trailing slash is held to it the same; a chain
- * longer than any system follows is refused; and a failure to look on
- * the way names the folder that failed, not SKILL.md (§13).
+ * longer than crew's limit is refused; and a failure to look on the way
+ * names the path that failed, not SKILL.md (§13; C-SPEC-16).
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -38,7 +38,7 @@ test("C-SPEC-15 a skill named with a trailing slash is held to the .crew.json ru
   expect(r.out).toContain("reached through a link crew won't follow");
 });
 
-test("C-SPEC-15 a chain of more links than any system follows is refused", () => {
+test("C-SPEC-15 a chain longer than crew's limit is refused", () => {
   const src = sourceWithLink((folder) => {
     let target = "body.md";
     for (let i = 0; i < 33; i++) {
@@ -53,7 +53,7 @@ test("C-SPEC-15 a chain of more links than any system follows is refused", () =>
   expect(r.out).toContain("reached through a link crew won't follow");
 });
 
-test("a folder on the way crew can't look into is named, not SKILL.md", () => {
+test("C-SPEC-16 a path on the way crew can't look into is named, not SKILL.md", () => {
   const src = sourceWithLink((folder) => {
     mkdirSync(join(folder, "sub"));
     writeFileSync(join(folder, "sub", "body.md"), "x");

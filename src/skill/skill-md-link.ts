@@ -13,7 +13,7 @@
  * so it reads the same in a live clone and in an export of the folder.
  */
 
-import { lstatSync, readlinkSync } from "node:fs";
+import { lstatSync, readlinkSync, type Stats } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { isGoneError, unreadablePathError } from "../util/errno.ts";
@@ -22,7 +22,7 @@ import { isGoneError, unreadablePathError } from "../util/errno.ts";
 export const SKILL_MD_NOT_A_FILE_REMEDY =
   "Make the skill's SKILL.md a regular file, or a link to another file inside the skill's folder (not `.crew.json`), with every link on the way relative and never climbing above the folder.";
 
-/** macOS gives up on a chain after 32 links (Linux after 40): refuse before the OS does. */
+/** crew's limit on a chain, set at macOS's 32 (Linux allows 40). */
 const MAX_HOPS = 32;
 
 /**
@@ -47,53 +47,68 @@ export function assertSkillMdLinkAllowed(folder: string, shown = folder): void {
  * follow: absolute text, text that isn't UTF-8, a `..` that climbs above
  * the folder, a chain that loops, or one that leads to the folder's
  * `.crew.json`. A
- * `SKILL.md` that is no link, or a chain of allowed links that dangles,
- * is not refused: whether it is a file is the caller's check
+ * `SKILL.md` that is no link, or a chain of allowed links that dangles —
+ * judged by its text past the missing part — is not refused: whether it
+ * is a file is the caller's check
  * (`invalid_skill` at install, gone on update). Any other failure to
  * look is thrown as the raw filesystem error.
  */
-export function isRefusedSkillMdLink(given: string): boolean {
+function isRefusedSkillMdLink(folderPath: string): boolean {
   // Normalized once, so `dir === folder` holds however the caller spelled it.
-  const folder = resolve(given);
-  try {
-    if (!lstatSync(join(folder, "SKILL.md")).isSymbolicLink()) return false;
-    // `dir` only ever holds real folders reached from `folder`, so a `..`
-    // from it is exact: here, and in a copy, which keeps every link.
-    let dir = folder;
-    let rest = ["SKILL.md"];
-    let hops = 0;
-    while (rest.length > 0) {
-      const part = rest[0]!;
-      rest = rest.slice(1);
-      if (part === "..") {
-        if (dir === folder) return true;
-        dir = dirname(dir);
-        continue;
-      }
-      if (dir === folder && isMarkerName(part)) return true;
-      const at = join(dir, part);
-      if (!lstatSync(at).isSymbolicLink()) {
-        dir = at;
-        continue;
-      }
-      hops++;
-      // Read as bytes: text that isn't UTF-8 decodes lossily, and the
-      // kernel would follow a different name than the one checked.
-      const raw = readlinkSync(at, { encoding: "buffer" });
-      const text = raw.toString("utf8");
-      if (isAbsolute(text) || !Buffer.from(text).equals(raw) || hops > MAX_HOPS) return true;
-      rest = [...text.split(sep).filter((p) => p !== "" && p !== "."), ...rest];
+  const folder = resolve(folderPath);
+  if (entryAt(join(folder, "SKILL.md"))?.isSymbolicLink() !== true) return false;
+  // `dir` is where the walk stands: reached from `folder` through real
+  // entries, so a `..` from it is exact here and in a copy, which keeps
+  // every link. Once a part is missing, the rest is judged by its text.
+  let dir = folder;
+  let rest = ["SKILL.md"];
+  let hops = 0;
+  let missing = false;
+  while (rest.length > 0) {
+    const part = rest[0]!;
+    rest = rest.slice(1);
+    if (part === "..") {
+      if (dir === folder) return true;
+      dir = dirname(dir);
+      continue;
     }
-    return false;
+    if (dir === folder && isMarkerName(part)) return true;
+    const at = join(dir, part);
+    const entry: Stats | undefined = missing ? undefined : entryAt(at);
+    if (entry === undefined || !entry.isSymbolicLink()) {
+      missing ||= entry === undefined;
+      dir = at;
+      continue;
+    }
+    hops++;
+    // Read as bytes: text that isn't UTF-8 decodes lossily, and the
+    // kernel would follow a different name than the one checked.
+    const raw = readlinkSync(at, { encoding: "buffer" });
+    const text = raw.toString("utf8");
+    if (isAbsolute(text) || !Buffer.from(text).equals(raw) || hops > MAX_HOPS) return true;
+    rest = [...text.split(sep).filter((p) => p !== "" && p !== "."), ...rest];
+  }
+  return false;
+}
+
+/** The entry at `path` without following it; undefined when nothing usable is there. */
+function entryAt(path: string): Stats | undefined {
+  try {
+    return lstatSync(path);
   } catch (err) {
-    if (isGoneError(err)) return false;
+    if (isGoneError(err)) return undefined;
     throw err;
   }
 }
 
-/** The folder's `.crew.json`, as a case- and form-insensitive disk (macOS) also finds it. */
+/**
+ * The folder's `.crew.json`, as any disk crew installs to might find it:
+ * case- and form-insensitive (APFS), or ignoring invisible format
+ * characters such as U+200C (HFS+), as git does for `.git`.
+ */
 function isMarkerName(part: string): boolean {
-  return part.normalize("NFKC").toLowerCase() === ".crew.json";
+  const folded = part.normalize("NFKC").replace(/\p{Default_Ignorable_Code_Point}/gu, "");
+  return folded.toLowerCase() === ".crew.json";
 }
 
 /** `invalid_skill` for a `SKILL.md` reached through a link crew won't follow. */

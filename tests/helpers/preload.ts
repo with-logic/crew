@@ -26,8 +26,11 @@
  * 3. Install the network tripwire, so a fixture carrying a remote URL
  *    fails loudly instead of silently cloning over the network. See
  *    `./no-network.ts`.
+ *
+ * 4. Give the run its own temp root, removed on exit (`./scratch-root.ts`).
  */
 
+import "./scratch-root.ts";
 import { afterEach } from "bun:test";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
