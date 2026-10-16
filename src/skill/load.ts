@@ -19,11 +19,7 @@ import { isGoneError, unreadablePathError } from "../util/errno.ts";
 import { readText } from "../util/fs.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 import { isSkillFile } from "./skill-file.ts";
-import {
-  isRefusedSkillMdLink,
-  refusedSkillMdLinkError,
-  SKILL_MD_NOT_A_FILE_REMEDY,
-} from "./skill-md-link.ts";
+import { assertSkillMdLinkAllowed, SKILL_MD_NOT_A_FILE_REMEDY } from "./skill-md-link.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
 /**
@@ -67,24 +63,25 @@ export function hasSkillMd(path: string): boolean {
  * The text of the `SKILL.md` for the skill at `path` — a skill file, or a
  * directory's own. Every failure is a `CrewError` naming the path, so
  * discovery skips this one candidate (§9 step 4) rather than aborting: a
- * `SKILL.md` that is missing or not a file — a link that dangles or loops
- * included — or that links out of its skill's folder, is the skill's own
- * fault (`invalid_skill`); one crew can't read is the local filesystem's
+ * `SKILL.md` that is missing or not a file — a link that leads nowhere
+ * included — or that is reached through a link crew won't follow (§9 step
+ * 4), is the skill's own fault (`invalid_skill`); one crew can't read is
+ * the local filesystem's
  * (`source_unreachable`), and is never blamed on the skill's author.
  */
 function readSkillMd(path: string): string {
   const skillFile = isSkillFile(path);
   const skillMdPath = skillFile ? path : join(path, "SKILL.md");
+  // §9 step 4: refused before anything is read through it. A gist's skill
+  // file is never a link (`isSkillFile`).
+  if (!skillFile) assertSkillMdLinkAllowed(path);
   let raw: string | null = null;
   try {
-    // §9 step 4: refused before anything is read through it. A gist's
-    // skill file is never a link (`isSkillFile`).
-    if (!skillFile && isRefusedSkillMdLink(path)) throw refusedSkillMdLinkError(path);
     if (statSync(skillMdPath, { throwIfNoEntry: false })?.isFile()) raw = readText(skillMdPath);
   } catch (err) {
-    if (err instanceof CrewError) throw err;
     // A loop above the folder, or a folder on the way that is a file: no
-    // SKILL.md either, reported below (a loop below it is refused above).
+    // SKILL.md either, reported below (a loop inside it was refused by
+    // `assertSkillMdLinkAllowed`).
     if (!isGoneError(err)) {
       const where = (err as NodeJS.ErrnoException).path ?? skillMdPath;
       throw unreadablePathError(where, err, "read");

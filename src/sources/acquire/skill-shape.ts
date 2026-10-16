@@ -9,7 +9,7 @@ import { basename, dirname, join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { isGistTap } from "../../core/gist-url.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { isRefusedSkillMdLink, refusedSkillMdLinkError } from "../../skill/skill-md-link.ts";
+import { assertSkillMdLinkAllowed } from "../../skill/skill-md-link.ts";
 import { isGoneError, unreadablePathError } from "../../util/errno.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { isExactSkillFile, isOneSkillGist } from "../gist.ts";
@@ -30,28 +30,19 @@ export function assertStillASkill(
 }
 
 /**
- * A folder skill's `SKILL.md` that links out of the skill's folder is
- * `invalid_skill`, as at install (§9 step 4): a hard failure, checked
- * before anything looks through the link. At an `@<ref>` the folder is
- * the skill's scratch export. A gist's files are never links.
+ * A folder skill's `SKILL.md` is held to §9 step 4 on update as at
+ * install: one reached through a link crew won't follow is a hard
+ * `invalid_skill`, checked before anything looks through the link. At an
+ * `@<ref>` the folder is the skill's scratch export. A gist's files —
+ * and a one-skill gist's root `SKILL.md` — are judged without following
+ * links instead (`assertStillASkill`).
  */
-export function assertSkillMdLinkAllowed(
+export function assertFolderSkillMdLink(
   tap: Pick<TapConfig, "kind" | "url">,
   location: string,
   tapRelativePath: string,
 ): void {
-  if (isGistTap(tap)) return;
-  let refused: boolean;
-  try {
-    refused = isRefusedSkillMdLink(location);
-  } catch (err) {
-    // Named by what failed: a folder on the way, or the SKILL.md itself.
-    throw unreadablePathError(
-      (err as NodeJS.ErrnoException).path ?? join(location, "SKILL.md"),
-      err,
-    );
-  }
-  if (refused) throw refusedSkillMdLinkError(location, tapRelativePath || ".");
+  if (!isGistTap(tap)) assertSkillMdLinkAllowed(location, tapRelativePath || ".");
 }
 
 function stillASkill(

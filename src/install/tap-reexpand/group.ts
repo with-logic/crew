@@ -58,7 +58,8 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
   const { members, tap, home, projectRoot, cache } = input;
   const first = members[0]!;
   const children = cache.children(tap, home, acquired.rootDir);
-  const survey = surveyGroup({ members, childrenByName: groupChildrenByName(children), tap });
+  const childrenByName = groupChildrenByName(children);
+  const survey = surveyGroup({ members, childrenByName, tap, rootDir: acquired.rootDir });
   const additions = collectAdditions({
     children,
     conflictedNames: survey.conflictedNames,

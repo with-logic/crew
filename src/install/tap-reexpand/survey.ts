@@ -8,7 +8,11 @@
  * vanished, and which have merely moved.
  */
 
+import { lstatSync } from "node:fs";
+import { join } from "node:path";
+import { isGistTap } from "../../core/gist-url.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
+import { hasSkillMd } from "../../skill/load.ts";
 import { entryIdentity } from "../../state/collections/index.ts";
 import type { CurrentTapChild } from "../tap-children.ts";
 import type { TapReexpandRow } from "./index.ts";
@@ -17,6 +21,8 @@ export interface SurveyInput {
   readonly members: readonly StateEntry[];
   readonly childrenByName: ReadonlyMap<string, CurrentTapChild[]>;
   readonly tap: TapConfig;
+  /** The group's materialized tap root: the clone, or an export of its ref. */
+  readonly rootDir: string;
 }
 
 export interface SurveyResult {
@@ -31,7 +37,7 @@ export interface SurveyResult {
 }
 
 export function surveyGroup(input: SurveyInput): SurveyResult {
-  const { members, childrenByName, tap } = input;
+  const { members, childrenByName, tap, rootDir } = input;
   const first = members[0]!;
   const rows: TapReexpandRow[] = [];
   const conflictedNames = new Set<string>();
@@ -55,9 +61,19 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
     });
   }
 
+  const childPaths = new Set<string>();
+  for (const locs of childrenByName.values())
+    for (const c of locs) childPaths.add(c.tapRelativePath);
   for (const m of members) {
     if (conflictedNames.has(m.name)) continue;
     const child = childrenByName.get(m.name)?.[0];
+    // §10.1.1 step 3: gone only when its skill is no longer there. One the
+    // index dropped — no child at its path, though its SKILL.md is (one crew
+    // won't follow, say) — is left to the per-skill update, which reports
+    // why (§10.1). A child at its path under another name was renamed.
+    if (!(child || childPaths.has(m.source.path)) && stillThere(rootDir, m.source.path, tap)) {
+      continue;
+    }
     if (!child) {
       // Keyed by identity, not name: the same name can be installed
       // from another tap or at another scope, and that install is a
@@ -72,4 +88,19 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
   }
 
   return { conflictedNames, sourceGone, relocated, rows, hardFailure };
+}
+
+/** True when the member's recorded skill file, or its folder's `SKILL.md`, still has an entry. */
+function stillThere(rootDir: string, tapRelativePath: string, tap: TapConfig): boolean {
+  const location = join(rootDir, tapRelativePath);
+  return isGistTap(tap) && tapRelativePath !== "" ? entryExists(location) : hasSkillMd(location);
+}
+
+function entryExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
 }

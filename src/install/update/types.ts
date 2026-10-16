@@ -37,11 +37,6 @@ export type Outcome =
   | { kind: "missing_project_root"; root: string }
   | { kind: "failed"; error: { code: CrewErrorName; message: string } };
 
-/** True when an `updated` outcome has a target crew couldn't write (§10.1). */
-export function hasFailedTarget(o: Outcome): boolean {
-  return o.kind === "updated" && o.per_target.some((t) => t.kind === "failed");
-}
-
 export interface UpdateRow {
   readonly name: string;
   readonly scope: string;

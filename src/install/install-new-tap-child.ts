@@ -6,9 +6,11 @@
  * fresh state entry on success — or null when no agent target applies,
  * or a safety check (§7.3) refused every one. An agent folder crew can't
  * write throws, so the child is reported and retried, not recorded
- * without that agent.
+ * without that agent — and is removed from the agents it was just
+ * installed into, so it is installed nowhere.
  */
 
+import { existsSync } from "node:fs";
 import { type AgentAdapter, baseFor } from "../agents/adapter.ts";
 import { installSkillIntoAgents } from "../agents/install.ts";
 import { agentByName } from "../agents/registry.ts";
@@ -53,10 +55,13 @@ export function installNewTapChild(
     else groups.set(dest, [adapter]);
   }
   let fsFailure: unknown = null;
-  const written: string[] = [];
+  // Only folders this call created: one that was already there belongs
+  // to whatever crew recorded for it, and is never this child's to remove.
+  const createdDests: string[] = [];
   for (const [dest, group] of groups) {
+    const existed = existsSync(dest);
     try {
-      installSkillIntoAgents({
+      const res = installSkillIntoAgents({
         agents: group,
         scope: args.scope,
         cwd: childCwd,
@@ -70,18 +75,20 @@ export function installNewTapChild(
         force,
       });
       for (const a of group) successfulTargets.push(a.name);
-      written.push(dest);
+      if (!existed && res.kind === "installed") createdDests.push(dest);
     } catch (err) {
       // A safety check refusing one agent (§7.3) leaves the child out of
       // it, as on an install; an agent folder crew can't write fails the
       // child (§10.1.1), so it is retried rather than recorded without it.
-      if (!(err instanceof CrewError)) fsFailure ??= err;
+      if (err instanceof CrewError) continue;
+      fsFailure = err;
+      break;
     }
   }
   if (fsFailure !== null) {
     // Not recorded means installed nowhere: the copies this child just
     // made in other agents go, so nothing is left that state doesn't know.
-    for (const dest of written) rmrf(dest);
+    for (const dest of createdDests) rmrf(dest);
     throw fsFailure;
   }
   if (successfulTargets.length === 0) return null;

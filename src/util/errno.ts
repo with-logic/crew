@@ -56,10 +56,11 @@ export function isGoneError(err: unknown): boolean {
 export type FailureCode = CrewErrorName | `E${Uppercase<string>}`;
 
 /**
- * The code a per-agent failure reports — installing into, or removing
- * from, one agent: a §13 name for a `CrewError` (a safety check, §7.3, or
- * a staging failure), or the errno code of a filesystem error on the
- * agent's folder, which isn't the source's fault.
+ * The code a failure reports where a raw filesystem error is about an
+ * agent's folder, not the source — installing into or removing from one
+ * agent, or a re-expansion child crew couldn't write: a §13 name for a
+ * `CrewError` (a safety check, §7.3, or a staging failure), or the errno
+ * code itself. Compare `crewErrorNameOf`, for a failure about the source.
  */
 export function failureCodeOf(err: unknown): FailureCode {
   if (err instanceof CrewError) return err.code;
@@ -67,10 +68,10 @@ export function failureCodeOf(err: unknown): FailureCode {
 }
 
 /**
- * The §13 name an entry's or a tap's failure reports in an update or
- * re-expansion row (per-agent rows use `failureCodeOf`). A raw filesystem
- * error is a local file crew couldn't use, `source_unreachable`; its
- * errno `.code` is no §13 name. Anything else is `fallback`.
+ * The §13 name a failure about the source reports — an entry's update, or
+ * a tap's re-expansion: a raw filesystem error is a local file crew
+ * couldn't use, `source_unreachable`, since its errno `.code` is no §13
+ * name. Anything else is `fallback`. Compare `failureCodeOf`.
  */
 export function crewErrorNameOf(err: unknown, fallback: CrewErrorName): CrewErrorName {
   if (err instanceof CrewError) return err.code;

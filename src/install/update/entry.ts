@@ -22,10 +22,10 @@ import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { crewErrorNameOf } from "../../util/errno.ts";
 import { peekResolvedSha } from "./peek.ts";
-import { rowFor } from "./public-row.ts";
+import { hasFailedTarget, rowFor } from "./public-row.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
 import { rebuildStateEntry } from "./state.ts";
-import { hasFailedTarget, type InternalOutcome, type UpdateRow } from "./types.ts";
+import type { InternalOutcome, UpdateRow } from "./types.ts";
 
 export function updateOneEntry(
   entry: StateEntry,

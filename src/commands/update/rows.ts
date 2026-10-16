@@ -10,7 +10,8 @@
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
-import { hasFailedTarget, type Outcome, type UpdateRow } from "../../install/update/types.ts";
+import { hasFailedTarget } from "../../install/update/public-row.ts";
+import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 

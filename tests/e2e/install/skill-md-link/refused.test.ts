@@ -65,6 +65,15 @@ for (const [what, link] of [
     },
   ],
   [
+    // Only a case-insensitive disk (macOS by default) finds the marker
+    // this way; elsewhere the link just leads to no file. Refused alike.
+    "to `.CREW.JSON`, which a case-insensitive disk finds as crew's marker",
+    (folder: string) => {
+      writeFileSync(join(folder, ".crew.json"), readFileSync(join(folder, "body.md")));
+      return ".CREW.JSON";
+    },
+  ],
+  [
     "past a folder link with `..`",
     (folder: string) => {
       const outside = makeTempDir();
@@ -73,6 +82,20 @@ for (const [what, link] of [
       writeFileSync(join(outside, "x.md"), md);
       symlinkSync(join(outside, "inner"), join(folder, "sub"));
       return "sub/../x.md";
+    },
+  ],
+  [
+    "through a link in a subfolder, resolved from that subfolder, that leads out",
+    (folder: string) => {
+      const outside = makeTempDir();
+      writeFileSync(
+        join(outside, "SKILL.md"),
+        `---\n${skillFrontmatter({ name: "linked" })}\n---\n`,
+      );
+      mkdirSync(join(folder, "sub"));
+      symlinkSync(outside, join(folder, "sub", "b"));
+      symlinkSync("b", join(folder, "sub", "a"));
+      return join("sub", "a", "SKILL.md");
     },
   ],
   [
@@ -122,6 +145,17 @@ test("C-SPEC-15 at a ref, a SKILL.md linking out of a selected folder is invalid
   // Only `skills/foo` is exported at the ref, so the link dangles there.
   const r = install(makeCrewHome(), `file://${repo}@main//skills/foo`);
   expect(r.code).toBe(4);
+  expect(r.out).toContain("reached through a link crew won't follow");
+});
+
+test("C-SPEC-15 a SKILL.md link whose text isn't UTF-8 is refused, never followed", () => {
+  // On Linux a folder could carry those very bytes as its name and lead
+  // anywhere; the text crew would check decodes to a different name.
+  const notUtf8 = Buffer.from([0xff, 0x2f, 0x78, 0x2e, 0x6d, 0x64]); // "\xff/x.md"
+  const src = sourceWithLink(() => notUtf8 as unknown as string);
+  const r = install(makeCrewHome(), src);
+  expect(r.code).toBe(1);
+  expect(readdirSync(claude.userRoot)).toEqual(["good"]);
   expect(r.out).toContain("reached through a link crew won't follow");
 });
 

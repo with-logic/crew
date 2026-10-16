@@ -109,9 +109,11 @@ export function isStoreFault(err: CrewError): boolean {
  * A staging failure as a §13 error: a file of the skill crew can't read
  * names that file; anything else is crew's own store. Reading a file of
  * the skill — or the file going away mid-copy, as the source is edited —
- * is the skill's. Only a copy is ambiguous: Node names its source file
- * even when writing failed, so a source crew can still read wasn't what
- * broke (a full disk, say).
+ * is the skill's. A copy and a symlink are ambiguous: Node names a
+ * copy's source file even when writing failed, and a symlink's text.
+ * Either is the store's when its destination side broke — a symlink, or
+ * a copy into a folder that is gone or with a source crew can still read
+ * (a full disk, say).
  */
 export function stagingError(
   err: NodeJS.ErrnoException,
@@ -120,7 +122,7 @@ export function stagingError(
 ): CrewError {
   const file = err.path ?? skillPath;
   // A failed symlink names the link's text, not a file of the skill; a
-  // copy whose destination folder is gone lost crew's staging folder.
+  // copy whose destination folder is gone means crew's staging folder was.
   const dest = (err as { dest?: string }).dest;
   const storeSide = err.syscall === "symlink" || (dest !== undefined && !existsSync(dirname(dest)));
   const inSkill = !(storeSide || climbsOut(relative(skillPath, file)));

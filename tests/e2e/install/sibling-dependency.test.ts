@@ -1,5 +1,6 @@
 /**
- * Which sibling a bare dependency resolves to (§9 step 6; C-SPEC-16): one
+ * Which sibling a bare dependency resolves to (§9 step 6; C-DEP-01,
+ * C-DEP-02, C-SPEC-16): one
  * whose SKILL.md is invalid fails the install with that reason, naming
  * the dependency — never passed over for another tap's skill of the same
  * name. A sibling is matched by its declared name, and an entry named for
@@ -66,7 +67,7 @@ test("C-SPEC-16 an unrelated folder crew can't look into doesn't fail a sibling 
   );
 });
 
-test("C-SPEC-16 a sibling is matched by its declared name, not its folder name", () => {
+test("C-DEP-01 C-DEP-02 a sibling is matched by its declared name, not its folder name", () => {
   const { home, src } = setup();
   makeSkill(src, "b", skillFrontmatter({ name: "c" }));
   makeSkill(src, "x", skillFrontmatter({ name: "b" }), "From x.\n");
@@ -74,7 +75,7 @@ test("C-SPEC-16 a sibling is matched by its declared name, not its folder name",
   expect(readFileSync(join(claude.userRoot, "b", "SKILL.md"), "utf8")).toContain("From x.");
 });
 
-test("C-SPEC-16 an entry named for the dependency that isn't a skill is no sibling", () => {
+test("C-DEP-02 an entry named for the dependency that isn't a skill is no sibling", () => {
   const { home, src } = setup();
   mkdirSync(join(src, "b"));
   writeFileSync(join(src, "b", "README.md"), "Not a skill.\n");

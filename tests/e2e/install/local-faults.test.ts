@@ -6,7 +6,8 @@
  * look into, an unreadable SKILL.md — fails the install with that
  * reason, naming the dependency, and is never taken from another tap
  * (an invalid one: `sibling-dependency.test.ts`). A skipped skill's next step
- * is shown, but kept out of `--json`.
+ * is shown, but kept out of `--json`. A folder crew can't look into
+ * isn't taken for a skill at all.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -162,4 +163,17 @@ test("C-SPEC-16 a dependency from a tap that crew can't copy is skipped; its dep
     ]);
   });
   expect(readdirSync(claude.userRoot)).toEqual(["a"]);
+});
+
+test("a folder crew can't look into isn't taken for a skill", () => {
+  const src = makeTempDir();
+  makeSkill(src, "good", skillFrontmatter({ name: "good" }));
+  mkdirSync(join(src, "sealed"));
+  chmodSync(join(src, "sealed"), 0o666);
+  try {
+    expect(install(makeCrewHome(), [src]).code).toBe(0);
+    expect(readdirSync(claude.userRoot)).toEqual(["good"]);
+  } finally {
+    chmodSync(join(src, "sealed"), 0o755);
+  }
 });
