@@ -49,7 +49,6 @@ test("C-UPD-16b a tracking entry isn't moved onto the tap of a whole install at 
   const repo = buildRepo(["a", "b"]);
   expect(install(home, `file://${repo}//skills/a`).code).toBe(0);
   const ownTap = tapOf(home, "a");
-  expect(ownTap).toBeString();
   tagRepo(repo, "v1");
   // The whole repo at `v1`, on the same commit: `a`, already installed,
   // keeps its own tap and the default branch.
@@ -95,17 +94,4 @@ test("C-UPD-16b one skill installed alone at a tag leaves the subscription behin
 
   expect(crew(home, ["update"])).toBe(0);
   expect(tracking(home)).toEqual(["a:mine:v1:false", "b:mine:-:true"]);
-});
-
-test("C-UPD-16b a whole install at a tag that reinstalls an entry on its registered tap moves it to the tag, tracking", () => {
-  const home = makeCrewHome();
-  const repo = buildRepo(["a", "b"]);
-  expect(crew(home, ["tap", "add", `file://${repo}`, "mine"])).toBe(0);
-  expect(install(home, "mine/a").code).toBe(0);
-  tagRepo(repo, "v1");
-  expect(crew(home, ["install", "mine@v1", "--agent", "claude-code", "--force"])).toBe(0);
-  expect(tracking(home)).toEqual(["a:mine:v1:true", "b:mine:v1:true"]);
-
-  expect(addSiblingAndUpdate(home, repo)).toBe(0);
-  expect(tracking(home)).toEqual(["a:mine:v1:true", "b:mine:v1:true"]);
 });

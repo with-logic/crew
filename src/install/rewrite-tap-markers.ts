@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { listInstalledForAgent } from "../agents/list.ts";
 import { ALL_AGENTS } from "../agents/registry.ts";
 import { recordedDiscovery } from "../config/taps.ts";
-import type { Marker, StateEntry, TapDiscovery } from "../core/types.ts";
+import type { Config, Marker, StateEntry, TapDiscovery } from "../core/types.ts";
 import { writeJson } from "../util/json.ts";
 
 export interface TapMarkerRewrite {
@@ -53,4 +53,24 @@ function maybeRewrite(installDir: string, marker: Marker, rewrite: TapMarkerRewr
     tap_name: rewrite.newName,
     ...(discovery === undefined ? {} : { tap_discovery: discovery }),
   });
+}
+
+/** Rewrite the markers of every tap an install upgraded to recursive discovery (§16.3). */
+export function rewriteDiscoveryUpgradeMarkers(
+  before: Config,
+  after: Config,
+  stateEntries: readonly StateEntry[],
+  cwd: string,
+): void {
+  const previous = new Map(before.taps.map((tap) => [tap.name, tap]));
+  for (const tap of after.taps) {
+    const old = previous.get(tap.name);
+    if (!old) continue;
+    if (old.discovery === "recursive" || tap.discovery !== "recursive") continue;
+    rewriteTapMarkers(
+      { oldName: tap.name, newName: tap.name, discovery: "recursive" },
+      stateEntries,
+      cwd,
+    );
+  }
 }

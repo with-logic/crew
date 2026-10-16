@@ -92,9 +92,10 @@ export function applyDuplicateRules(
       incomingProjectRoot,
       reinstalls,
     );
-    // §5.4: an entry the install finds already installed moves now; one
-    // it reinstalls moves with its reinstall, once that succeeds, so a
-    // failed install leaves it, and its subscription, as they were.
+    // §5.4: an entry the install finds already installed moves before the
+    // install runs; one it reinstalls moves with its reinstall, once that
+    // succeeds, so a failed reinstall leaves it, and its subscription, as
+    // they were.
     if (reattribution) (reinstalls ? movesOnSuccess : reattributions).push(reattribution);
     // A registered tap, and a tracking entry's own tap the incoming
     // install doesn't take over, survive reinstalls as well as duplicate

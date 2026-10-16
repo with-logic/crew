@@ -4,12 +4,12 @@
  * the install subscribes to, so it moves onto the install's tap and
  * tracks it there — whether a new commit, `--force`, or a new agent made
  * the reinstall, at the same ref or another — and its own tap, left empty,
- * is collected. The move is the reinstall's: one that fails leaves the
- * entry, its subscription, and its tap as they were.
+ * is collected. An entry on its registered tap stays there, recorded at
+ * the install's ref, tracking. (Failures and markers: `./failures.test.ts`.)
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, readFileSync } from "node:fs";
+
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../../src/agents/codex.ts";
@@ -23,13 +23,14 @@ import {
   tagRepo,
 } from "../../../helpers/fixtures.ts";
 import { buildRepo, install } from "../helpers.ts";
-import { addSiblingAndUpdate, crew, tapOf, tracking } from "./helpers.ts";
+import { addSiblingAndUpdate, crew, markerTap, tapOf, tracking } from "./helpers.ts";
 
 type Redirect = { userPath: () => string; detect: () => boolean };
 let originals: (readonly [Redirect, Redirect])[] = [];
 beforeEach(() => {
   originals = [];
-  // Every install names its agents: codex takes part only as the new one.
+  // Every install names its agents, so codex takes part only where a test
+  // names it.
   for (const adapter of [claudeCodeAdapter, codexAdapter]) {
     originals.push([adapter, { userPath: adapter.userPath, detect: adapter.detect }]);
     const root = makeTempDir("crew-agent-");
@@ -55,7 +56,6 @@ for (const { how, at, flags, edit } of REINSTALLS) {
     const repo = buildRepo(["a", "b"]);
     expect(install(home, `file://${repo}//skills/a`).code).toBe(0);
     const ownTap = tapOf(home, "a");
-    expect(ownTap).toBeString();
     if (edit) {
       makeSkill(join(repo, "skills"), "a", skillFrontmatter({ name: "a" }), "Edited.\n");
       commitAll(repo, "edit a");
@@ -65,45 +65,22 @@ for (const { how, at, flags, edit } of REINSTALLS) {
     expect(tapOf(home, "a")).not.toBe(ownTap);
     const ref = at === "" ? "-" : "v1";
     expect(tracking(home)).toEqual([`a:auto:${ref}:true`, `b:auto:${ref}:true`]);
-    // Its own one-skill tap, left with nothing, is collected.
+    // Its own one-skill tap, left with nothing, is collected; every marker
+    // follows, an agent the run found up to date included.
     expect(readConfig(home).taps.some((t) => t.name === ownTap)).toBe(false);
+    expect(markerTap(claudeCodeAdapter.userPath(), "a")).toBe(tapOf(home, "a"));
   });
 }
 
-test("C-UPD-16b a reinstall that moves an entry moves its markers in agents it didn't touch", () => {
+test("C-UPD-16b a whole install at a tag that reinstalls an entry on its registered tap records it at the tag, tracking", () => {
   const home = makeCrewHome();
   const repo = buildRepo(["a", "b"]);
-  const both = [...CLAUDE, "--agent", "codex"];
-  expect(crew(home, ["install", `file://${repo}//skills/a`, ...both])).toBe(0);
+  expect(crew(home, ["tap", "add", `file://${repo}`, "mine"])).toBe(0);
+  expect(install(home, "mine/a").code).toBe(0);
   tagRepo(repo, "v1");
-  // Reinstalled into claude-code only; codex's copy stays as it was.
-  expect(crew(home, ["install", `file://${repo}@v1`, ...CLAUDE, "--force"])).toBe(0);
-  const marker = JSON.parse(readFileSync(join(codexAdapter.userPath(), "a", ".crew.json"), "utf8"));
-  expect(marker.tap_name).toBe(tapOf(home, "a"));
+  expect(crew(home, ["install", "mine@v1", ...CLAUDE, "--force"])).toBe(0);
+  expect(tracking(home)).toEqual(["a:mine:v1:true", "b:mine:v1:true"]);
+
+  expect(addSiblingAndUpdate(home, repo)).toBe(0);
+  expect(tracking(home)).toEqual(["a:mine:v1:true", "b:mine:v1:true"]);
 });
-
-for (const at of ["@v1", ""]) {
-  test(`C-UPD-16b a failed reinstall leaves the entry, its subscription, and its tap as they were (${at || "same ref"})`, () => {
-    const home = makeCrewHome();
-    const repo = buildRepo(["a", "b"]);
-    expect(install(home, `file://${repo}//skills`).code).toBe(0);
-    const ownTap = tapOf(home, "a");
-    expect(ownTap).toBeString();
-    tagRepo(repo, "v1");
-    // claude-code's folder can't be written, so every reinstall fails.
-    const root = claudeCodeAdapter.userPath();
-    chmodSync(root, 0o555);
-    try {
-      expect(crew(home, ["install", `file://${repo}${at}`, ...CLAUDE, "--force"])).toBe(1);
-    } finally {
-      chmodSync(root, 0o755);
-    }
-    expect([tapOf(home, "a"), tapOf(home, "b")]).toEqual([ownTap, ownTap]);
-    expect(tracking(home)).toEqual(["a:auto:-:true", "b:auto:-:true"]);
-    expect(readConfig(home).taps.some((t) => t.name === ownTap)).toBe(true);
-
-    // Still following its own tap: a sibling added there arrives.
-    expect(addSiblingAndUpdate(home, repo)).toBe(0);
-    expect(tracking(home)).toEqual(["a:auto:-:true", "b:auto:-:true", "c:auto:-:true"]);
-  });
-}

@@ -15,7 +15,7 @@
 
 import { readConfig, writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
-import type { Config, ResolvedSkill, Scope, StateEntry } from "../core/types.ts";
+import type { Config, ResolvedSkill, Scope } from "../core/types.ts";
 import { garbageCollectAutoTaps } from "../maintenance/auto-taps.ts";
 import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
@@ -25,10 +25,15 @@ import { assertTapsPresent, mergeAutoTaps } from "./config-merge.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules/index.ts";
 import { type InstallSummary, performInstall } from "./perform/index.ts";
 import { promoteFlags } from "./promote-flags.ts";
-import { applyReattributions, movesTaken, rewriteReattributedMarkers } from "./reattribute.ts";
+import {
+  applyReattributions,
+  assertMarkersCanMove,
+  movesMade,
+  rewriteReattributedMarkers,
+} from "./reattribute.ts";
 import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
 import type { KindHint } from "./resolve-ref/index.ts";
-import { rewriteTapMarkers } from "./rewrite-tap-markers.ts";
+import { rewriteDiscoveryUpgradeMarkers } from "./rewrite-tap-markers.ts";
 
 /** Options accepted by `runInstall`. */
 export interface InstallOptions {
@@ -141,10 +146,11 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     const { toInstall, reattributions, keepSource } = analysis;
     alreadyInstalled = analysis.alreadyInstalled;
     rewriteDiscoveryUpgradeMarkers(config, configWithAutoTaps, freshState.installations, cwd);
-    // §5.4: entries that reached the same source through a narrower
-    // auto tap move onto the incoming tap before the install runs, so
-    // `performInstall` sees the attribution it is about to write.
+    // §5.4: entries the install finds already installed skip
+    // `performInstall`, so their moves (state and markers) apply here;
+    // moves of reinstalled entries wait for the reinstall to succeed.
     rewriteReattributedMarkers(reattributions, configWithAutoTaps.taps, cwd);
+    assertMarkersCanMove(analysis.movesOnSuccess, cwd);
     const reattributed = applyReattributions(freshState, reattributions);
     const result = performInstall(toInstall, agents, options.scope, cwd, reattributed, {
       force: options.force,
@@ -159,37 +165,19 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       options.scope,
       options.scope === "project" ? cwd : null,
     );
+    // A reinstall that moved its entry wrote the markers it reinstalled;
+    // the entry's others follow now that it succeeded (§5.4) — before
+    // state, so a marker that can't follow leaves the move to a retry.
+    const madeMoves = movesMade(analysis.movesOnSuccess, promoted);
+    rewriteReattributedMarkers(madeMoves, configWithAutoTaps.taps, cwd);
     writeState(promoted, home);
-    // A reinstall that moved its entry wrote its own markers; the entry's
-    // other agents' markers follow now that it succeeded (§5.4).
-    const moved = movesTaken(analysis.movesOnSuccess, promoted);
-    rewriteReattributedMarkers(moved, configWithAutoTaps.taps, cwd);
     // An auto tap left with no entries after re-attribution is crew's
     // own bookkeeping and goes away with its clone (§16.5).
-    if (reattributions.length + moved.length > 0) garbageCollectAutoTaps(promoted, home);
+    if (reattributions.length + madeMoves.length > 0) garbageCollectAutoTaps(promoted, home);
     return { ...result, newState: promoted };
   }, home);
 
   return { summary, alreadyInstalled, resolved: resolvedAll, skipped };
-}
-
-function rewriteDiscoveryUpgradeMarkers(
-  before: Config,
-  after: Config,
-  stateEntries: readonly StateEntry[],
-  cwd: string,
-): void {
-  const previous = new Map(before.taps.map((tap) => [tap.name, tap]));
-  for (const tap of after.taps) {
-    const old = previous.get(tap.name);
-    if (!old) continue;
-    if (old.discovery === "recursive" || tap.discovery !== "recursive") continue;
-    rewriteTapMarkers(
-      { oldName: tap.name, newName: tap.name, discovery: "recursive" },
-      stateEntries,
-      cwd,
-    );
-  }
 }
 
 // Keep `RequiredByMap` exported under this module's name for consumers.

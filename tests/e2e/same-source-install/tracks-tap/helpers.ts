@@ -4,6 +4,7 @@
  * sibling upstream before an update.
  */
 
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../../src/cli/main.ts";
 import { readState } from "../../../../src/state/load.ts";
@@ -30,9 +31,14 @@ export function tracking(home: string): string[] {
     .sort();
 }
 
-/** The tap `name`'s entry is attributed to. */
-export function tapOf(home: string, name: string): string | undefined {
-  return readState(home).installations.find((e) => e.name === name)?.source.tap;
+/** The tap `name`'s entry is attributed to; throws when nothing is installed by that name. */
+export function tapOf(home: string, name: string): string {
+  return readState(home).installations.find((e) => e.name === name)!.source.tap;
+}
+
+/** The tap named in the crew marker of `name` under agent skills folder `root`. */
+export function markerTap(root: string, name: string): string {
+  return JSON.parse(readFileSync(join(root, name, ".crew.json"), "utf8")).tap_name;
 }
 
 /** Commit a new skill `c` to `repo`'s default branch, then `crew update`; its exit code. */

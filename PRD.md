@@ -306,7 +306,7 @@ moved with it anywhere else, it would follow siblings the user never
 subscribed to. A moved entry takes `tracks_tap` on those same terms. An
 entry the install finds already installed moves before the install
 runs; one it reinstalls moves with its reinstall, only if that succeeds,
-so a failed install leaves the entry, its subscription, and its tap as
+so a failed reinstall leaves the entry, its subscription, and its tap as
 they were.
 
 ### 5.5 Help output

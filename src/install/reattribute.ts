@@ -9,11 +9,12 @@
  * authoritative for `doctor --repair` (§11.1).
  */
 
+import { accessSync, constants } from "node:fs";
 import { join } from "node:path";
 import { baseFor } from "../agents/adapter.ts";
 import { ALL_AGENTS } from "../agents/registry.ts";
 import type { Marker, Scope, StateFile, TapConfig } from "../core/types.ts";
-import { installLocationKey } from "../state/identity.ts";
+import { entryKey, installLocationKey } from "../state/identity.ts";
 import { tryReadJson, writeJson } from "../util/json.ts";
 import type { Reattribution } from "./duplicate-rules/index.ts";
 
@@ -42,19 +43,17 @@ function movesByLocation(
  * attributes to the incoming tap (§5.4). A reinstall that failed on every
  * agent left its entry where it was.
  */
-export function movesTaken(moves: readonly Reattribution[], state: StateFile): Reattribution[] {
-  const taken: Reattribution[] = [];
-  for (const r of moves) {
-    const key = installLocationKey(r.name, r.scope, r.projectRoot);
-    const entry = state.installations.find(
-      (e) => installLocationKey(e.name, e.scope, e.project_root ?? null) === key,
-    );
-    if (entry?.source.tap === r.toTap) taken.push(r);
+export function movesMade(moves: readonly Reattribution[], state: StateFile): Reattribution[] {
+  const byLocation = movesByLocation(moves);
+  const made: Reattribution[] = [];
+  for (const entry of state.installations) {
+    const move = byLocation.get(entryKey(entry));
+    if (move !== undefined && entry.source.tap === move.toTap) made.push(move);
   }
-  return taken;
+  return made;
 }
 
-/** Apply every re-attribution to `state`, returning the updated file. */
+/** Apply the moves of entries an install finds already installed to `state`. */
 export function applyReattributions(
   state: StateFile,
   reattributions: readonly Reattribution[],
@@ -64,13 +63,12 @@ export function applyReattributions(
   return {
     schema_version: 1,
     installations: state.installations.map((entry) => {
-      const move = moves.get(
-        installLocationKey(entry.name, entry.scope, entry.project_root ?? null),
-      );
+      const move = moves.get(entryKey(entry));
       if (!move) return entry;
       // An already-installed entry skips `performInstall`, so it takes a
-      // subscription with the move (§10.1.1). A tracking entry moves only
-      // with it (`./duplicate-rules/classify.ts`), so none is dropped here.
+      // subscription with the move (§10.1.1). `./duplicate-rules/classify.ts`
+      // moves a tracking entry only when the move carries its subscription,
+      // so keeping the entry's own `tracks_tap` never subscribes it anywhere new.
       return {
         ...entry,
         source: { tap: move.toTap, path: move.toPath },
@@ -102,12 +100,36 @@ export function rewriteReattributedMarkers(
   for (const r of reattributions) {
     movesByMarker.set(markerMoveKey(r.name, r.scope, r.projectRoot, r.fromTap), r);
   }
+  for (const m of movedMarkers(reattributions, cwd)) {
+    maybeRewrite(m.installDir, m.marker, movesByMarker, tapsByName, m.scope, m.projectRoot);
+  }
+}
+
+/**
+ * Throw, before anything is written, when a marker `moves` would rewrite
+ * after the install can't be read or written: failing then would leave
+ * the reinstalled copies and the rest apart (§5.4, §11.1).
+ */
+export function assertMarkersCanMove(moves: readonly Reattribution[], cwd: string): void {
+  for (const m of movedMarkers(moves, cwd)) accessSync(m.installDir, constants.W_OK);
+}
+
+interface MovedMarker {
+  readonly installDir: string;
+  readonly marker: Marker;
+  readonly scope: Scope;
+  readonly projectRoot: string | null;
+}
+
+/** The markers of the skills `moves` name, in every agent that owns one. */
+function movedMarkers(moves: readonly Reattribution[], cwd: string): MovedMarker[] {
+  const found: MovedMarker[] = [];
   // Go straight to the directories the moves name. Listing every
   // adapter's whole marker tree and filtering afterwards would walk
   // unrelated skills (and unrelated projects) under the state lock; a
   // move knows its own skill name, scope and project root, and the
   // install path is a pure function of those plus the adapter.
-  for (const r of reattributions) {
+  for (const r of moves) {
     const root = r.scope === "user" ? cwd : r.projectRoot;
     // A project-scope move with no recorded root has nothing to rewrite:
     // the marker's location is exactly what we'd be guessing at.
@@ -119,16 +141,10 @@ export function rewriteReattributedMarkers(
       const marker = tryReadJson<Marker>(join(installDir, ".crew.json"));
       // No marker, or one this adapter doesn't own: not ours to rewrite.
       if (!marker?.agents?.includes(adapter.name)) continue;
-      maybeRewrite(
-        installDir,
-        marker,
-        movesByMarker,
-        tapsByName,
-        r.scope,
-        r.scope === "project" ? root : null,
-      );
+      found.push({ installDir, marker, scope: r.scope, projectRoot: r.projectRoot });
     }
   }
+  return found;
 }
 
 function maybeRewrite(
