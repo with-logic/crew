@@ -1,16 +1,16 @@
 /**
  * Locating one installed skill again for `crew update` (§10.1): in a live
- * (unexported) tap checkout, with `assertExportedSkillMdInside` for a
- * commit's export. Whether it is still a skill is `./skill-shape.ts`.
+ * (unexported) tap checkout, with `assertSkillMdInside` for a commit's
+ * export too. Whether it is still a skill is `./skill-shape.ts`.
  */
 
-import { lstatSync, readlinkSync, realpathSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { realpathSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { isGistTap } from "../../core/gist-url.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { climbsOut } from "../../util/relative-path.ts";
+import { isLink, resolveInside } from "./resolve-inside.ts";
 import {
   assertStillASkill,
   isMissingPathError,
@@ -28,19 +28,20 @@ import {
  * error, say — is `source_unreachable`, failing the update rather than
  * being mistaken for an upstream deletion.
  *
- * In a git tap the skill, and its own `SKILL.md`, must also still resolve
- * inside the clone (§8.4): upstream can replace either with a link out of
- * the repository after it was installed, and following it would read
- * content that was never part of the source. That escape is `invalid_ref`,
- * also reported as `source_gone`; so is a link that dangles or loops, or
- * one crew can't resolve that points out of the repository. One crew
- * can't resolve that points inside is a local fault (`source_unreachable`).
- * A link that stays inside the repository is followed, as discovery
- * follows skill-directory links at install — but never, for a skill below
- * the root, to the clone itself or into its `.git`, which hold crew's
- * clone metadata (a remote URL with a token, say), not the source. A path
- * tap is the user's own directory and, like its root (`tapRootDir`),
- * isn't held to the containment check.
+ * In a git tap the skill must also still resolve inside the clone (§8.4):
+ * upstream can replace it with a link out of the repository after it was
+ * installed, and following it would read content that was never part of
+ * the source. That escape is `invalid_ref`, also reported as
+ * `source_gone`; so is a link that dangles or loops, or one crew can't
+ * resolve that points out of the repository. One crew can't resolve that
+ * points inside is a local fault (`source_unreachable`). A link that
+ * stays inside the repository is followed, as discovery follows
+ * skill-directory links at install — but never, for a skill below the
+ * root, to the clone itself or into its `.git`, which hold crew's clone
+ * metadata (a remote URL with a token, say), not the source. A path tap
+ * is the user's own directory and, like its root (`tapRootDir`), isn't
+ * held to the containment check. In every tap, the skill's `SKILL.md` is
+ * held to `assertSkillMdInside`.
  */
 export function liveSkillPath(
   tap: TapConfig,
@@ -58,74 +59,36 @@ export function liveSkillPath(
     // Measured against the repository, not the tap's subpath: a link from
     // `skills/foo` to `../shared/foo` is still inside the source.
     const clone = realpathSync(tapClonePath(tap, home));
-    const resolved = resolveInside(clone, location, tapRelativePath);
+    const resolved = resolveInside(clone, location, tapRelativePath, outsideRepo);
     const belowRoot = tapRelativePath !== "" || tap.subpath !== "";
     if (belowRoot && isCloneMetadata(relative(clone, resolved))) {
       throw intoCloneMetadata(tapRelativePath);
     }
-    const skillMd = join(location, "SKILL.md");
-    if (isLink(skillMd)) resolveInside(clone, skillMd, tapRelativePath);
   } else if (isGone(location)) {
     throw noLongerASkill(tapRelativePath);
   }
+  assertSkillMdInside(tap, location, tapRelativePath);
   assertStillASkill(tap, location, tapRelativePath);
   return location;
 }
 
 /**
- * At an `@<ref>`, a folder skill's `SKILL.md` is held to the same rule
- * against the skill's own scratch export (§9 step 3): a link out of it is
- * never read. A gist's files are already judged without following links.
+ * A folder skill's `SKILL.md` may be a link only to a file inside the
+ * skill's own folder (§9 step 4): crew copies a link as a link, so one
+ * leading anywhere else would leave the installed skill without a
+ * `SKILL.md`. One that does now is gone, and is never read. At an
+ * `@<ref>` the folder is the skill's scratch export. A gist's files are
+ * already judged without following links.
  */
-export function assertExportedSkillMdInside(
+export function assertSkillMdInside(
   tap: Pick<TapConfig, "kind" | "url">,
   location: string,
   tapRelativePath: string,
 ): void {
   if (isGistTap(tap)) return;
   const skillMd = join(location, "SKILL.md");
-  if (isLink(skillMd)) resolveInside(realpathSync(location), skillMd, tapRelativePath);
-}
-
-/**
- * The real path of `path`; throws unless it is inside `boundary`, already
- * a real path: the clone live, or the skill's own export at a ref. Missing
- * — deleted, or a dangling or looping link — is gone. A link crew can't
- * resolve is judged by where it points: outside the boundary it is never
- * read; inside, the failure is a local one.
- */
-function resolveInside(boundary: string, path: string, tapRelativePath: string): string {
-  let resolved: string;
-  try {
-    resolved = realpathSync(path);
-  } catch (err) {
-    if (isMissingPathError(err) || (err as NodeJS.ErrnoException).code === "ELOOP") {
-      throw noLongerASkill(tapRelativePath);
-    }
-    if (linksOut(boundary, path)) throw outsideRepo(tapRelativePath);
-    throw unreadable(path, err);
-  }
-  if (climbsOut(relative(boundary, resolved))) throw outsideRepo(tapRelativePath);
-  return resolved;
-}
-
-/**
- * True when a link on the way to `path` — `path` itself, or a folder
- * above it — points out of `boundary`. It walks up only while the path
- * won't resolve; from there up, the real path settled where it leads.
- */
-function linksOut(boundary: string, at: string): boolean {
-  const target = linkTarget(at);
-  if (target !== null && climbsOut(relative(boundary, target))) return true;
-  return !resolves(at) && linksOut(boundary, dirname(at));
-}
-
-function resolves(path: string): boolean {
-  try {
-    realpathSync(path);
-    return true;
-  } catch {
-    return false;
+  if (isLink(skillMd)) {
+    resolveInside(realpathSync(location), skillMd, tapRelativePath, outsideSkill);
   }
 }
 
@@ -150,22 +113,12 @@ function outsideRepo(tapRelativePath: string): CrewError {
   );
 }
 
-/** Where the link at `path` points, from its real parent directory; null when it isn't a readable link. */
-function linkTarget(path: string): string | null {
-  try {
-    return resolve(realpathSync(dirname(path)), readlinkSync(path));
-  } catch {
-    return null;
-  }
-}
-
-/** True when `path` is itself a symlink; false when it isn't, or can't be looked at. */
-function isLink(path: string): boolean {
-  try {
-    return lstatSync(path).isSymbolicLink();
-  } catch {
-    return false;
-  }
+function outsideSkill(tapRelativePath: string): CrewError {
+  return new CrewError(
+    "invalid_ref",
+    `the SKILL.md of \`${tapRelativePath || "."}\` now links outside the skill's folder, so crew won't read it`,
+    { path: tapRelativePath },
+  );
 }
 
 /**

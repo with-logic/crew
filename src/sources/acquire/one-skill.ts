@@ -14,7 +14,7 @@ import { classifyRef } from "../../git/repo/refs.ts";
 import { isGistSkillFileName } from "../../refs/gist.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
 import { type AcquiredTap, acquireTap } from "./index.ts";
-import { assertExportedSkillMdInside, liveSkillPath } from "./live-skill-path.ts";
+import { assertSkillMdInside, liveSkillPath } from "./live-skill-path.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 import { assertStillASkill, noLongerASkill } from "./skill-shape.ts";
 
@@ -65,7 +65,7 @@ export function withAcquiredSkill<T>(
     return withExportedTree(clonePath, sha, exportPath, home, (skillPath) => {
       exported = true;
       assertStillASkill(tap, skillPath, tapRelativePath);
-      assertExportedSkillMdInside(tap, skillPath, tapRelativePath);
+      assertSkillMdInside(tap, skillPath, tapRelativePath);
       return fn({ resolvedSha: sha, pinned }, skillPath);
     });
   } catch (err) {

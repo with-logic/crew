@@ -1,6 +1,6 @@
 /**
  * `crew update` reading one skill out of a live tap checkout (§8.4,
- * §10.1; C-UPD-11, C-UPD-39).
+ * §10.1; C-UPD-11, C-UPD-39, C-UPD-40).
  *
  * An entry that doesn't track its tap (`<tap>/<skill>`) is updated by
  * reading its recorded path straight out of the tap's clone, with no
@@ -86,8 +86,8 @@ describe("crew update of a <tap>/<skill> install", () => {
 
   for (const ref of ["", "@main"]) {
     for (const [what, replaced] of [
-      ["its parent folder", "skills"],
-      ["its folder", "skills/demo"],
+      ["parent folder", "skills"],
+      ["folder", "skills/demo"],
     ] as const) {
       test(`C-UPD-11 a skill whose ${what} became a file upstream is source_gone (${ref || "no ref"})`, () => {
         const { home, repo } = installFromGitTap(ref);
@@ -137,7 +137,7 @@ describe("crew update of a <tap>/<skill> install", () => {
     expect(installed()).toContain("Edited.");
   });
 
-  test("a skill crew can't look at fails the update rather than reading as removed", () => {
+  test("C-UPD-40 a skill crew can't look at fails the update rather than reading as removed", () => {
     const home = makeCrewHome();
     const tapDir = makeTempDir();
     makeSkill(join(tapDir, "skills"), "demo", skillFrontmatter({ name: "demo" }), "Original.\n");

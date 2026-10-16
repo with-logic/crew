@@ -72,16 +72,13 @@ describe("gist tap identity", () => {
     expect(existsSync(join(shared, ".git", "crew-moved"))).toBe(true);
     expect(existsSync(legacyTapPath(GIST_ID, home))).toBe(false);
 
-    const preview = run(home, ["tap", "add", GIST_PAGE_URL, "--dry-run"]);
-    expect(preview.stdout).toContain(GIST_ID);
-    expect(preview.stdout).not.toContain(GIST_TAP);
-    expect(preview.stdout).toContain(GIST_PAGE_URL);
-    const added = run(home, ["tap", "add", GIST_PAGE_URL]);
-    expect(added.code).toBe(0);
     // Reported as it was recorded — name and URL — not as a derived `gist-<id8>`.
-    expect(added.stdout).toContain(GIST_ID);
-    expect(added.stdout).not.toContain(GIST_TAP);
-    expect(added.stdout).toContain(GIST_PAGE_URL);
+    const preview = run(home, ["tap", "add", GIST_PAGE_URL, "--dry-run", "--json"]);
+    expect([json(preview).name, json(preview).url]).toEqual([GIST_ID, GIST_PAGE_URL]);
+    const added = run(home, ["tap", "add", GIST_PAGE_URL, "--json"]);
+    expect(added.code).toBe(0);
+    expect([json(added).name, json(added).url]).toEqual([GIST_ID, GIST_PAGE_URL]);
+    expect(run(home, ["tap", "add", GIST_PAGE_URL]).stdout).not.toContain(GIST_TAP);
     const gistTaps = readConfig(home).taps.filter((t) => t.url.includes(GIST_ID));
     expect(gistTaps.map((t) => [t.name, t.registered])).toEqual([[GIST_ID, true]]);
   });

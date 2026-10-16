@@ -11,12 +11,13 @@
  * `path` IS the skill's `SKILL.md`, and its errors name that file.
  */
 
-import { statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { lstatSync, realpathSync, statSync } from "node:fs";
+import { basename, join, relative } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
 import { errnoReason } from "../util/errno.ts";
 import { exists, readText } from "../util/fs.ts";
+import { climbsOut } from "../util/relative-path.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 import { isSkillFile } from "./skill-file.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
@@ -60,12 +61,14 @@ export function hasSkillMd(path: string): boolean {
  * The text of the `SKILL.md` for the skill at `path` — a skill file, or a
  * directory's own. Every failure is a `CrewError` naming the path, so
  * discovery skips this one candidate (§9 step 4) rather than aborting: a
- * `SKILL.md` that is missing or not a file is the skill's own fault
- * (`invalid_skill`); one crew can't read is the local filesystem's
- * (`source_unreachable`), and is never blamed on the skill's author.
+ * `SKILL.md` that is missing or not a file, or that links out of its
+ * skill's folder, is the skill's own fault (`invalid_skill`); one crew
+ * can't read is the local filesystem's (`source_unreachable`), and is
+ * never blamed on the skill's author.
  */
 function readSkillMd(path: string): string {
-  const skillMdPath = isSkillFile(path) ? path : join(path, "SKILL.md");
+  const skillFile = isSkillFile(path);
+  const skillMdPath = skillFile ? path : join(path, "SKILL.md");
   let raw: string | null = null;
   try {
     if (statSync(skillMdPath, { throwIfNoEntry: false })?.isFile()) raw = readText(skillMdPath);
@@ -83,7 +86,23 @@ function readSkillMd(path: string): string {
       : `no SKILL.md in \`${path}\` — every skill directory needs one`;
     throw new CrewError("invalid_skill", message, { path });
   }
+  // §9 step 4: crew copies a link as a link, so a `SKILL.md` linking out of
+  // its folder would leave the installed skill without one. A gist's skill
+  // file is never a link (`isSkillFile`).
+  if (!skillFile && linksOutOfFolder(path, skillMdPath)) {
+    throw new CrewError(
+      "invalid_skill",
+      `\`${skillMdPath}\` links outside its skill's folder — crew copies a link as a link, so the installed skill would have no SKILL.md`,
+      { path },
+    );
+  }
   return raw;
+}
+
+/** True when `skillMd`, already read, is a link to somewhere outside `folder`. */
+function linksOutOfFolder(folder: string, skillMd: string): boolean {
+  if (!lstatSync(skillMd).isSymbolicLink()) return false;
+  return climbsOut(relative(realpathSync(folder), realpathSync(skillMd)));
 }
 
 /**

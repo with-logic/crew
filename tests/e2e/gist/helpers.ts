@@ -101,6 +101,9 @@ export interface CliJson {
   readonly rows: { name: string; outcome: { kind: string } }[];
   readonly records: unknown[];
   readonly skipped: { message: string; code: string; path: string }[];
+  /** `crew tap add`: the tap as recorded. */
+  readonly name: string;
+  readonly url: string;
 }
 
 /** The `--json` body of a run. */
