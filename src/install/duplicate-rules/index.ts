@@ -56,6 +56,7 @@ export function applyDuplicateRules(
   const alreadyInstalled: AlreadyInstalled[] = [];
   const promotions: { explicit: string[]; tracksTap: string[] } = { explicit: [], tracksTap: [] };
   const reattributions: Reattribution[] = [];
+  const movesOnSuccess: Reattribution[] = [];
   const keepSource: KeptSource[] = [];
 
   const incomingProjectRoot = scope === "project" ? cwd : null;
@@ -82,17 +83,21 @@ export function applyDuplicateRules(
       newAdapters.length === 0 &&
       !options.force;
 
+    const reinstalls = !upToDate;
     const sameAttribution = hasSameAttribution(existing, skill);
     const reattribution = classifySource(
       existing,
       skill,
       options.taps,
       incomingProjectRoot,
-      !upToDate,
+      reinstalls,
     );
-    if (reattribution) reattributions.push(reattribution);
-    // Registered attribution, and a subscription the incoming install
-    // doesn't take over, survive reinstalls as well as duplicate
+    // §5.4: an entry the install finds already installed moves now; one
+    // it reinstalls moves with its reinstall, once that succeeds, so a
+    // failed install leaves it, and its subscription, as they were.
+    if (reattribution) (reinstalls ? movesOnSuccess : reattributions).push(reattribution);
+    // A registered tap, and a tracking entry's own tap the incoming
+    // install doesn't take over, survive reinstalls as well as duplicate
     // short-circuits (§5.4, §10.1.1).
     else if (!sameAttribution) {
       // Successful source classification already proved this tap exists.
@@ -129,5 +134,5 @@ export function applyDuplicateRules(
     // → install (possibly as no-op byte-copy but with marker rewrite).
     toInstall.push(skill);
   }
-  return { toInstall, alreadyInstalled, promotions, reattributions, keepSource };
+  return { toInstall, alreadyInstalled, promotions, reattributions, movesOnSuccess, keepSource };
 }

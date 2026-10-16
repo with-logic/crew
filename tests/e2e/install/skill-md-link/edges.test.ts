@@ -179,7 +179,7 @@ test("C-SPEC-16 a link crew can't look at, its own path to it being too long, is
   expect(installed.out).toContain("Shorten the path");
   const cap = captureStreams();
   expect(runCli(["info", folder, "--json"], { home, streams: cap.streams })).toBe(5);
-  expect(cap.stdout()).not.toContain(leaked);
+  expect(cap.stdout() + cap.stderr()).not.toContain(leaked);
   expect(JSON.parse(cap.stdout()).error.name).toBe("source_unreachable");
 });
 

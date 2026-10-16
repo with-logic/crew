@@ -109,8 +109,8 @@ function isRefusedSkillMdLink(folder: string): boolean {
 
 /**
  * The entry at `path` without following it; undefined when it is gone.
- * Throws any other failure, naming `path` — the system leaves it off
- * when the path itself is too long.
+ * Throws any other failure, naming `path`: Bun fails a path longer than
+ * the system's limit before looking, and leaves the path off.
  */
 function lstatUnlessGone(path: string): Stats | undefined {
   try {

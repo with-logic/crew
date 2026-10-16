@@ -30,16 +30,19 @@ export interface Reattribution {
   readonly toPath: string;
   /**
    * Whether the moved entry takes the incoming install's subscription:
-   * the install is of the whole tap, at the entry's ref (§11.1). Carried
-   * with the move because an already-installed entry can skip
-   * `performInstall`, which otherwise records `tracks_tap` (§10.1.1).
+   * the install is of the whole tap, at the ref the entry ends at (§11.1).
+   * Carried with a move made before the install, because an
+   * already-installed entry skips `performInstall`, which otherwise
+   * records `tracks_tap` (§10.1.1).
    */
   readonly tracksTap: boolean;
 }
 
 /**
  * Attribution retained when a reinstall must preserve a registered tap,
- * or a subscription the incoming install doesn't take over (§5.4, §10.1.1). The full descriptor keeps
+ * or a tracking entry's own tap the incoming install doesn't take over
+ * (§5.4, §10.1.1); whether the subscription survives too is
+ * `buildStateEntry`'s call (the same ref only). The full descriptor keeps
  * authoritative markers consistent with state (§11.1).
  */
 export interface KeptSource {
@@ -55,7 +58,14 @@ export interface DuplicateAnalysis {
   readonly alreadyInstalled: AlreadyInstalled[];
   /** One-way flags to set on already-installed entries (`../promote-flags.ts`). */
   readonly promotions: Promotions;
+  /** Moves of already-installed entries, made before the install runs. */
   readonly reattributions: Reattribution[];
+  /**
+   * Moves of entries the install reinstalls: `performInstall` writes the
+   * incoming attribution itself, and the entry's other markers follow
+   * only if it succeeds (§5.4).
+   */
+  readonly movesOnSuccess: Reattribution[];
   readonly keepSource: KeptSource[];
 }
 

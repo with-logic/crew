@@ -25,7 +25,7 @@ import { assertTapsPresent, mergeAutoTaps } from "./config-merge.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules/index.ts";
 import { type InstallSummary, performInstall } from "./perform/index.ts";
 import { promoteFlags } from "./promote-flags.ts";
-import { applyReattributions, rewriteReattributedMarkers } from "./reattribute.ts";
+import { applyReattributions, movesTaken, rewriteReattributedMarkers } from "./reattribute.ts";
 import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
 import type { KindHint } from "./resolve-ref/index.ts";
 import { rewriteTapMarkers } from "./rewrite-tap-markers.ts";
@@ -160,9 +160,13 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       options.scope === "project" ? cwd : null,
     );
     writeState(promoted, home);
+    // A reinstall that moved its entry wrote its own markers; the entry's
+    // other agents' markers follow now that it succeeded (§5.4).
+    const moved = movesTaken(analysis.movesOnSuccess, promoted);
+    rewriteReattributedMarkers(moved, configWithAutoTaps.taps, cwd);
     // An auto tap left with no entries after re-attribution is crew's
     // own bookkeeping and goes away with its clone (§16.5).
-    if (reattributions.length > 0) garbageCollectAutoTaps(promoted, home);
+    if (reattributions.length + moved.length > 0) garbageCollectAutoTaps(promoted, home);
     return { ...result, newState: promoted };
   }, home);
 

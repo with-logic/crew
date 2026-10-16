@@ -30,6 +30,11 @@ export function tracking(home: string): string[] {
     .sort();
 }
 
+/** The tap `name`'s entry is attributed to. */
+export function tapOf(home: string, name: string): string | undefined {
+  return readState(home).installations.find((e) => e.name === name)?.source.tap;
+}
+
 /** Commit a new skill `c` to `repo`'s default branch, then `crew update`; its exit code. */
 export function addSiblingAndUpdate(home: string, repo: string): number {
   makeSkill(join(repo, "skills"), "c", skillFrontmatter({ name: "c" }));

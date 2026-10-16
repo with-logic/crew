@@ -37,6 +37,23 @@ function movesByLocation(
   return byLocation;
 }
 
+/**
+ * The moves an install's reinstalls made: those whose entry `state` now
+ * attributes to the incoming tap (§5.4). A reinstall that failed on every
+ * agent left its entry where it was.
+ */
+export function movesTaken(moves: readonly Reattribution[], state: StateFile): Reattribution[] {
+  const taken: Reattribution[] = [];
+  for (const r of moves) {
+    const key = installLocationKey(r.name, r.scope, r.projectRoot);
+    const entry = state.installations.find(
+      (e) => installLocationKey(e.name, e.scope, e.project_root ?? null) === key,
+    );
+    if (entry?.source.tap === r.toTap) taken.push(r);
+  }
+  return taken;
+}
+
 /** Apply every re-attribution to `state`, returning the updated file. */
 export function applyReattributions(
   state: StateFile,
@@ -51,13 +68,11 @@ export function applyReattributions(
         installLocationKey(entry.name, entry.scope, entry.project_root ?? null),
       );
       if (!move) return entry;
-      // The move decides tracking outright (`./duplicate-rules/classify.ts`):
-      // an already-installed entry skips `performInstall`, so it takes a
-      // subscription here (§10.1.1); a reinstalled one takes it when its
-      // reinstall succeeds, and until then follows nothing.
-      const { tracks_tap: _before, ...rest } = entry;
+      // An already-installed entry skips `performInstall`, so it takes a
+      // subscription with the move (§10.1.1). A tracking entry moves only
+      // with it (`./duplicate-rules/classify.ts`), so none is dropped here.
       return {
-        ...rest,
+        ...entry,
         source: { tap: move.toTap, path: move.toPath },
         ...(move.tracksTap ? { tracks_tap: true } : {}),
       };

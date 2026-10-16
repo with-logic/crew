@@ -26,7 +26,7 @@ export function hasSameAttribution(existing: StateEntry, skill: ResolvedSkill): 
  * tap covering the same location, or null when attribution already
  * matches, the existing tap is the user's own, or the move would narrow
  * a whole-tap subscription or carry it where the user never subscribed.
- * `reinstalls`: the install writes the entry again, at its own ref.
+ * `reinstalls`: the install rewrites the entry, so it ends at `skill.ref`.
  */
 export function classifySource(
   existing: StateEntry,
@@ -75,8 +75,6 @@ export function classifySource(
     fromTap: existing.source.tap,
     toTap: skill.tap.name,
     toPath: skill.tapRelativePath,
-    // A reinstall records the subscription itself, once it succeeds: a
-    // failed one must not leave the entry moved and following the tap.
-    tracksTap: subscribesHere && !reinstalls,
+    tracksTap: subscribesHere,
   };
 }
