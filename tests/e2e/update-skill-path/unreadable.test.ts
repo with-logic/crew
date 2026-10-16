@@ -1,28 +1,25 @@
 /**
- * `crew update` of a skill holding a file crew can't read (§10.1, §13;
- * C-UPD-40): a local fault, so the update fails with `source_unreachable`
- * — not an upstream deletion, and not a usage error.
+ * `crew update` against local faults (§10.1, §10.1.1, §13; C-UPD-40): a
+ * skill holding a file crew can't read, a path crew can't search, and a
+ * tracked tap's new child crew can't copy all fail as
+ * `source_unreachable` — not an upstream deletion, and not a usage error
+ * that stops the rest of the run. A path tap's skill folder that became
+ * a looping link is gone.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, writeFileSync } from "node:fs";
+import { chmodSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runCli } from "../../../src/cli/main.ts";
-import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
+import { run } from "./helpers.ts";
 
 let claude: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
   claude = redirectClaudeCode();
 });
 afterEach(() => restoreClaudeCode(claude.originals));
-
-function run(home: string, args: string[]): { code: number; stdout: string } {
-  const cap = captureStreams();
-  const code = runCli(args, { home, streams: cap.streams });
-  return { code, stdout: cap.stdout() };
-}
 
 test("C-UPD-40 a file crew can't read while staging fails the update as source_unreachable", () => {
   const home = makeCrewHome();
@@ -44,5 +41,67 @@ test("C-UPD-40 a file crew can't read while staging fails the update as source_u
     ]);
   } finally {
     chmodSync(join(skill, "notes.txt"), 0o644);
+  }
+});
+
+test("C-UPD-40 a path tap's skill folder that became a looping link is source_gone", () => {
+  const home = makeCrewHome();
+  const tapDir = makeTempDir();
+  const skill = makeSkill(tapDir, "demo", skillFrontmatter({ name: "demo" }));
+  expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
+  expect(run(home, ["install", "mine/demo"]).code).toBe(0);
+  rmSync(skill, { recursive: true });
+  symlinkSync("demo", skill);
+
+  const r = run(home, ["update", "--json"]);
+  expect(r.code).toBe(0);
+  expect(
+    JSON.parse(r.stdout).rows.map((row: { outcome: { kind: string } }) => row.outcome.kind),
+  ).toEqual(["source_gone"]);
+});
+
+test("C-UPD-40 a skill installed by path under a folder crew can't search fails, not gone", () => {
+  const home = makeCrewHome();
+  const outer = makeTempDir();
+  makeSkill(join(outer, "pt"), "demo", skillFrontmatter({ name: "demo" }));
+  expect(run(home, ["install", join(outer, "pt", "demo")]).code).toBe(0);
+  chmodSync(outer, 0o000);
+  try {
+    const r = run(home, ["update", "--json"]);
+    expect(r.code).toBe(1);
+    const [row] = JSON.parse(r.stdout).rows;
+    expect([row.outcome.kind, row.outcome.error.code]).toEqual(["failed", "source_unreachable"]);
+  } finally {
+    chmodSync(outer, 0o755);
+  }
+});
+
+test("C-UPD-18e C-UPD-40 a tracked tap's new child crew can't copy fails alone; the rest update", () => {
+  const home = makeCrewHome();
+  const tapDir = makeTempDir();
+  makeSkill(join(tapDir, "skills"), "beta", skillFrontmatter({ name: "beta" }), "Original.\n");
+  expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
+  expect(run(home, ["install", "mine"]).code).toBe(0);
+  makeSkill(join(tapDir, "skills"), "beta", skillFrontmatter({ name: "beta" }), "Edited.\n");
+  const alpha = makeSkill(join(tapDir, "skills"), "alpha", skillFrontmatter({ name: "alpha" }));
+  writeFileSync(join(alpha, "extra.txt"), "private\n");
+  chmodSync(join(alpha, "extra.txt"), 0o000);
+  try {
+    const r = run(home, ["update", "--json"]);
+    expect(r.code).toBe(1);
+    const out = JSON.parse(r.stdout);
+    expect(
+      out.rows.map(
+        (row: { name: string; outcome: { kind: string } }) => `${row.name}:${row.outcome.kind}`,
+      ),
+    ).toEqual(["beta:updated"]);
+    const [added] = out.tap_reexpand_rows;
+    expect([added.name, added.kind, added.error.code]).toEqual([
+      "alpha",
+      "tap_error",
+      "source_unreachable",
+    ]);
+  } finally {
+    chmodSync(join(alpha, "extra.txt"), 0o644);
   }
 });

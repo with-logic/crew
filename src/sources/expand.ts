@@ -37,7 +37,7 @@ import { isDirectory, listDir } from "../util/fs.ts";
 import { gistLabel, gistSkillCandidates, isOneSkillGist } from "./gist.ts";
 import { findRecursiveSkillDirs } from "./recursive.ts";
 
-/** A skill candidate that couldn't be loaded. */
+/** A skill candidate that couldn't be loaded, or staged (§9 steps 4, 8). */
 export interface SkippedSkill {
   /** Absolute path to the (would-be) skill directory, or a gist's skill file. */
   readonly path: string;
@@ -45,6 +45,8 @@ export interface SkippedSkill {
   readonly message: string;
   /** The error code: `invalid_skill`, or `source_unreachable` for a file crew couldn't read. */
   readonly code: SkipCode;
+  /** The underlying error's next step, when it has its own. */
+  readonly remedy?: string;
 }
 
 /** Why a candidate was skipped (§9 step 4): its own fault, or unreadable. */
@@ -181,6 +183,7 @@ function pushSoft(candidate: string, valid: LoadedSkill[], skipped: SkippedSkill
     // `SKILL.md` it couldn't read, `invalid_skill` for the rest (§9 step 4).
     const ce = err as CrewError;
     const code = ce.code === "source_unreachable" ? "source_unreachable" : "invalid_skill";
-    skipped.push({ path: candidate, message: ce.message, code });
+    const remedy = typeof ce.remedy === "string" ? { remedy: ce.remedy } : {};
+    skipped.push({ path: candidate, message: ce.message, code, ...remedy });
   }
 }

@@ -4,10 +4,9 @@
 
 import { gitTapMatches } from "../../config/find-tap.ts";
 import { CrewError } from "../../core/errors.ts";
-import { isGistUrl } from "../../core/gist-url.ts";
+import { isGistSkillFileName, isGistUrl } from "../../core/gist-url.ts";
 import type { Source, TapConfig, TapSource } from "../../core/types.ts";
 import { displayText, displayUrl } from "../../refs/display-url.ts";
-import { isGistSkillFileName } from "../../refs/gist.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { shellQuote } from "../../util/format.ts";
 

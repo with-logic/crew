@@ -26,6 +26,7 @@
  * tap to acquire.
  */
 
+import { statSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { crewHome } from "../../core/paths.ts";
@@ -35,10 +36,12 @@ import { withExportedTree } from "../../git/export.ts";
 import { ensureClone } from "../../git/repo/index.ts";
 import { classifyRef, resolveRef } from "../../git/repo/refs.ts";
 import { displayUrl } from "../../refs/display-url.ts";
+import { isGoneError } from "../../util/errno.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
+import { unreadableError } from "./skill-shape.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
@@ -61,7 +64,7 @@ export interface AcquiredTap {
  */
 export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredTap {
   if (tap.kind === "path") {
-    if (!isDirectory(tap.path)) {
+    if (!isTapDirectory(tap.path)) {
       throw new CrewError(
         "no_skills_found",
         `tap \`${tap.name}\` points at \`${tap.path}\` which isn't a directory`,
@@ -86,6 +89,21 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
     );
   }
   return { rootDir, resolvedSha: sha, pinned: false };
+}
+
+/**
+ * Whether a path tap's directory is there. A failure to look other than
+ * its absence — a folder above it crew can't search — is the local
+ * filesystem's, `source_unreachable`, never a source that went away
+ * (§10.1).
+ */
+function isTapDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch (err) {
+    if (isGoneError(err)) return false;
+    throw unreadableError(path, err);
+  }
 }
 
 /**

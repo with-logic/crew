@@ -4,19 +4,18 @@
  */
 
 import { posix } from "node:path";
-import type { CrewError } from "../../core/errors.ts";
-import { isGistTap } from "../../core/gist-url.ts";
+import { CrewError } from "../../core/errors.ts";
+import { isGistSkillFileName, isGistTap } from "../../core/gist-url.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { withExportedTree } from "../../git/export.ts";
 import { ensureClone } from "../../git/repo/index.ts";
 import { classifyRef } from "../../git/repo/refs.ts";
-import { isGistSkillFileName } from "../../refs/gist.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
 import { type AcquiredTap, acquireTap } from "./index.ts";
-import { assertSkillMdInside, liveSkillPath } from "./live-skill-path.ts";
+import { liveSkillPath } from "./live-skill-path.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
-import { assertStillASkill, noLongerASkill } from "./skill-shape.ts";
+import { assertSkillMdInside, assertStillASkill, noLongerASkillError } from "./skill-shape.ts";
 
 /**
  * Acquire only ONE skill's subtree of a tap at `ref`.
@@ -42,7 +41,7 @@ export function withAcquiredSkill<T>(
   // A gist skill is one top-level file: a recorded path that isn't — a
   // hand-edited or repaired `../x.md` — is never read (§10.1).
   if (isGistTap(tap) && tapRelativePath !== "" && !isGistSkillFileName(tapRelativePath)) {
-    throw noLongerASkill(tapRelativePath);
+    throw noLongerASkillError(tapRelativePath);
   }
   if (ref === null || tap.kind === "path") {
     const acquired = acquireTap(tap, home);
@@ -64,15 +63,16 @@ export function withAcquiredSkill<T>(
   try {
     return withExportedTree(clonePath, sha, exportPath, home, (skillPath) => {
       exported = true;
-      assertStillASkill(tap, skillPath, tapRelativePath);
+      // The link check first: `assertStillASkill` looks through the link.
       assertSkillMdInside(tap, skillPath, tapRelativePath);
+      assertStillASkill(tap, skillPath, tapRelativePath);
       return fn({ resolvedSha: sha, pinned }, skillPath);
     });
   } catch (err) {
     // §10.1: the export refuses a recorded path reached through a symlink
     // (its only `invalid_skill`, §9 step 3); at a ref, that skill is gone.
-    if (!exported && (err as CrewError).code === "invalid_skill") {
-      throw noLongerASkill(tapRelativePath);
+    if (!exported && err instanceof CrewError && err.code === "invalid_skill") {
+      throw noLongerASkillError(tapRelativePath);
     }
     throw err;
   }

@@ -69,7 +69,7 @@ describe("crew install of a folder with a skill crew can't load", () => {
       const r = install(makeCrewHome(), src);
       expect(r.code).toBe(1);
       expect(readdirSync(claude.userRoot)).toEqual(["good"]);
-      expect(r.out).toMatch(/couldn't copy `\S+\/locked\/notes\.txt` into the store — EACCES/);
+      expect(r.out).toMatch(/couldn't read `\S+\/locked\/notes\.txt` — EACCES/);
       expect(r.out).not.toContain("unexpected error");
     } finally {
       chmodSync(notes, 0o644);

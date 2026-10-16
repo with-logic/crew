@@ -2,17 +2,18 @@
  * `crew update` when upstream changes what a skill's `SKILL.md` is (§9
  * step 4, §10.1; C-UPD-40), at the default branch and at an `@<ref>`.
  *
- * A `SKILL.md` deleted, left dangling, or relinked out of the skill's own
- * folder — even to a file elsewhere in the repository — is `source_gone`,
- * and the installed bytes stay; so is a skill folder that became a link
- * to itself. A `SKILL.md` linked to a file inside its folder updates.
+ * A `SKILL.md` deleted or left dangling is `source_gone`, and the
+ * installed bytes stay; so is a skill folder that became a link to
+ * itself. One relinked out of the skill's own folder — even to a file
+ * elsewhere in the repository, or back in by name — fails the update as
+ * `invalid_skill`, as it fails an install, and is never read. A
+ * `SKILL.md` linked to a file inside its folder updates.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runCli } from "../../../src/cli/main.ts";
-import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeCrewHome } from "../../helpers/env.ts";
 import {
   commitAll,
   makeGitRepo,
@@ -21,18 +22,13 @@ import {
   skillFrontmatter,
 } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
+import { run } from "./helpers.ts";
 
 let claude: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
   claude = redirectClaudeCode();
 });
 afterEach(() => restoreClaudeCode(claude.originals));
-
-function run(home: string, args: string[]): { code: number; stdout: string } {
-  const cap = captureStreams();
-  const code = runCli(args, { home, streams: cap.streams });
-  return { code, stdout: cap.stdout() };
-}
 
 /** `name:outcome` for every row of a `crew update --json` run, and its exit code. */
 function update(home: string): { code: number; rows: string[] } {
@@ -69,14 +65,6 @@ const GONE: readonly (readonly [string, (demo: string, repo: string) => void])[]
     },
   ],
   [
-    "a SKILL.md relinked elsewhere inside the repository",
-    (demo, repo) => {
-      mkdirSync(join(repo, "shared"));
-      renameSync(join(demo, "SKILL.md"), join(repo, "shared", "SKILL.md"));
-      symlinkSync(join("..", "..", "shared", "SKILL.md"), join(demo, "SKILL.md"));
-    },
-  ],
-  [
     "a skill folder that became a link to itself",
     (demo) => {
       rmSync(demo, { recursive: true });
@@ -85,7 +73,41 @@ const GONE: readonly (readonly [string, (demo: string, repo: string) => void])[]
   ],
 ];
 
+/** Ways a `SKILL.md` can link out of its folder; each fails the update, unread. */
+const OUT: readonly (readonly [string, (demo: string, repo: string) => void])[] = [
+  [
+    "relinked elsewhere inside the repository",
+    (demo, repo) => {
+      mkdirSync(join(repo, "shared"));
+      renameSync(join(demo, "SKILL.md"), join(repo, "shared", "SKILL.md"));
+      symlinkSync(join("..", "..", "shared", "SKILL.md"), join(demo, "SKILL.md"));
+    },
+  ],
+  [
+    "linked out of its folder and back in by name",
+    (demo) => {
+      renameSync(join(demo, "SKILL.md"), join(demo, "body.md"));
+      symlinkSync(join("..", "demo", "body.md"), join(demo, "SKILL.md"));
+    },
+  ],
+];
+
 for (const ref of ["", "@main"]) {
+  for (const [what, change] of OUT) {
+    test(`C-UPD-40 a SKILL.md ${what} fails the update as invalid (${ref || "no ref"})`, () => {
+      const { home, demo, repo } = installDemo(ref);
+      expect(installed()).toContain("Original.");
+      change(demo, repo);
+      commitAll(repo, what);
+
+      const r = run(home, ["update", "--json"]);
+      expect(r.code).toBe(1);
+      const [row] = JSON.parse(r.stdout).rows;
+      expect([row.outcome.kind, row.outcome.error.code]).toEqual(["failed", "invalid_skill"]);
+      expect(installed()).toContain("Original.");
+    });
+  }
+
   for (const [what, change] of GONE) {
     test(`C-UPD-40 ${what} is source_gone (${ref || "no ref"})`, () => {
       const { home, demo, repo } = installDemo(ref);

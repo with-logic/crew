@@ -18,7 +18,7 @@
  * so state paths remain relative to the tap that owns them.
  */
 
-import { join, posix } from "node:path";
+import { basename, join, posix } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { isGistTap } from "../core/gist-url.ts";
 import { tapClonePath } from "../core/repo-path.ts";
@@ -65,7 +65,7 @@ export function findSiblingDep(
   for (const entryName of listDir(siblingParent)) {
     const siblingPath = join(siblingParent, entryName);
     if (!isSiblingSkill(parent.tap, siblingPath)) continue;
-    if (siblingName(siblingPath) !== depName) continue;
+    if (siblingName(siblingPath, depName) !== depName) continue;
     const loaded = loadSkill(siblingPath);
     matches.push({ entryName, siblingPath, loaded });
   }
@@ -103,10 +103,17 @@ function isSiblingSkill(tap: TapConfig, path: string): boolean {
   return isDirectory(path) && hasSkillMd(path);
 }
 
-function siblingName(path: string): string | null {
+/**
+ * The declared name of a sibling, or null when it can't be read. One
+ * named for the dependency — its folder, or its file without `.md` —
+ * that can't be read is the dependency failing, not a miss to look past
+ * to other taps (§9 step 6).
+ */
+function siblingName(path: string, depName: string): string | null {
   try {
     return loadSkillName(path);
-  } catch {
+  } catch (err) {
+    if (basename(path).replace(/\.md$/i, "") === depName) throw err;
     return null;
   }
 }

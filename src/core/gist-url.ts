@@ -65,8 +65,13 @@ export function gistIdentityPath(path: string): string {
 /**
  * True when a file name or path ends in `.md`, in any case — the extension
  * a gist skill file has (§9 step 5, "Gists"). A `//<file>` selection must
- * also be top-level: see `isGistSkillFileName` (`refs/gist.ts`).
+ * also be top-level: see `isGistSkillFileName`.
  */
 export function hasMarkdownExtension(name: string): boolean {
   return /\.md$/i.test(name);
+}
+
+/** True when `name` can be a gist `//<file>`: one top-level `.md` file name. */
+export function isGistSkillFileName(name: string): boolean {
+  return !name.includes("/") && hasMarkdownExtension(name);
 }

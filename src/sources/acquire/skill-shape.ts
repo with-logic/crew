@@ -11,7 +11,8 @@ import { isGistTap } from "../../core/gist-url.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { UNREADABLE_REMEDY } from "../../skill/load.ts";
 import { isSkillFile } from "../../skill/skill-file.ts";
-import { errnoReason } from "../../util/errno.ts";
+import { skillMdLinksOut, skillMdOutsideError } from "../../skill/skill-md-link.ts";
+import { errnoReason, isGoneError } from "../../util/errno.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { isOneSkillGist } from "../gist.ts";
 
@@ -27,7 +28,28 @@ export function assertStillASkill(
   location: string,
   tapRelativePath: string,
 ): void {
-  if (!stillASkill(tap, location, tapRelativePath)) throw noLongerASkill(tapRelativePath);
+  if (!stillASkill(tap, location, tapRelativePath)) throw noLongerASkillError(tapRelativePath);
+}
+
+/**
+ * A folder skill's `SKILL.md` that links out of the skill's folder is
+ * `invalid_skill`, as at install (§9 step 4): a hard failure, checked
+ * before anything looks through the link. At an `@<ref>` the folder is
+ * the skill's scratch export. A gist's files are never links.
+ */
+export function assertSkillMdInside(
+  tap: Pick<TapConfig, "kind" | "url">,
+  location: string,
+  tapRelativePath: string,
+): void {
+  if (isGistTap(tap)) return;
+  let out: boolean;
+  try {
+    out = skillMdLinksOut(location);
+  } catch (err) {
+    throw unreadableError(join(location, "SKILL.md"), err);
+  }
+  if (out) throw skillMdOutsideError(location, tapRelativePath || ".");
 }
 
 function stillASkill(
@@ -55,12 +77,12 @@ function skillMdGone(location: string): boolean {
     statSync(skillMd);
     return false;
   } catch (err) {
-    if (isMissingPathError(err) || (err as NodeJS.ErrnoException).code === "ELOOP") return true;
-    throw unreadable(skillMd, err);
+    if (isGoneError(err)) return true;
+    throw unreadableError(skillMd, err);
   }
 }
 
-export function noLongerASkill(tapRelativePath: string): CrewError {
+export function noLongerASkillError(tapRelativePath: string): CrewError {
   return new CrewError(
     "no_skills_found",
     `\`${tapRelativePath || "."}\` is no longer a skill in the tap`,
@@ -68,13 +90,7 @@ export function noLongerASkill(tapRelativePath: string): CrewError {
   );
 }
 
-/** Nothing at the path, or a path through something that isn't a folder. */
-export function isMissingPathError(err: unknown): boolean {
-  const code = (err as NodeJS.ErrnoException).code;
-  return code === "ENOENT" || code === "ENOTDIR";
-}
-
-export function unreadable(path: string, err: unknown): CrewError {
+export function unreadableError(path: string, err: unknown): CrewError {
   return new CrewError(
     "source_unreachable",
     `couldn't look at \`${path}\` — ${errnoReason(err)}`,

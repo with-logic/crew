@@ -72,7 +72,7 @@ describe("liveSkillPath in a git tap", () => {
     writeFileSync(join(outside, "SKILL.md"), `---\n${skillFrontmatter({ name: "demo" })}\n---\n`);
     mkdirSync(join(skills, "demo"));
     symlinkSync(join(outside, "SKILL.md"), join(skills, "demo", "SKILL.md"));
-    expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe("invalid_ref");
+    expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe("invalid_skill");
   });
 
   test("C-UPD-40 a dangling SKILL.md link is gone", () => {

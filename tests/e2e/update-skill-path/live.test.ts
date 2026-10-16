@@ -12,8 +12,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runCli } from "../../../src/cli/main.ts";
-import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeCrewHome } from "../../helpers/env.ts";
 import {
   commitAll,
   makeGitRepo,
@@ -22,18 +21,13 @@ import {
   skillFrontmatter,
 } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
+import { run } from "./helpers.ts";
 
 let claude: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
   claude = redirectClaudeCode();
 });
 afterEach(() => restoreClaudeCode(claude.originals));
-
-function run(home: string, args: string[]): { code: number; stdout: string } {
-  const cap = captureStreams();
-  const code = runCli(args, { home, streams: cap.streams });
-  return { code, stdout: cap.stdout() };
-}
 
 function outcomes(r: { stdout: string }): string[] {
   const rows: { name: string; outcome: { kind: string } }[] = JSON.parse(r.stdout).rows;

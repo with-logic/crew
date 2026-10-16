@@ -20,9 +20,10 @@ import { withAcquiredSkill } from "../../sources/acquire/one-skill.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
+import { crewErrorNameOf } from "../../util/errno.ts";
 import { peekResolvedSha } from "./peek.ts";
+import { rowFor } from "./public-row.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
-import { rowFor, updateErrorCode } from "./row.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
@@ -57,7 +58,9 @@ export function updateOneEntry(
         outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed"),
     };
   } catch (err) {
-    const code = updateErrorCode(err);
+    // A raw `node:fs` error can land here too (a file crew can't read
+    // while hashing); its errno `.code` is no §13 name.
+    const code = crewErrorNameOf(err, "usage_error");
     const soft = code === "no_skills_found" || code === "invalid_ref";
     if (soft) {
       return {

@@ -2,11 +2,11 @@
  * Skill-expansion helpers for the install resolver (§9 step 5).
  */
 
+import type { CrewError } from "../../core/errors.ts";
 import type { Source, TapConfig } from "../../core/types.ts";
 import type { AcquiredTap } from "../../sources/acquire/index.ts";
 import { expandTapSkills, type SkippedSkill } from "../../sources/expand.ts";
 import { type StoredSkill, stageIntoStore } from "../../sources/store.ts";
-import { errnoReason } from "../../util/errno.ts";
 import type { PendingItem } from "./enqueue.ts";
 
 interface ExpansionItems {
@@ -68,9 +68,9 @@ export function expandSkillsAsItems(
 }
 
 /**
- * Stage one skill, or record it in `skipped` when one of its files can't
- * be copied. Staging only touches the filesystem, so what it throws is an
- * `ErrnoException`, whose `path` names the file.
+ * Stage one skill, or record it in `skipped` when a file of it can't be
+ * read (§9 step 8). crew's own store failing fails the run instead: no
+ * other skill could be staged either.
  */
 function stageOrSkip(
   path: string,
@@ -82,9 +82,11 @@ function stageOrSkip(
   try {
     return stageIntoStore(path, name, resolvedSha, home);
   } catch (err) {
-    const file = (err as NodeJS.ErrnoException).path ?? path;
-    const message = `couldn't copy \`${file}\` into the store — ${errnoReason(err)}`;
-    skipped.push({ path, message, code: "source_unreachable" });
+    // `stageIntoStore` throws only `CrewError`.
+    const fault = err as CrewError;
+    if ("store" in fault.details) throw fault;
+    const remedy = typeof fault.remedy === "string" ? { remedy: fault.remedy } : {};
+    skipped.push({ path, message: fault.message, code: "source_unreachable", ...remedy });
     return null;
   }
 }

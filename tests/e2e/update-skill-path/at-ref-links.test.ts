@@ -2,14 +2,14 @@
  * `crew update` of a skill installed at an `@<ref>` (§9 step 3, §10.1;
  * C-UPD-39, C-UPD-40): the skill is read from a scratch export of the
  * commit, so a symlink on its recorded path makes it gone, and its
- * `SKILL.md` is still never read through a link out of it.
+ * `SKILL.md` is still never read through a link out of it: that fails the
+ * update, as it fails an install (§9 step 4).
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runCli } from "../../../src/cli/main.ts";
-import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeCrewHome } from "../../helpers/env.ts";
 import {
   commitAll,
   makeGitRepo,
@@ -18,6 +18,7 @@ import {
   skillFrontmatter,
 } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
+import { run } from "./helpers.ts";
 
 let claude: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -25,13 +26,7 @@ beforeEach(() => {
 });
 afterEach(() => restoreClaudeCode(claude.originals));
 
-function run(home: string, args: string[]): { code: number; stdout: string } {
-  const cap = captureStreams();
-  const code = runCli(args, { home, streams: cap.streams });
-  return { code, stdout: cap.stdout() };
-}
-
-test("C-UPD-40 a SKILL.md relinked out of the repository is never read at a ref", () => {
+test("C-UPD-40 a SKILL.md relinked out of the repository fails the update at a ref, unread", () => {
   const home = makeCrewHome();
   const repo = makeTempDir();
   makeSkill(join(repo, "skills"), "demo", skillFrontmatter({ name: "demo" }), "Original.\n");
@@ -49,8 +44,9 @@ test("C-UPD-40 a SKILL.md relinked out of the repository is never read at a ref"
   commitAll(repo, "link SKILL.md out of the repo");
 
   const r = run(home, ["update", "--json"]);
-  const rows: { name: string; outcome: { kind: string } }[] = JSON.parse(r.stdout).rows;
-  expect(rows.map((row) => `${row.name}:${row.outcome.kind}`)).toEqual(["demo:source_gone"]);
+  expect(r.code).toBe(1);
+  const [row] = JSON.parse(r.stdout).rows;
+  expect([row.outcome.kind, row.outcome.error.code]).toEqual(["failed", "invalid_skill"]);
   expect(readFileSync(join(claude.userRoot, "demo", "SKILL.md"), "utf8")).toContain("Original.");
 });
 

@@ -1,51 +1,43 @@
 /**
- * Resolving a path in a tap without leaving a boundary (§8.4, §10.1):
- * for `crew update`, the repository a skill was installed from, or the
- * skill's own folder for its `SKILL.md`.
+ * Resolving an installed skill's recorded path in a tap's clone without
+ * leaving the repository, for `crew update` (§8.4, §10.1).
  */
 
-import { lstatSync, readlinkSync, realpathSync } from "node:fs";
+import { readlinkSync, realpathSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
-import type { CrewError } from "../../core/errors.ts";
+import { CrewError } from "../../core/errors.ts";
+import { isGoneError } from "../../util/errno.ts";
 import { climbsOut } from "../../util/relative-path.ts";
-import { isMissingPathError, noLongerASkill, unreadable } from "./skill-shape.ts";
+import { noLongerASkillError, unreadableError } from "./skill-shape.ts";
 
 /**
- * The real path of `path`; throws `escaped` unless it is inside
- * `boundary`, already a real path: the clone, or the skill's own folder.
- * Missing — deleted, or a dangling or looping link — is gone. A link crew
- * can't resolve is judged by where it points: outside the boundary it is
- * never read; inside, the failure is a local one.
+ * The real path of `path`; throws unless it is inside `clone`, already a
+ * real path. Missing — deleted, or a dangling or looping link — is gone.
+ * A link crew can't resolve is judged by where it points: out of the
+ * repository it is never read; inside, the failure is a local one.
  */
-export function resolveInside(
-  boundary: string,
-  path: string,
-  tapRelativePath: string,
-  escaped: (tapRelativePath: string) => CrewError,
-): string {
+export function resolveInside(clone: string, path: string, tapRelativePath: string): string {
   let resolved: string;
   try {
     resolved = realpathSync(path);
   } catch (err) {
-    if (isMissingPathError(err) || (err as NodeJS.ErrnoException).code === "ELOOP") {
-      throw noLongerASkill(tapRelativePath);
-    }
-    if (linksOut(boundary, path)) throw escaped(tapRelativePath);
-    throw unreadable(path, err);
+    if (isGoneError(err)) throw noLongerASkillError(tapRelativePath);
+    if (linksOut(clone, path)) throw outsideRepoError(tapRelativePath);
+    throw unreadableError(path, err);
   }
-  if (climbsOut(relative(boundary, resolved))) throw escaped(tapRelativePath);
+  if (climbsOut(relative(clone, resolved))) throw outsideRepoError(tapRelativePath);
   return resolved;
 }
 
 /**
- * True when a link on the way to `path` — `path` itself, or a folder
- * above it — points out of `boundary`. It walks up only while the path
- * won't resolve; from there up, the real path settled where it leads.
+ * True when a link on the way to `at` — `at` itself, or a folder above
+ * it — points out of `clone`. It walks up only while the path won't
+ * resolve; from there up, the real path settled where it leads.
  */
-function linksOut(boundary: string, at: string): boolean {
+function linksOut(clone: string, at: string): boolean {
   const target = linkTarget(at);
-  if (target !== null && climbsOut(relative(boundary, target))) return true;
-  return !resolves(at) && linksOut(boundary, dirname(at));
+  if (target !== null && climbsOut(relative(clone, target))) return true;
+  return !resolves(at) && linksOut(clone, dirname(at));
 }
 
 function resolves(path: string): boolean {
@@ -66,11 +58,10 @@ function linkTarget(path: string): string | null {
   }
 }
 
-/** True when `path` is itself a symlink; false when it isn't, or can't be looked at. */
-export function isLink(path: string): boolean {
-  try {
-    return lstatSync(path).isSymbolicLink();
-  } catch {
-    return false;
-  }
+function outsideRepoError(tapRelativePath: string): CrewError {
+  return new CrewError(
+    "invalid_ref",
+    `\`${tapRelativePath || "."}\` now leads outside the repository through a symlink, so crew won't read it`,
+    { path: tapRelativePath },
+  );
 }

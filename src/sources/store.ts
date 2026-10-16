@@ -13,14 +13,18 @@
  */
 
 import { copyFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
-import { crewHome, storeEntryPath } from "../core/paths.ts";
+import { join, relative } from "node:path";
+import { CrewError } from "../core/errors.ts";
+import { crewHome, paths, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
+import { UNREADABLE_REMEDY } from "../skill/load.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
 import { copyTree } from "../util/copy.ts";
+import { errnoReason } from "../util/errno.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { safePath } from "../util/redact.ts";
+import { climbsOut } from "../util/relative-path.ts";
 
 /** Record returned after staging. */
 export interface StoredSkill {
@@ -35,6 +39,10 @@ export interface StoredSkill {
  * Copy the skill at `skillPath` (a directory, or a gist's skill file)
  * into the store under `<name>@<short-sha>`. If the entry already exists
  * with a matching content hash, the existing one is reused.
+ *
+ * Every failure is a `source_unreachable` `CrewError` (§9 step 8): one
+ * naming a file of the skill crew can't read (`details.path`), or one
+ * naming crew's own store (`details.store`) when crew can't use it.
  */
 export function stageIntoStore(
   skillPath: string,
@@ -42,6 +50,21 @@ export function stageIntoStore(
   resolvedSha: string | null,
   home: string = crewHome(),
   sourceHash?: string,
+): StoredSkill {
+  try {
+    return stage(skillPath, name, resolvedSha, home, sourceHash);
+  } catch (err) {
+    // Staging only touches the filesystem, so what it throws is an errno error.
+    throw stagingError(err as NodeJS.ErrnoException, skillPath, home);
+  }
+}
+
+function stage(
+  skillPath: string,
+  name: string,
+  resolvedSha: string | null,
+  home: string,
+  sourceHash: string | undefined,
 ): StoredSkill {
   // A path source with no SHA uses the hash itself as the short id so
   // different path-installed skills don't collide in the store.
@@ -59,12 +82,42 @@ export function stageIntoStore(
 
   const staging = `${storePath}.staging-${Date.now()}`;
   if (exists(staging)) rmrf(staging);
-  copySkill(skillPath, staging);
-  ensureDir(join(storePath, "..")); // parents
-  atomicReplace(staging, storePath);
+  try {
+    copySkill(skillPath, staging);
+    ensureDir(join(storePath, "..")); // parents
+    atomicReplace(staging, storePath);
+  } catch (err) {
+    // A partial copy is never left behind for `crew doctor` to report.
+    rmrf(staging);
+    throw err;
+  }
 
   const contentHash = hashDirectory(storePath);
   return { storePath, contentHash, shortSha, reused: false };
+}
+
+/**
+ * A staging failure as a §13 error. One whose path is in the skill names
+ * that file — Node names a failed copy by its source file, so a write
+ * failing mid-copy reads the same; anything else is crew's own store.
+ */
+function stagingError(err: NodeJS.ErrnoException, skillPath: string, home: string): CrewError {
+  const file = err.path ?? skillPath;
+  if (!climbsOut(relative(skillPath, file))) {
+    return new CrewError(
+      "source_unreachable",
+      `couldn't read \`${file}\` — ${errnoReason(err)}`,
+      { path: file },
+      UNREADABLE_REMEDY,
+    );
+  }
+  const store = paths(home).storeDir;
+  return new CrewError(
+    "source_unreachable",
+    `couldn't use crew's store at \`${store}\` — ${errnoReason(err)}`,
+    { store },
+    "Check that `~/.crew/store` is writable by you, or run `crew cache clean`.",
+  );
 }
 
 /**

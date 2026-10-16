@@ -16,10 +16,10 @@ import { CrewError } from "../../core/errors.ts";
 import type { Config, LoadedSkill, TapConfig, TapSource } from "../../core/types.ts";
 import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
-import { loadSkill, skillFileRemedy, UNREADABLE_REMEDY } from "../../skill/load.ts";
+import { loadSkill } from "../../skill/load.ts";
 import { isSkillFile } from "../../skill/skill-file.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
-import { expandTapSkills, type SkippedSkill } from "../../sources/expand.ts";
+import { expandTapSkills } from "../../sources/expand.ts";
 import { selectGistFile } from "../../sources/gist.ts";
 import { toPosix } from "../../util/fs.ts";
 import type { SkillInfo } from "./render.ts";
@@ -96,11 +96,11 @@ function previewSkills(root: string, tap: TapConfig, sha: string | null): SkillI
   // directory order; the reason, code, and next step all come from it.
   const reported = skipped.find((s) => s.code === "invalid_skill") ?? skipped[0];
   if (valid.length === 0 && reported) {
-    // A gist file's message and a read failure's already name the file;
-    // a folder skill's validation message doesn't.
+    // A gist file's message, and one about the SKILL.md file itself (a read
+    // failure, a link out), already name it; frontmatter messages don't.
     const rel = toPosix(relative(root, reported.path));
     const named =
-      rel === "" || isSkillFile(reported.path) || reported.code === "source_unreachable";
+      rel === "" || isSkillFile(reported.path) || reported.message.includes(reported.path);
     const reason = named ? reported.message : `\`${rel}\`: ${reported.message}`;
     const unreadableCount = skipped.filter((s) => s.code === "source_unreachable").length;
     const alsoUnreadable =
@@ -115,13 +115,13 @@ function previewSkills(root: string, tap: TapConfig, sha: string | null): SkillI
     const candidates = skipped.map((s) => candidateName(root, s.path));
     // Named as the user knows them, never by crew's clone or scratch folders.
     const path = candidateName(root, reported.path);
-    throw new CrewError(reported.code, message, { path, candidates }, remedyFor(reported));
+    throw new CrewError(reported.code, message, { path, candidates }, reported.remedy);
   }
   return valid.map(skillInfoOf);
 }
 
 /**
- * How `details.candidates` names a skipped candidate: a gist skill file by
+ * How `details` (`path` and `candidates`) names a skipped candidate: a gist skill file by
  * its file name (the root may be that file itself); anything else by its
  * path under `root`, `.` for the root skill — never crew's own clone or
  * scratch-export folder name.
@@ -144,10 +144,4 @@ function skillInfoOf(s: LoadedSkill): SkillInfo {
     homepage: s.frontmatter.metadata?.crew?.homepage ?? null,
     dependencies: s.frontmatter.metadata?.crew?.dependencies ?? [],
   };
-}
-
-/** The next step for the skill a failed preview reports. */
-function remedyFor(reported: SkippedSkill): string | undefined {
-  if (reported.code === "source_unreachable") return UNREADABLE_REMEDY;
-  return isSkillFile(reported.path) ? skillFileRemedy(reported.path) : undefined;
 }

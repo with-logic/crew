@@ -11,15 +11,15 @@
  * `path` IS the skill's `SKILL.md`, and its errors name that file.
  */
 
-import { lstatSync, realpathSync, statSync } from "node:fs";
-import { basename, join, relative } from "node:path";
+import { lstatSync, statSync } from "node:fs";
+import { basename, join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
 import { errnoReason } from "../util/errno.ts";
-import { exists, readText } from "../util/fs.ts";
-import { climbsOut } from "../util/relative-path.ts";
+import { readText } from "../util/fs.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 import { isSkillFile } from "./skill-file.ts";
+import { SKILL_MD_REMEDY, skillMdLinksOut, skillMdOutsideError } from "./skill-md-link.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
 /**
@@ -47,14 +47,23 @@ export function loadSkillName(path: string): string {
 
 /**
  * The next step when crew can't read or look at a skill's path: its
- * `SKILL.md` here, or its location on update (`acquire/live-skill-path.ts`).
+ * `SKILL.md` here, or its location on update (`acquire/skill-shape.ts`).
  */
 export const UNREADABLE_REMEDY =
   "Check that it is readable by you (its permissions, and its folder's).";
 
-/** True iff `path` contains a `SKILL.md`. Does not validate. */
+/**
+ * True iff `path` has an entry named `SKILL.md` — a link counts, even one
+ * that leads nowhere, so validation can say what is wrong with it (§9
+ * step 4). A folder crew can't look into has none it can see. Does not
+ * validate.
+ */
 export function hasSkillMd(path: string): boolean {
-  return exists(join(path, "SKILL.md"));
+  try {
+    return lstatSync(join(path, "SKILL.md"), { throwIfNoEntry: false }) !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -71,8 +80,12 @@ function readSkillMd(path: string): string {
   const skillMdPath = skillFile ? path : join(path, "SKILL.md");
   let raw: string | null = null;
   try {
+    // §9 step 4: refused before anything is read through it. A gist's
+    // skill file is never a link (`isSkillFile`).
+    if (!skillFile && skillMdLinksOut(path)) throw skillMdOutsideError(path);
     if (statSync(skillMdPath, { throwIfNoEntry: false })?.isFile()) raw = readText(skillMdPath);
   } catch (err) {
+    if (err instanceof CrewError) throw err;
     throw new CrewError(
       "source_unreachable",
       `couldn't read \`${skillMdPath}\` — ${errnoReason(err)}`,
@@ -81,28 +94,14 @@ function readSkillMd(path: string): string {
     );
   }
   if (raw === null) {
-    const message = exists(skillMdPath)
+    // A link counts as there: one that leads nowhere isn't a file either.
+    const isThere = lstatSync(skillMdPath, { throwIfNoEntry: false }) !== undefined;
+    const message = isThere
       ? `\`${skillMdPath}\` isn't a regular file — a skill's SKILL.md must be one`
       : `no SKILL.md in \`${path}\` — every skill directory needs one`;
-    throw new CrewError("invalid_skill", message, { path });
-  }
-  // §9 step 4: crew copies a link as a link, so a `SKILL.md` linking out of
-  // its folder would leave the installed skill without one. A gist's skill
-  // file is never a link (`isSkillFile`).
-  if (!skillFile && linksOutOfFolder(path, skillMdPath)) {
-    throw new CrewError(
-      "invalid_skill",
-      `\`${skillMdPath}\` links outside its skill's folder — crew copies a link as a link, so the installed skill would have no SKILL.md`,
-      { path },
-    );
+    throw new CrewError("invalid_skill", message, { path }, isThere ? SKILL_MD_REMEDY : undefined);
   }
   return raw;
-}
-
-/** True when `skillMd`, already read, is a link to somewhere outside `folder`. */
-function linksOutOfFolder(folder: string, skillMd: string): boolean {
-  if (!lstatSync(skillMd).isSymbolicLink()) return false;
-  return climbsOut(relative(realpathSync(folder), realpathSync(skillMd)));
 }
 
 /**

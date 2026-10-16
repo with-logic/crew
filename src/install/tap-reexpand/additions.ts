@@ -8,6 +8,7 @@
  */
 
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
+import { crewErrorNameOf } from "../../util/errno.ts";
 import {
   type InstalledSourceIndex,
   indexHasSameSource,
@@ -102,18 +103,34 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       });
       continue;
     }
-    const entry = input.installOne({
-      skillPath: child.path,
-      skillName: child.name,
-      tapRelativePath: child.tapRelativePath,
-      scope: input.scope,
-      tap: input.tap,
-      agents: input.agents,
-      resolvedSha: input.resolvedSha,
-      projectRoot: input.projectRoot,
-      ref: input.ref,
-      pinned: input.pinned,
-    });
+    let entry: StateEntry | null;
+    try {
+      entry = input.installOne({
+        skillPath: child.path,
+        skillName: child.name,
+        tapRelativePath: child.tapRelativePath,
+        scope: input.scope,
+        tap: input.tap,
+        agents: input.agents,
+        resolvedSha: input.resolvedSha,
+        projectRoot: input.projectRoot,
+        ref: input.ref,
+        pinned: input.pinned,
+      });
+    } catch (err) {
+      // A child crew can't stage (a file it can't read, §9 step 8) fails
+      // that child, not the whole run (§10.1 error isolation).
+      hardFailure = true;
+      const error = { code: crewErrorNameOf(err, "usage_error"), message: (err as Error).message };
+      rows.push({
+        name: child.name,
+        scope: input.scope,
+        tap: input.tap.name,
+        kind: "tap_error",
+        error,
+      });
+      continue;
+    }
     if (entry) {
       added.push(entry);
       noteInstalled(input.installedIndex, lookup);

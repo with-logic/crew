@@ -10,7 +10,7 @@
  */
 
 import { CrewError } from "../core/errors.ts";
-import { GIST_ID_PATTERN, hasMarkdownExtension, isGistUrl } from "../core/gist-url.ts";
+import { GIST_ID_PATTERN, isGistSkillFileName, isGistUrl } from "../core/gist-url.ts";
 import type { GitSource, PathSource } from "../core/types.ts";
 import type { BrowserUrlParts } from "./browser-url.ts";
 import { displayText, displayUrl } from "./display-url.ts";
@@ -91,11 +91,6 @@ export interface GistSelection {
   readonly tapSource: GitSource | PathSource;
   /** The selected gist skill file, or `""` when none was selected. */
   readonly gistFile: string;
-}
-
-/** True when `name` can be a gist `//<file>`: one top-level `.md` file name. */
-export function isGistSkillFileName(name: string): boolean {
-  return !name.includes("/") && hasMarkdownExtension(name);
 }
 
 /**
