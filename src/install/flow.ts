@@ -155,7 +155,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     });
     const promoted = promoteFlags(
       result.newState,
-      { explicit: analysis.promoteToExplicit, tracksTap: analysis.promoteToTracking },
+      analysis.promotions,
       options.scope,
       options.scope === "project" ? cwd : null,
     );

@@ -8,6 +8,7 @@
  */
 
 import type { ResolvedSkill, Scope, StateEntry, TapConfig } from "../../core/types.ts";
+import type { Promotions } from "../promote-flags.ts";
 
 export interface AlreadyInstalled {
   readonly name: string;
@@ -51,9 +52,8 @@ export interface KeptSource {
 export interface DuplicateAnalysis {
   readonly toInstall: ResolvedSkill[];
   readonly alreadyInstalled: AlreadyInstalled[];
-  readonly promoteToExplicit: string[];
-  /** Already installed on its own, now reached by a whole-tap install. */
-  readonly promoteToTracking: string[];
+  /** One-way flags to set on already-installed entries (`../promote-flags.ts`). */
+  readonly promotions: Promotions;
   readonly reattributions: Reattribution[];
   readonly keepSource: KeptSource[];
 }

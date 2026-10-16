@@ -12,11 +12,11 @@
  */
 
 import { afterEach } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
-import { resetGitRunner, setGitRunner } from "../../../src/git/exec.ts";
+import { resetGitRunner, runGit, setGitRunner } from "../../../src/git/exec.ts";
 import type { TapReexpandRow } from "../../../src/install/tap-reexpand/types.ts";
 import type { Outcome } from "../../../src/install/update/types.ts";
 import { captureStreams } from "../../helpers/env.ts";
@@ -42,6 +42,18 @@ export function writeGistFiles(
 ): string {
   writeFiles(dir, files);
   return commitAll(dir, message);
+}
+
+/**
+ * Rename gist file `from` to `to`, writing `contents`, and commit. Staged
+ * by hand: git on a case-insensitive filesystem won't see a rename that
+ * only changes case.
+ */
+export function renameGistFile(dir: string, from: string, to: string, contents: string): void {
+  runGit(["rm", "--cached", "--quiet", from], { cwd: dir });
+  rmSync(join(dir, from));
+  writeFileSync(join(dir, to), contents);
+  commitAll(dir, `rename ${from} to ${to}`);
 }
 
 function writeFiles(dir: string, files: Record<string, string>): void {

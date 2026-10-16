@@ -12,10 +12,9 @@ import { readState } from "../../../../src/state/load.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../../helpers/fixtures.ts";
 import { run } from "../helpers.ts";
 
-type Redirectable = { userPath: () => string; detect: () => boolean };
 const ADAPTERS = [
-  ["claude-code", claudeCodeAdapter as Redirectable],
-  ["gemini-cli", geminiCliAdapter as Redirectable],
+  ["claude-code", claudeCodeAdapter],
+  ["gemini-cli", geminiCliAdapter],
 ] as const;
 type AgentName = (typeof ADAPTERS)[number][0];
 

@@ -14,14 +14,12 @@
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { runGit } from "../../../src/git/exec.ts";
 import { readState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
-import { commitAll } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
-import { GIST_PAGE_URL, json, run, skillFile, useGistFixture } from "./helpers.ts";
+import { GIST_PAGE_URL, json, renameGistFile, run, skillFile, useGistFixture } from "./helpers.ts";
 
 const fx = useGistFixture();
 
@@ -35,11 +33,7 @@ test("C-UPD-40 a gist file renamed upstream only in case is source_gone", () => 
   const { dir } = fx.gist({ "prd.md": skillFile("prd") });
   const home = makeCrewHome();
   expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
-  // Staged by hand: git on a case-insensitive filesystem won't see it.
-  runGit(["rm", "--cached", "--quiet", "prd.md"], { cwd: dir });
-  rmSync(join(dir, "prd.md"));
-  writeFileSync(join(dir, "PRD.md"), skillFile("prd", "Renamed.\n"));
-  commitAll(dir, "rename prd.md to PRD.md");
+  renameGistFile(dir, "prd.md", "PRD.md", skillFile("prd", "Renamed.\n"));
 
   const r = run(home, ["update", "--json"]);
   expect(r.code).toBe(0);

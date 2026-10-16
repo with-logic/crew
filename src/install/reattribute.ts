@@ -51,8 +51,9 @@ export function applyReattributions(
         installLocationKey(entry.name, entry.scope, entry.project_root ?? null),
       );
       if (!move) return entry;
-      // Already-installed entries can skip `performInstall`, so record
-      // whole-tap tracking here too (§10.1.1). Like `explicit`, a
+      // An already-installed entry that moves skips `performInstall`, so
+      // record whole-tap tracking with the move (§10.1.1); `promoteFlags`
+      // covers only entries that stay where they are. Like `explicit`, a
       // narrower install never clears an existing subscription.
       const tracksTap = move.tracksTap || (entry.tracks_tap ?? false);
       return {

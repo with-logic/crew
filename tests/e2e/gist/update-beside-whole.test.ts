@@ -1,21 +1,22 @@
 /**
  * A gist file installed on its own beside a whole-gist install of the
- * same gist (§10.1, §10.1.1 step 3; C-UPD-16, C-UPD-39, C-UPD-40). The
+ * same gist (§10.1, §10.1.1 step 3; C-INST-26, C-UPD-16, C-UPD-40). The
  * entry that doesn't track the gist is judged by its own update at its
  * recorded file exactly, as when nothing beside it tracks the gist: a
  * file that lost its frontmatter fails, and one deleted or renamed — even
  * only in case — is `source_gone`, never moved to another file. A
  * whole-gist install that reaches an entry already installed on its own
- * makes it track the gist, whichever way the install goes.
+ * makes it track the gist, with or without `--force`.
  *
  * The gist is served from a local repo by `useGistFixture`; nothing here
  * touches the network.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runGit } from "../../../src/git/exec.ts";
+import type { TapReexpandRow } from "../../../src/install/tap-reexpand/types.ts";
 import { readState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { commitAll } from "../../helpers/fixtures.ts";
@@ -24,6 +25,7 @@ import {
   GIST_PAGE_URL,
   GIST_TAP,
   json,
+  renameGistFile,
   run,
   skillFile,
   useGistFixture,
@@ -60,12 +62,16 @@ function prdBesideWholeGist(): { dir: string; home: string } {
   return { dir, home };
 }
 
-/** `crew update --json`: its exit code, prd's outcome, and the re-expansion rows. */
-function updatePrd(home: string): { code: number; prd: string; reexpand: unknown[] } {
+/** A whole `crew update --json` run: its exit code, prd's outcome, and the re-expansion rows. */
+function runUpdate(home: string): {
+  code: number;
+  prdOutcome: string;
+  reexpandRows: TapReexpandRow[];
+} {
   const r = run(home, ["update", "--json"]);
   const row = json(r).rows.find((each) => each.name === "prd");
-  const prd = [row?.outcome.kind, row?.outcome.error?.code].filter(Boolean).join(":");
-  return { code: r.code, prd, reexpand: [...json(r).tap_reexpand_rows] };
+  const prdOutcome = [row?.outcome.kind, row?.outcome.error?.code].filter(Boolean).join(":");
+  return { code: r.code, prdOutcome, reexpandRows: [...json(r).tap_reexpand_rows] };
 }
 
 test("C-UPD-16 a file installed on its own that loses its frontmatter fails, beside the whole gist", () => {
@@ -73,16 +79,21 @@ test("C-UPD-16 a file installed on its own that loses its frontmatter fails, bes
   expect(tracking(home)).toEqual(["build:true", "prd:false"]);
   writeGistFiles(dir, { "prd.md": "Just notes now, no frontmatter.\n" });
 
-  expect(updatePrd(home)).toEqual({ code: 1, prd: "failed:invalid_skill", reexpand: [] });
+  expect(runUpdate(home)).toEqual({
+    code: 1,
+    prdOutcome: "failed:invalid_skill",
+    reexpandRows: [],
+  });
   expect(readFileSync(join(claude.userRoot, "prd", "SKILL.md"), "utf8")).toBe(skillFile("prd"));
 });
 
-test("C-UPD-39 a file installed on its own that is deleted is source_gone, beside the whole gist", () => {
+test("C-UPD-16 a file installed on its own that is deleted is source_gone, beside the whole gist", () => {
   const { dir, home } = prdBesideWholeGist();
+  expect(tracking(home)).toEqual(["build:true", "prd:false"]);
   runGit(["rm", "--quiet", "prd.md"], { cwd: dir });
   commitAll(dir, "delete prd.md");
 
-  expect(updatePrd(home)).toEqual({ code: 0, prd: "source_gone", reexpand: [] });
+  expect(runUpdate(home)).toEqual({ code: 0, prdOutcome: "source_gone", reexpandRows: [] });
   expect(readFileSync(join(claude.userRoot, "prd", "SKILL.md"), "utf8")).toBe(skillFile("prd"));
 });
 
@@ -90,17 +101,12 @@ for (const [what, renamed] of [
   ["to another name", "notes.md"],
   ["only in case", "PRD.md"],
 ] as const) {
-  test(`C-UPD-40 a file installed on its own renamed ${what} is source_gone, beside the whole gist`, () => {
+  test(`C-UPD-16 C-UPD-40 a file installed on its own renamed ${what} is source_gone, beside the whole gist`, () => {
     const { dir, home } = prdBesideWholeGist();
-    // Staged by hand: git on a case-insensitive filesystem won't see a
-    // rename that only changes case.
-    runGit(["rm", "--cached", "--quiet", "prd.md"], { cwd: dir });
-    rmSync(join(dir, "prd.md"));
-    writeFileSync(join(dir, renamed), skillFile("prd", "Renamed.\n"));
-    commitAll(dir, `rename prd.md to ${renamed}`);
+    expect(tracking(home)).toEqual(["build:true", "prd:false"]);
+    renameGistFile(dir, "prd.md", renamed, skillFile("prd", "Renamed.\n"));
 
-    const { code, prd } = updatePrd(home);
-    expect([code, prd]).toEqual([0, "source_gone"]);
+    expect(runUpdate(home)).toEqual({ code: 0, prdOutcome: "source_gone", reexpandRows: [] });
     const entry = readState(home).installations.find((e) => e.name === "prd");
     expect(entry?.source.path).toBe("prd.md");
     expect(readFileSync(join(claude.userRoot, "prd", "SKILL.md"), "utf8")).toBe(skillFile("prd"));
@@ -116,7 +122,12 @@ for (const flags of [[], ["--force"]]) {
     expect(tracking(home)).toEqual(["build:true", "prd:true"]);
     writeGistFiles(dir, { "prd.md": "Just notes now, no frontmatter.\n" });
 
-    const gone = { name: "prd", scope: "user", tap: GIST_TAP, kind: "source_gone" };
-    expect(updatePrd(home)).toEqual({ code: 0, prd: "source_gone", reexpand: [gone] });
+    const gone = {
+      name: "prd",
+      scope: "user",
+      tap: GIST_TAP,
+      kind: "source_gone",
+    } satisfies TapReexpandRow;
+    expect(runUpdate(home)).toEqual({ code: 0, prdOutcome: "source_gone", reexpandRows: [gone] });
   });
 }

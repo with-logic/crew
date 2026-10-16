@@ -51,11 +51,12 @@ export function assertSkillMdLinkAllowed(folder: string, shown = folder): void {
  * True when `folder`'s `SKILL.md` is reached through a link crew won't
  * follow: absolute text, text that isn't UTF-8, a `..` that climbs above
  * the folder, a chain that loops or runs past `MAX_HOPS` links, or one
- * that leads to the folder's `.crew.json`. A `SKILL.md` that is no link, or a chain of allowed links
- * that dangles, is not refused: whether it is a file is the caller's
- * check (`invalid_skill` at install, gone on update). Any other failure
- * to look is thrown as the raw filesystem error — a link swapped out
- * between looking at it and reading it, too.
+ * that leads to the folder's `.crew.json`. A `SKILL.md` that is no link,
+ * or a chain of allowed links that dangles, is not refused: whether it is
+ * a file is the caller's check (`invalid_skill` at install, gone on
+ * update). Any other failure to look — a name too long to look up, say,
+ * or a link swapped out between looking at it and reading it — is thrown
+ * as the raw filesystem error, so the skill is refused, never read.
  */
 function isRefusedSkillMdLink(folder: string): boolean {
   if (lstatUnlessGone(join(folder, "SKILL.md"))?.isSymbolicLink() !== true) return false;
@@ -110,8 +111,7 @@ function lstatUnlessGone(path: string): Stats | undefined {
   try {
     return lstatSync(path);
   } catch (err) {
-    if (isGoneError(err) || (err as NodeJS.ErrnoException).code === "ENAMETOOLONG")
-      return undefined;
+    if (isGoneError(err)) return undefined;
     throw err;
   }
 }

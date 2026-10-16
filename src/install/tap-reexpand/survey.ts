@@ -6,7 +6,8 @@
  * exposes, the entries installed from it, and the materialized tree,
  * decide which names are ambiguous upstream, which installed entries
  * have vanished, which have merely moved, and which are still there but
- * weren't indexed — left to their own update to report why.
+ * weren't indexed — left to their own update to report why. A gist entry
+ * installed on its own is never surveyed: its own update judges it.
  */
 
 import { lstatSync } from "node:fs";
@@ -67,10 +68,10 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
   for (const locs of childrenByName.values())
     for (const c of locs) childPaths.add(c.tapRelativePath);
   for (const member of members) {
-    // A gist file installed on its own (`//<file>`, by name, as a
+    // A gist entry installed on its own (`//<file>`, by name, as a
     // dependency) is judged by its own update, at its recorded file
     // exactly (§10.1, C-UPD-39), as when nothing beside it tracks the gist.
-    if (isGistTap(tap) && member.tracks_tap !== true && member.source.path !== "") continue;
+    if (isGistTap(tap) && member.tracks_tap !== true) continue;
     if (conflictedNames.has(member.name)) continue;
     const child = childrenByName.get(member.name)?.[0];
     // §10.1.1 step 3: gone only when its skill is no longer there. One the
@@ -96,15 +97,16 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
 }
 
 /**
- * True when the member's recorded skill is still there to update
+ * True when the skill at `tapRelativePath` is still there to update
  * (§10.1.1 step 3): a gist skill file, or a folder's `SKILL.md` entry.
- * Only a gone error says a folder's isn't: one crew can't search is still
- * there, for its own update to report.
+ * Gist files reach here only for entries that track the gist (the caller
+ * skips the rest). Only a gone error says a folder's isn't: one crew
+ * can't search is still there, for its own update to report.
  */
 function skillStillThere(rootDir: string, tapRelativePath: string, tap: TapConfig): boolean {
   const location = join(rootDir, tapRelativePath);
-  // A file of a gist tracked whole is a skill only while it opens
-  // frontmatter (§9 step 5), though one crew can't read still counts.
+  // For an entry that tracks the gist, a file is a skill only while it
+  // opens frontmatter (§9 step 5), though one crew can't read still counts.
   if (isGistTap(tap) && tapRelativePath !== "") return isGistSkillCandidate(location);
   try {
     lstatSync(join(location, "SKILL.md"));

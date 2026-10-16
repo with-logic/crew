@@ -2030,7 +2030,7 @@ an uninstall in one project never rewrites the other's. A skill with
 this entry came from a whole-tap install (`crew install <tap-url>` or
 `crew install <tap-name>`). Drives tap re-expansion (§10.1.1): on
 `crew update`, the group of entries sharing `(source.tap, scope,
-project_root)` is re-walked and new siblings are installed iff any
+project_root, ref)` is re-walked and new siblings are installed iff any
 member has `tracks_tap: true`. A user who installed just one skill
 from a tap (`crew install <tap>/<skill>` or a bare skill name)
 doesn't opt into this; `tracks_tap` is absent on those entries, and
@@ -2039,7 +2039,10 @@ the tap's later additions don't pull into their setup. Like
 whole tap, a later `crew install <tap>/<one-skill>` doesn't flip it
 off. It promotes instead: a whole-tap install that reaches an entry
 already installed on its own sets `tracks_tap` on it, even when the
-entry is otherwise up to date.
+entry is otherwise up to date — but only when the entry is attributed
+to that tap at the same `ref`. An entry that keeps another tap (a
+registered one, §5.4) or sits at another ref never takes it from that
+install: it would start following siblings the user never asked for.
 
 **Invariants:**
 
@@ -2581,7 +2584,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-13 | §5.4 | Installing a skill with the same `name` from a different source produces `name_conflict`, exit 4, without `--force`. |
 | C-INST-13a | §5.4 | Installing a repo subpath (`<url>//skills/foo`) and then the whole repo (`<url>`) does NOT produce `name_conflict`: both reach the same canonical location, so `foo` is reported as already installed. |
 | C-INST-13b | §5.4, §16.5 | In that case the entry is re-attributed to the broader tap — `state.source` and the markers name it — and the emptied auto tap is garbage-collected; its clone is deleted only when no remaining configured tap references that repository. |
-| C-INST-13c | §5.4 | An entry attributed to a **registered** tap is not re-attributed; the install reports it as already installed and leaves `state.source` alone. |
+| C-INST-13c | §5.4 | An entry attributed to a **registered** tap is not re-attributed; the install reports it as already installed and leaves `state.source` alone. Nor does it take `tracks_tap` from that install (§11.1), with or without `--force`. |
 | C-INST-13d | §5.4 | Canonical URL comparison ignores a trailing `.git`, a trailing `/`, and host casing, so those spellings of one repo are the same source. |
 | C-INST-13e | §10.1.1, §5.4 | Tap re-expansion does not "add" a child that is already installed at the same scope from the same canonical location through another tap. |
 | C-INST-13f | §5.4, §16.5 | A re-attribution in one project rewrites only that project's marker; a sibling project's install of the same skill is left alone. |
@@ -2684,9 +2687,9 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-12b | §10.1 | When an installed skill's tap is no longer in `config.yaml`, `crew update` reports `tap_missing` for that skill, leaves the local install, marker, and state entry untouched, and exits 0 when that is the run's only abnormality. Other skills in the same run still update. |
 | C-UPD-13 | §10.1 | `crew update` never deletes a agent's installed skill directory, its marker, or its state entry as a consequence of upstream changes. Removal is only ever performed by `crew uninstall`. |
 | C-UPD-14 | §16.5 | `crew install <git-url>` against a source with no matching configured tap creates an auto tap (`registered: false`) in `config.yaml`. Every resulting state entry's `source.tap` names that tap. |
-| C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). |
+| C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). A later `crew install <tap>` subscribes such an entry, already installed and up to date, at that install's scope and project root only (§11.1). |
 | C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. One whose folder and `SKILL.md` (or gist skill file) are still there but that discovery can't index is not gone: its own update reports why — `invalid_skill` for a `SKILL.md` reached through a link crew won't follow. For an entry that tracks the gist, a file that no longer opens frontmatter is no longer a skill, and is gone. A gist entry that doesn't track it (`//<file>`, by name, a dependency) is judged by its own update at its recorded file, whatever else is installed from the gist: a file that lost its frontmatter fails as `invalid_skill`, and one deleted or renamed — even only in case — is `source_gone`. |
-| C-UPD-16b | §10.1.1 | A whole-tap install at an explicit `@<ref>` is re-expanded against that ref: a child added to the tap's default branch but absent at the ref is NOT installed, and a child present at the ref is installed carrying that ref and the group's `pinned` value. |
+| C-UPD-16b | §10.1.1 | A whole-tap install at an explicit `@<ref>` is re-expanded against that ref: a child added to the tap's default branch but absent at the ref is NOT installed, and a child present at the ref is installed carrying that ref and the group's `pinned` value. An entry installed on its own at the default branch doesn't start tracking the tap when a whole-tap install at a ref reaches it on the same commit (§11.1). |
 | C-UPD-16c | §10.1, §13 | A `crew update` run in which any skill failed for a reason outside the soft set (`source_gone` / `no_skills_found` / `invalid_ref`) exits 1. A failure crew cannot classify MUST NOT be reported as a `failed` row on a run that exits 0. An agent whose skills folder crew can't write is such a failure: the skill's row reads as failed in human output, its entry keeps its previous state, and the next run tries again. |
 | C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`; its clone is deleted only when no remaining configured tap references that repository. Registered taps are NOT garbage-collected by uninstall. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps — the one thing it does change — then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, store entries, and state are byte-identical before and after; `--json` carries `dry_run: true`. |

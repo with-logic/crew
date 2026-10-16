@@ -1,15 +1,16 @@
 /**
  * Duplicate-install detection (§5.4).
  *
- * Compares the resolved install set against current state, partitioning
- * each entry into one of three buckets:
+ * Compares the resolved install set against current state, putting each
+ * entry in one of two buckets:
  *
  *   - `toInstall` — no existing entry, OR same source at a different SHA.
  *   - `alreadyInstalled` — same source + same SHA + same content hash.
- *   - `promoteToExplicit` — was-a-dep, now-explicitly-named; and
- *     `promoteToTracking` — installed on its own, now reached by a
- *     whole-tap install. Handled separately so the install loop can flip
- *     the flag without re-staging.
+ *
+ * An already-installed entry may also need a one-way flag set without
+ * re-staging (`promotions`, applied by `../promote-flags.ts`): `explicit`
+ * for one first pulled in as a dependency and now named, `tracks_tap` for
+ * one installed on its own and now reached by a whole install of its tap.
  *
  * A different-source install of the same name throws `name_conflict`
  * (never overridden by --force — per §13). "Same source" means the same
@@ -52,8 +53,7 @@ export function applyDuplicateRules(
 ): DuplicateAnalysis {
   const toInstall: ResolvedSkill[] = [];
   const alreadyInstalled: AlreadyInstalled[] = [];
-  const promoteToExplicit: string[] = [];
-  const promoteToTracking: string[] = [];
+  const promotions = { explicit: [] as string[], tracksTap: [] as string[] };
   const reattributions: Reattribution[] = [];
   const keepSource: KeptSource[] = [];
 
@@ -110,22 +110,22 @@ export function applyDuplicateRules(
         agents: existing.agents,
         ...(reattribution ? { reattributedFrom: reattribution.fromTap } : {}),
       });
-      if (skill.explicit && !existing.explicit) {
-        promoteToExplicit.push(skill.name);
-      }
-      if (skill.tracksTap && existing.tracks_tap !== true) promoteToTracking.push(skill.name);
+      if (skill.explicit && !existing.explicit) promotions.explicit.push(skill.name);
+      // §11.1: only onto the tap, path, and ref this install subscribes
+      // to — an entry that keeps another tap, or sits at another ref,
+      // would follow siblings the user never asked for. (A moved entry
+      // carries the flag with the move, `../reattribute.ts`.)
+      const subscribed =
+        existing.source.tap === skill.tap.name &&
+        existing.source.path === skill.tapRelativePath &&
+        existing.ref === skill.ref;
+      if (skill.tracksTap && existing.tracks_tap !== true && subscribed)
+        promotions.tracksTap.push(skill.name);
       continue;
     }
     // Same source, different SHA, or a new active adapter, or --force
     // → install (possibly as no-op byte-copy but with marker rewrite).
     toInstall.push(skill);
   }
-  return {
-    toInstall,
-    alreadyInstalled,
-    promoteToExplicit,
-    promoteToTracking,
-    reattributions,
-    keepSource,
-  };
+  return { toInstall, alreadyInstalled, promotions, reattributions, keepSource };
 }

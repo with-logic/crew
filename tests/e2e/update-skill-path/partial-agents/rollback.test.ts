@@ -2,9 +2,10 @@
  * Removing a tracked tap's new child that one agent's folder can't take
  * (§10.1.1 step 2; C-UPD-18e): the child is removed from the agents it
  * was just installed into, so it is installed nowhere — but never from a
- * folder holding a crew marker naming it (another source's install of
- * that name), one a safety check refused, or the failing agent's own —
- * and no later agent is written after the first failure.
+ * folder that held a crew marker naming it, one a safety check refused,
+ * or the failing agent's own — and no later agent is written after the
+ * first failure. (Another source's install of that name keeps its
+ * folder, but the child has written over it: a known gap, not fixed here.)
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -97,7 +98,7 @@ test("C-UPD-18e a failed child that --force wrote over another name's install is
   expect(readState(home).installations.map((e) => e.name)).toEqual(["beta"]);
 });
 
-test("C-UPD-18e removing a failed child never removes another source's install of that name", () => {
+test("C-UPD-18e removing a failed child never deletes a folder that held a crew marker naming it", () => {
   const home = makeCrewHome();
   expect(installOtherGamma(home, "claude-code")).toBe(0);
   const tapDir = installTrackedTap(home);

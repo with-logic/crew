@@ -17,10 +17,15 @@ process.env["TMPDIR"] = root;
 // A watcher removes it after this process exits, not an `afterAll`: that
 // runs again after each `--rerun-each` pass, while later passes still use
 // the root, and never on a run that is interrupted. The watcher ignores
-// the Ctrl-C sent to the whole terminal, and first makes readable any
-// folder an interrupted test left at mode 000, which `rm -rf` can't enter.
-const WATCHER =
-  'trap "" INT HUP TERM; while kill -0 "$1" 2>/dev/null; do sleep 1; done; chmod -R u+rwx "$2" 2>/dev/null; rm -rf "$2"';
+// the Ctrl-C sent to the whole terminal. Should `rm -rf` fail on a folder
+// an interrupted test left at mode 000, it makes what's left writable and
+// removes it again. "crew-temp-root" fills `$0` (the name `ps` shows); the
+// pid and root are `$1` and `$2`.
+const WATCHER = [
+  'trap "" INT HUP TERM',
+  'while kill -0 "$1" 2>/dev/null; do sleep 1; done',
+  'rm -rf "$2" 2>/dev/null || { chmod -R u+rwx "$2" 2>/dev/null; rm -rf "$2"; }',
+].join("; ");
 Bun.spawn(["sh", "-c", WATCHER, "crew-temp-root", String(process.pid), root], {
   stdio: ["ignore", "ignore", "ignore"],
 }).unref();

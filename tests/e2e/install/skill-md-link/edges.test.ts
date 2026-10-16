@@ -4,8 +4,8 @@
  * that isn't UTF-8 is refused, never followed; a chain at crew's limit
  * installs, readable, and one longer is refused; past a missing part no
  * link is read and the rest is judged as written, quickly however long;
- * and a failure to look on the way names the path that failed, not
- * SKILL.md (§13; C-SPEC-16).
+ * and a failure to look on the way — a name too long to look up, too —
+ * names the path that failed, not SKILL.md (§13; C-SPEC-16).
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -87,7 +87,11 @@ test("C-SPEC-15 past a missing part, a link is never read: the rest is judged as
 
 /** The longest link text the system allows: 1023 bytes on macOS, 4095 on Linux. */
 const MAX_LINK_TEXT = process.platform === "linux" ? 4095 : 1023;
-/** Far above the linear walk (a few ms), far below the quadratic one it replaced (~0.7 s on Linux). */
+/**
+ * Far above the linear walk (a few ms), far below the quadratic one it
+ * replaced on Linux (~0.7 s). Only Linux's longer link text makes the old
+ * walk this slow; on macOS this is a smoke check.
+ */
 const QUICK_MS = 250;
 
 test("C-SPEC-15 a long chain past a missing part is judged quickly", () => {
@@ -124,6 +128,19 @@ test("C-SPEC-16 a path on the way crew can't look into is named, not SKILL.md", 
   } finally {
     chmodSync(sub, 0o755);
   }
+});
+
+test("C-SPEC-16 a name on the way too long to look up refuses the skill, naming it", () => {
+  // Never taken for a missing part, which would end the walk's checks: a
+  // path crew builds can be too long where the one the system follows,
+  // from the folder, is not.
+  const long = "a".repeat(300);
+  const src = sourceWithLink(() => `${long}/../body.md`);
+  const r = install(makeCrewHome(), src);
+  expect(r.code).toBe(1);
+  expect(readdirSync(claude.userRoot)).toEqual(["good"]);
+  expect(r.out).toContain(`couldn't look at \``);
+  expect(r.out).toContain(`/linked/${long}\``);
 });
 
 test("C-SPEC-15 a SKILL.md link whose text isn't UTF-8 is refused, never followed", () => {
