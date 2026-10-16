@@ -70,3 +70,22 @@ test("C-UPD-39 a skill folder relinked at a ref is source_gone, even inside the 
   expect(rows.map((row) => `${row.name}:${row.outcome.kind}`)).toEqual(["demo:source_gone"]);
   expect(readFileSync(join(claude.userRoot, "demo", "SKILL.md"), "utf8")).toContain("Original.");
 });
+
+test("C-UPD-18c a skill made invalid upstream fails the update at a ref, not gone", () => {
+  const home = makeCrewHome();
+  const repo = makeTempDir();
+  makeSkill(join(repo, "skills"), "demo", skillFrontmatter({ name: "demo" }), "Original.\n");
+  makeGitRepo(repo);
+  run(home, ["tap", "add", `file://${repo}`, "acme"]);
+  expect(run(home, ["install", "acme/demo@main"]).code).toBe(0);
+  writeFileSync(
+    join(repo, "skills", "demo", "SKILL.md"),
+    "---\nname: demo\n---\nNo description.\n",
+  );
+  commitAll(repo, "drop the description");
+
+  const r = run(home, ["update", "--json"]);
+  expect(r.code).toBe(1);
+  const [row] = JSON.parse(r.stdout).rows;
+  expect([row.outcome.kind, row.outcome.error.code]).toEqual(["failed", "invalid_skill"]);
+});

@@ -65,6 +65,13 @@ const GONE: readonly (readonly [string, (demo: string, repo: string) => void])[]
     },
   ],
   [
+    "a SKILL.md that links to itself",
+    (demo) => {
+      rmSync(join(demo, "SKILL.md"));
+      symlinkSync("SKILL.md", join(demo, "SKILL.md"));
+    },
+  ],
+  [
     "a skill folder that became a link to itself",
     (demo) => {
       rmSync(demo, { recursive: true });

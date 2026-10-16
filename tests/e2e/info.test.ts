@@ -154,6 +154,7 @@ describe("crew info", () => {
     expect(error.message).toContain("frontmatter is missing `description`");
     // The root skill is `.`, never crew's own clone or export folder name.
     expect(error.details.candidates).toEqual(["."]);
+    expect(error.details.path).toBe(".");
   });
 });
 

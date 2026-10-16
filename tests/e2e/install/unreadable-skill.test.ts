@@ -76,6 +76,26 @@ describe("crew install of a folder with a skill crew can't load", () => {
     }
   });
 
+  test("C-INST-21 a source whose only skill has a file crew can't copy is an operational failure", () => {
+    const src = makeTempDir();
+    makeSkill(src, "locked", skillFrontmatter({ name: "locked" }));
+    const notes = join(src, "locked", "notes.txt");
+    writeFileSync(notes, "private");
+    chmodSync(notes, 0o000);
+    try {
+      const cap = captureStreams();
+      const code = runCli(["install", src, "--json"], {
+        home: makeCrewHome(),
+        streams: cap.streams,
+      });
+      expect(code).toBe(1);
+      const { skipped } = JSON.parse(cap.stdout());
+      expect(skipped.map((s: { code: string }) => s.code)).toEqual(["source_unreachable"]);
+    } finally {
+      chmodSync(notes, 0o644);
+    }
+  });
+
   test("C-INST-21 a source whose only skill can't be read is an operational failure (exit 1)", () => {
     const src = makeTempDir();
     makeSkill(src, "locked", skillFrontmatter({ name: "locked" }));

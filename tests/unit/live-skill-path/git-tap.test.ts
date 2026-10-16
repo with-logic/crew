@@ -23,14 +23,6 @@ describe("liveSkillPath in a git tap", () => {
     expect(liveSkillPath(TAP, home, root, "skills/demo")).toBe(join(skills, "demo"));
   });
 
-  test("C-UPD-40 a looping link is gone", () => {
-    const { home, root, skills } = clone();
-    symlinkSync("demo", join(skills, "demo"));
-    expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe(
-      "no_skills_found",
-    );
-  });
-
   test("C-UPD-40 a link out of the repository is never read, even one crew can't resolve", () => {
     const { home, root, skills } = clone();
     const outside = makeTempDir("crew-live-outside-");
@@ -58,14 +50,6 @@ describe("liveSkillPath in a git tap", () => {
     }
   });
 
-  test("C-UPD-40 a skill folder left without a SKILL.md is gone", () => {
-    const { home, root, skills } = clone();
-    mkdirSync(join(skills, "demo"));
-    expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe(
-      "no_skills_found",
-    );
-  });
-
   test("C-UPD-40 a SKILL.md relinked out of the repository is never read", () => {
     const { home, root, skills } = clone();
     const outside = makeTempDir("crew-live-outside-");
@@ -73,15 +57,6 @@ describe("liveSkillPath in a git tap", () => {
     mkdirSync(join(skills, "demo"));
     symlinkSync(join(outside, "SKILL.md"), join(skills, "demo", "SKILL.md"));
     expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe("invalid_skill");
-  });
-
-  test("C-UPD-40 a dangling SKILL.md link is gone", () => {
-    const { home, root, skills } = clone();
-    mkdirSync(join(skills, "demo"));
-    symlinkSync("nowhere.md", join(skills, "demo", "SKILL.md"));
-    expect(failure(() => liveSkillPath(TAP, home, root, "skills/demo")).code).toBe(
-      "no_skills_found",
-    );
   });
 
   test("C-UPD-40 a folder crew can't look into is a local fault, named with its reason", () => {
