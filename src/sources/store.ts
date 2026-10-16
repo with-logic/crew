@@ -109,7 +109,11 @@ export function isStoreFault(err: CrewError): boolean {
  * even when writing failed, so a source crew can still read wasn't what
  * broke (a full disk, say).
  */
-function stagingError(err: NodeJS.ErrnoException, skillPath: string, home: string): CrewError {
+export function stagingError(
+  err: NodeJS.ErrnoException,
+  skillPath: string,
+  home: string,
+): CrewError {
   const file = err.path ?? skillPath;
   const inSkill = !climbsOut(relative(skillPath, file));
   if (inSkill && (err.syscall !== "copyfile" || isGoneError(err) || !isReadable(file))) {

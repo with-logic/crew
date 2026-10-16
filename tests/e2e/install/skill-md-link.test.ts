@@ -173,6 +173,7 @@ test("C-SPEC-15 a SKILL.md that links to itself is invalid at install and in cre
   const r = install(makeCrewHome(), src);
   expect(r.code).toBe(1);
   expect(r.out).toContain("isn't a plain link to a file inside");
+  expect(r.out).toContain("Make the skill's SKILL.md a regular file");
   expect(r.out).not.toContain("ELOOP");
   const cap = captureStreams();
   const code = runCli(["info", join(src, "linked"), "--json"], {

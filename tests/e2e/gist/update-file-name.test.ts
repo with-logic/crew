@@ -5,6 +5,10 @@
  * filesystem as on any other — rather than updating from a file whose
  * name state no longer records.
  *
+ * Only a case-insensitive filesystem (macOS by default) can tell this
+ * apart from a plain deletion: on Linux the lookup fails either way, so
+ * there this test passes with or without the exact-name guard.
+ *
  * The gist is served from a local repo by `useGistFixture`; nothing here
  * touches the network.
  */

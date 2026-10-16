@@ -101,6 +101,9 @@ test("C-SPEC-16 a dependency beside its parent that crew can't read is never tak
     const r = install(home, [join(src, "a")]);
     expect([r.code, r.json.error.name]).toEqual([5, "source_unreachable"]);
     expect(r.json.error.message).toMatch(/couldn't read `\S+\/b\/SKILL\.md`/);
+    const human = captureStreams();
+    runCli(["install", join(src, "a")], { home, streams: human.streams });
+    expect(human.stderr() + human.stdout()).toContain("Check that it is readable by you");
   });
   expect(readdirSync(claude.userRoot)).toEqual([]);
 });
@@ -139,4 +142,22 @@ test("a skipped skill's next step is shown, and kept out of --json", () => {
       ["code", "message", "path"],
     ]);
   });
+});
+
+test("C-SPEC-16 a dependency from a tap that crew can't copy is skipped; its dependent installs", () => {
+  const other = makeTempDir();
+  const b = makeSkill(join(other, "skills"), "b", skillFrontmatter({ name: "b" }));
+  writeFileSync(join(b, "notes.txt"), "private");
+  const home = makeCrewHome();
+  runCli(["tap", "add", other, "other"], { home, streams: captureStreams().streams });
+  const src = makeTempDir();
+  makeSkill(src, "a", skillFrontmatter({ name: "a", dependencies: ["b"] }));
+  withMode(join(b, "notes.txt"), 0o000, () => {
+    const r = install(home, [join(src, "a")]);
+    expect(r.code).toBe(1);
+    expect(r.json.skipped.map((s: { path: string; code: string }) => [s.path, s.code])).toEqual([
+      [b, "source_unreachable"],
+    ]);
+  });
+  expect(readdirSync(claude.userRoot)).toEqual(["a"]);
 });
