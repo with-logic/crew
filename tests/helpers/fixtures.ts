@@ -74,6 +74,9 @@ export function makeGitRepo(path: string, commitMessage: string = "init"): { sha
   runGit(["config", "user.email", "test@example.com"], { cwd: path });
   runGit(["config", "user.name", "Test"], { cwd: path });
   runGit(["config", "commit.gpgsign", "false"], { cwd: path });
+  // A developer's global excludes (a `PRD.md` line matches `prd.md` on a
+  // case-insensitive disk) would silently drop fixture files from commits.
+  runGit(["config", "core.excludesFile", "/dev/null"], { cwd: path });
   runGit(["add", "."], { cwd: path });
   runGit(["commit", "--quiet", "-m", commitMessage, "--allow-empty"], { cwd: path });
   const result = runGit(["rev-parse", "HEAD"], { cwd: path });

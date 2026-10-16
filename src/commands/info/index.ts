@@ -21,6 +21,7 @@ import { attributeRef } from "../../install/tap-attribution.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { hasSkillMd, loadSkill } from "../../skill/load.ts";
 import { withDiscoveredTapLocks } from "../../sources/discovered-tap-locks.ts";
+import { splitGistFile } from "../../sources/gist.ts";
 import { readState } from "../../state/load.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
 import { isAutoTapSource, sourceLabel, tapIndex } from "../source-label/index.ts";
@@ -69,17 +70,19 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
     if (source.type === "tap") {
       return tapCandidate(source, config, ref, ctx.home);
     }
+    // A gist's `//<file>` previews one skill of the whole-gist tap (§8.2).
+    const { source: target, file } = splitGistFile(source);
     const matched = config.taps.find((t) => {
-      if (source.type === "git")
-        return t.kind === "git" && t.url === source.url && t.subpath === source.subpath;
-      return t.kind === "path" && t.path === source.path;
+      if (target.type === "git")
+        return t.kind === "git" && t.url === target.url && t.subpath === target.subpath;
+      return t.kind === "path" && t.path === target.path;
     });
     if (matched) {
-      return { tap: matched, skills: skillsAtRef(matched, ref, ctx.home) };
+      return { tap: matched, skills: skillsAtRef(matched, ref, ctx.home, file) };
     }
-    const attrib = attributeRef(source, config);
+    const attrib = attributeRef(target, config);
     requireTap(attrib.tap);
-    return { tap: attrib.tap, skills: skillsAtRef(attrib.tap, ref, ctx.home) };
+    return { tap: attrib.tap, skills: skillsAtRef(attrib.tap, ref, ctx.home, file) };
   });
 
   return {

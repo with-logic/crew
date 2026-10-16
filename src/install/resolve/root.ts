@@ -2,9 +2,10 @@
  * Enqueue the items produced by a single root reference (§9 steps 1–5).
  *
  * A root is what the user typed. Tap-shaped references delegate to
- * `enqueueTapRef`; a git URL or path is always a whole-tap install,
- * because pointing at a repository or folder means "install what is
- * here", and §10.1.1 then keeps that set current.
+ * `enqueueTapRef`; a git URL or path is a whole-tap install, because
+ * pointing at a repository or folder means "install what is here", and
+ * §10.1.1 then keeps that set current. A gist's `//<file>` is the one
+ * narrower git form (§8.2).
  *
  * When the reference carries an `@<ref>`, acquisition exports that
  * commit first and expansion reads from the export, so the bytes and
@@ -15,6 +16,7 @@ import type { Config, ResolvedSkill, TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
+import { gistLocation, splitGistFile } from "../../sources/gist.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
 import { attributeRef } from "../tap-attribution.ts";
 import { enqueueTapRef, type PendingItem } from "./enqueue.ts";
@@ -37,22 +39,25 @@ export function enqueueRoot(
     return enqueueTapRef(source, config, home, true, kindHint);
   }
 
-  // Git URL or path: find or create the tap. This is always a
-  // whole-tap install — the user pointed at a folder (or repo) and
-  // said "install this". Future additions should follow.
-  const attrib = attributeRef(source, config, recursive ? "recursive" : undefined);
+  // Git URL or path: find or create the tap. This is a whole-tap
+  // install — the user pointed at a folder (or repo) and said "install
+  // this", so future additions should follow — except for a gist's
+  // `//<file>`, which names one skill of the whole-gist tap and, like
+  // `<tap>/<skill>`, doesn't track it (§8.2).
+  const { source: tapSource, file } = splitGistFile(source);
+  const attrib = attributeRef(tapSource, config, recursive ? "recursive" : undefined);
   requireTap(attrib.tap);
   const requestedRef = sourceRequestedRef(source);
   const expansion = withAcquiredTap(attrib.tap, requestedRef, home, (acquired) =>
     expandSkillsAsItems(
-      acquired.rootDir,
+      gistLocation(acquired.rootDir, file),
       attrib.tap,
-      "",
+      file,
       acquired.resolvedSha,
       requestedRef,
       acquired.pinned,
       true,
-      true,
+      file === "",
       home,
     ),
   );

@@ -5,6 +5,7 @@
 import { CrewError } from "../../core/errors.ts";
 import type { Source, TapConfig, TapSource } from "../../core/types.ts";
 import { displayText, displayUrl } from "../../refs/display-url.ts";
+import { isGistUrl } from "../../refs/gist.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { shellQuote } from "../../util/format.ts";
 
@@ -38,6 +39,15 @@ export function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {
       "usage_error",
       `\`${shown}\` carries a \`@${source.ref}\` tail — taps track the default branch and can't be pinned. Drop the \`@${source.ref}\` and try again.`,
       { raw: shown, ref: source.ref },
+    );
+  }
+  // §16.3: a gist tap is always the whole gist; `//<file>` names one skill of it.
+  if (source.subpath.length > 0 && isGistUrl(source.url)) {
+    const shown = displayText(raw);
+    throw new CrewError(
+      "usage_error",
+      `\`${shown}\` names one file of a gist, but a gist is added as a tap whole. Drop the \`//${displayText(source.subpath)}\`, then install one skill with \`crew install <tap>/<skill>\`.`,
+      { raw: shown, subpath: displayText(source.subpath) },
     );
   }
   return { kind: "git", url: source.url, subpath: source.subpath, path: "" };

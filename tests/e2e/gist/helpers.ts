@@ -1,0 +1,80 @@
+/**
+ * Fixtures for gist sources (§8.2 "Gists", §9 step 5).
+ *
+ * A gist is only recognised by its host, so these tests must hand crew a
+ * real `https://gist.github.com/...` reference — and must not reach the
+ * network. `serveGist` routes the gist's canonical clone URL to a local
+ * repository through the git seam: the reference parser, tap naming, and
+ * gist layout all see the real gist URL, while real `git` clones a local
+ * `file://` repo. Any other spelling reaching git (a parse that failed to
+ * canonicalize, say) is left untouched and trips the network guard.
+ */
+
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
+import { runCli } from "../../../src/cli/main.ts";
+import { setGitRunner } from "../../../src/git/exec.ts";
+import { captureStreams } from "../../helpers/env.ts";
+import { commitAll, makeGitRepo, skillFrontmatter } from "../../helpers/fixtures.ts";
+
+export const GIST_ID = "7489027d2d93c185f48a628547c043d8";
+/** The URL crew records for the gist: owner dropped, `.git` added. */
+export const GIST_CLONE_URL = `https://gist.github.com/${GIST_ID}.git`;
+/** The URL a browser shows for the gist. */
+export const GIST_PAGE_URL = `https://gist.github.com/acme/${GIST_ID}`;
+export const GIST_TAP = "gist-7489027d";
+
+/** A gist skill file: frontmatter plus a body, as GitHub stores it. */
+export function skillFile(name: string, body = `Body of ${name}.\n`, deps?: string[]): string {
+  return `---\n${skillFrontmatter({ name, ...(deps ? { dependencies: deps } : {}) })}\n---\n${body}`;
+}
+
+/** Write `files` at the root of `dir` and commit; returns the new HEAD. */
+export function writeGistFiles(
+  dir: string,
+  files: Record<string, string>,
+  message = "edit",
+): string {
+  for (const [name, contents] of Object.entries(files)) writeFileSync(join(dir, name), contents);
+  return commitAll(dir, message);
+}
+
+/** A local repository laid out like a gist: every file at its root. */
+export function makeGist(files: Record<string, string>): { dir: string; sha: string } {
+  const dir = mkdtempSync(join(tmpdir(), "crew-gist-"));
+  makeGitRepo(dir);
+  const sha = writeGistFiles(dir, files, "gist");
+  return { dir, sha };
+}
+
+/** Route clones of the gist's clone URL to `repoDir`. Returns the restore function. */
+export function serveGist(repoDir: string): () => void {
+  const previous = setGitRunner((args, options) =>
+    previous(
+      args.map((a) => (a === GIST_CLONE_URL ? `file://${repoDir}` : a)),
+      options,
+    ),
+  );
+  return () => setGitRunner(previous);
+}
+
+/** Point claude-code at a fresh tmp dir. Returns that dir and the restore function. */
+export function redirectClaude(): { skills: string; restore: () => void } {
+  const skills = mkdtempSync(join(tmpdir(), "crew-gist-claude-"));
+  const saved = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
+  claudeCodeAdapter.userPath = () => skills;
+  claudeCodeAdapter.detect = () => true;
+  return { skills, restore: () => Object.assign(claudeCodeAdapter, saved) };
+}
+
+/** Run the CLI against `home`, capturing output. */
+export function run(
+  home: string,
+  args: string[],
+): { code: number; stdout: string; stderr: string } {
+  const cap = captureStreams();
+  const code = runCli(args, { home, streams: cap.streams });
+  return { code, stdout: cap.stdout(), stderr: cap.stderr() };
+}

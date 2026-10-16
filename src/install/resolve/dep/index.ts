@@ -10,6 +10,7 @@ import type { Config, TapConfig, TapSource } from "../../../core/types.ts";
 import { parseRef } from "../../../refs/parse.ts";
 import { withAcquiredTap } from "../../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
+import { gistLocation, splitGistFile } from "../../../sources/gist.ts";
 import { findSiblingDep } from "../../dep-resolution.ts";
 import { attributeRef } from "../../tap-attribution.ts";
 import { enqueueTapRef, type PendingItem } from "../enqueue.ts";
@@ -107,15 +108,17 @@ export function enqueueDep(
   if (source.type === "tap") return enqueueTapRef(source, config, home, false, null);
 
   // Git or path dep ref. Dep edges don't subscribe the user to every
-  // sibling of the dep's source.
-  const attrib = attributeRef(source, config);
+  // sibling of the dep's source. A gist's `//<file>` narrows the
+  // whole-gist tap to that one skill (§8.2).
+  const { source: tapSource, file } = splitGistFile(source);
+  const attrib = attributeRef(tapSource, config);
   requireTap(attrib.tap);
   const requestedRef = sourceRequestedRef(source);
   const expansion = withAcquiredTap(attrib.tap, requestedRef, home, (acquired) =>
     expandSkillsAsItems(
-      acquired.rootDir,
+      gistLocation(acquired.rootDir, file),
       attrib.tap,
-      "",
+      file,
       acquired.resolvedSha,
       requestedRef,
       acquired.pinned,

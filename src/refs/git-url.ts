@@ -16,6 +16,7 @@ import { CrewError } from "../core/errors.ts";
 import type { GitSource } from "../core/types.ts";
 import { normalizeBrowserUrl, stripUrlQueryAndFragment } from "./browser-url.ts";
 import { displayUrl } from "./display-url.ts";
+import { isGistUrl } from "./gist.ts";
 import { splitGitRef, splitSubpath, splitTrailingRef } from "./git-tails.ts";
 import { normalizeSubpath } from "./subpath.ts";
 
@@ -176,9 +177,9 @@ function canonicalizeUrl(raw: string): string | null {
     if (!(u.hostname && u.pathname) || u.pathname === "/") {
       return null;
     }
-    // Path must have at least `/owner/repo`.
+    // Path must have at least `/owner/repo`; a gist's clone URL is just `/<id>.git`.
     const segments = u.pathname.split("/").filter(Boolean);
-    if (segments.length < 2) {
+    if (segments.length < 2 && !isGistUrl(url)) {
       return null;
     }
     return url;

@@ -17,6 +17,19 @@ export interface Frontmatter {
   readonly body: string;
 }
 
+/**
+ * True iff `raw` opens with a frontmatter delimiter: its first non-blank
+ * line is `---`, the same test `extractFrontmatter` applies. A gist file
+ * passing it is a skill candidate (§9 step 5, "Gists").
+ */
+export function opensFrontmatter(raw: string): boolean {
+  const first = raw
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .find((line) => line.trim() !== "");
+  return first?.trim() === "---";
+}
+
 /** Extract frontmatter from a raw SKILL.md string. Throws `invalid_skill` if malformed. */
 export function extractFrontmatter(raw: string): Frontmatter {
   const lines = raw.replace(/\r\n?/g, "\n").split("\n");

@@ -3,7 +3,7 @@
  */
 
 import type { Source, TapConfig } from "../../core/types.ts";
-import { expandSkills, type SkippedSkill } from "../../sources/expand.ts";
+import { expandOptionsFor, expandSkills, type SkippedSkill } from "../../sources/expand.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import type { PendingItem } from "./enqueue.ts";
 
@@ -31,7 +31,7 @@ export function expandSkillsAsItems(
   tracksTap: boolean,
   home: string,
 ): ExpansionItems {
-  const { valid, skipped } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
+  const { valid, skipped } = expandSkills(dir, expandOptionsFor(tap));
   const items: PendingItem[] = [];
   for (const l of valid) {
     const subSegment = l.path === dir ? "" : l.path.slice(dir.length + 1);

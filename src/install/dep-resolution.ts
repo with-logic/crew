@@ -24,6 +24,7 @@ import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkill, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
+import { isGistSkillFile, isGistTap } from "../sources/gist.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 import { attributeRef } from "./tap-attribution.ts";
 
@@ -68,7 +69,7 @@ export function findSiblingDep(
   const matches: { dirName: string; siblingDir: string; loaded: LoadedSkill }[] = [];
   for (const dirName of listDir(siblingParent)) {
     const siblingDir = join(siblingParent, dirName);
-    if (!(isDirectory(siblingDir) && hasSkillMd(siblingDir))) continue;
+    if (!isSiblingSkill(parent.tap, siblingDir)) continue;
     if (siblingName(siblingDir) !== depName) continue;
     const loaded = loadSkill(siblingDir);
     matches.push({ dirName, siblingDir, loaded });
@@ -91,6 +92,12 @@ export function findSiblingDep(
     config,
   );
   return { tap: attrib.tap, config: attrib.config, tapRelativePath: "", loaded: match.loaded };
+}
+
+/** A sibling is a skill directory — or, in a gist, a skill file (§9 step 5). */
+function isSiblingSkill(tap: TapConfig, path: string): boolean {
+  if (isGistTap(tap)) return isGistSkillFile(path);
+  return isDirectory(path) && hasSkillMd(path);
 }
 
 function siblingName(path: string): string | null {

@@ -12,7 +12,7 @@
  *     longer referenced by state or any marker.
  */
 
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { crewHome, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
@@ -20,6 +20,7 @@ import { copyTree } from "../util/copy.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { safePath } from "../util/redact.ts";
+import { isRegularFile } from "../util/regular-file.ts";
 
 /** Record returned after staging. */
 export interface StoredSkill {
@@ -31,9 +32,9 @@ export interface StoredSkill {
 }
 
 /**
- * Copy `sourceDir` into the store under `<name>@<short-sha>`. If the
- * entry already exists with a matching content hash, the existing one
- * is reused.
+ * Copy `sourceDir` (a skill directory, or a gist's skill file) into the
+ * store under `<name>@<short-sha>`. If the entry already exists with a
+ * matching content hash, the existing one is reused.
  */
 export function stageIntoStore(
   sourceDir: string,
@@ -58,12 +59,25 @@ export function stageIntoStore(
 
   const staging = `${storePath}.staging-${Date.now()}`;
   if (exists(staging)) rmrf(staging);
-  copyTree(sourceDir, staging, { stripRootMarker: true });
+  copySkill(sourceDir, staging);
   ensureDir(join(storePath, "..")); // parents
   atomicReplace(staging, storePath);
 
   const contentHash = hashDirectory(storePath);
   return { storePath, contentHash, shortSha, reused: false };
+}
+
+/**
+ * Copy a skill's files into `dest`. A gist skill is a single file, and
+ * it becomes the `SKILL.md` of its own directory (§9 step 8).
+ */
+function copySkill(source: string, dest: string): void {
+  if (isRegularFile(source)) {
+    ensureDir(dest);
+    copyFileSync(source, join(dest, "SKILL.md"));
+  } else {
+    copyTree(source, dest, { stripRootMarker: true });
+  }
 }
 
 /**

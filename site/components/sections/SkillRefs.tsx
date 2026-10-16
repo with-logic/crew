@@ -35,7 +35,8 @@ const CARDS: readonly {
         subpath: <code>{"//engineers/founding@v1.2.0"}</code>. Put the ref first for branches
         containing <code>/</code> (<code>{"@feature/python//engineers/founding"}</code>) or a final
         folder containing a literal <code>@</code> (<code>{"@main//skills/foo@bar"}</code>). Or just
-        paste the link from your browser.
+        paste the link from your browser. A GitHub gist works too: each <code>.md</code> file that
+        starts with frontmatter is one skill.
       </>
     ),
     examples: [
@@ -44,6 +45,7 @@ const CARDS: readonly {
       "crew install @acme/skills//engineers/founding",
       "crew install github.com/acme/skills",
       "crew install https://github.com/acme/skills/tree/main/engineers/founding",
+      "crew install https://gist.github.com/acme/aa5a315d61ae9438b18d",
     ],
   },
   {

@@ -16,7 +16,8 @@ import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-r
 import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
-import { expandSkills } from "../../sources/expand.ts";
+import { expandOptionsFor, expandSkills } from "../../sources/expand.ts";
+import { gistLocation } from "../../sources/gist.ts";
 import type { SkillInfo } from "./render.ts";
 
 export interface TapPreview {
@@ -40,9 +41,19 @@ export function tapCandidate(
   );
 }
 
-/** Expand a tap's skills, reading at `ref` when one was requested. */
-export function skillsAtRef(tap: TapConfig, ref: string | null, home: string): SkillInfo[] {
-  return withAcquiredTap(tap, ref, home, (acq) => buildSkillInfos(acq.rootDir, tap));
+/**
+ * Expand a tap's skills, reading at `ref` when one was requested. `file`
+ * narrows a gist tap to the one skill file a `//<file>` named (§8.2).
+ */
+export function skillsAtRef(
+  tap: TapConfig,
+  ref: string | null,
+  home: string,
+  file = "",
+): SkillInfo[] {
+  return withAcquiredTap(tap, ref, home, (acq) =>
+    buildSkillInfos(gistLocation(acq.rootDir, file), tap),
+  );
 }
 
 /**
@@ -69,7 +80,7 @@ function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
 }
 
 function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
-  const { valid } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
+  const { valid } = expandSkills(dir, expandOptionsFor(tap));
   return valid.map(skillInfoOf);
 }
 

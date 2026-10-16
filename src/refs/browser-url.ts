@@ -7,6 +7,9 @@
  * splits them into the clone URL, the ref, and the subpath so the rest
  * of the parser sees the same thing it would for `gh:o/r@ref//path`.
  *
+ * A gist page (`gist.github.com/<owner>/<id>`) becomes the gist's clone
+ * URL; see `./gist.ts`.
+ *
  * Any other `http(s)` URL still gets the cheap hygiene pass: `?query`,
  * `#fragment`, and trailing `/` dropped, leading `www.` removed from
  * the host. Userinfo (`user:token@`) is preserved — an authenticated
@@ -16,6 +19,7 @@
 
 import { CrewError } from "../core/errors.ts";
 import { displayUrl } from "./display-url.ts";
+import { GIST_HOST, gistCloneUrl } from "./gist.ts";
 
 /** Clone URL plus whatever ref / subpath the browser URL encoded. */
 export interface BrowserUrlParts {
@@ -80,6 +84,7 @@ export function normalizeBrowserUrl(raw: string): BrowserUrlParts {
 
   const dash = segments.indexOf("-");
   const forge = { raw, plain, origin, segments };
+  if (host === GIST_HOST) return { ...gistCloneUrl(origin, segments), subpath: "" };
   if (dash > 0) return fromForge(forge, dash, GITLAB_SHAPES);
   if (host === "github.com") return fromForge(forge, 2, GITHUB_SHAPES);
   if (host === "bitbucket.org") return fromForge(forge, 2, BITBUCKET_SHAPES);

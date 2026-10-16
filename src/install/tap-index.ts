@@ -16,14 +16,18 @@
  * Namespace rules (§9 step 5 case 2): a namespace is a directory
  * directly under `skills/` that contains no `SKILL.md` of its own
  * but contains child directories with a `SKILL.md`.
+ *
+ * A gist (§9 step 5, "Gists") has no directories: its index is the
+ * skill files at its root, each located by its file name.
  */
 
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
+import { gistSkillFiles, isGistTap } from "../sources/gist.ts";
 import { migrateTapClone } from "../sources/migrate-clones.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
 import { isDirectory, listDir, toPosix } from "../util/fs.ts";
@@ -34,7 +38,7 @@ export interface SkillLocation {
   readonly name: string;
   /** Namespace the skill lives under, or null if at skills/ root or tap root. */
   readonly namespace: string | null;
-  /** Absolute path to the skill's directory on disk. */
+  /** Absolute path to the skill's directory (or, in a gist, its file) on disk. */
   readonly path: string;
   /**
    * Path RELATIVE to the tap root, POSIX-style. Empty when the skill
@@ -92,6 +96,15 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
     const skillName = skillNameForIndex(root);
     if (skillName !== null)
       addSkill({ name: skillName, namespace: null, path: root, tapRelativePath: "" });
+    return { skills, namespaces };
+  }
+
+  if (isGistTap(tap)) {
+    for (const file of gistSkillFiles(root)) {
+      const skillName = skillNameForIndex(file);
+      if (skillName === null) continue;
+      addSkill({ name: skillName, namespace: null, path: file, tapRelativePath: basename(file) });
+    }
     return { skills, namespaces };
   }
 
