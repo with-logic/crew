@@ -9,7 +9,7 @@ import { basename, dirname, join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { isGistTap } from "../../core/gist-url.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { skillMdLinksOut, skillMdOutsideError } from "../../skill/skill-md-link.ts";
+import { isRefusedSkillMdLink, refusedSkillMdLinkError } from "../../skill/skill-md-link.ts";
 import { isGoneError, unreadablePathError } from "../../util/errno.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { isExactSkillFile, isOneSkillGist } from "../gist.ts";
@@ -35,19 +35,23 @@ export function assertStillASkill(
  * before anything looks through the link. At an `@<ref>` the folder is
  * the skill's scratch export. A gist's files are never links.
  */
-export function assertSkillMdInside(
+export function assertSkillMdLinkAllowed(
   tap: Pick<TapConfig, "kind" | "url">,
   location: string,
   tapRelativePath: string,
 ): void {
   if (isGistTap(tap)) return;
-  let out: boolean;
+  let refused: boolean;
   try {
-    out = skillMdLinksOut(location);
+    refused = isRefusedSkillMdLink(location);
   } catch (err) {
-    throw unreadablePathError(join(location, "SKILL.md"), err);
+    // Named by what failed: a folder on the way, or the SKILL.md itself.
+    throw unreadablePathError(
+      (err as NodeJS.ErrnoException).path ?? join(location, "SKILL.md"),
+      err,
+    );
   }
-  if (out) throw skillMdOutsideError(location, tapRelativePath || ".");
+  if (refused) throw refusedSkillMdLinkError(location, tapRelativePath || ".");
 }
 
 function stillASkill(

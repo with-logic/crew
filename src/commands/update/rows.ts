@@ -10,7 +10,7 @@
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
-import type { Outcome, UpdateRow } from "../../install/update/types.ts";
+import { hasFailedTarget, type Outcome, type UpdateRow } from "../../install/update/types.ts";
 import { shortenHome } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 
@@ -31,9 +31,9 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
     return { status: style.dim("up to date"), detail: "", required };
   }
   if (o.kind === "updated") {
-    const failed = failedTargets(o);
-    if (failed.length > 0) {
-      return { status: style.red("failed"), detail: style.red(failed.join(", ")), required };
+    if (hasFailedTarget(o)) {
+      const labels = failedTargetLabels(o).join(", ");
+      return { status: style.red("failed"), detail: style.red(labels), required };
     }
     return { status: style.green("updated"), detail: style.cyan(shortSha(o.new_sha)), required };
   }
@@ -82,7 +82,7 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
 
 export function symbolFor(row: UpdateRow, style: Styler): string {
   const o = row.outcome;
-  if (failedTargets(o).length > 0) return style.symbol("fail");
+  if (hasFailedTarget(o)) return style.symbol("fail");
   if (o.kind === "updated" || o.kind === "would_update") return style.symbol("ok");
   if (o.kind === "up_to_date") return style.symbol("muted");
   if (o.kind === "skipped" || o.kind === "missing_project_root") return style.symbol("muted");
@@ -96,13 +96,11 @@ export function symbolFor(row: UpdateRow, style: Styler): string {
 
 /**
  * The agents an `updated` row couldn't write, as `agent: CODE` — the run
- * exits 1 for them (§10.1), so the row reads as a failure; empty when
- * every target installed.
+ * exits 1 for them (§10.1), so the row reads as a failure.
  */
-export function failedTargets(o: Outcome): string[] {
+function failedTargetLabels(o: Extract<Outcome, { kind: "updated" }>): string[] {
   const out: string[] = [];
-  if (o.kind !== "updated") return out;
-  for (const t of o.per_target) if (t.kind === "failed") out.push(`${t.agent}: ${t.error?.code}`);
+  for (const t of o.per_target) if (t.kind === "failed") out.push(`${t.agent}: ${t.error.code}`);
   return out;
 }
 

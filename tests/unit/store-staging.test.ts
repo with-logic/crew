@@ -7,7 +7,7 @@
  */
 
 import { expect, test } from "bun:test";
-import { chmodSync, readdirSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CrewError } from "../../src/core/errors.ts";
 import { paths } from "../../src/core/paths.ts";
@@ -49,9 +49,44 @@ test("a copy that fails on a source file crew can still read is crew's store fai
   expect(err.remedy).toContain("the disk has room");
 });
 
+/** The error a real copy of `from` to `to` throws. */
+function copyError(from: string, to: string): NodeJS.ErrnoException {
+  try {
+    copyFileSync(from, to);
+  } catch (err) {
+    return err as NodeJS.ErrnoException;
+  }
+  throw new Error("expected the copy to fail");
+}
+
 test("a source file that went away mid-copy is the skill's, not the store's", () => {
   const src = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
   const gone = join(src, "notes.txt");
-  const err = stagingError(fsError("ENOENT", "copyfile", gone), src, makeTempDir());
-  expect(err.details).toEqual({ path: gone });
+  const failed = copyError(gone, join(makeTempDir(), "notes.txt"));
+  // Back by the time the failure is classified, as when an editor saves.
+  writeFileSync(gone, "back");
+  expect(stagingError(failed, src, makeTempDir()).details).toEqual({ path: gone });
+});
+
+test("any other call failing on a file of the skill is the skill's, readable or not", () => {
+  const src = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
+  const file = join(src, "SKILL.md");
+  expect(stagingError(fsError("EIO", "open", file), src, makeTempDir()).details).toEqual({
+    path: file,
+  });
+});
+
+test("a symlink crew couldn't write is the store's, whatever its text names", () => {
+  const src = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
+  const home = makeTempDir();
+  const err = stagingError(fsError("ENOSPC", "symlink", join(src, "SKILL.md")), src, home);
+  expect(err.details).toEqual({ store: paths(home).storeDir });
+});
+
+test("a copy whose staging folder was removed is crew's store failing, not the skill", () => {
+  const src = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
+  const home = makeTempDir();
+  const missing = join(makeTempDir(), "removed", "SKILL.md");
+  const err = stagingError(copyError(join(src, "SKILL.md"), missing), src, home);
+  expect(err.details).toEqual({ store: paths(home).storeDir });
 });

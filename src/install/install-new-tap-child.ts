@@ -15,6 +15,7 @@ import { agentByName } from "../agents/registry.ts";
 import { CrewError } from "../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../core/types.ts";
 import { stageIntoStore } from "../sources/store.ts";
+import { rmrf } from "../util/fs.ts";
 import { nowIso } from "../util/time.ts";
 
 export function installNewTapChild(
@@ -52,7 +53,8 @@ export function installNewTapChild(
     else groups.set(dest, [adapter]);
   }
   let fsFailure: unknown = null;
-  for (const group of groups.values()) {
+  const written: string[] = [];
+  for (const [dest, group] of groups) {
     try {
       installSkillIntoAgents({
         agents: group,
@@ -68,6 +70,7 @@ export function installNewTapChild(
         force,
       });
       for (const a of group) successfulTargets.push(a.name);
+      written.push(dest);
     } catch (err) {
       // A safety check refusing one agent (§7.3) leaves the child out of
       // it, as on an install; an agent folder crew can't write fails the
@@ -75,7 +78,12 @@ export function installNewTapChild(
       if (!(err instanceof CrewError)) fsFailure ??= err;
     }
   }
-  if (fsFailure !== null) throw fsFailure;
+  if (fsFailure !== null) {
+    // Not recorded means installed nowhere: the copies this child just
+    // made in other agents go, so nothing is left that state doesn't know.
+    for (const dest of written) rmrf(dest);
+    throw fsFailure;
+  }
   if (successfulTargets.length === 0) return null;
   return {
     name: args.skillName,

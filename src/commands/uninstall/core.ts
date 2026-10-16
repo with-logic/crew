@@ -13,7 +13,7 @@ import { uninstallSkillFromAgents } from "../../agents/uninstall.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
 import type { CollectionKind } from "../../state/collections/index.ts";
 import type { StateSubject } from "../../state/subjects.ts";
-import { agentFailureCode } from "../../util/errno.ts";
+import { failureCodeOf } from "../../util/errno.ts";
 import type { CommandContext } from "../types.ts";
 import { dropScopedEntriesAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
 
@@ -181,7 +181,7 @@ function removeFromAgents(
       // Absent and removed alike leave no bytes owned by this agent.
       for (const a of group) detached.add(a.name);
     } catch (err) {
-      const error = { code: agentFailureCode(err), message: (err as Error).message };
+      const error = { code: failureCodeOf(err), message: (err as Error).message };
       for (const a of group) rec.failures.push({ agent: a.name, error });
     }
   }

@@ -7,17 +7,17 @@
  */
 
 import type { CrewErrorName } from "../../core/errors.ts";
-import type { AgentFailureCode } from "../../util/errno.ts";
+import type { FailureCode } from "../../util/errno.ts";
 
 /** One agent's part of an `updated` row (§10.1). */
 export type PerAgentUpdate =
   | { readonly agent: string; readonly kind: "installed" | "up_to_date" }
   /** A safety check refused it (§7.3); `reason` is its §13 name. */
-  | { readonly agent: string; readonly kind: "skipped"; readonly reason: string }
+  | { readonly agent: string; readonly kind: "skipped"; readonly reason: CrewErrorName }
   | {
       readonly agent: string;
       readonly kind: "failed";
-      readonly error: { code: AgentFailureCode; message: string };
+      readonly error: { code: FailureCode; message: string };
     };
 
 export type Outcome =
@@ -36,6 +36,11 @@ export type Outcome =
   | { kind: "tap_missing"; tap: string }
   | { kind: "missing_project_root"; root: string }
   | { kind: "failed"; error: { code: CrewErrorName; message: string } };
+
+/** True when an `updated` outcome has a target crew couldn't write (§10.1). */
+export function hasFailedTarget(o: Outcome): boolean {
+  return o.kind === "updated" && o.per_target.some((t) => t.kind === "failed");
+}
 
 export interface UpdateRow {
   readonly name: string;

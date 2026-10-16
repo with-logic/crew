@@ -12,7 +12,7 @@ import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { resolveInside } from "./resolve-inside.ts";
 import {
-  assertSkillMdInside,
+  assertSkillMdLinkAllowed,
   assertStillASkill,
   isGone,
   noLongerASkillError,
@@ -41,7 +41,7 @@ import {
  * metadata (a remote URL with a token, say), not the source. A path tap
  * is the user's own directory and, like its root (`tapRootDir`), isn't
  * held to the containment check. In every tap but a gist, the skill's
- * `SKILL.md` is held to `assertSkillMdInside` first.
+ * `SKILL.md` is held to `assertSkillMdLinkAllowed` first.
  */
 export function liveSkillPath(
   tap: TapConfig,
@@ -67,7 +67,7 @@ export function liveSkillPath(
   } else if (isGone(location)) {
     throw noLongerASkillError(tapRelativePath);
   }
-  assertSkillMdInside(tap, location, tapRelativePath);
+  assertSkillMdLinkAllowed(tap, location, tapRelativePath);
   assertStillASkill(tap, location, tapRelativePath);
   return location;
 }

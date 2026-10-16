@@ -73,11 +73,11 @@ export function findSiblingDep(
     // never a miss to look past to other taps.
     const namedForDep = (isGist ? entryName.replace(/\.md$/i, "") : entryName) === depName;
     if (namedForDep && !isGist) {
-      inDependency(depName, siblingPath, () => assertSkillMdVisible(siblingPath));
+      withDependencyErrors(depName, siblingPath, () => assertCanLookForSkillMd(siblingPath));
     }
     if (!isSiblingSkill(parent.tap, siblingPath)) continue;
     if (!namedForDep && siblingName(siblingPath) !== depName) continue;
-    const loaded = inDependency(depName, siblingPath, () => loadSkill(siblingPath));
+    const loaded = withDependencyErrors(depName, siblingPath, () => loadSkill(siblingPath));
     if (loaded.frontmatter.name !== depName) continue;
     matches.push({ entryName, siblingPath, loaded });
   }
@@ -125,7 +125,7 @@ function siblingName(path: string): string | null {
 }
 
 /** Throw when crew can't look into `folder` for its `SKILL.md`. */
-function assertSkillMdVisible(folder: string): void {
+function assertCanLookForSkillMd(folder: string): void {
   const skillMd = join(folder, "SKILL.md");
   try {
     lstatSync(skillMd);
@@ -138,19 +138,15 @@ function assertSkillMdVisible(folder: string): void {
  * Run `step` on the dependency at `path`, naming the dependency in the
  * `CrewError` it throws; the path is added only where the message lacks it.
  */
-function inDependency<T>(depName: string, path: string, step: () => T): T {
+function withDependencyErrors<T>(depName: string, path: string, step: () => T): T {
   try {
     return step();
   } catch (err) {
-    if (!(err instanceof CrewError)) throw err;
-    const where = err.message.includes(path) ? "" : ` (\`${path}\`)`;
-    const message = `dependency \`${depName}\`${where}: ${err.message}`;
-    throw new CrewError(
-      err.code,
-      message,
-      { path, ...err.details, dependency: depName },
-      err.remedy,
-    );
+    // Both steps throw only `CrewError`: the look-in check, and `loadSkill`.
+    const ce = err as CrewError;
+    const where = ce.message.includes(path) ? "" : ` (\`${path}\`)`;
+    const message = `dependency \`${depName}\`${where}: ${ce.message}`;
+    throw new CrewError(ce.code, message, { path, ...ce.details, dependency: depName }, ce.remedy);
   }
 }
 

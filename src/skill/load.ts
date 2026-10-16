@@ -20,9 +20,9 @@ import { readText } from "../util/fs.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 import { isSkillFile } from "./skill-file.ts";
 import {
+  isRefusedSkillMdLink,
+  refusedSkillMdLinkError,
   SKILL_MD_NOT_A_FILE_REMEDY,
-  skillMdLinksOut,
-  skillMdOutsideError,
 } from "./skill-md-link.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
@@ -79,12 +79,16 @@ function readSkillMd(path: string): string {
   try {
     // §9 step 4: refused before anything is read through it. A gist's
     // skill file is never a link (`isSkillFile`).
-    if (!skillFile && skillMdLinksOut(path)) throw skillMdOutsideError(path);
+    if (!skillFile && isRefusedSkillMdLink(path)) throw refusedSkillMdLinkError(path);
     if (statSync(skillMdPath, { throwIfNoEntry: false })?.isFile()) raw = readText(skillMdPath);
   } catch (err) {
     if (err instanceof CrewError) throw err;
-    // A link chain that loops is no file either: reported below.
-    if (!isGoneError(err)) throw unreadablePathError(skillMdPath, err, "read");
+    // A loop above the folder, or a folder on the way that is a file: no
+    // SKILL.md either, reported below (a loop below it is refused above).
+    if (!isGoneError(err)) {
+      const where = (err as NodeJS.ErrnoException).path ?? skillMdPath;
+      throw unreadablePathError(where, err, "read");
+    }
   }
   if (raw === null) throw skillMdNotAFileError(path, skillMdPath);
   return raw;
@@ -92,7 +96,7 @@ function readSkillMd(path: string): string {
 
 /** `invalid_skill` for a skill whose `SKILL.md` is missing, or isn't a file. */
 function skillMdNotAFileError(path: string, skillMdPath: string): CrewError {
-  const entry = lookAt(skillMdPath);
+  const entry = entryAt(skillMdPath);
   if (entry === undefined) {
     return new CrewError(
       "invalid_skill",
@@ -117,7 +121,7 @@ function skillMdNotAFileError(path: string, skillMdPath: string): CrewError {
  * usable is there. `readSkillMd` has just looked at the same path, so the
  * only failure left is a gone one (missing, or a file on the way).
  */
-function lookAt(path: string): Stats | undefined {
+function entryAt(path: string): Stats | undefined {
   try {
     return lstatSync(path);
   } catch {

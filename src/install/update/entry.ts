@@ -25,7 +25,7 @@ import { peekResolvedSha } from "./peek.ts";
 import { rowFor } from "./public-row.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
 import { rebuildStateEntry } from "./state.ts";
-import type { InternalOutcome, UpdateRow } from "./types.ts";
+import { hasFailedTarget, type InternalOutcome, type UpdateRow } from "./types.ts";
 
 export function updateOneEntry(
   entry: StateEntry,
@@ -39,8 +39,7 @@ export function updateOneEntry(
   try {
     const outcome = updateOne(entry, config, home, force, fallbackCwd, dryRun);
     let next = state;
-    const targetFailed =
-      outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed");
+    const targetFailed = hasFailedTarget(outcome);
     // §10.1: a target crew couldn't write keeps its previous install, so
     // the entry stays as it was and the next run tries again.
     if (outcome.kind === "updated" && !targetFailed) {

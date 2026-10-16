@@ -13,7 +13,7 @@
  */
 
 import { copyFileSync, existsSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { crewHome, paths, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
@@ -54,7 +54,9 @@ export function stageIntoStore(
   try {
     return stage(skillPath, name, resolvedSha, home, sourceHash);
   } catch (err) {
-    // Staging only touches the filesystem, so what it throws is an errno error.
+    // A failed copy is already classified (before its cleanup); anything
+    // else staging throws is an errno error from the filesystem.
+    if (err instanceof CrewError) throw err;
     throw stagingError(err as NodeJS.ErrnoException, skillPath, home);
   }
 }
@@ -87,9 +89,11 @@ function stage(
     ensureDir(join(storePath, "..")); // parents
     atomicReplace(staging, storePath);
   } catch (err) {
-    // A partial copy is never left behind for `crew doctor` to report.
+    // Classified first, while the staging folder is still there to tell a
+    // copy's sides apart; a partial copy is never left for `crew doctor`.
+    const fault = stagingError(err as NodeJS.ErrnoException, skillPath, home);
     rmrf(staging);
-    throw err;
+    throw fault;
   }
 
   const contentHash = hashDirectory(storePath);
@@ -115,7 +119,11 @@ export function stagingError(
   home: string,
 ): CrewError {
   const file = err.path ?? skillPath;
-  const inSkill = !climbsOut(relative(skillPath, file));
+  // A failed symlink names the link's text, not a file of the skill; a
+  // copy whose destination folder is gone lost crew's staging folder.
+  const dest = (err as { dest?: string }).dest;
+  const storeSide = err.syscall === "symlink" || (dest !== undefined && !existsSync(dirname(dest)));
+  const inSkill = !(storeSide || climbsOut(relative(skillPath, file)));
   if (inSkill && (err.syscall !== "copyfile" || isGoneError(err) || !isReadable(file))) {
     return unreadablePathError(file, err, "read");
   }

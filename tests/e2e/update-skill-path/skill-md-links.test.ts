@@ -2,13 +2,13 @@
  * `crew update` when upstream changes what a skill's `SKILL.md` is (§9
  * step 4, §10.1; C-UPD-40), at the default branch and at an `@<ref>`.
  *
- * A `SKILL.md` deleted, or left as a plain link to nothing, is
- * `source_gone`, and the installed bytes stay; so is a skill folder that
- * became a link to itself. One that isn't a plain link to a file inside
- * the skill's own folder — out of it, back in by name, past a folder
- * link with `..`, to itself or another link — fails the update as
- * `invalid_skill`, as it fails an install, and is never read. A
- * `SKILL.md` linked straight to a file inside its folder updates.
+ * A `SKILL.md` deleted, or left as a link to nothing, is `source_gone`,
+ * and the installed bytes stay; so is a skill folder that became a link
+ * to itself. One reached through a link crew won't follow — absolute,
+ * with a `..` (out of the folder, back in by name, past a folder link),
+ * or looping — fails the update as `invalid_skill`, as it fails an
+ * install, and is never read. A `SKILL.md` linked to a file inside its
+ * folder through allowed links only updates.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -74,8 +74,8 @@ const GONE: readonly (readonly [string, (demo: string, repo: string) => void])[]
   ],
 ];
 
-/** Ways a `SKILL.md` can link out of its folder; each fails the update, unread. */
-const OUT: readonly (readonly [string, (demo: string, repo: string) => void])[] = [
+/** Ways a `SKILL.md` can be reached through a link crew won't follow; each fails the update, unread. */
+const REFUSED: readonly (readonly [string, (demo: string, repo: string) => void])[] = [
   [
     "relinked elsewhere inside the repository",
     (demo, repo) => {
@@ -136,7 +136,7 @@ const OUT: readonly (readonly [string, (demo: string, repo: string) => void])[] 
 ];
 
 for (const ref of ["", "@main"]) {
-  for (const [what, change] of OUT) {
+  for (const [what, change] of REFUSED) {
     test(`C-UPD-40 a SKILL.md ${what} fails the update as invalid (${ref || "no ref"})`, () => {
       const { home, demo, repo } = installDemo(ref);
       expect(installed()).toContain("Original.");

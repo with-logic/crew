@@ -5,7 +5,7 @@
  * dependency beside its parent that crew can't load — a folder it can't
  * look into, an unreadable SKILL.md — fails the install with that
  * reason, naming the dependency, and is never taken from another tap
- * (an invalid one: `dependencies.test.ts`). A skipped skill's next step
+ * (an invalid one: `sibling-dependency.test.ts`). A skipped skill's next step
  * is shown, but kept out of `--json`.
  */
 
@@ -101,6 +101,7 @@ test("C-SPEC-16 a dependency beside its parent that crew can't read is never tak
     const r = install(home, [join(src, "a")]);
     expect([r.code, r.json.error.name]).toEqual([5, "source_unreachable"]);
     expect(r.json.error.message).toMatch(/couldn't read `\S+\/b\/SKILL\.md`/);
+    expect(r.json.error.details.path).toBe(join(src, "b", "SKILL.md"));
     const human = captureStreams();
     runCli(["install", join(src, "a")], { home, streams: human.streams });
     expect(human.stderr() + human.stdout()).toContain("Check that it is readable by you");
@@ -125,6 +126,7 @@ test("C-SPEC-16 a dependency folder crew can't look into fails the install, not 
     expect([r.code, r.json.error.name]).toEqual([5, "source_unreachable"]);
     expect(r.json.error.message).toMatch(/^dependency `b`: couldn't look at `\S+\/b\/SKILL\.md`/);
     expect(r.json.error.details.dependency).toBe("b");
+    expect(r.json.error.details.path).toBe(join(src, "b", "SKILL.md"));
   });
   expect(readdirSync(claude.userRoot)).toEqual([]);
 });

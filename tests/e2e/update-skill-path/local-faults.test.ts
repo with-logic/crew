@@ -1,11 +1,13 @@
 /**
- * `crew update` against local faults (§10.1, §10.1.1, §13; C-UPD-40): a
- * skill holding a file crew can't read, a path crew can't search, and a
- * tracked tap's new child crew can't copy all fail as
- * `source_unreachable` — not an upstream deletion, and not a usage error
- * that stops the rest of the run. An agent folder crew can't write fails
- * that agent, and a new child no agent took is reported, not dropped. A
- * path tap's skill folder that became a looping link is gone.
+ * `crew update` against local faults (§10.1, §10.1.1, §13; C-UPD-16c,
+ * C-UPD-18e, C-UPD-40): a skill holding a file crew can't read, a path
+ * crew can't search, and a tracked tap's new child crew can't copy all
+ * fail as `source_unreachable` — not an upstream deletion, and not a
+ * usage error that stops the rest of the run. An agent folder crew can't
+ * write fails the skill's update, which keeps its entry and is retried;
+ * a new child no agent could take is reported, not dropped, while one a
+ * safety check refuses is left out. A path tap's skill folder that
+ * became a looping link is gone.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -122,7 +124,10 @@ test("C-UPD-16c an agent folder crew can't write fails the update, and the next 
     expect(r.code).toBe(1);
     const [target] = JSON.parse(r.stdout).rows[0].outcome.per_target;
     expect([target.kind, target.error.code]).toEqual(["failed", "EACCES"]);
-    expect(run(home, ["update"]).stdout).toMatch(/demo\s+failed\s+claude-code: EACCES/);
+    const human = run(home, ["update"]).stdout;
+    expect(human).toMatch(/\[fail\] demo\s+failed\s+claude-code: EACCES/);
+    expect(human).toContain("1 failure");
+    expect(human).not.toContain("updated");
     expect(readState(home).installations[0]!.content_hash).toBe(before);
   } finally {
     chmodSync(claude.userRoot, 0o755);

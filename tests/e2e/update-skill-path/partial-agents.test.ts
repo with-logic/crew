@@ -1,8 +1,8 @@
 /**
  * A tracked tap's new child that one agent's folder can't take (§10.1.1
- * step 2; C-UPD-18e): the child is reported as failed and not recorded,
- * even though another agent took it, so the next run installs it into
- * both rather than leaving one agent without it for good.
+ * step 2; C-UPD-18e): the child is reported as failed, not recorded, and
+ * removed from the agent that did take it, so the next run installs it
+ * into both rather than leaving one agent without it for good.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -52,6 +52,8 @@ test("C-UPD-18e a new child one agent's folder can't take is retried, not record
     const [row] = JSON.parse(r.stdout).tap_reexpand_rows;
     expect([row.name, row.kind, row.error.code]).toEqual(["gamma", "tap_error", "EACCES"]);
     expect(readState(home).installations.map((e) => e.name)).toEqual(["beta"]);
+    // Installed nowhere, so nothing is left that state doesn't know.
+    expect(existsSync(join(roots["gemini-cli"]!, "gamma"))).toBe(false);
   } finally {
     chmodSync(claude, 0o755);
   }

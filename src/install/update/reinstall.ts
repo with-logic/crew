@@ -12,7 +12,7 @@ import { installSkillIntoAgents } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
-import { agentFailureCode } from "../../util/errno.ts";
+import { failureCodeOf } from "../../util/errno.ts";
 import type { PerAgentUpdate } from "./types.ts";
 
 export interface ReinstallInput {
@@ -81,7 +81,7 @@ function installGroup(
       for (const a of group) perTarget.push({ agent: a.name, kind: "skipped", reason: err.code });
       return;
     }
-    const error = { code: agentFailureCode(err), message: (err as Error).message };
+    const error = { code: failureCodeOf(err), message: (err as Error).message };
     for (const a of group) perTarget.push({ agent: a.name, kind: "failed", error });
   }
 }

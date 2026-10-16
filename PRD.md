@@ -1264,7 +1264,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
 
    **The materialized tree is a boundary.** The resolved location MUST be reached without traversing a symlink. A repository can commit a symlink at the very path a reference names; following it would read content from outside the requested commit — potentially from anywhere on the host filesystem.
 4. **Validate each candidate skill** against the Agent Skills specification:
-   - `SKILL.md` exists at the expected location, as a file. A plain symlink straight to a file inside the skill's own folder counts as one: relative text with no `..`, reaching its target through no other link, and not itself pointing at a link. crew never reads through a link that could lead out of a skill, and copies a skill's files as they are — a symlink as a symlink, which then resolves from wherever the copy lives (the store entry, each install) — so this is judged from the link's text and each entry on the way, never by following it. Any other symlink — absolute, with a `..` (even one that comes back in), through or to another link (itself included) — is `invalid_skill`, refused before anything is read through it; a plain one to nothing is no `SKILL.md`, also `invalid_skill`. One that exists but can't be read (its permissions, say) is not the skill's fault: it is reported as `source_unreachable` naming the file and skipped like an invalid candidate, but it counts as an operational failure, not a validation failure (step 9).
+   - `SKILL.md` exists at the expected location, as a file. A symlink to a file inside the skill's own folder counts as one, if every link on the way to that file — `SKILL.md` itself, any link it points at, and any folder link its path passes through — has relative text with no `..`: such a link resolves at or below the folder it sits in, so the chain stays inside the skill. crew never reads through a link that could lead out of a skill, and copies a skill's files as they are — a symlink as a symlink, which then resolves from wherever the copy lives (the store entry, each install) — so this is judged from each link's text, resolved by hand, never by following it. Any other — a link with absolute text or a `..` (even one that comes back in), a chain that loops, or one that ends at the folder's `.crew.json` (the one file a copy drops, and replaces with crew's marker, §7.5) — is `invalid_skill`, refused before anything is read through it; a chain of allowed links to nothing is no `SKILL.md`, also `invalid_skill`. One that exists but can't be read (its permissions, say) is not the skill's fault: it is reported as `source_unreachable` naming the file and skipped like an invalid candidate, but it counts as an operational failure, not a validation failure (step 9).
    - Frontmatter parses as YAML.
    - `name` matches `[a-z0-9][a-z0-9-]*`, length 1–64, no leading/trailing hyphen, and no consecutive hyphens. It MAY begin with a digit and need not match the parent directory name.
    - `description` is present, non-empty, length ≤ 1024 characters.
@@ -1449,7 +1449,7 @@ between resolution and targeting:
 4. Garbage-collect the store: any `store/<name>@<short-sha>/` entry no longer referenced by any `state.json` entry or marker is deleted.
 5. Print summary (human or JSON).
 
-**Error isolation.** Every skill is processed independently. A failure — network error, fetch error, spec validation error on a newly pulled version, customized install detected, dependency resolution failure, target install failure — is recorded against that skill and does not stop processing of the rest. A target crew couldn't write (its agent's skills folder isn't writable, say) is a failure of that skill's update: the entry keeps its previous state, so the agent still holding the previous install stays recorded and the next run tries again. Exit code is 0 if all skills were either up-to-date, updated successfully, or cleanly skipped as customized. Exit code is 1 if any skill encountered a hard failure (network, fetch, validation).
+**Error isolation.** Every skill is processed independently. A failure — network error, fetch error, spec validation error on a newly pulled version, customized install detected, dependency resolution failure, target install failure — is recorded against that skill and does not stop processing of the rest. A target crew couldn't write (its agent's skills folder isn't writable, say) is a failure of that skill's update: the entry keeps its previous state, so the agent still holding the previous install stays recorded, and the next update that finds the source changed from that state tries again. Agents that did take the new version keep it until then. Exit code is 0 if all skills were either up-to-date, updated successfully, or cleanly skipped as customized. Exit code is 1 if any skill encountered a hard failure (network, fetch, validation, a target crew couldn't write).
 
 **Upstream deletion does not remove local installs.** If an installed
 skill's source still resolves (the repo or tap is reachable) but the
@@ -1468,8 +1468,8 @@ recorded path's boundary is the repository; a path tap is the user's own
 directory and has none. At an explicit `@<ref>` the recorded path is
 held to the export rule of §9 step 3 instead — a symlink anywhere on it
 makes the skill gone. The skill's `SKILL.md` is held to §9 step 4
-wherever it is read: one that isn't a regular file or a plain link to one
-inside its folder fails the update as `invalid_skill` (below).
+wherever it is read: one reached through a link crew won't follow fails
+the update as `invalid_skill` (below).
 
 - **`source_gone`:**
   - the recorded path leads outside its boundary through a symlink —
@@ -1479,7 +1479,7 @@ inside its folder fails the update as `invalid_skill` (below).
     directory: crew's clone metadata (its remote URL, say) is not part of
     the source;
   - the recorded path is a link that dangles or loops, or the `SKILL.md`
-    is a plain link to nothing inside its folder;
+    is a chain of allowed links (§9 step 4) to nothing;
   - the skill is now the wrong kind of thing: a gist skill file, or a
     one-skill gist's root `SKILL.md`, that is no longer a regular file of
     that exact name, case included (a symlink is never a gist skill, §9
@@ -1489,9 +1489,10 @@ inside its folder fails the update as `invalid_skill` (below).
     hand-edited `../x.md`, say): it is never read.
 - **Followed:** a symlink to a skill directory that stays inside the
   repository, as discovery follows skill-directory links at install, and a
-  `SKILL.md` that is a plain link to a file inside its skill's folder.
-- **`invalid_skill`** (a hard failure, as at install): a `SKILL.md` that
-  is any other symlink (§9 step 4). Nothing is read through it.
+  `SKILL.md` linked to a file inside its folder through allowed links.
+- **`invalid_skill`** (a hard failure, as at install): a `SKILL.md`
+  reached through a link crew won't follow (§9 step 4). Nothing is read
+  through it.
 - **`source_unreachable`** (a hard failure): any other failure to look —
   a permission error, say, including on a link crew can't resolve that
   points inside the boundary, or on a folder above a path tap — and a
@@ -1564,12 +1565,14 @@ On every `crew update` run, for each group of state entries sharing
    is mandatory: a child whose frontmatter is invalid (missing
    `description`, over-long fields, …) MUST be reported as a per-child
    failure carrying `invalid_skill` and MUST NOT be installed, in both
-   real and `--dry-run` runs. The run exits 1. So is a child crew
-   can't stage (§9 step 8), or can't install into an agent because it
-   can't write that agent's skills folder: it is reported as a failed
-   child and not recorded, so the next run tries again. A safety check
-   refusing an agent (§7.3) leaves the child out of that agent, as an
-   install does.
+   real and `--dry-run` runs. The run exits 1. A child crew can't
+   stage (§9 step 8), or can't install into an agent because it can't
+   write that agent's skills folder, fails the same way: it is reported
+   as a failed child, not recorded, and removed from any agent it was
+   just installed into, so it is installed nowhere and the next run
+   tries again. A safety check refusing an agent (§7.3) leaves the child
+   out of that agent, with no re-expansion row and without failing the
+   run.
 3. For each skill in state attributed to this tap whose directory is
    **no longer present** under the resolved root: reports `source_gone`
    and leaves the local install untouched (per the upstream-deletion
@@ -2534,7 +2537,7 @@ Implementations and test suites refer to criteria by ID.
 | C-SPEC-12 | §9 | Validation errors name the offending field in the human-readable message. |
 | C-SPEC-13 | §9 | No file is written to any agent when validation fails. |
 | C-SPEC-14 | §9 | A skill whose `name` begins with a digit passes validation if the rest of the name is otherwise valid. |
-| C-SPEC-15 | §9 step 4 | A `SKILL.md` that isn't a regular file (a directory, say), or that is a symlink other than a plain one straight to a file inside its folder — absolute, with a `..` (even to come back), through or to another link (itself included), or out to a file crew can't read — fails validation with a message naming it, while the source's valid skills install; nothing is read through such a link, at a ref too. A `SKILL.md` that is a plain link to a file inside its folder is valid, and installs readable. |
+| C-SPEC-15 | §9 step 4 | A `SKILL.md` that isn't a regular file (a directory, say), or that is reached through a link crew won't follow — absolute text or a `..` anywhere on the way (even to come back, past a folder link, or out to a file crew can't read), or a chain that loops — fails validation with a message naming it, while the source's valid skills install; nothing is read through such a link, at a ref too. A `SKILL.md` linked to a file inside its folder through relative, `..`-free links — directly, through another link, or through a folder link such as `current -> v1` — is valid, and installs readable. |
 | C-SPEC-16 | §9 steps 4, 6, 8 | A `SKILL.md` crew can't read, or another file of the skill it can't read while staging, is reported as `source_unreachable` naming the file; that skill is skipped while the source's other skills install, and no partial copy is left in the store. A dependency beside its parent that crew can't load — it can't look into the folder, or the `SKILL.md` is unreadable or invalid — fails the install with that reason, naming the dependency, and is never taken from another tap; crew's own store failing is one error naming the store. |
 
 #### C-INST: Install (§9)
@@ -2679,7 +2682,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-18b | §10.1.1 | `--force --dry-run` previews a pinned skill whose upstream moved as `would_update` (rather than `skipped`) and still writes nothing. |
 | C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. |
 | C-UPD-18d | §10.1.1, §14 | `crew update` holds a per-repository clone lock spanning refresh through source read, in both real and `--dry-run` runs, so a concurrent run cannot change the clone's checked-out commit between SHA resolution and byte read. A run blocked past the timeout exits `state_locked`. |
-| C-UPD-18e | §10.1.1 | A newly-discovered child that fails validation, that crew can't stage (§9 step 8), or that crew can't install into an agent whose skills folder it can't write, is named in human output along with its error code and message, is counted as a failure in the run totals, and isn't recorded; the rest of the run proceeds. |
+| C-UPD-18e | §10.1.1 | A newly-discovered child that fails validation, that crew can't stage (§9 step 8), or that crew can't install into an agent whose skills folder it can't write, is named in human output along with its error code and message, is counted as a failure in the run totals, and is installed nowhere — not recorded, and removed from any agent it was just installed into; the rest of the run proceeds. A safety check refusing an agent leaves the child out of it with no re-expansion row and without failing the run. |
 | C-UPD-18f | §10.1.1 | `crew outdated [<selector>...]` behaves as `crew update --dry-run`: identical `--json` payload (`dry_run: true`, `would_update` / `would_add` kinds), identical exit code, and the same write boundary — tap clones refresh, while installed skills, markers, store entries, and `state.json` are unchanged. Human output lists only rows that would change and prints a single "up to date" line when none would. |
 | C-UPD-18g | §10.1.1, §14 | `crew outdated` against a home with no `state.json` leaves it absent, and never acquires the state lock. |
 | C-UPD-18h | §10.1.1 | When a tap refresh or re-expansion fails, `crew outdated` reports the results as possibly stale rather than printing an unqualified "up to date", even if every locally-known row is up to date. |
@@ -2704,7 +2707,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
 | C-UPD-38 | §9 step 5, §10.1.1 | For a gist installed whole: an edited skill file is updated by `crew update`; a new skill file added upstream is installed by tap re-expansion; a deleted skill file reports `source_gone` and its local install is left in place. For one skill installed with `//<file>`, a deleted file is likewise `source_gone`. |
 | C-UPD-39 | §8.4, §10.1 | When the recorded path of an installed skill that doesn't track its git tap (`<tap>/<skill>`, a gist `//<file>`) is replaced upstream by a symlink leading outside the repository, `crew update` reports `source_gone` and leaves the installed bytes unchanged; nothing is read through the link. So does a gist `//<file>` replaced by a symlink to another file of the gist, a one-skill gist (installed as `<tap>/<skill>`) whose root `SKILL.md` becomes a symlink, and a gist entry whose recorded path is not one top-level file name. The same holds at an `@<ref>`, where any symlink on the recorded path is gone. At the default branch, a symlink to a skill directory that stays inside the repository updates normally. |
-| C-UPD-40 | §8.4, §10.1, §10.1.1 | On `crew update` of a skill that doesn't track its git tap: a recorded path that dangles or loops (in a path tap too), a `SKILL.md` that is a plain link to nothing inside its folder, a gist `//<file>` whose name now differs only in case, a skill directory left without a `SKILL.md`, a recorded path that is a symlink out of its boundary (§10.1; even one crew can't resolve, through any folder of the path), and a skill folder relinked to the repository root or into `.git` report `source_gone`. A `SKILL.md` that is any other symlink (§9 step 4) fails the update as `invalid_skill`, unread, at a ref too. A path crew can't look at for any other reason (permissions, the skill's own folder or a folder above a path tap included) fails the update with `source_unreachable`, as does a file it can't read while staging; a tracked tap's new child crew can't stage is reported as a failed child (as in C-UPD-18e, with `source_unreachable`) while the rest of the run proceeds. |
+| C-UPD-40 | §8.4, §10.1, §10.1.1 | On `crew update` of a skill that doesn't track its git tap: a recorded path that dangles or loops (in a path tap too), a `SKILL.md` that is a chain of allowed links to nothing, a gist `//<file>` whose name now differs only in case, a skill directory left without a `SKILL.md`, a recorded path that is a symlink out of its boundary (§10.1; even one crew can't resolve, through any folder of the path), and a skill folder relinked to the repository root or into `.git` report `source_gone`. A `SKILL.md` reached through a link crew won't follow (§9 step 4) fails the update as `invalid_skill`, unread, at a ref too. A path crew can't look at for any other reason (permissions, the skill's own folder or a folder above a path tap included) fails the update with `source_unreachable`, as does a file it can't read while staging; a tracked tap's new child crew can't stage is reported as a failed child (as in C-UPD-18e, with `source_unreachable`) while the rest of the run proceeds. |
 
 #### C-INFO: Info (§9.1)
 

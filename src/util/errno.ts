@@ -53,7 +53,7 @@ export function isGoneError(err: unknown): boolean {
 }
 
 /** A §13 name, or a filesystem errno code (`EACCES`) for which §13 has none. */
-export type AgentFailureCode = CrewErrorName | `E${Uppercase<string>}`;
+export type FailureCode = CrewErrorName | `E${Uppercase<string>}`;
 
 /**
  * The code a per-agent failure reports — installing into, or removing
@@ -61,14 +61,14 @@ export type AgentFailureCode = CrewErrorName | `E${Uppercase<string>}`;
  * a staging failure), or the errno code of a filesystem error on the
  * agent's folder, which isn't the source's fault.
  */
-export function agentFailureCode(err: unknown): AgentFailureCode {
+export function failureCodeOf(err: unknown): FailureCode {
   if (err instanceof CrewError) return err.code;
-  return isFsError(err) ? ((err as NodeJS.ErrnoException).code as AgentFailureCode) : "usage_error";
+  return isFsError(err) ? ((err as NodeJS.ErrnoException).code as FailureCode) : "usage_error";
 }
 
 /**
  * The §13 name an entry's or a tap's failure reports in an update or
- * re-expansion row (per-agent rows use `agentFailureCode`). A raw filesystem
+ * re-expansion row (per-agent rows use `failureCodeOf`). A raw filesystem
  * error is a local file crew couldn't use, `source_unreachable`; its
  * errno `.code` is no §13 name. Anything else is `fallback`.
  */
