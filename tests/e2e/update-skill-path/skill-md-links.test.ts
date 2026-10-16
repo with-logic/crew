@@ -107,6 +107,16 @@ const OUT: readonly (readonly [string, (demo: string, repo: string) => void])[] 
     },
   ],
   [
+    "resolved out through a folder link inside it",
+    (demo) => {
+      const outside = makeTempDir();
+      writeFileSync(join(outside, "SKILL.md"), `---\n${skillFrontmatter({ name: "demo" })}\n---\n`);
+      symlinkSync(outside, join(demo, "sub"));
+      rmSync(join(demo, "SKILL.md"));
+      symlinkSync(join("sub", "SKILL.md"), join(demo, "SKILL.md"));
+    },
+  ],
+  [
     "linked out of its folder and back in by name",
     (demo) => {
       renameSync(join(demo, "SKILL.md"), join(demo, "body.md"));

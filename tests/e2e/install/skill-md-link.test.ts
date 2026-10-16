@@ -79,6 +79,16 @@ for (const [what, link] of [
   ["by an absolute path, even to a file inside it", (folder: string) => join(folder, "body.md")],
   ["out and back in by name", () => join("..", "linked", "body.md")],
   ["to nothing outside it", () => "/nonexistent/SKILL.md"],
+  [
+    "through a folder link inside it that leads out",
+    (folder: string) => {
+      const outside = makeTempDir();
+      const md = `---\n${skillFrontmatter({ name: "linked" })}\n---\nOUTSIDE\n`;
+      writeFileSync(join(outside, "SKILL.md"), md);
+      symlinkSync(outside, join(folder, "sub"));
+      return join("sub", "SKILL.md");
+    },
+  ],
 ] as const) {
   test(`C-SPEC-15 a SKILL.md linking ${what} is invalid; the rest install`, () => {
     const r = install(makeCrewHome(), sourceWithLink(link));

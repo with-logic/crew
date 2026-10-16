@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -138,6 +138,21 @@ describe("crew info", () => {
     } finally {
       chmodSync(join(src, "locked", "SKILL.md"), 0o644);
     }
+  });
+
+  test("C-INFO-03 a SKILL.md that links out is named once, by the message itself", () => {
+    const src = makeTempDir();
+    mkdirSync(join(src, "docs"));
+    writeFileSync(join(src, "docs", "x.md"), `---\n${skillFrontmatter({ name: "linked" })}\n---\n`);
+    mkdirSync(join(src, "linked"));
+    symlinkSync(join("..", "docs", "x.md"), join(src, "linked", "SKILL.md"));
+    const capture = captureStreams();
+    const code = runCli(["info", src, "--json"], {
+      home: makeInfoHome(),
+      streams: capture.streams,
+    });
+    expect(code).toBe(4);
+    expect(JSON.parse(capture.stdout()).error.message).toMatch(/^the SKILL\.md of `/);
   });
 
   test("C-INFO-03 a folder whose one skill is invalid reports why instead of no skills", () => {

@@ -47,7 +47,7 @@ test("C-SPEC-16 crew's own store failing is one error naming the store, not the 
   mkdirSync(paths(home).storeDir, { recursive: true });
   withMode(paths(home).storeDir, 0o555, () => {
     const r = install(home, [src]);
-    expect(r.json.error.name).toBe("source_unreachable");
+    expect([r.code, r.json.error.name]).toEqual([5, "source_unreachable"]);
     expect(r.json.error.details).toEqual({ store: paths(home).storeDir });
     expect(r.json.error.message).toContain("couldn't use crew's store");
   });
@@ -59,7 +59,7 @@ test("an agent folder crew can't write fails that agent, naming the folder", () 
   makeSkill(src, "a", skillFrontmatter({ name: "a" }));
   withMode(claude.userRoot, 0o555, () => {
     const r = install(makeCrewHome(), [src]);
-    expect(r.code).not.toBe(0);
+    expect(r.code).toBe(1);
     const [agent] = r.json.records[0].agents;
     // Not the source's fault: reported by the agent folder's own error.
     expect([agent.kind, agent.error.code]).toEqual(["failed", "EACCES"]);
@@ -82,7 +82,7 @@ test("C-SPEC-16 a dependency beside its parent that crew can't copy fails, namin
   });
   withMode(restore, 0o000, () => {
     const r = install(makeCrewHome(), [join(src, "a")]);
-    expect(r.json.error.name).toBe("source_unreachable");
+    expect([r.code, r.json.error.name]).toEqual([5, "source_unreachable"]);
     expect(r.json.error.message).toMatch(/couldn't read `\S+\/b\/notes\.txt` — EACCES/);
   });
   expect(readdirSync(claude.userRoot)).toEqual([]);
@@ -98,7 +98,7 @@ test("C-SPEC-16 a dependency beside its parent that crew can't read is never tak
   const { src, restore } = parentWithSibling((b) => join(b, "SKILL.md"));
   withMode(restore, 0o000, () => {
     const r = install(home, [join(src, "a")]);
-    expect(r.json.error.name).toBe("source_unreachable");
+    expect([r.code, r.json.error.name]).toEqual([5, "source_unreachable"]);
     expect(r.json.error.message).toMatch(/couldn't read `\S+\/b\/SKILL\.md`/);
   });
   expect(readdirSync(claude.userRoot)).toEqual([]);
@@ -118,7 +118,7 @@ test("C-SPEC-16 a dependency folder crew can't look into fails the install, not 
   const { src, restore } = parentWithSibling((b) => b);
   withMode(restore, 0o000, () => {
     const r = install(home, [join(src, "a")]);
-    expect(r.json.error.name).toBe("source_unreachable");
+    expect([r.code, r.json.error.name]).toEqual([5, "source_unreachable"]);
     expect(r.json.error.message).toMatch(/couldn't look at `\S+\/b\/SKILL\.md`/);
   });
   expect(readdirSync(claude.userRoot)).toEqual([]);
@@ -131,7 +131,7 @@ test("C-SPEC-16 an invalid dependency beside its parent fails the install, namin
     return b;
   });
   const r = install(home, [join(src, "a")]);
-  expect(r.json.error.name).toBe("invalid_skill");
+  expect([r.code, r.json.error.name]).toEqual([4, "invalid_skill"]);
   expect(r.json.error.message).toMatch(/^dependency `b` \(`\S+\/b`\): /);
   expect(r.json.error.details).toMatchObject({ dependency: "b", path: join(src, "b") });
   expect(readdirSync(claude.userRoot)).toEqual([]);
