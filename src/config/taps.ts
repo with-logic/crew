@@ -3,6 +3,7 @@
  */
 
 import { CrewError } from "../core/errors.ts";
+import { isGistUrl } from "../core/gist-url.ts";
 import type { TapConfig, TapDiscovery, TapKind } from "../core/types.ts";
 import type { YamlMap, YamlValue } from "../yaml/parse.ts";
 
@@ -77,7 +78,11 @@ function parseGitTap(
     );
   }
   const subpath = parseSubpath(em["subpath"]);
-  return { name, kind: "git", registered, url, subpath, path: "", ...discovery };
+  // §8.2 "Gists": recursive discovery never applies to a gist. A row an
+  // older crew recorded with it would otherwise keep claiming it in
+  // `tap list` and spread it into every new marker.
+  const applies = isGistUrl(url) ? {} : discovery;
+  return { name, kind: "git", registered, url, subpath, path: "", ...applies };
 }
 
 function parsePathTap(

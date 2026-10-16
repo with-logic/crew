@@ -14,7 +14,7 @@ import type { Config, TapConfig } from "../../../core/types.ts";
 import { withAcquiredTap } from "../../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { stageIntoStore } from "../../../sources/store.ts";
-import type { SiblingHit } from "../../dep-resolution.ts";
+import { isWholeRepoRootSkill, type SiblingHit } from "../../dep-resolution.ts";
 import type { PendingItem } from "../enqueue.ts";
 
 /**
@@ -37,7 +37,13 @@ export function withParentSkill<T>(
   home: string,
   fn: (parentPath: string | undefined) => T,
 ): T {
-  if (parent.requestedRef === null || parent.resolvedSha === null || parent.tap.kind !== "git")
+  // No export when no sibling search will read it (a whole-repo root skill).
+  if (
+    parent.requestedRef === null ||
+    parent.resolvedSha === null ||
+    parent.tap.kind !== "git" ||
+    isWholeRepoRootSkill(parent.tap, parent.tapRelativePath)
+  )
     return fn(undefined);
   const widened: TapConfig = { ...parent.tap, subpath: enclosingSubpath(parent.tap.subpath) };
   // Inside the widened export, the parent sits at its own directory name

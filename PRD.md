@@ -1263,7 +1263,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
 
    **The materialized tree is a boundary.** The resolved location MUST be reached without traversing a symlink. A repository can commit a symlink at the very path a reference names; following it would read content from outside the requested commit — potentially from anywhere on the host filesystem.
 4. **Validate each candidate skill** against the Agent Skills specification:
-   - `SKILL.md` exists at the expected location, as a file. One that exists but can't be read (its permissions, say) is not the skill's fault: it is reported as `source_unreachable` naming the file, and skipped like an invalid candidate.
+   - `SKILL.md` exists at the expected location, as a file. One that exists but can't be read (its permissions, say) is not the skill's fault: it is reported as `source_unreachable` naming the file and skipped like an invalid candidate, but it counts as an operational failure, not a validation failure (step 9).
    - Frontmatter parses as YAML.
    - `name` matches `[a-z0-9][a-z0-9-]*`, length 1–64, no leading/trailing hyphen, and no consecutive hyphens. It MAY begin with a digit and need not match the parent directory name.
    - `description` is present, non-empty, length ≤ 1024 characters.
@@ -1346,8 +1346,11 @@ beside the label for auto taps. `--json` adds the rendered label as
 If the argument does not match installed state, `crew info` resolves it as an
 install reference and previews the valid skills available at that source.
 When the source holds skill candidates but none of them is valid, the
-preview fails with `invalid_skill` naming the reason, as an install of the
-same reference would (§9 step 9), rather than reporting no skills. An
+preview fails naming the reason rather than reporting no skills: with
+`invalid_skill` (exit 4) if any candidate is invalid — the same verdict an
+install of the reference reaches (§9 step 9) — otherwise with
+`source_unreachable` (exit 5), when every candidate's `SKILL.md` was
+unreadable (§9 step 4). An
 `@ref` tail is not part of the installed-skill selector grammar; arguments such
 as `<tap>/<skill>@<ref>` therefore follow the reference-preview path rather than
 matching installed state.
@@ -1461,10 +1464,12 @@ default branch whose recorded path in a git source now leads outside the
 repository through a symlink is treated the same way: crew never follows
 it (§8.4), so as far as the source is concerned the skill is gone. A
 symlink to a skill directory that stays inside the repository is
-followed, as discovery follows skill-directory links at install; a gist skill file that
-becomes a symlink is gone, since a symlink is never a gist skill (§9 step
-5, "Gists"). (A skill read at an explicit `@<ref>` is held to the export
-rule of §9 step 3 instead.)
+followed, as discovery follows skill-directory links at install; a gist
+skill file that becomes a symlink is gone, since a symlink is never a
+gist skill (§9 step 5, "Gists"). So is a skill directory replaced by a
+file. A failure to look that isn't a missing path — a permission error,
+say — is `source_unreachable`, not `source_gone`. (A skill read at an
+explicit `@<ref>` is held to the export rule of §9 step 3 instead.)
 
 This rule also applies when a whole source becomes unresolvable: a
 tap's clone URL 404s, or a git repo is gone. Those produce
@@ -2544,7 +2549,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-18 | §11.1 | A project-scope install records `project_root` in the state entry equal to the user's working directory at install time. User-scope installs do NOT have a `project_root`. |
 | C-INST-19 | §9 | `state.json` may contain multiple project-scope entries for the same skill name, each with a different `project_root` — they're independent installs, not duplicates. |
 | C-INST-20 | §9 step 9 | A validation failure on any skill is recorded as a failed skill; the run continues through the remaining skills. It does not abort the command. |
-| C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation). |
+| C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation — including a `SKILL.md` crew can't read, §9 step 4). |
 | C-INST-21a | §9 step 9 | Two directly-named roots where one succeeds in ≥1 agent and the other fails in every selected agent: the run exits 1 and both roots appear in the output. |
 | C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
 | C-INST-23 | §8.2, §9 step 5 | `crew install <gist-url>` installs one skill per top-level `.md` file that opens with YAML frontmatter. Each installed directory contains that file's bytes as `SKILL.md`, the entry's `source.path` is the file name, and files that are not candidates are ignored. |
@@ -2673,7 +2678,7 @@ Implementations and test suites refer to criteria by ID.
 |---|---|---|
 | C-INFO-01 | §9.1 | `crew info <tap>/<skill>` resolves the argument against installed state first; if matching state entries exist, it renders the installed view rather than walking the tap source. |
 | C-INFO-02 | §9.1 | `crew info <installed-skill>` renders the source with the §5.1 label rule, and for an auto tap also shows that tap's name so the user can act on it. `--json` carries the rendered label as `source_label`. |
-| C-INFO-03 | §9.1 | `crew info <ref>` for a source whose skill candidates are all invalid — a gist `//<file>` naming an invalid file, or a folder holding one invalid skill — exits 4 with `invalid_skill` and the reason, rather than previewing no skills. |
+| C-INFO-03 | §9.1 | `crew info <ref>` for a source whose skill candidates are all invalid — a gist `//<file>` naming an invalid file, or a folder holding one invalid skill — exits 4 with `invalid_skill` and the reason, rather than previewing no skills; when every candidate is merely unreadable it exits 5 with `source_unreachable`. |
 
 #### C-UNINST: Uninstall (§7.4)
 

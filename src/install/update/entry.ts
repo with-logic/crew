@@ -150,7 +150,7 @@ function updateOne(
 /** Stage and reinstall one entry from an already-acquired tree. */
 function applyUpdate(
   entry: StateEntry,
-  acquired: AcquiredTap,
+  acquired: Pick<AcquiredTap, "resolvedSha" | "pinned">,
   // Exists: tap re-expansion marks tracked children gone upstream, and
   // `withAcquiredSkill` raises `no_skills_found`/`invalid_ref` (soft
   // `source_gone`, above) for the rest.

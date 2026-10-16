@@ -77,12 +77,13 @@ export function installCommand(ctx: CommandContext): CommandOutput {
 
   // Exit-code rules (PRD §9 step 9). Per-skill outcome is
   // "succeeded" iff the skill validated AND at least one agent
-  // install succeeded. Validation failures land in result.skipped;
-  // agent-level failures live in result.summary.records with
-  // `anySuccess === false`.
+  // install succeeded. Skipped candidates are validation failures unless
+  // crew couldn't read them (operational, like failed agent installs).
   const succeeded = result.summary.records.filter((r) => r.anySuccess).length;
-  const operationalFailures = result.summary.records.filter((r) => !r.anySuccess).length;
-  const validationFailures = result.skipped.length;
+  const validationFailures = result.skipped.filter((s) => s.code === "invalid_skill").length;
+  const operationalFailures =
+    result.summary.records.filter((r) => !r.anySuccess).length +
+    (result.skipped.length - validationFailures);
   const failed = operationalFailures + validationFailures;
   const allAlreadyInstalled =
     result.alreadyInstalled.length > 0 && result.summary.records.length === 0;

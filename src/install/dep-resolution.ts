@@ -42,10 +42,10 @@ export interface SiblingHit {
  *
  * `parent.parentPath`, when set, is the parent skill's own location (its
  * directory, or a gist's skill file) inside an already-materialized
- * export of a pinned commit. Siblings
- * must be discovered there, not in the live clone: staging HEAD's bytes
- * while recording the parent's SHA would make state describe a
- * provenance the content doesn't have (§9 step 3).
+ * export of a pinned commit. Siblings must be discovered there, not in
+ * the live clone: staging HEAD's bytes while recording the parent's SHA
+ * would make state describe a provenance the content doesn't have
+ * (§9 step 3).
  */
 export function findSiblingDep(
   parent: { tap: TapConfig; tapRelativePath: string; parentPath?: string | undefined },
@@ -53,13 +53,9 @@ export function findSiblingDep(
   home: string,
   config: Config,
 ): SiblingHit | null {
+  if (isWholeRepoRootSkill(parent.tap, parent.tapRelativePath)) return null;
   const tapClone = tapClonePath(parent.tap, home);
   const tapRoot = tapRootDir(tapClone, parent.tap);
-  // A whole-repo root skill has no siblings: beside it is crew's own clone
-  // or scratch-export directory, not the source.
-  if (parent.tap.kind === "git" && parent.tap.subpath === "" && parent.tapRelativePath === "") {
-    return null;
-  }
   // The parent's own location inside the tap; its siblings share its parent directory.
   const parentPath = parent.parentPath ?? join(tapRoot, parent.tapRelativePath);
   const siblingParent = join(parentPath, "..");
@@ -90,6 +86,14 @@ export function findSiblingDep(
     config,
   );
   return { tap: attrib.tap, config: attrib.config, tapRelativePath: "", loaded: match.loaded };
+}
+
+/**
+ * A git repository whose root is the skill has no siblings: beside it is
+ * crew's own clone or scratch-export directory, not the source.
+ */
+export function isWholeRepoRootSkill(tap: TapConfig, tapRelativePath: string): boolean {
+  return tap.kind === "git" && tap.subpath === "" && tapRelativePath === "";
 }
 
 /** A sibling is a skill directory — or, in a gist, a skill file (§9 step 5). */

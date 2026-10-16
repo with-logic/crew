@@ -1,6 +1,7 @@
 /**
  * One skill of a gist: `<gist-url>//<file>` (§8.2 "Gists", §9 step 5;
- * C-INST-26, C-REF-39, C-LIST-09).
+ * C-INST-26, C-REF-39, C-LIST-09). `crew info` of a gist is in
+ * `info.test.ts`.
  *
  * The gist is served from a local repo by `useGistFixture`; nothing here
  * touches the network.
@@ -79,14 +80,14 @@ describe("crew install <gist-url>//<file>", () => {
       expect(error.details["files"]).toEqual(["build.md", "prd.md"]);
     }
     const human = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//missing.md`]);
-    expect(human.stderr + human.stdout).toContain("Its skill files are `build.md`, `prd.md`");
+    expect(human.stderr + human.stdout).toContain("Its skills are in `build.md`, `prd.md`");
   });
 
   test("C-INST-26 a gist with no skill files says so when a file is missing", () => {
     fx.gist({ "README.md": "# Notes\n" });
     const r = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//prd.md`]);
     expect(r.code).toBe(4);
-    expect(r.stderr + r.stdout).toContain("The gist has no skill files");
+    expect(r.stderr + r.stdout).toContain("The gist has no skills:");
   });
 
   test("a skill file crew can't read says so, naming the file", () => {
@@ -100,6 +101,8 @@ describe("crew install <gist-url>//<file>", () => {
       expect(r.code).toBe(5);
       expect(json(r).error.name).toBe("source_unreachable");
       expect(json(r).error.message).toMatch(/^couldn't read `\S+\/prd\.md` — EACCES/);
+      const human = run(home, ["info", `${GIST_PAGE_URL}//prd.md`]);
+      expect(human.stdout + human.stderr).toContain("Check that the file is readable by you");
     } finally {
       chmodSync(join(home, "repos", clone, "prd.md"), 0o644);
     }
@@ -135,7 +138,10 @@ describe("crew install <gist-url>//<file>", () => {
   });
 
   test("C-INST-26 a gist with a root SKILL.md takes no //<file>", () => {
-    fx.gist({ "SKILL.md": skillFile("whole"), "helper.md": skillFile("helper") });
+    const { sha } = fx.gist({ "SKILL.md": skillFile("whole"), "helper.md": skillFile("helper") });
+    // The suggested whole-gist command keeps the user's pin.
+    const pinned = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}@${sha}//helper.md`]);
+    expect(pinned.stdout + pinned.stderr).toContain(`crew install ${GIST_CLONE_URL}@${sha}`);
     for (const file of ["SKILL.md", "helper.md"]) {
       const r = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//${file}`, "--json"]);
       expect(r.code).toBe(4);
@@ -152,47 +158,5 @@ describe("crew install <gist-url>//<file>", () => {
       expect(r.code).toBe(4);
       expect(json(r).error.name).toBe("invalid_ref");
     }
-  });
-});
-
-describe("crew info <gist-url>//<file>", () => {
-  for (const configured of [false, true]) {
-    const when = configured ? "once the gist's tap exists" : "for a gist crew hasn't seen";
-    test(`previews just the named file, ${when}`, () => {
-      fx.gist({ "prd.md": skillFile("prd"), "build.md": skillFile("build") });
-      const home = makeCrewHome();
-      if (configured) expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
-      const whole = json(run(home, ["info", GIST_PAGE_URL, "--json"]));
-      expect(whole.skills.map((s: { name: string }) => s.name).sort()).toEqual(["build", "prd"]);
-      const one = json(run(home, ["info", `${GIST_PAGE_URL}//build.md`, "--json"]));
-      expect(one.skills.map((s: { name: string }) => s.name)).toEqual(["build"]);
-    });
-
-    test(`C-INFO-03 an invalid named file reports why, as install does, ${when}`, () => {
-      fx.gist({ "prd.md": skillFile("prd"), "bad.md": "---\nname: Not Valid\n---\n" });
-      const home = makeCrewHome();
-      if (configured) expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
-      const r = run(home, ["info", `${GIST_PAGE_URL}//bad.md`]);
-      expect(r.code).toBe(4);
-      expect(r.stderr + r.stdout).toContain("`bad.md`: `name: Not Valid`");
-      expect(r.stderr + r.stdout).toContain("Check `bad.md`'s frontmatter");
-    });
-  }
-
-  test("C-INFO-03 a gist whose only skill file is invalid reports why", () => {
-    fx.gist({ "prd.md": "---\nname: prd\n---\n" });
-    const r = run(makeCrewHome(), ["info", GIST_PAGE_URL, "--json"]);
-    expect(r.code).toBe(4);
-    expect(json(r).error.name).toBe("invalid_skill");
-    expect(json(r).error.message).toBe(
-      "`prd.md` frontmatter is missing `description` — add a non-empty one-line summary the agent will read to decide whether to use this skill",
-    );
-  });
-
-  test("C-INFO-03 a gist with several invalid files says how many", () => {
-    fx.gist({ "a.md": "---\nname: a\n---\n", "b.md": "---\nname: b\n---\n" });
-    const r = run(makeCrewHome(), ["info", GIST_PAGE_URL, "--json"]);
-    expect(r.code).toBe(4);
-    expect(json(r).error.message).toStartWith("none of the 2 skills here is valid — `a.md`");
   });
 });

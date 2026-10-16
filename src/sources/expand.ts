@@ -1,7 +1,7 @@
 /**
  * Skill expansion (§9 step 5).
  *
- * Three cases, checked in order:
+ * Four cases, checked in order:
  *   1. Root `SKILL.md` → one skill.
  *   2. Root `skills/` subdirectory present → walk under `skills/`:
  *      - Each immediate child with a `SKILL.md` is a skill.
@@ -11,8 +11,10 @@
  *      - Exactly one level of namespace nesting. Deeper is ignored.
  *      - The source root itself is not walked in this case.
  *   3. Otherwise → walk ONE level under the source root.
+ *   4. Only when 2–3 found no candidate and the tap's discovery is
+ *      recursive → bounded recursive search (`./recursive.ts`).
  *
- * A gist (§9 step 5, "Gists") replaces cases 2–3: after case 1, every
+ * A gist (§9 step 5, "Gists") replaces cases 2–4: after case 1, every
  * skill-shaped file at its root is a skill. A `//<file>` selection hands
  * this module the skill file itself, which is the one skill.
  *
@@ -25,12 +27,13 @@
  */
 
 import { join } from "node:path";
+import type { CrewErrorName } from "../core/errors.ts";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill, TapConfig, TapDiscovery } from "../core/types.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
-import { gistSkillCandidates, isGistTap, isOneSkillGist } from "./gist.ts";
+import { gistLabel, gistSkillCandidates, isGistTap, isOneSkillGist } from "./gist.ts";
 import { findRecursiveSkillDirs } from "./recursive.ts";
 
 /** A skill candidate that couldn't be loaded. */
@@ -39,8 +42,8 @@ export interface SkippedSkill {
   readonly path: string;
   /** Human-readable reason from the underlying `CrewError`. */
   readonly message: string;
-  /** The error code (typically `invalid_skill`). */
-  readonly code: string;
+  /** The error code: `invalid_skill`, or `source_unreachable` for a file crew couldn't read. */
+  readonly code: CrewErrorName;
 }
 
 /** Result of an expansion: the valid skills plus any children skipped. */
@@ -60,6 +63,12 @@ export type DiscoveryMode = "standard" | "gist" | TapDiscovery;
 export function discoveryOf(tap: Pick<TapConfig, "kind" | "url" | "discovery">): DiscoveryMode {
   if (isGistTap(tap)) return "gist";
   return tap.discovery ?? "standard";
+}
+
+/** Expand `root` the way `tap` lays out skills; a gist is named by its URL and `sha` in errors. */
+export function expandTapSkills(root: string, tap: TapConfig, sha: string | null): ExpansionResult {
+  const mode = discoveryOf(tap);
+  return expandSkills(root, mode, mode === "gist" ? gistLabel(tap, sha) : undefined);
 }
 
 /** Case 1: `root` is itself one skill. */

@@ -15,7 +15,7 @@
  */
 
 import { lstatSync, type Stats } from "node:fs";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { toPosix } from "./fs.ts";
 
@@ -33,6 +33,15 @@ import { toPosix } from "./fs.ts";
  * The caller supplies `describe` so the message names the thing the
  * user typed (a tap, a reference) rather than an internal path.
  */
+/**
+ * True when a `path.relative` result leaves its base: it climbs (`..`, or
+ * `../…`) or shares no base at all (absolute, a different drive). A name
+ * that merely starts with dots — `..notes.md` — stays inside.
+ */
+export function climbsOut(rel: string): boolean {
+  return rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+}
+
 export function assertNoSymlinkEscape(root: string, target: string, describe: string): void {
   const rootAbs = resolve(root);
   const targetAbs = resolve(target);
@@ -40,7 +49,7 @@ export function assertNoSymlinkEscape(root: string, target: string, describe: st
   // to climb, so a leading `..` means it escaped. An absolute result
   // means the two share no common base at all (different drives).
   const rel = relative(rootAbs, targetAbs);
-  if (rel.startsWith("..") || isAbsolute(rel)) {
+  if (climbsOut(rel)) {
     throw new CrewError(
       "invalid_ref",
       `${describe} resolves outside the source, which would read content that isn't part of it`,

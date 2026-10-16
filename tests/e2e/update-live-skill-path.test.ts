@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -84,6 +84,18 @@ describe("crew update of a <tap>/<skill> install", () => {
     expect(installed()).toContain("Original.");
   });
 
+  test("C-UPD-11 a skill folder replaced by a file upstream is source_gone", () => {
+    const { home, repo } = installFromGitTap();
+    expect(installed()).toContain("Original.");
+    rmSync(join(repo, "skills", "demo"), { recursive: true });
+    writeFileSync(join(repo, "skills", "demo"), "now a file\n");
+    commitAll(repo, "demo is a file now");
+
+    const r = run(home, ["update", "--json"]);
+    expect(r.code).toBe(0);
+    expect(outcomes(r)).toEqual(["demo:source_gone"]);
+  });
+
   test("C-UPD-39 a symlink that stays inside the repository updates normally", () => {
     const home = makeCrewHome();
     const repo = makeTempDir();
@@ -113,10 +125,29 @@ describe("crew update of a <tap>/<skill> install", () => {
     try {
       const r = run(home, ["update", "--json"]);
       expect(r.code).toBe(1);
-      expect(outcomes(r)).not.toContain("demo:source_gone");
+      expect(outcomes(r)).toEqual(["demo:failed"]);
+      expect(r.stdout).toContain("source_unreachable");
     } finally {
       chmodSync(join(tapDir, "skills"), 0o755);
     }
+  });
+
+  test("C-UPD-39 a subpath tap's skill linking elsewhere in the repository updates normally", () => {
+    const home = makeCrewHome();
+    const repo = makeTempDir();
+    makeSkill(join(repo, "shared"), "demo", skillFrontmatter({ name: "demo" }), "Original.\n");
+    mkdirSync(join(repo, "skills"));
+    symlinkSync(join("..", "shared", "demo"), join(repo, "skills", "demo"));
+    makeGitRepo(repo);
+    run(home, ["tap", "add", `file://${repo}//skills`, "acme"]);
+    expect(run(home, ["install", "acme/demo"]).code).toBe(0);
+    makeSkill(join(repo, "shared"), "demo", skillFrontmatter({ name: "demo" }), "Edited.\n");
+    commitAll(repo, "edit demo");
+
+    const r = run(home, ["update", "--json"]);
+    expect(r.code).toBe(0);
+    expect(outcomes(r)).toEqual(["demo:updated"]);
+    expect(installed()).toContain("Edited.");
   });
 
   test("a path tap is the user's own directory, so a symlinked skill there still updates", () => {

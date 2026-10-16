@@ -20,7 +20,11 @@ import { extractFrontmatter } from "./frontmatter.ts";
 import { isSkillFile } from "./skill-file.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
-/** Load and validate the skill at `path`. Throws `invalid_skill` on any failure. */
+/**
+ * Load and validate the skill at `path` — a directory, or a gist's skill
+ * file. Throws `invalid_skill` for a bad skill, and `source_unreachable`
+ * for a `SKILL.md` crew can't read.
+ */
 export function loadSkill(path: string): LoadedSkill {
   // Read outside the wrapper: a read failure already names its path.
   const raw = readSkillMd(path);
@@ -38,6 +42,10 @@ export function loadSkillName(path: string): string {
     validateFrontmatterName(extractFrontmatter(raw, subject).data, subject),
   );
 }
+
+/** The next step for a `SKILL.md` crew couldn't read. */
+export const UNREADABLE_REMEDY =
+  "Check that the file is readable by you (its permissions, and its folder's).";
 
 /** True iff `path` contains a `SKILL.md`. Does not validate. */
 export function hasSkillMd(path: string): boolean {
@@ -62,15 +70,14 @@ function readSkillMd(path: string): string {
       "source_unreachable",
       `couldn't read \`${skillMdPath}\` — ${(err as Error).message}`,
       { path },
-      "Check that the file is readable by you (its permissions, and its folder's).",
+      UNREADABLE_REMEDY,
     );
   }
   if (raw === null) {
-    throw new CrewError(
-      "invalid_skill",
-      `no SKILL.md in \`${path}\` — every skill directory needs one`,
-      { path },
-    );
+    const message = exists(skillMdPath)
+      ? `\`${skillMdPath}\` isn't a regular file — a skill's SKILL.md must be one`
+      : `no SKILL.md in \`${path}\` — every skill directory needs one`;
+    throw new CrewError("invalid_skill", message, { path });
   }
   return raw;
 }

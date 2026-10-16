@@ -37,7 +37,7 @@ describe("crew install of a folder with an unreadable skill", () => {
     const r = install(makeCrewHome(), src);
     expect(r.code).toBe(1);
     expect(readdirSync(claude.userRoot)).toEqual(["good"]);
-    expect(r.out).toContain("no SKILL.md in");
+    expect(r.out).toMatch(/`\S+\/odd\/SKILL\.md` isn't a regular file/);
     expect(r.out).not.toContain("unexpected error");
   });
 
@@ -51,6 +51,17 @@ describe("crew install of a folder with an unreadable skill", () => {
       expect(r.code).toBe(1);
       expect(readdirSync(claude.userRoot)).toEqual(["good"]);
       expect(r.out).toMatch(/couldn't read `\S+\/locked\/SKILL\.md` — EACCES/);
+    } finally {
+      chmodSync(join(src, "locked", "SKILL.md"), 0o644);
+    }
+  });
+
+  test("C-INST-21 a source whose only skill can't be read is an operational failure (exit 1)", () => {
+    const src = makeTempDir();
+    makeSkill(src, "locked", skillFrontmatter({ name: "locked" }));
+    chmodSync(join(src, "locked", "SKILL.md"), 0o000);
+    try {
+      expect(install(makeCrewHome(), src).code).toBe(1);
     } finally {
       chmodSync(join(src, "locked", "SKILL.md"), 0o644);
     }

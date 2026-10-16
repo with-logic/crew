@@ -7,7 +7,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { readConfig } from "../../../src/config/load.ts";
 import { readState } from "../../../src/state/load.ts";
@@ -113,6 +120,22 @@ describe("crew install <gist-url>", () => {
     expect(r.stdout).toContain("`bad.md`: `name: Not Valid` has invalid characters");
     expect(r.stdout).toContain("`nodesc.md` frontmatter is missing `description`");
     expect(r.stdout).not.toContain("SKILL.md");
+  });
+
+  test("C-INST-25 an unreadable gist file fails alone; its siblings install", () => {
+    fx.gist({ "prd.md": skillFile("prd"), "build.md": skillFile("build") });
+    const home = makeCrewHome();
+    expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
+    const locked = join(home, "repos", readdirSync(join(home, "repos"))[0]!, "build.md");
+    chmodSync(locked, 0o000);
+    try {
+      const r = run(home, ["install", GIST_PAGE_URL]);
+      expect(r.code).toBe(1);
+      expect(readdirSync(skillsDir())).toEqual(["prd"]);
+      expect(r.stdout.replace(/\s+/g, " ")).toContain("couldn't read");
+    } finally {
+      chmodSync(locked, 0o644);
+    }
   });
 
   test("C-INST-25 a symlink in a gist is never a skill candidate", () => {

@@ -53,9 +53,16 @@ export function gistSkillCandidates(root: string): string[] {
  * A skill file whose first non-blank line opens frontmatter: what
  * discovery treats as a skill. A file named by `//<file>` only has to be
  * a skill file — it is validated whether or not it opens frontmatter.
+ * One crew can't read stays a candidate, so loading it reports the file
+ * as unreadable (§9 step 4) instead of one file sinking the whole gist.
  */
 export function isGistSkillCandidate(path: string): boolean {
-  return isSkillFile(path) && opensFrontmatter(readText(path));
+  if (!isSkillFile(path)) return false;
+  try {
+    return opensFrontmatter(readText(path));
+  } catch {
+    return true;
+  }
 }
 
 /** How gist errors name a gist: its URL and the commit read (a gist tap is always git). */
@@ -72,37 +79,45 @@ export function gistLabel(tap: Pick<TapConfig, "url">, sha: string | null): stri
  * and naming a file the gist doesn't have is `no_skills_found` listing
  * the files it does.
  */
-export function selectGistFile(acquired: AcquiredTap, tap: TapConfig, gistFile: string): string {
+export function selectGistFile(
+  acquired: AcquiredTap,
+  tap: TapConfig,
+  gistFile: string,
+  ref: string | null,
+): string {
   const { rootDir } = acquired;
   if (gistFile === "") return rootDir;
   const shown = displayText(gistFile);
   const where = gistLabel(tap, acquired.resolvedSha);
+  // The whole-gist command keeps the user's pin.
+  const wholeGist = `crew install ${displayUrl(tap.url)}${ref === null ? "" : `@${displayText(ref)}`}`;
   if (isOneSkillGist(rootDir)) {
     throw new CrewError(
       "invalid_ref",
       `the gist ${where} is one skill (it has a root SKILL.md), so \`//${shown}\` can't select a file of it`,
       { file: shown },
-      `Install the whole gist: \`crew install ${displayUrl(tap.url)}\`.`,
+      `Install the whole gist: \`${wholeGist}\`.`,
     );
   }
   const target = join(rootDir, gistFile);
+  // Matched by exact name: a case-insensitive disk would also find `PRD.md`.
+  const present = listDir(rootDir).includes(gistFile);
   // `gistFile` is one top-level name (`splitGistFile`), so the file itself
   // is the only place a link could be (§8.4).
-  if (lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink()) {
+  if (present && lstatSync(target).isSymbolicLink()) {
     throw new CrewError(
       "invalid_ref",
       `\`${shown}\` in the gist ${where} is a symlink — crew installs only regular files from a gist`,
       { file: shown },
-      `Name the file it points to after \`//\`, or install the whole gist: \`crew install ${displayUrl(tap.url)}\`.`,
+      `Name the file it points to after \`//\`, or install the whole gist: \`${wholeGist}\`.`,
     );
   }
-  // Matched by exact name: a case-insensitive disk would also find `PRD.md`.
-  if (!(listDir(rootDir).includes(gistFile) && isSkillFile(target))) {
+  if (!(present && isSkillFile(target))) {
     const files = gistSkillCandidates(rootDir).map((path) => basename(path));
     const remedy =
       files.length === 0
-        ? "The gist has no skill files: each skill is a top-level `.md` file that opens with frontmatter."
-        : `Its skill files are ${files.map((f) => `\`${displayText(f)}\``).join(", ")} (names are case-sensitive).`;
+        ? "The gist has no skills: each skill is a top-level `.md` file that opens with frontmatter."
+        : `Its skills are in ${files.map((f) => `\`${displayText(f)}\``).join(", ")} (names are case-sensitive).`;
     throw new CrewError(
       "no_skills_found",
       `the gist ${where} has no file \`${shown}\``,

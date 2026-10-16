@@ -43,7 +43,7 @@ export function enqueueDirectRef(
   const requestedRef = sourceRequestedRef(source);
   const expansion = withAcquiredTap(attrib.tap, requestedRef, home, (acquired) =>
     expandSkillsAsItems(
-      selectGistFile(acquired, attrib.tap, gistFile),
+      selectGistFile(acquired, attrib.tap, gistFile, requestedRef),
       attrib.tap,
       acquired,
       {

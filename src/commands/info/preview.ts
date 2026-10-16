@@ -12,15 +12,15 @@
  */
 
 import { relative } from "node:path";
-import { CrewError, type CrewErrorName } from "../../core/errors.ts";
+import { CrewError } from "../../core/errors.ts";
 import type { Config, LoadedSkill, TapConfig, TapSource } from "../../core/types.ts";
 import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
-import { loadSkill, skillFileRemedy } from "../../skill/load.ts";
+import { loadSkill, skillFileRemedy, UNREADABLE_REMEDY } from "../../skill/load.ts";
 import { isSkillFile } from "../../skill/skill-file.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
-import { discoveryOf, expandSkills } from "../../sources/expand.ts";
-import { gistLabel, selectGistFile } from "../../sources/gist.ts";
+import { expandTapSkills } from "../../sources/expand.ts";
+import { selectGistFile } from "../../sources/gist.ts";
 import { toPosix } from "../../util/fs.ts";
 import type { SkillInfo } from "./render.ts";
 
@@ -57,7 +57,7 @@ export function skillsAtRef(
   gistFile = "",
 ): SkillInfo[] {
   return withAcquiredTap(tap, ref, home, (acq) =>
-    previewSkills(selectGistFile(acq, tap, gistFile), tap, acq.resolvedSha),
+    previewSkills(selectGistFile(acq, tap, gistFile, ref), tap, acq.resolvedSha),
   );
 }
 
@@ -90,10 +90,10 @@ function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
  * reference would (§9.1, C-INST-21): "No skills here" would hide why.
  */
 function previewSkills(root: string, tap: TapConfig, sha: string | null): SkillInfo[] {
-  const mode = discoveryOf(tap);
-  const label = mode === "gist" ? gistLabel(tap, sha) : undefined;
-  const { valid, skipped } = expandSkills(root, mode, label);
-  const [first] = skipped;
+  const { valid, skipped } = expandTapSkills(root, tap, sha);
+  // An invalid skill is reported ahead of an unreadable one, whatever the
+  // directory order; the reason, code, and next step all come from it.
+  const first = skipped.find((s) => s.code === "invalid_skill") ?? skipped[0];
   if (valid.length === 0 && first) {
     // A gist file's message already names it; a folder skill's doesn't.
     const rel = toPosix(relative(root, first.path));
@@ -103,14 +103,14 @@ function previewSkills(root: string, tap: TapConfig, sha: string | null): SkillI
       skipped.length === 1
         ? reason
         : `none of the ${skipped.length} skills here is valid — ${reason}`;
-    const remedy = isSkillFile(first.path) ? skillFileRemedy(first.path) : undefined;
-    // The first skip's own code: an unreadable file stays `source_unreachable`.
-    throw new CrewError(
-      first.code as CrewErrorName,
-      message,
-      { path: first.path, invalid: skipped.length },
-      remedy,
-    );
+    const remedy =
+      first.code === "source_unreachable"
+        ? UNREADABLE_REMEDY
+        : isSkillFile(first.path)
+          ? skillFileRemedy(first.path)
+          : undefined;
+    const files = skipped.map((s) => toPosix(relative(root, s.path)) || ".");
+    throw new CrewError(first.code, message, { path: first.path, files }, remedy);
   }
   return valid.map(skillInfoOf);
 }

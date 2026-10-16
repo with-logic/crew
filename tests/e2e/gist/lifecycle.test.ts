@@ -114,6 +114,26 @@ describe("crew update of a gist //<file> that became a link", () => {
   });
 });
 
+describe("crew update of a one-skill gist whose SKILL.md became a link", () => {
+  for (const ref of ["", "@main"]) {
+    test(`C-UPD-39 is source_gone for ${GIST_TAP}/whole${ref}, never read through the link`, () => {
+      const outside = mkdtempSync(join(tmpdir(), "crew-outside-"));
+      makeSkill(outside, "whole", skillFrontmatter({ name: "whole" }), "Not from the gist.\n");
+      const { dir } = fx.gist({ "SKILL.md": skillFile("whole"), "notes.md": "notes\n" });
+      const home = makeCrewHome();
+      expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
+      expect(run(home, ["install", `${GIST_TAP}/whole${ref}`]).code).toBe(0);
+      rmSync(join(dir, "SKILL.md"));
+      symlinkSync(join(outside, "whole", "SKILL.md"), join(dir, "SKILL.md"));
+      commitAll(dir, "link SKILL.md out of the gist");
+
+      const r = run(home, ["update", "--json"]);
+      expect(outcomes(r)).toEqual(["whole:source_gone"]);
+      expect(installed("whole")).toBe(skillFile("whole"));
+    });
+  }
+});
+
 describe("a gist revision page", () => {
   test("C-REF-38 installs that revision's bytes, pinned, even after the gist moved", () => {
     const first = fx.gist({ "prd.md": skillFile("prd", "First PRD.\n") });

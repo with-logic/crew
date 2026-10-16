@@ -73,11 +73,29 @@ describe("gist tap identity", () => {
 
     const added = run(home, ["tap", "add", GIST_PAGE_URL]);
     expect(added.code).toBe(0);
-    // Reported under the name it was recorded with, not a derived `gist-<id8>`.
+    // Reported as it was recorded — name and URL — not as a derived `gist-<id8>`.
     expect(added.stdout).toContain(GIST_ID);
     expect(added.stdout).not.toContain(GIST_TAP);
+    expect(added.stdout).toContain(GIST_PAGE_URL);
     const gistTaps = readConfig(home).taps.filter((t) => t.url.includes(GIST_ID));
     expect(gistTaps.map((t) => [t.name, t.registered])).toEqual([[GIST_ID, true]]);
+  });
+});
+
+describe("a gist tap recorded with recursive discovery", () => {
+  test("reads as standard discovery: recursive never applies to a gist", () => {
+    const home = makeCrewHome();
+    const config = readConfig(home);
+    const row = { name: GIST_TAP, kind: "git" as const, registered: true, url: GIST_CLONE_URL };
+    writeConfig(
+      {
+        ...config,
+        taps: [...config.taps, { ...row, subpath: "", path: "", discovery: "recursive" }],
+      },
+      home,
+    );
+    expect(readConfig(home).taps.find((t) => t.name === GIST_TAP)?.discovery).toBeUndefined();
+    expect(run(home, ["tap", "list"]).stdout).not.toContain("recursive");
   });
 });
 

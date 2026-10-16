@@ -4,8 +4,7 @@
 
 import type { Source, TapConfig } from "../../core/types.ts";
 import type { AcquiredTap } from "../../sources/acquire/index.ts";
-import { discoveryOf, expandSkills, type SkippedSkill } from "../../sources/expand.ts";
-import { gistLabel } from "../../sources/gist.ts";
+import { expandTapSkills, type SkippedSkill } from "../../sources/expand.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import type { PendingItem } from "./enqueue.ts";
 
@@ -43,9 +42,7 @@ export function expandSkillsAsItems(
   home: string,
 ): ExpansionItems {
   const { resolvedSha, pinned } = acquired;
-  const mode = discoveryOf(tap);
-  const label = mode === "gist" ? gistLabel(tap, resolvedSha) : undefined;
-  const { valid, skipped } = expandSkills(root, mode, label);
+  const { valid, skipped } = expandTapSkills(root, tap, resolvedSha);
   const { baseTapPath, requestedRef, explicit, tracksTap } = options;
   const items: PendingItem[] = [];
   for (const l of valid) {

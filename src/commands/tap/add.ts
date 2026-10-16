@@ -78,20 +78,31 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   if (ctx.flags.dryRun) {
     // Read-only preview: no lock, no clone, no config write (§16.3).
     const plan = planAdd(readConfig(ctx.home), input);
-    return renderTapAdd(plan.outcome, shownName(plan, input), target, true, ctx.style);
+    return renderTapAdd(
+      plan.outcome,
+      shownName(plan, input),
+      shownTarget(plan, input),
+      true,
+      ctx.style,
+    );
   }
   // Wrap in an object so TS doesn't narrow the literal type via the
   // initial assignment — `withStateLock`'s callback assigns later but
   // TS doesn't trace control flow into closures.
-  const out: { value: TapAddOutcome; name: string } = { value: "added", name };
+  const out: { value: TapAddOutcome; name: string; target: TapAddTarget } = {
+    value: "added",
+    name,
+    target,
+  };
   withStateLock(() => {
     const config = readConfig(ctx.home);
     const plan = planAdd(config, input);
     applyAdd(ctx, config, plan, input);
     out.value = plan.outcome;
     out.name = shownName(plan, input);
+    out.target = shownTarget(plan, input);
   }, ctx.home);
-  return renderTapAdd(out.value, out.name, target, false, ctx.style);
+  return renderTapAdd(out.value, out.name, out.target, false, ctx.style);
 }
 
 /**
@@ -103,6 +114,11 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
 function shownName(plan: TapAddPlan, input: TapAddInput): string {
   if (plan.outcome === "added") return input.name;
   return input.explicitName ?? plan.sameTarget.name;
+}
+
+/** The tap's source as stored: an existing row keeps the URL it was recorded with. */
+function shownTarget(plan: TapAddPlan, input: TapAddInput): TapAddTarget {
+  return plan.outcome === "added" ? input.target : plan.sameTarget;
 }
 
 /**

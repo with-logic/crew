@@ -38,15 +38,12 @@ import { displayUrl } from "../../refs/display-url.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
-import { liveSkillPath } from "./live-skill-path.ts";
+import { assertStillASkill, liveSkillPath } from "./live-skill-path.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
-  /**
-   * Materialized tap root, or — from `withAcquiredSkill` at a ref — the
-   * one skill's narrowed location, which is a file for a gist skill.
-   */
+  /** Materialized tap root, after its subpath (a directory). */
   readonly rootDir: string;
   /** Full 40-char SHA for git taps; null for path taps. */
   readonly resolvedSha: string | null;
@@ -139,11 +136,11 @@ export function withAcquiredSkill<T>(
   ref: string | null,
   tapRelativePath: string,
   home: string,
-  fn: (acquired: AcquiredTap, skillPath: string) => T,
+  fn: (acquired: Pick<AcquiredTap, "resolvedSha" | "pinned">, skillPath: string) => T,
 ): T {
   if (ref === null || tap.kind === "path") {
     const acquired = acquireTap(tap, home);
-    return fn(acquired, liveSkillPath(tap, acquired.rootDir, tapRelativePath));
+    return fn(acquired, liveSkillPath(tap, home, acquired.rootDir, tapRelativePath));
   }
   migrateTapClone(tap, home);
   const clonePath = tapClonePath(tap, home);
@@ -157,9 +154,10 @@ export function withAcquiredSkill<T>(
       : tap.subpath.length > 0
         ? posix.join(tap.subpath, tapRelativePath)
         : tapRelativePath;
-  return withExportedTree(clonePath, sha, exportPath, home, (skillPath) =>
-    fn({ rootDir: skillPath, resolvedSha: sha, pinned }, skillPath),
-  );
+  return withExportedTree(clonePath, sha, exportPath, home, (skillPath) => {
+    assertStillASkill(tap, skillPath, tapRelativePath);
+    return fn({ resolvedSha: sha, pinned }, skillPath);
+  });
 }
 
 /**
