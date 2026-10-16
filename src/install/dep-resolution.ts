@@ -41,7 +41,8 @@ export interface SiblingHit {
 
 /**
  * Look for `depName` as a sibling skill of `parentTapPath`. Returns
- * null if not found (the dep walker will try cross-tap resolution next).
+ * null if not found (the dep walker will try cross-tap resolution next);
+ * throws when a sibling named for it can't be loaded (§9 step 6).
  *
  * `parent.exportedPath`, when set, is the parent skill's own location (its
  * directory, or a gist's skill file) inside an already-materialized
@@ -64,17 +65,19 @@ export function findSiblingDep(
   const siblingParent = join(parentPath, "..");
   const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
   const matches: { entryName: string; siblingPath: string; loaded: LoadedSkill }[] = [];
+  const isGist = isGistTap(parent.tap);
   for (const entryName of listDir(siblingParent)) {
     const siblingPath = join(siblingParent, entryName);
     // §9 step 6: a sibling named for the dependency that crew can't load —
-    // unreadable or invalid — is the dependency failing, never a miss to
-    // look past to other taps.
-    const gist = isGistTap(parent.tap);
-    const namedForDep = (gist ? entryName.replace(/\.md$/i, "") : entryName) === depName;
-    if (namedForDep && !gist) assertCanLook(siblingPath);
+    // can't look into, unreadable, or invalid — is the dependency failing,
+    // never a miss to look past to other taps.
+    const namedForDep = (isGist ? entryName.replace(/\.md$/i, "") : entryName) === depName;
+    if (namedForDep && !isGist) {
+      inDependency(depName, siblingPath, () => assertSkillMdVisible(siblingPath));
+    }
     if (!isSiblingSkill(parent.tap, siblingPath)) continue;
     if (!namedForDep && siblingName(siblingPath) !== depName) continue;
-    const loaded = withDependencyContext(depName, siblingPath, () => loadSkill(siblingPath));
+    const loaded = inDependency(depName, siblingPath, () => loadSkill(siblingPath));
     if (loaded.frontmatter.name !== depName) continue;
     matches.push({ entryName, siblingPath, loaded });
   }
@@ -121,9 +124,9 @@ function siblingName(path: string): string | null {
   }
 }
 
-/** Throw when crew can't look into the folder at `path` for a `SKILL.md`. */
-function assertCanLook(path: string): void {
-  const skillMd = join(path, "SKILL.md");
+/** Throw when crew can't look into `folder` for its `SKILL.md`. */
+function assertSkillMdVisible(folder: string): void {
+  const skillMd = join(folder, "SKILL.md");
   try {
     lstatSync(skillMd);
   } catch (err) {
@@ -131,14 +134,23 @@ function assertCanLook(path: string): void {
   }
 }
 
-/** Run `load`, naming the dependency in what it throws (`loadSkill` throws only `CrewError`). */
-function withDependencyContext<T>(depName: string, path: string, load: () => T): T {
+/**
+ * Run `step` on the dependency at `path`, naming the dependency in the
+ * `CrewError` it throws; the path is added only where the message lacks it.
+ */
+function inDependency<T>(depName: string, path: string, step: () => T): T {
   try {
-    return load();
+    return step();
   } catch (err) {
-    const ce = err as CrewError;
-    const message = `dependency \`${depName}\` (\`${path}\`): ${ce.message}`;
-    throw new CrewError(ce.code, message, { ...ce.details, path, dependency: depName }, ce.remedy);
+    if (!(err instanceof CrewError)) throw err;
+    const where = err.message.includes(path) ? "" : ` (\`${path}\`)`;
+    const message = `dependency \`${depName}\`${where}: ${err.message}`;
+    throw new CrewError(
+      err.code,
+      message,
+      { path, ...err.details, dependency: depName },
+      err.remedy,
+    );
   }
 }
 

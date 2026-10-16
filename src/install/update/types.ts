@@ -7,14 +7,18 @@
  */
 
 import type { CrewErrorName } from "../../core/errors.ts";
+import type { AgentFailureCode } from "../../util/errno.ts";
 
-export interface PerAgentUpdate {
-  readonly agent: string;
-  readonly kind: "installed" | "up_to_date" | "skipped" | "failed";
-  /** See `agentFailureCode`: a §13 name, or a filesystem errno code. */
-  readonly error?: { code: string; message: string };
-  readonly reason?: string;
-}
+/** One agent's part of an `updated` row (§10.1). */
+export type PerAgentUpdate =
+  | { readonly agent: string; readonly kind: "installed" | "up_to_date" }
+  /** A safety check refused it (§7.3); `reason` is its §13 name. */
+  | { readonly agent: string; readonly kind: "skipped"; readonly reason: string }
+  | {
+      readonly agent: string;
+      readonly kind: "failed";
+      readonly error: { code: AgentFailureCode; message: string };
+    };
 
 export type Outcome =
   | { kind: "up_to_date" }

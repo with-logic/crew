@@ -4,15 +4,19 @@
  * commit's export — is `./skill-shape.ts`.
  */
 
-import { realpathSync, statSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { isGistTap } from "../../core/gist-url.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { isGoneError, unreadablePathError } from "../../util/errno.ts";
 import { resolveInside } from "./resolve-inside.ts";
-import { assertSkillMdInside, assertStillASkill, noLongerASkillError } from "./skill-shape.ts";
+import {
+  assertSkillMdInside,
+  assertStillASkill,
+  isGone,
+  noLongerASkillError,
+} from "./skill-shape.ts";
 
 /**
  * Where an installed skill now lives in a live checkout: `rootDir` joined
@@ -79,19 +83,4 @@ function cloneMetadataError(tapRelativePath: string): CrewError {
     `\`${tapRelativePath || "."}\` now leads to the repository's root or its \`.git\` through a symlink, so crew won't read it`,
     { path: tapRelativePath },
   );
-}
-
-/**
- * True when nothing is at `path` any more — a dangling or looping link
- * included. Any other failure to look is the local filesystem's,
- * reported as such.
- */
-function isGone(path: string): boolean {
-  try {
-    statSync(path);
-    return false;
-  } catch (err) {
-    if (isGoneError(err)) return true;
-    throw unreadablePathError(path, err);
-  }
 }

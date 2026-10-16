@@ -32,7 +32,15 @@ import type { AcquiredTap } from "./acquire/index.ts";
  * (§9 step 5).
  */
 export function isOneSkillGist(root: string): boolean {
-  return listDir(root).includes("SKILL.md") && isSkillFile(join(root, "SKILL.md"));
+  return isExactSkillFile(root, "SKILL.md");
+}
+
+/**
+ * True when `dir` holds a regular file named exactly `name` — case
+ * included, on a case-insensitive disk too — that can be a skill file.
+ */
+export function isExactSkillFile(dir: string, name: string): boolean {
+  return listDir(dir).includes(name) && isSkillFile(join(dir, name));
 }
 
 /** The skill candidates at the root of a gist checkout, in name order. */

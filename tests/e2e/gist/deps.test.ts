@@ -37,7 +37,8 @@ test("C-SPEC-16 a gist dependency file crew can't read is never taken from anoth
   try {
     const r = run(home, ["install", `${GIST_PAGE_URL}//build.md`, "--json"]);
     expect([r.code, json(r).error.name]).toEqual([5, "source_unreachable"]);
-    expect(json(r).error.message).toMatch(/^dependency `prd` .*couldn't read `\S+\/prd\.md`/);
+    expect(json(r).error.message).toMatch(/^dependency `prd`: couldn't read `\S+\/prd\.md`/);
+    expect(json(r).error.details["dependency"]).toBe("prd");
   } finally {
     chmodSync(prd, 0o644);
   }

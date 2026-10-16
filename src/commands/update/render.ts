@@ -10,7 +10,7 @@ import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { columns, plural } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
-import { formatRowParts, groupByTap, nameCell } from "./rows.ts";
+import { failedTargets, formatRowParts, groupByTap, nameCell } from "./rows.ts";
 
 /** A tap or namespace the user selected, with how many entries it expanded to. */
 export interface CollectionSummary {
@@ -147,7 +147,8 @@ function tally(rows: readonly UpdateRow[], addedCount: number, tapErrorCount: nu
   for (const r of rows) {
     const o = r.outcome;
     const k = o.kind;
-    if (k === "updated" || k === "would_update") t.updated++;
+    if (failedTargets(o).length > 0) t.failed++;
+    else if (k === "updated" || k === "would_update") t.updated++;
     else if (k === "up_to_date") t.upToDate++;
     else if (k === "skipped" || k === "missing_project_root") t.skipped++;
     else if (k === "source_gone") t.sourceGone++;

@@ -9,11 +9,10 @@ import { basename, dirname, join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { isGistTap } from "../../core/gist-url.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { isSkillFile } from "../../skill/skill-file.ts";
 import { skillMdLinksOut, skillMdOutsideError } from "../../skill/skill-md-link.ts";
 import { isGoneError, unreadablePathError } from "../../util/errno.ts";
-import { isDirectory, listDir } from "../../util/fs.ts";
-import { isOneSkillGist } from "../gist.ts";
+import { isDirectory } from "../../util/fs.ts";
+import { isExactSkillFile, isOneSkillGist } from "../gist.ts";
 
 /**
  * Throw `no_skills_found` when the skill at `location` — live, or in a
@@ -60,7 +59,7 @@ function stillASkill(
     if (tapRelativePath === "") return isOneSkillGist(location);
     // Named exactly, case included (§9 step 5): on a case-insensitive
     // filesystem `prd.md` would otherwise still find an upstream `PRD.md`.
-    return listDir(dirname(location)).includes(basename(location)) && isSkillFile(location);
+    return isExactSkillFile(dirname(location), basename(location));
   }
   // A whole-tap root skill's directory is the tap root, which acquisition
   // already proved exists as a directory. Either way it must still hold a
@@ -74,13 +73,21 @@ function stillASkill(
  * folder crew can't read — is a local fault, not an upstream deletion.
  */
 function skillMdGone(location: string): boolean {
-  const skillMd = join(location, "SKILL.md");
+  return isGone(join(location, "SKILL.md"));
+}
+
+/**
+ * True when nothing is at `path` any more — a dangling or looping link
+ * included. Any other failure to look is the local filesystem's,
+ * reported as such.
+ */
+export function isGone(path: string): boolean {
   try {
-    statSync(skillMd);
+    statSync(path);
     return false;
   } catch (err) {
     if (isGoneError(err)) return true;
-    throw unreadablePathError(skillMd, err);
+    throw unreadablePathError(path, err);
   }
 }
 

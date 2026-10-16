@@ -2,12 +2,13 @@
  * `crew update` when upstream changes what a skill's `SKILL.md` is (§9
  * step 4, §10.1; C-UPD-40), at the default branch and at an `@<ref>`.
  *
- * A `SKILL.md` deleted or left dangling is `source_gone`, and the
- * installed bytes stay; so is a skill folder that became a link to
- * itself. One relinked out of the skill's own folder — even to a file
- * elsewhere in the repository, or back in by name — fails the update as
+ * A `SKILL.md` deleted, or left as a plain link to nothing, is
+ * `source_gone`, and the installed bytes stay; so is a skill folder that
+ * became a link to itself. One that isn't a plain link to a file inside
+ * the skill's own folder — out of it, back in by name, past a folder
+ * link with `..`, to itself or another link — fails the update as
  * `invalid_skill`, as it fails an install, and is never read. A
- * `SKILL.md` linked to a file inside its folder updates.
+ * `SKILL.md` linked straight to a file inside its folder updates.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -65,13 +66,6 @@ const GONE: readonly (readonly [string, (demo: string, repo: string) => void])[]
     },
   ],
   [
-    "a SKILL.md that links to itself",
-    (demo) => {
-      rmSync(join(demo, "SKILL.md"));
-      symlinkSync("SKILL.md", join(demo, "SKILL.md"));
-    },
-  ],
-  [
     "a skill folder that became a link to itself",
     (demo) => {
       rmSync(demo, { recursive: true });
@@ -88,6 +82,22 @@ const OUT: readonly (readonly [string, (demo: string, repo: string) => void])[] 
       mkdirSync(join(repo, "shared"));
       renameSync(join(demo, "SKILL.md"), join(repo, "shared", "SKILL.md"));
       symlinkSync(join("..", "..", "shared", "SKILL.md"), join(demo, "SKILL.md"));
+    },
+  ],
+  [
+    "that links to itself",
+    (demo) => {
+      rmSync(join(demo, "SKILL.md"));
+      symlinkSync("SKILL.md", join(demo, "SKILL.md"));
+    },
+  ],
+  [
+    "linked past a folder link with `..`",
+    (demo, repo) => {
+      mkdirSync(join(repo, "elsewhere", "inner"), { recursive: true });
+      renameSync(join(demo, "SKILL.md"), join(repo, "elsewhere", "x.md"));
+      symlinkSync(join("..", "..", "elsewhere", "inner"), join(demo, "sub"));
+      symlinkSync("sub/../x.md", join(demo, "SKILL.md"));
     },
   ],
   [

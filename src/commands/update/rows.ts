@@ -31,6 +31,10 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
     return { status: style.dim("up to date"), detail: "", required };
   }
   if (o.kind === "updated") {
+    const failed = failedTargets(o);
+    if (failed.length > 0) {
+      return { status: style.red("failed"), detail: style.red(failed.join(", ")), required };
+    }
     return { status: style.green("updated"), detail: style.cyan(shortSha(o.new_sha)), required };
   }
   if (o.kind === "would_update") {
@@ -78,6 +82,7 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
 
 export function symbolFor(row: UpdateRow, style: Styler): string {
   const o = row.outcome;
+  if (failedTargets(o).length > 0) return style.symbol("fail");
   if (o.kind === "updated" || o.kind === "would_update") return style.symbol("ok");
   if (o.kind === "up_to_date") return style.symbol("muted");
   if (o.kind === "skipped" || o.kind === "missing_project_root") return style.symbol("muted");
@@ -87,6 +92,18 @@ export function symbolFor(row: UpdateRow, style: Styler): string {
   // symbol, and costs no unreachable runtime line.
   o satisfies Extract<Outcome, { kind: "failed" }>;
   return style.symbol("fail");
+}
+
+/**
+ * The agents an `updated` row couldn't write, as `agent: CODE` — the run
+ * exits 1 for them (§10.1), so the row reads as a failure; empty when
+ * every target installed.
+ */
+export function failedTargets(o: Outcome): string[] {
+  const out: string[] = [];
+  if (o.kind !== "updated") return out;
+  for (const t of o.per_target) if (t.kind === "failed") out.push(`${t.agent}: ${t.error?.code}`);
+  return out;
 }
 
 function shortSha(sha: string | null): string {

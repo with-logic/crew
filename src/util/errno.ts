@@ -27,11 +27,14 @@ function isFsError(err: unknown): boolean {
  * `SKILL.md` or another of its files, a path tap, or a skill's recorded
  * location on update.
  */
-export const UNREADABLE_REMEDY =
-  "Check that it is readable by you (its permissions, and its folder's).";
+const UNREADABLE_REMEDY = "Check that it is readable by you (its permissions, and its folder's).";
 
 /** `source_unreachable` for a local path crew couldn't look at, or read (§13). */
-export function unreadablePathError(path: string, err: unknown, verb = "look at"): CrewError {
+export function unreadablePathError(
+  path: string,
+  err: unknown,
+  verb: "look at" | "read" = "look at",
+): CrewError {
   return new CrewError(
     "source_unreachable",
     `couldn't ${verb} \`${path}\` — ${errnoReason(err)}`,
@@ -49,18 +52,23 @@ export function isGoneError(err: unknown): boolean {
   return code === "ENOENT" || code === "ENOTDIR" || code === "ELOOP";
 }
 
+/** A §13 name, or a filesystem errno code (`EACCES`) for which §13 has none. */
+export type AgentFailureCode = CrewErrorName | `E${Uppercase<string>}`;
+
 /**
- * The code a failure installing into, or removing from, one agent
- * reports: a §13 name for a `CrewError` (a safety check, §7.3), or the
- * errno code of a filesystem error on the agent's folder (`EACCES`) —
- * which has no §13 name, and isn't the source's fault.
+ * The code a per-agent failure reports — installing into, or removing
+ * from, one agent: a §13 name for a `CrewError` (a safety check, §7.3, or
+ * a staging failure), or the errno code of a filesystem error on the
+ * agent's folder, which isn't the source's fault.
  */
-export function agentFailureCode(err: unknown): string {
-  return (err as { code?: string }).code ?? "usage_error";
+export function agentFailureCode(err: unknown): AgentFailureCode {
+  if (err instanceof CrewError) return err.code;
+  return isFsError(err) ? ((err as NodeJS.ErrnoException).code as AgentFailureCode) : "usage_error";
 }
 
 /**
- * The §13 name a failure reports in a result row. A raw filesystem
+ * The §13 name an entry's or a tap's failure reports in an update or
+ * re-expansion row (per-agent rows use `agentFailureCode`). A raw filesystem
  * error is a local file crew couldn't use, `source_unreachable`; its
  * errno `.code` is no §13 name. Anything else is `fallback`.
  */

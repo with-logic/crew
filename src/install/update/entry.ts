@@ -39,23 +39,19 @@ export function updateOneEntry(
   try {
     const outcome = updateOne(entry, config, home, force, fallbackCwd, dryRun);
     let next = state;
-    if (outcome.kind === "updated") {
-      const successfulTargets = outcome.per_target
-        .filter((t) => t.kind !== "failed")
-        .map((t) => t.agent);
-      const newEntry = rebuildStateEntry(
-        entry,
-        outcome.new_sha,
-        outcome.content_hash,
-        successfulTargets,
-      );
+    const targetFailed =
+      outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed");
+    // §10.1: a target crew couldn't write keeps its previous install, so
+    // the entry stays as it was and the next run tries again.
+    if (outcome.kind === "updated" && !targetFailed) {
+      const agents = outcome.per_target.map((t) => t.agent);
+      const newEntry = rebuildStateEntry(entry, outcome.new_sha, outcome.content_hash, agents);
       next = upsertEntry(state, newEntry);
     }
     return {
       row: rowFor(entry, outcome),
       updatedState: next,
-      bumpHardFailure:
-        outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed"),
+      bumpHardFailure: targetFailed,
     };
   } catch (err) {
     // A raw `node:fs` error can land here too (a file crew can't read

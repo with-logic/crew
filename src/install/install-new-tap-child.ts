@@ -3,12 +3,16 @@
  *
  * Stages the child into the store, runs the install algorithm for
  * every target the rest of the tap was installed into, and returns a
- * fresh state entry on success. Per-target failures are non-fatal.
+ * fresh state entry on success — or null when no agent target applies,
+ * or a safety check (§7.3) refused every one. An agent folder crew can't
+ * write throws, so the child is reported and retried, not recorded
+ * without that agent.
  */
 
 import { type AgentAdapter, baseFor } from "../agents/adapter.ts";
 import { installSkillIntoAgents } from "../agents/install.ts";
 import { agentByName } from "../agents/registry.ts";
+import { CrewError } from "../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../core/types.ts";
 import { stageIntoStore } from "../sources/store.ts";
 import { nowIso } from "../util/time.ts";
@@ -47,7 +51,7 @@ export function installNewTapChild(
     if (existing) existing.push(adapter);
     else groups.set(dest, [adapter]);
   }
-  let firstFailure: unknown = null;
+  let fsFailure: unknown = null;
   for (const group of groups.values()) {
     try {
       installSkillIntoAgents({
@@ -65,12 +69,13 @@ export function installNewTapChild(
       });
       for (const a of group) successfulTargets.push(a.name);
     } catch (err) {
-      // One group failing is non-fatal while another installs.
-      firstFailure ??= err;
+      // A safety check refusing one agent (§7.3) leaves the child out of
+      // it, as on an install; an agent folder crew can't write fails the
+      // child (§10.1.1), so it is retried rather than recorded without it.
+      if (!(err instanceof CrewError)) fsFailure ??= err;
     }
   }
-  // Every agent failed: report why, rather than dropping the child (§10.1.1).
-  if (successfulTargets.length === 0 && firstFailure !== null) throw firstFailure;
+  if (fsFailure !== null) throw fsFailure;
   if (successfulTargets.length === 0) return null;
   return {
     name: args.skillName,

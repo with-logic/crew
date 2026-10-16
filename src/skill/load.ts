@@ -11,7 +11,7 @@
  * `path` IS the skill's `SKILL.md`, and its errors name that file.
  */
 
-import { lstatSync, statSync } from "node:fs";
+import { lstatSync, type Stats, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
@@ -86,13 +86,13 @@ function readSkillMd(path: string): string {
     // A link chain that loops is no file either: reported below.
     if (!isGoneError(err)) throw unreadablePathError(skillMdPath, err, "read");
   }
-  if (raw === null) throw notAFileError(path, skillMdPath);
+  if (raw === null) throw skillMdNotAFileError(path, skillMdPath);
   return raw;
 }
 
 /** `invalid_skill` for a skill whose `SKILL.md` is missing, or isn't a file. */
-function notAFileError(path: string, skillMdPath: string): CrewError {
-  const entry = lstatSync(skillMdPath, { throwIfNoEntry: false });
+function skillMdNotAFileError(path: string, skillMdPath: string): CrewError {
+  const entry = lookAt(skillMdPath);
   if (entry === undefined) {
     return new CrewError(
       "invalid_skill",
@@ -106,10 +106,23 @@ function notAFileError(path: string, skillMdPath: string): CrewError {
   const what = entry.isSymbolicLink() ? "is a link that leads to no file" : "isn't a regular file";
   return new CrewError(
     "invalid_skill",
-    `\`${skillMdPath}\` ${what} — a skill's SKILL.md must be one`,
+    `\`${skillMdPath}\` ${what} — a skill's SKILL.md must be a file, or a link to one inside its folder`,
     { path },
     SKILL_MD_NOT_A_FILE_REMEDY,
   );
+}
+
+/**
+ * The entry at `path` without following a link; undefined when nothing
+ * usable is there. `readSkillMd` has just looked at the same path, so the
+ * only failure left is a gone one (missing, or a file on the way).
+ */
+function lookAt(path: string): Stats | undefined {
+  try {
+    return lstatSync(path);
+  } catch {
+    return undefined;
+  }
 }
 
 /**

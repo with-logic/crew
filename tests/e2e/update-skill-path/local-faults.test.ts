@@ -9,8 +9,9 @@
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { readState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
@@ -107,12 +108,13 @@ test("C-UPD-18e C-UPD-40 a tracked tap's new child crew can't copy fails alone; 
   }
 });
 
-test("C-UPD-40 an agent folder crew can't write fails the update, not a clean skip", () => {
+test("C-UPD-16c an agent folder crew can't write fails the update, and the next run retries", () => {
   const home = makeCrewHome();
   const tapDir = makeTempDir();
   makeSkill(tapDir, "demo", skillFrontmatter({ name: "demo" }), "Original.\n");
   expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
   expect(run(home, ["install", "mine/demo"]).code).toBe(0);
+  const before = readState(home).installations[0]!.content_hash;
   makeSkill(tapDir, "demo", skillFrontmatter({ name: "demo" }), "Edited.\n");
   chmodSync(claude.userRoot, 0o555);
   try {
@@ -120,9 +122,13 @@ test("C-UPD-40 an agent folder crew can't write fails the update, not a clean sk
     expect(r.code).toBe(1);
     const [target] = JSON.parse(r.stdout).rows[0].outcome.per_target;
     expect([target.kind, target.error.code]).toEqual(["failed", "EACCES"]);
+    expect(run(home, ["update"]).stdout).toMatch(/demo\s+failed\s+claude-code: EACCES/);
+    expect(readState(home).installations[0]!.content_hash).toBe(before);
   } finally {
     chmodSync(claude.userRoot, 0o755);
   }
+  expect(run(home, ["update"]).code).toBe(0);
+  expect(readFileSync(join(claude.userRoot, "demo", "SKILL.md"), "utf8")).toContain("Edited.");
 });
 
 test("C-UPD-18e a tracked tap's new child no agent could take is reported, not dropped", () => {
@@ -141,4 +147,20 @@ test("C-UPD-18e a tracked tap's new child no agent could take is reported, not d
   } finally {
     chmodSync(claude.userRoot, 0o755);
   }
+});
+
+test("C-UPD-18e a new child an untracked folder blocks is left out, as an install leaves it", () => {
+  const home = makeCrewHome();
+  const tapDir = makeTempDir();
+  makeSkill(join(tapDir, "skills"), "beta", skillFrontmatter({ name: "beta" }));
+  expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
+  expect(run(home, ["install", "mine"]).code).toBe(0);
+  makeSkill(join(tapDir, "skills"), "gamma", skillFrontmatter({ name: "gamma" }));
+  // The user's own folder of that name, which crew didn't install (§7.3).
+  makeSkill(claude.userRoot, "gamma", skillFrontmatter({ name: "gamma" }), "Mine.\n");
+
+  const r = run(home, ["update", "--json"]);
+  expect(r.code).toBe(0);
+  expect(JSON.parse(r.stdout).tap_reexpand_rows).toEqual([]);
+  expect(readFileSync(join(claude.userRoot, "gamma", "SKILL.md"), "utf8")).toContain("Mine.");
 });

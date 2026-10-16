@@ -3,9 +3,10 @@
  * C-SPEC-16): crew's own store failing is one error naming the store; an
  * agent folder crew can't write fails that agent with its own error. A
  * dependency beside its parent that crew can't load — a folder it can't
- * look into, an unreadable or invalid SKILL.md — fails the install with
- * that reason, naming the dependency, and is never taken from another
- * tap. A skipped skill's next step is shown, but kept out of `--json`.
+ * look into, an unreadable SKILL.md — fails the install with that
+ * reason, naming the dependency, and is never taken from another tap
+ * (an invalid one: `dependencies.test.ts`). A skipped skill's next step
+ * is shown, but kept out of `--json`.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -119,21 +120,9 @@ test("C-SPEC-16 a dependency folder crew can't look into fails the install, not 
   withMode(restore, 0o000, () => {
     const r = install(home, [join(src, "a")]);
     expect([r.code, r.json.error.name]).toEqual([5, "source_unreachable"]);
-    expect(r.json.error.message).toMatch(/couldn't look at `\S+\/b\/SKILL\.md`/);
+    expect(r.json.error.message).toMatch(/^dependency `b`: couldn't look at `\S+\/b\/SKILL\.md`/);
+    expect(r.json.error.details.dependency).toBe("b");
   });
-  expect(readdirSync(claude.userRoot)).toEqual([]);
-});
-
-test("C-SPEC-16 an invalid dependency beside its parent fails the install, naming it", () => {
-  const home = homeWithOtherB();
-  const { src } = parentWithSibling((b) => {
-    writeFileSync(join(b, "SKILL.md"), "---\nname: b\n---\nNo description.\n");
-    return b;
-  });
-  const r = install(home, [join(src, "a")]);
-  expect([r.code, r.json.error.name]).toEqual([4, "invalid_skill"]);
-  expect(r.json.error.message).toMatch(/^dependency `b` \(`\S+\/b`\): /);
-  expect(r.json.error.details).toMatchObject({ dependency: "b", path: join(src, "b") });
   expect(readdirSync(claude.userRoot)).toEqual([]);
 });
 

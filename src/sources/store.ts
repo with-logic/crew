@@ -19,7 +19,7 @@ import { crewHome, paths, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
 import { copyTree } from "../util/copy.ts";
-import { errnoReason, unreadablePathError } from "../util/errno.ts";
+import { errnoReason, isGoneError, unreadablePathError } from "../util/errno.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { isReadable } from "../util/readable.ts";
@@ -103,13 +103,16 @@ export function isStoreFault(err: CrewError): boolean {
 
 /**
  * A staging failure as a §13 error: a file of the skill crew can't read
- * names that file; anything else is crew's own store. Node names a failed
- * copy by its source file even when writing failed, so a source file crew
- * can still read wasn't what broke (a full disk, say).
+ * names that file; anything else is crew's own store. Reading a file of
+ * the skill — or the file going away mid-copy, as the source is edited —
+ * is the skill's. Only a copy is ambiguous: Node names its source file
+ * even when writing failed, so a source crew can still read wasn't what
+ * broke (a full disk, say).
  */
 function stagingError(err: NodeJS.ErrnoException, skillPath: string, home: string): CrewError {
   const file = err.path ?? skillPath;
-  if (!(climbsOut(relative(skillPath, file)) || isReadable(file))) {
+  const inSkill = !climbsOut(relative(skillPath, file));
+  if (inSkill && (err.syscall !== "copyfile" || isGoneError(err) || !isReadable(file))) {
     return unreadablePathError(file, err, "read");
   }
   const store = paths(home).storeDir;

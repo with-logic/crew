@@ -71,7 +71,7 @@ test("C-UPD-39 a skill folder relinked at a ref is source_gone, even inside the 
   expect(readFileSync(join(claude.userRoot, "demo", "SKILL.md"), "utf8")).toContain("Original.");
 });
 
-test("C-UPD-18c a skill made invalid upstream fails the update at a ref, not gone", () => {
+test("C-UPD-10 a skill made invalid upstream fails the update at a ref, not gone", () => {
   const home = makeCrewHome();
   const repo = makeTempDir();
   makeSkill(join(repo, "skills"), "demo", skillFrontmatter({ name: "demo" }), "Original.\n");

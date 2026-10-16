@@ -1,8 +1,9 @@
 /**
- * A skill's `SKILL.md` may be a symlink only to a file inside the skill's
- * own folder (§9 step 4; C-SPEC-15): crew never reads through a link out
- * of a skill, and copies one as a link, so the link's text must stay
- * inside too. Any other is `invalid_skill`, refused before it is read.
+ * A skill's `SKILL.md` may be a symlink only straight to a file inside
+ * the skill's own folder (§9 step 4; C-SPEC-15): relative text with no
+ * `..`, through and to no other link. crew never reads through a link
+ * that could lead out of a skill, and copies one as a link. Any other is
+ * `invalid_skill`, refused before anything is read through it.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -49,7 +50,7 @@ test("C-SPEC-15 a SKILL.md linking out of its folder is invalid; the rest instal
   const r = install(makeCrewHome(), src);
   expect(r.code).toBe(1);
   expect(readdirSync(claude.userRoot)).toEqual(["good"]);
-  expect(r.out).toMatch(/the SKILL\.md of `\S+\/linked` links outside its skill's folder/);
+  expect(r.out).toMatch(/the SKILL\.md of `\S+\/linked` isn't a plain link to a file inside/);
 });
 
 test("C-SPEC-15 a SKILL.md linked to a file inside its folder installs, and still reads", () => {
@@ -80,6 +81,31 @@ for (const [what, link] of [
   ["out and back in by name", () => join("..", "linked", "body.md")],
   ["to nothing outside it", () => "/nonexistent/SKILL.md"],
   [
+    "past a folder link with `..`",
+    (folder: string) => {
+      const outside = makeTempDir();
+      mkdirSync(join(outside, "inner"));
+      const md = `---\n${skillFrontmatter({ name: "linked" })}\n---\nOUTSIDE\n`;
+      writeFileSync(join(outside, "x.md"), md);
+      symlinkSync(join(outside, "inner"), join(folder, "sub"));
+      return "sub/../x.md";
+    },
+  ],
+  [
+    "through a folder link that stays inside it",
+    (folder: string) => {
+      symlinkSync(".", join(folder, "here"));
+      return join("here", "body.md");
+    },
+  ],
+  [
+    "to another link, even one inside it",
+    (folder: string) => {
+      symlinkSync("body.md", join(folder, "hop"));
+      return "hop";
+    },
+  ],
+  [
     "through a folder link inside it that leads out",
     (folder: string) => {
       const outside = makeTempDir();
@@ -94,7 +120,7 @@ for (const [what, link] of [
     const r = install(makeCrewHome(), sourceWithLink(link));
     expect(r.code).toBe(1);
     expect(readdirSync(claude.userRoot)).toEqual(["good"]);
-    expect(r.out).toContain("links outside its skill's folder");
+    expect(r.out).toContain("isn't a plain link to a file inside");
   });
 }
 
@@ -108,7 +134,7 @@ test("C-SPEC-15 a SKILL.md linking out to a file crew can't read is invalid, nev
       sourceWithLink(() => join(outside, "SKILL.md")),
     );
     expect(r.code).toBe(1);
-    expect(r.out).toContain("links outside its skill's folder");
+    expect(r.out).toContain("isn't a plain link to a file inside");
     expect(r.out).not.toContain("EACCES");
   } finally {
     chmodSync(join(outside, "SKILL.md"), 0o644);
@@ -126,7 +152,7 @@ test("C-SPEC-15 at a ref, a SKILL.md linking out of a selected folder is invalid
   // Only `skills/foo` is exported at the ref, so the link dangles there.
   const r = install(makeCrewHome(), `file://${repo}@main//skills/foo`);
   expect(r.code).toBe(4);
-  expect(r.out).toContain("links outside its skill's folder");
+  expect(r.out).toContain("isn't a plain link to a file inside");
 });
 
 test("a folder crew can't look into isn't taken for a skill", () => {
@@ -146,7 +172,7 @@ test("C-SPEC-15 a SKILL.md that links to itself is invalid at install and in cre
   const src = sourceWithLink(() => "SKILL.md");
   const r = install(makeCrewHome(), src);
   expect(r.code).toBe(1);
-  expect(r.out).toContain("is a link that leads to no file");
+  expect(r.out).toContain("isn't a plain link to a file inside");
   expect(r.out).not.toContain("ELOOP");
   const cap = captureStreams();
   const code = runCli(["info", join(src, "linked"), "--json"], {
