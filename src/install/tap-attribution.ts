@@ -17,6 +17,7 @@
  * created (so the caller knows to write config.yaml back).
  */
 
+import { sameTapUrl } from "../core/repo-path.ts";
 import type { Config, GitSource, PathSource, TapConfig, TapDiscovery } from "../core/types.ts";
 import { deriveAutoTapName } from "./tap-naming.ts";
 
@@ -50,7 +51,7 @@ function findOrCreateGitTap(
   discovery: TapDiscovery | undefined,
 ): TapAttribution {
   const existing = config.taps.find(
-    (t) => t.kind === "git" && t.url === source.url && t.subpath === source.subpath,
+    (t) => t.kind === "git" && sameTapUrl(t.url, source.url) && t.subpath === source.subpath,
   );
   if (existing) return maybeUpgradeDiscovery(existing, config, discovery);
   const name = uniqueAutoName(deriveAutoTapName(source.url, source.subpath), config);

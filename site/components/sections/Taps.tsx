@@ -45,7 +45,9 @@ export function Taps() {
               works too — if <code>skills/</code> exists, crew indexes its children instead of the
               root. For trusted repos with non-standard nesting,{" "}
               <code>crew tap add --recursive</code> keeps those standard layouts first and falls
-              back to bounded recursive discovery.
+              back to bounded recursive discovery. A GitHub gist works as a tap too: it can't hold
+              folders, so each top-level <code>.md</code> file that opens with frontmatter is a
+              skill (a gist with a root <code>SKILL.md</code> is one skill).
             </p>
             <p className={styles.note}>
               Group related skills into <strong>namespaces</strong>: <code>skills/marketing/*</code>

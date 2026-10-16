@@ -1,64 +1,48 @@
 /**
- * `crew install <gist-url>` (§8.2 "Gists", §9 step 5; C-INST-23..26, C-TAP-26).
+ * `crew install <gist-url>` for a whole gist (§8.2 "Gists", §9 step 5;
+ * C-INST-23..25, C-INST-28, C-TAP-30, C-TAP-31).
  *
  * Every test installs from a real gist URL, served from a local repo by
- * `serveGist`, so nothing here touches the network.
+ * `useGistFixture`, so nothing here touches the network.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { readConfig } from "../../../src/config/load.ts";
+import { readConfig, writeConfig } from "../../../src/config/load.ts";
 import { readState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { commitAll } from "../../helpers/fixtures.ts";
 import {
   GIST_CLONE_URL,
+  GIST_ID,
   GIST_PAGE_URL,
   GIST_TAP,
-  makeGist,
-  redirectClaude,
+  json,
   run,
-  serveGist,
   skillFile,
+  useGistFixture,
 } from "./helpers.ts";
 
-let claude: ReturnType<typeof redirectClaude>;
-let unserve: (() => void) | null = null;
-
-beforeEach(() => {
-  claude = redirectClaude();
-});
-afterEach(() => {
-  unserve?.();
-  unserve = null;
-  claude.restore();
-});
-
-function gist(files: Record<string, string>): string {
-  const { dir } = makeGist(files);
-  unserve = serveGist(dir);
-  return dir;
-}
+const fx = useGistFixture();
 
 describe("crew install <gist-url>", () => {
   test("C-INST-23 installs one skill per skill file, ignoring everything else", () => {
     const prd = skillFile("prd");
     const build = skillFile("build");
-    gist({
+    fx.gist({
       "prd.md": prd,
       "build.md": build,
       "README.md": "# Notes\n\nNo frontmatter, so not a skill.\n",
       "config.yaml": "---\nname: not-markdown\ndescription: ignored\n",
     });
     const home = makeCrewHome();
-    const r = run(home, ["install", GIST_PAGE_URL]);
-    expect(r.code).toBe(0);
+    expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
 
-    expect(readdirSync(claude.skills).sort()).toEqual(["build", "prd"]);
-    expect(readdirSync(join(claude.skills, "prd")).sort()).toEqual([".crew.json", "SKILL.md"]);
-    expect(readFileSync(join(claude.skills, "prd", "SKILL.md"), "utf8")).toBe(prd);
-    expect(readFileSync(join(claude.skills, "build", "SKILL.md"), "utf8")).toBe(build);
+    expect(readdirSync(fx.skills()).sort()).toEqual(["build", "prd"]);
+    expect(readdirSync(join(fx.skills(), "prd")).sort()).toEqual([".crew.json", "SKILL.md"]);
+    expect(readFileSync(join(fx.skills(), "prd", "SKILL.md"), "utf8")).toBe(prd);
+    expect(readFileSync(join(fx.skills(), "build", "SKILL.md"), "utf8")).toBe(build);
 
     const entries = readState(home).installations;
     const sources = entries.map((e) => [e.name, e.source.tap, e.source.path, e.tracks_tap]);
@@ -66,40 +50,77 @@ describe("crew install <gist-url>", () => {
       ["build", GIST_TAP, "build.md", true],
       ["prd", GIST_TAP, "prd.md", true],
     ]);
-    const marker = JSON.parse(readFileSync(join(claude.skills, "prd", ".crew.json"), "utf8"));
+    const marker = JSON.parse(readFileSync(join(fx.skills(), "prd", ".crew.json"), "utf8"));
     expect(marker.path).toBe("prd.md");
     expect(marker.tap_url).toBe(GIST_CLONE_URL);
   });
 
-  test("C-TAP-26 every spelling of the gist records one tap named gist-<id8>", () => {
-    gist({ "prd.md": skillFile("prd") });
+  test("C-INST-23 the .md match ignores case, and frontmatter may follow blank lines or CRLF", () => {
+    fx.gist({
+      "NOTES.MD": skillFile("notes"),
+      "spaced.md": `\n\n${skillFile("spaced")}`,
+      "windows.md": skillFile("windows").replaceAll("\n", "\r\n"),
+      "titled.md": `# Title\n\n${skillFile("titled")}`,
+    });
+    const home = makeCrewHome();
+    expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
+    expect(readdirSync(fx.skills()).sort()).toEqual(["notes", "spaced", "windows"]);
+  });
+
+  test("C-TAP-30 every https spelling of the gist records one tap named gist-<id8>", () => {
+    fx.gist({ "prd.md": skillFile("prd") });
     const home = makeCrewHome();
     expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
     expect(run(home, ["install", GIST_CLONE_URL]).code).toBe(0);
+    expect(run(home, ["install", `https://gist.github.com/${GIST_ID.toUpperCase()}`]).code).toBe(0);
     const gistTaps = readConfig(home).taps.filter((t) => t.url === GIST_CLONE_URL);
     expect(gistTaps.map((t) => [t.name, t.subpath, t.registered])).toEqual([[GIST_TAP, "", false]]);
   });
 
+  test("C-TAP-31 a gist tap recorded with its owner keeps serving that gist", () => {
+    // Recorded before crew rewrote gist page URLs, so the tap clones the page URL.
+    fx.gist({ "prd.md": skillFile("prd") }, [GIST_PAGE_URL]);
+    const home = makeCrewHome();
+    const config = readConfig(home);
+    const legacy = { name: GIST_ID, kind: "git" as const, registered: false, url: GIST_PAGE_URL };
+    writeConfig({ ...config, taps: [...config.taps, { ...legacy, subpath: "", path: "" }] }, home);
+
+    expect(run(home, ["install", GIST_CLONE_URL]).code).toBe(0);
+    expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
+    expect(readState(home).installations.map((e) => [e.name, e.source.tap])).toEqual([
+      ["prd", GIST_ID],
+    ]);
+    expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
+    const gistTaps = readConfig(home).taps.filter((t) => t.url.includes(GIST_ID));
+    expect(gistTaps.map((t) => [t.name, t.registered])).toEqual([[GIST_ID, true]]);
+  });
+
   test("C-INST-24 a gist with a root SKILL.md is one skill holding every file", () => {
-    gist({ "SKILL.md": skillFile("whole"), "helper.md": skillFile("helper") });
+    fx.gist({ "SKILL.md": skillFile("whole"), "helper.md": skillFile("helper") });
     const home = makeCrewHome();
     expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
-    expect(readdirSync(claude.skills)).toEqual(["whole"]);
-    expect(existsSync(join(claude.skills, "whole", "helper.md"))).toBe(true);
+    expect(readdirSync(fx.skills())).toEqual(["whole"]);
+    expect(existsSync(join(fx.skills(), "whole", "helper.md"))).toBe(true);
     expect(readState(home).installations.map((e) => e.source.path)).toEqual([""]);
   });
 
-  test("C-INST-25 an invalid skill file fails while its siblings install", () => {
-    gist({ "prd.md": skillFile("prd"), "bad.md": "---\nname: Not Valid\n---\n" });
+  test("C-INST-25 an invalid skill file fails, named by its file, while its siblings install", () => {
+    fx.gist({
+      "prd.md": skillFile("prd"),
+      "bad.md": "---\nname: Not Valid\n---\n",
+      "nodesc.md": "---\nname: nodesc\n---\n",
+    });
     const home = makeCrewHome();
-    const r = run(home, ["install", GIST_PAGE_URL, "--json"]);
+    const r = run(home, ["install", GIST_PAGE_URL]);
     expect(r.code).toBe(1);
-    expect(readdirSync(claude.skills)).toEqual(["prd"]);
-    expect(r.stdout).toContain("bad.md");
+    expect(readdirSync(fx.skills())).toEqual(["prd"]);
+    expect(r.stdout).toContain("`bad.md`: `name: Not Valid` has invalid characters");
+    expect(r.stdout).toContain("`nodesc.md` frontmatter is missing `description`");
+    expect(r.stdout).not.toContain("SKILL.md");
   });
 
   test("C-INST-25 a symlink in a gist is never a skill candidate", () => {
-    const dir = gist({ "prd.md": skillFile("prd") });
+    const { dir } = fx.gist({ "prd.md": skillFile("prd") });
     symlinkSync("prd.md", join(dir, "alias.md"));
     commitAll(dir, "add a link");
     const home = makeCrewHome();
@@ -108,52 +129,25 @@ describe("crew install <gist-url>", () => {
   });
 
   test("C-INST-25 a gist with no skill files is no_skills_found", () => {
-    gist({ "README.md": "# Just notes\n" });
+    fx.gist({ "README.md": "# Just notes\n" });
+    const r = run(makeCrewHome(), ["install", GIST_PAGE_URL, "--json"]);
+    expect(r.code).toBe(4);
+    expect(json(r).error.name).toBe("no_skills_found");
+    expect(json(r).error.message).toContain("the gist has no skills");
+  });
+
+  test("C-INST-28 --recursive doesn't apply to a gist, for install or tap add", () => {
     const home = makeCrewHome();
-    const r = run(home, ["install", GIST_PAGE_URL, "--json"]);
-    expect(r.code).toBe(4);
-    expect(JSON.parse(r.stdout).error.name).toBe("no_skills_found");
-  });
-});
-
-describe("crew install <gist-url>//<file>", () => {
-  test("C-INST-26 installs only that skill, attributed to the whole-gist tap", () => {
-    gist({ "prd.md": skillFile("prd"), "build.md": skillFile("build") });
-    const home = makeCrewHome();
-    expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
-    expect(readdirSync(claude.skills)).toEqual(["prd"]);
-    const [entry] = readState(home).installations;
-    expect([entry!.source.tap, entry!.source.path]).toEqual([GIST_TAP, "prd.md"]);
-    expect(entry!.tracks_tap).toBeUndefined();
-    const tap = readConfig(home).taps.find((t) => t.name === GIST_TAP);
-    expect(tap?.subpath).toBe("");
-
-    // The whole-gist tap now backs qualified references too.
-    expect(run(home, ["install", `${GIST_TAP}/build`]).code).toBe(0);
-    expect(readdirSync(claude.skills).sort()).toEqual(["build", "prd"]);
-  });
-
-  test("C-INST-26 a file that isn't there is no_skills_found", () => {
-    gist({ "prd.md": skillFile("prd") });
-    const r = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//missing.md`, "--json"]);
-    expect(r.code).toBe(4);
-    expect(JSON.parse(r.stdout).error.name).toBe("no_skills_found");
-  });
-
-  test("C-INST-26 a named file is validated even without frontmatter", () => {
-    gist({ "prd.md": skillFile("prd"), "README.md": "# Notes\n" });
-    const r = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//README.md`, "--json"]);
-    expect(r.code).toBe(4);
-    expect(r.stdout).toContain("frontmatter");
-    expect(readdirSync(claude.skills)).toEqual([]);
-  });
-
-  test("C-INST-26 a named file reached through a symlink is invalid_ref", () => {
-    const dir = gist({ "prd.md": skillFile("prd") });
-    symlinkSync("prd.md", join(dir, "alias.md"));
-    commitAll(dir, "add a link");
-    const r = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//alias.md`, "--json"]);
-    expect(r.code).toBe(4);
-    expect(JSON.parse(r.stdout).error.name).toBe("invalid_ref");
+    const before = readConfig(home);
+    for (const args of [
+      ["install", "--recursive", GIST_PAGE_URL],
+      ["tap", "add", "--recursive", GIST_PAGE_URL],
+    ]) {
+      const r = run(home, [...args, "--json"]);
+      expect(r.code).toBe(4);
+      expect(json(r).error.name).toBe("usage_error");
+      expect(json(r).error.message).toContain("`--recursive` doesn't apply to a gist");
+    }
+    expect(readConfig(home)).toEqual(before);
   });
 });

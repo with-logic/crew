@@ -40,8 +40,9 @@ export interface SiblingHit {
  * Look for `depName` as a sibling skill of `parentTapPath`. Returns
  * null if not found (the dep walker will try cross-tap resolution next).
  *
- * `parent.parentDir`, when set, is the parent skill's own directory
- * inside an already-materialized export of a pinned commit. Siblings
+ * `parent.parentDir`, when set, is the parent skill's own location (its
+ * directory, or a gist's skill file) inside an already-materialized
+ * export of a pinned commit. Siblings
  * must be discovered there, not in the live clone: staging HEAD's bytes
  * while recording the parent's SHA would make state describe a
  * provenance the content doesn't have (§9 step 3).
@@ -62,17 +63,17 @@ export function findSiblingDep(
   ) {
     return null;
   }
-  // The parent's own directory inside the tap.
-  const parentDir = parent.parentDir ?? join(tapRoot, parent.tapRelativePath);
-  const siblingParent = join(parentDir, "..");
+  // The parent's own location inside the tap; its siblings share its parent directory.
+  const parentPath = parent.parentDir ?? join(tapRoot, parent.tapRelativePath);
+  const siblingParent = join(parentPath, "..");
   const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
-  const matches: { dirName: string; siblingDir: string; loaded: LoadedSkill }[] = [];
-  for (const dirName of listDir(siblingParent)) {
-    const siblingDir = join(siblingParent, dirName);
-    if (!isSiblingSkill(parent.tap, siblingDir)) continue;
-    if (siblingName(siblingDir) !== depName) continue;
-    const loaded = loadSkill(siblingDir);
-    matches.push({ dirName, siblingDir, loaded });
+  const matches: { entryName: string; siblingPath: string; loaded: LoadedSkill }[] = [];
+  for (const entryName of listDir(siblingParent)) {
+    const siblingPath = join(siblingParent, entryName);
+    if (!isSiblingSkill(parent.tap, siblingPath)) continue;
+    if (siblingName(siblingPath) !== depName) continue;
+    const loaded = loadSkill(siblingPath);
+    matches.push({ entryName, siblingPath, loaded });
   }
   if (matches.length === 0) return null;
   if (matches.length > 1) throw duplicateSiblingError(depName, parent.tap.name, matches);
@@ -82,13 +83,13 @@ export function findSiblingDep(
     return {
       tap: parent.tap,
       config,
-      tapRelativePath: tapBase.concat([match.dirName]).filter(Boolean).join("/"),
+      tapRelativePath: tapBase.concat([match.entryName]).filter(Boolean).join("/"),
       loaded: match.loaded,
     };
   }
 
   const attrib = attributeRef(
-    siblingRootSource(parent.tap, match.dirName, match.siblingDir),
+    siblingRootSource(parent.tap, match.entryName, match.siblingPath),
     config,
   );
   return { tap: attrib.tap, config: attrib.config, tapRelativePath: "", loaded: match.loaded };
@@ -110,24 +111,24 @@ function siblingName(path: string): string | null {
 
 function siblingRootSource(
   tap: TapConfig,
-  dirName: string,
-  siblingDir: string,
+  entryName: string,
+  siblingPath: string,
 ): GitSource | PathSource {
-  if (tap.kind === "path") return { type: "path", path: siblingDir };
+  if (tap.kind === "path") return { type: "path", path: siblingPath };
   const base = tap.subpath === "" ? "" : posix.dirname(tap.subpath);
-  const subpath = base === "" || base === "." ? dirName : `${base}/${dirName}`;
+  const subpath = base === "" || base === "." ? entryName : `${base}/${entryName}`;
   return { type: "git", url: tap.url, ref: null, subpath };
 }
 
 function duplicateSiblingError(
   depName: string,
   tapName: string,
-  matches: readonly { dirName: string }[],
+  matches: readonly { entryName: string }[],
 ): CrewError {
-  const paths = matches.map((m) => m.dirName).join(", ");
+  const paths = matches.map((m) => m.entryName).join(", ");
   return new CrewError(
     "conflicting_dependencies",
     `dependency \`${depName}\` appears multiple times near tap \`${tapName}\` at ${paths}`,
-    { name: depName, tap: tapName, paths: matches.map((m) => m.dirName) },
+    { name: depName, tap: tapName, paths: matches.map((m) => m.entryName) },
   );
 }

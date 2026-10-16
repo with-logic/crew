@@ -14,7 +14,7 @@
  * downstream validator can quote it in a useful error.
  */
 
-import { isGistUrl } from "../refs/gist.ts";
+import { isGistUrl } from "../core/gist-url.ts";
 
 export function deriveAutoTapName(url: string, subpath: string): string {
   const repoTail = lastSegment(url);

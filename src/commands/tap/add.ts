@@ -17,6 +17,7 @@ import { CrewError } from "../../core/errors.ts";
 import type { Config, TapConfig } from "../../core/types.ts";
 import { rewriteTapMarkers } from "../../install/rewrite-tap-markers.ts";
 import { displayText } from "../../refs/display-url.ts";
+import { rejectRecursiveGist } from "../../refs/gist.ts";
 import { NAME_PATTERN } from "../../refs/parse.ts";
 import { readState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
@@ -65,6 +66,7 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   const explicitName = args[1];
   const name = explicitName ?? deriveName(target);
   const recursive = Boolean(ctx.flags.extras["recursive"]);
+  if (recursive && target.kind === "git") rejectRecursiveGist(target.url);
   if (!NAME_PATTERN.test(name)) {
     throw new CrewError(
       "usage_error",

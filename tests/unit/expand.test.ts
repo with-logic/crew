@@ -155,7 +155,7 @@ describe("expandSkills", () => {
 
     expect(() => expandSkills(root)).toThrow(/no valid skills found/);
 
-    const names = expandSkills(root, { recursive: true }).valid.map((s) => s.frontmatter.name);
+    const names = expandSkills(root, "recursive").valid.map((s) => s.frontmatter.name);
     expect(names).toEqual(["deep-skill"]);
   });
 
@@ -179,6 +179,6 @@ describe("expandSkills", () => {
       skillFrontmatter({ name: "package-skill" }),
     );
 
-    expect(() => expandSkills(root, { recursive: true })).toThrow(/no valid skills found/);
+    expect(() => expandSkills(root, "recursive")).toThrow(/no valid skills found/);
   });
 });

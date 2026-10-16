@@ -16,11 +16,11 @@ import { copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { crewHome, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
+import { isSkillFile } from "../skill/skill-file.ts";
 import { copyTree } from "../util/copy.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { safePath } from "../util/redact.ts";
-import { isRegularFile } from "../util/regular-file.ts";
 
 /** Record returned after staging. */
 export interface StoredSkill {
@@ -32,12 +32,12 @@ export interface StoredSkill {
 }
 
 /**
- * Copy `sourceDir` (a skill directory, or a gist's skill file) into the
- * store under `<name>@<short-sha>`. If the entry already exists with a
- * matching content hash, the existing one is reused.
+ * Copy the skill at `skillPath` (a directory, or a gist's skill file)
+ * into the store under `<name>@<short-sha>`. If the entry already exists
+ * with a matching content hash, the existing one is reused.
  */
 export function stageIntoStore(
-  sourceDir: string,
+  skillPath: string,
   name: string,
   resolvedSha: string | null,
   home: string = crewHome(),
@@ -45,9 +45,9 @@ export function stageIntoStore(
 ): StoredSkill {
   // A path source with no SHA uses the hash itself as the short id so
   // different path-installed skills don't collide in the store.
-  // `sourceHash`, when the caller already hashed `sourceDir`, avoids
+  // `sourceHash`, when the caller already hashed `skillPath`, avoids
   // walking the same unbounded tree twice.
-  const shortSha = shortShaFor(sourceDir, resolvedSha, sourceHash);
+  const shortSha = shortShaFor(skillPath, resolvedSha, sourceHash);
   const storePath = storeEntryPath(name, shortSha, home);
 
   if (existsSync(storePath)) {
@@ -59,7 +59,7 @@ export function stageIntoStore(
 
   const staging = `${storePath}.staging-${Date.now()}`;
   if (exists(staging)) rmrf(staging);
-  copySkill(sourceDir, staging);
+  copySkill(skillPath, staging);
   ensureDir(join(storePath, "..")); // parents
   atomicReplace(staging, storePath);
 
@@ -72,7 +72,7 @@ export function stageIntoStore(
  * it becomes the `SKILL.md` of its own directory (§9 step 8).
  */
 function copySkill(source: string, dest: string): void {
-  if (isRegularFile(source)) {
+  if (isSkillFile(source)) {
     ensureDir(dest);
     copyFileSync(source, join(dest, "SKILL.md"));
   } else {
@@ -81,18 +81,18 @@ function copySkill(source: string, dest: string): void {
 }
 
 /**
- * First 8 chars of a SHA, or of a hash of the source dir for path
- * sources. `sourceHash` lets a caller that already hashed `sourceDir`
- * skip a second full walk; it must be a `hashDirectory` digest of that
- * same directory.
+ * First 8 chars of a SHA, or of a hash of the skill directory for path
+ * sources (which never hold gist skill files). `sourceHash` lets a
+ * caller that already hashed `skillDir` skip a second full walk; it must
+ * be a `hashDirectory` digest of that same directory.
  */
 export function shortShaFor(
-  sourceDir: string,
+  skillDir: string,
   resolvedSha: string | null,
   sourceHash?: string,
 ): string {
   if (resolvedSha !== null) return resolvedSha.slice(0, 8);
   // Path source: derive a stable short id from the directory's content hash.
-  const digest = sourceHash ?? hashDirectory(sourceDir); // `sha256:xxxx...`
+  const digest = sourceHash ?? hashDirectory(skillDir); // `sha256:xxxx...`
   return digest.slice("sha256:".length, "sha256:".length + 8);
 }

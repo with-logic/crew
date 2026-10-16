@@ -18,6 +18,7 @@
 
 import { createHash } from "node:crypto";
 import { join } from "node:path";
+import { isGistUrl } from "./gist-url.ts";
 import { crewHome, paths } from "./paths.ts";
 import { canonicalRepoUrl } from "./repo-url.ts";
 import type { TapConfig } from "./types.ts";
@@ -25,6 +26,16 @@ import type { TapConfig } from "./types.ts";
 /** True when both URLs address the same repository (§16.3). */
 export function sameRepoUrl(a: string, b: string): boolean {
   return canonicalRepoUrl(a) === canonicalRepoUrl(b);
+}
+
+/**
+ * True when a configured tap's URL is the one an incoming reference
+ * names. Tap URLs match exactly — except a gist's, which GitHub serves
+ * with or without its owner: a gist tap recorded before crew rewrote gist
+ * pages (`/<owner>/<id>`) is still the tap for `/<id>.git` (§8.2).
+ */
+export function sameTapUrl(recorded: string, incoming: string): boolean {
+  return recorded === incoming || (isGistUrl(incoming) && sameRepoUrl(recorded, incoming));
 }
 
 /** Lowercase alphanumerics and hyphens; everything else becomes a hyphen. */

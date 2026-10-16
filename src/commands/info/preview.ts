@@ -16,8 +16,8 @@ import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-r
 import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
-import { expandOptionsFor, expandSkills } from "../../sources/expand.ts";
-import { gistLocation } from "../../sources/gist.ts";
+import { expandSkills, layoutOf } from "../../sources/expand.ts";
+import { selectGistFile } from "../../sources/gist.ts";
 import type { SkillInfo } from "./render.ts";
 
 export interface TapPreview {
@@ -44,6 +44,8 @@ export function tapCandidate(
 /**
  * Expand a tap's skills, reading at `ref` when one was requested. `file`
  * narrows a gist tap to the one skill file a `//<file>` named (§8.2).
+ * That file is the whole input, so its validation error is the answer —
+ * as it is for `crew install` — rather than an empty preview.
  */
 export function skillsAtRef(
   tap: TapConfig,
@@ -51,9 +53,11 @@ export function skillsAtRef(
   home: string,
   file = "",
 ): SkillInfo[] {
-  return withAcquiredTap(tap, ref, home, (acq) =>
-    buildSkillInfos(gistLocation(acq.rootDir, file), tap),
-  );
+  return withAcquiredTap(tap, ref, home, (acq) => {
+    const location = selectGistFile(acq, tap, file);
+    if (file !== "") return [skillInfoOf(loadSkill(location))];
+    return buildSkillInfos(location, tap);
+  });
 }
 
 /**
@@ -80,7 +84,7 @@ function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
 }
 
 function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
-  const { valid } = expandSkills(dir, expandOptionsFor(tap));
+  const { valid } = expandSkills(dir, layoutOf(tap));
   return valid.map(skillInfoOf);
 }
 

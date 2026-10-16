@@ -1021,28 +1021,44 @@ anything else looks at them:
 ```
 https://gist.github.com/<id>[.git]                  → https://gist.github.com/<id>.git
 https://gist.github.com/<owner>/<id>[.git]          → https://gist.github.com/<id>.git
+https://gist.github.com/<id>/<revision>             → https://gist.github.com/<id>.git@<revision>
 https://gist.github.com/<owner>/<id>/<revision>     → https://gist.github.com/<id>.git@<revision>
 git@gist.github.com:<id>.git                        (kept as typed, like any SSH remote)
 ```
 
-- `<id>` is the gist's hexadecimal ID. The owner segment is dropped
-  because the ID alone names the gist, so every spelling of one gist
-  records the same URL and shares one tap.
+- `<id>` is the gist's hexadecimal ID, recorded in lowercase. The owner
+  segment is dropped because the ID alone names the gist, so every
+  `https` spelling of one gist records the same URL and shares one tap.
+  (An SSH remote is a different URL, and so a tap of its own.) A gist's
+  repository identity (§5.4) is its host and ID, so a gist tap recorded
+  with its owner (`https://gist.github.com/<owner>/<id>`) is still the
+  tap for that gist.
 - `<revision>` is a 40-character commit SHA from the gist's revision
-  history; a revision page's URL therefore installs that revision. An
-  explicit `@<ref>` tail wins over it, as for other browser URLs.
+  history — longer than any gist ID, which is how an owner-less revision
+  page is told apart from `/<owner>/<id>`. A revision page's URL
+  therefore installs that revision. An explicit `@<ref>` tail wins over
+  it, as for other browser URLs.
 - Any other `http(s)` path on `gist.github.com` — a user's gist list,
-  `/raw/...` links, `/revisions` — is `invalid_ref`.
+  `/raw/...` links, `/revisions` — is `invalid_ref`. A single path
+  segment is always read as an ID, so the gist list of a user whose login
+  is all hexadecimal fails at clone time instead. A link to one file of a
+  gist (`…#file-<slug>`) is also `invalid_ref`: dropping its fragment, as
+  for other browser URLs, would silently widen one file to the whole gist.
 - A `//<file>` tail names one file of the gist instead of a subfolder:
   `https://gist.github.com/<id>//prd.md` installs only the skill in
-  `prd.md`. The install is attributed to the tap for the whole gist, with
+  `prd.md`. The file must be a top-level `.md` file — a name with no `/`
+  ending in `.md` (case-insensitive) — or the reference is `invalid_ref`.
+  The install is attributed to the tap for the whole gist, with
   `source.path` `prd.md`, and — like `<tap>/<skill>` — does not track the
   tap (§10.1.1). A gist tap is always the whole gist: `crew tap add`
   rejects a `//<file>` tail on a gist with `usage_error`.
+- `--recursive` (§16.3) does not apply to a gist, whose skills are always
+  its top-level files: `crew install --recursive` and `crew tap add
+  --recursive` with a gist URL are `usage_error`.
 - Only `gist.github.com` is recognised. A gist on a GitHub Enterprise
   host (`https://<host>/gist/<id>`) is an ordinary git source.
 
-The resolved location inside the repo is either the repo root or the subpath. Behavior at the resolved location matches §9 step 5 (single skill if `SKILL.md` present, walk one level otherwise).
+The resolved location inside the repo is either the repo root or the subpath. Behavior at the resolved location matches §9 step 5 (single skill if `SKILL.md` present, walk one level otherwise; for a gist, step 5 "Gists").
 
 When a ref is given, the skill's **content is read at that commit** — not
 at the repo's default branch. The bytes installed, the content hash, and
@@ -1258,15 +1274,15 @@ Given one or more skill references on the command line, `crew install` proceeds 
    4. If, and only if, the standard cases above find zero skill candidates and the owning tap has `discovery: recursive` (or the user supplied `--recursive` for a direct git/path install), crew performs bounded recursive fallback discovery. It searches descendant directories up to depth 5 for `SKILL.md`, skips hidden directories and common non-source/vendor directories (`.git`, `.hg`, `.svn`, `.crew`, `node_modules`, `vendor`, `dist`, `build`, `coverage`, `.next`), never descends inside a directory once it has found that directory's `SKILL.md`, and records each discovered skill with its POSIX path relative to the tap root. Recursive fallback never runs when a standard layout produced any valid or invalid skill candidate; invalid standard candidates are surfaced as validation failures instead of being bypassed by deeper search.
 
    **Gists.** A gist (§8.2) has no directories, so cases 2–4 never apply to it. Case 1 still does: a gist with a root `SKILL.md` is one skill, and its other files are that skill's resources. Otherwise:
-   - Every top-level regular file of the gist whose name ends in `.md` (case-insensitive) and whose first non-blank line is `---` is a skill candidate. The file is that skill's `SKILL.md`: it is validated per step 4, and a candidate that fails validation is reported like any invalid skill. Every other file is ignored, and a symlink is never a candidate.
+   - Every top-level regular file of the gist whose name ends in `.md` (case-insensitive) and whose first non-blank line is `---` is a skill candidate. The file is that skill's `SKILL.md`: it is validated per step 4, and a candidate that fails validation is reported like any invalid skill, with an error that names the file (`bad.md`) rather than `SKILL.md`. Every other file is ignored, and a symlink is never a candidate.
    - The skill's `source.path` is the file's name (e.g. `prd.md`).
-   - A `//<file>` reference (§8.2) expands to exactly the named file, which is validated per step 4 whether or not it opens with frontmatter. A name that is not a file at the resolved commit is `no_skills_found`.
+   - A `//<file>` reference (§8.2) expands to exactly the named file, which is validated per step 4 whether or not it opens with frontmatter. The name is matched exactly, case included. A name that is not a regular file of the gist at the resolved commit is `no_skills_found`, with an error naming the file; a name reached through a symlink is `invalid_ref` (§8.4). A gist with a root `SKILL.md` is one skill, so no file of it can be selected: a `//<file>` on such a gist is `invalid_ref`.
 
    A location that produces zero valid skills through the applicable case aborts with `no_skills_found`.
    - Multi-skill expansions are how the user gets every skill in a tap installed at once. Each child becomes an independent state entry attributed to the same tap (`source.tap`); upstream additions to that tap are picked up automatically by `crew update` (§10.1.1).
 6. **Resolve dependencies.** For each skill in the install set, read `metadata.crew.dependencies` and add each to the install set. Continue recursively until no new dependencies appear. Cycles are allowed and terminate naturally (a skill already in the set is not re-added).
    - **Install order:** the install set is ordered topologically — every dependency is installed before the skills that depend on it. Ordering uses the *resolved* name of each dependency (the `name` its `SKILL.md` declares), not the tail of the reference that selected it: a dependency referenced as `./dep-directory` but declaring `name: dep` is still ordered before its dependent. When a cycle makes a strict ordering impossible, any order that respects the acyclic part is valid; the resulting installs are identical either way.
-   - **Bare-name resolution precedence:** (1) a sibling directory at the same source and ref (for sources where "sibling" is meaningful — git sources with a parent directory and path sources in a parent directory); (2) the tap the parent skill was installed from, if any; (3) search across all configured taps. An unqualified name matching multiple taps aborts with `ambiguous_dependency` naming the candidates.
+   - **Bare-name resolution precedence:** (1) a sibling directory — or, in a gist, a sibling skill file (step 5, "Gists") — at the same source and ref (for sources where "sibling" is meaningful — git sources with a parent directory and path sources in a parent directory); (2) the tap the parent skill was installed from, if any; (3) search across all configured taps. An unqualified name matching multiple taps aborts with `ambiguous_dependency` naming the candidates.
    - **Conflict detection:** if two skills in the install set have the same `name` but come from different tap-relative source paths, or resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
 7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
 8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. A gist skill file (step 5, "Gists") is copied in as `SKILL.md`, so its store entry — and every directory installed from it — holds that one file. If the store entry already exists and its content hash matches, reuse it.
@@ -1429,7 +1445,10 @@ outcome and leaves the local install, its marker, and its state entry
 untouched. The skill keeps working at its last-resolved SHA. This is a
 soft outcome: exit code stays 0 for an update run whose only
 abnormalities are `source_gone`. Removal of an unwanted local skill is
-always explicit (`crew uninstall <selector>`).
+always explicit (`crew uninstall <selector>`). A skill whose recorded
+path in a git source is now reached through a symlink is treated the
+same way: crew never follows it (§8.4), so as far as the source is
+concerned the skill is gone.
 
 This rule also applies when a whole source becomes unresolvable: a
 tap's clone URL 404s, or a git repo is gone. Those produce
@@ -2236,7 +2255,7 @@ since the registry was built, the normal tap-add or install error applies.
   - `<url-or-path>` is either a git URL (with optional `//<subpath>` tail using the same syntax as §8.2 git refs — e.g. `crew tap add @with-logic/backend//skills`) or a filesystem path. Browser URLs (§8.2) are accepted; `crew tap add https://github.com/acme/skills/tree/main/skills` registers a tap at subpath `skills`.
   - Taps track the default branch and cannot be pinned. A `@<ref>` tail — explicit, or derived from a browser URL — is a `usage_error`, with one exception: a ref of `main` or `master` is taken to name the default branch and is silently dropped, so a pasted `/tree/main/...` link works without editing.
   - If `<name>` is omitted, it is derived: for root git taps, the final URL path component (minus `.git`); for subpath git taps, `<last-repo-segment>-<last-subpath-segment>` (so `@with-logic/backend//skills` → `backend-skills`); for gists (§8.2), `gist-` followed by the first 8 characters of the gist ID (so `https://gist.github.com/acme/7489027d2d93c185f48a628547c043d8` → `gist-7489027d`); for path taps, the basename of the directory.
-  - A gist is always added whole. A `//<file>` tail on a gist URL is a `usage_error`; install one of its skills with `crew install <tap>/<skill>` once the tap exists.
+  - A gist is always added whole. A `//<file>` tail on a gist URL is a `usage_error`; install one of its skills with `crew install <gist-url>//<file>`, or `crew install <tap>/<skill>` once the tap exists.
   - For git taps, the initial clone runs **before** the tap is written to config. If the clone fails (bad URL, typo, network failure, no access), the tap is not added — neither `crew tap list` nor `config.yaml` shows it, and any partially-materialized clone directory is removed.
   - If the named tap already exists with a matching URL/path/subpath, the call is an idempotent no-op (exit 0). If an existing tap of the same name has a different URL/path/subpath, the call is a `usage_error` — the user must pick a different name.
   - If the URL/path matches an existing **auto** tap, `crew tap add` promotes it: `registered` flips to `true`, and the `<name>` argument (if supplied) renames the tap. No re-clone.
@@ -2442,8 +2461,8 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-35 | §8.2 | A ref spelled before the subpath suppresses the trailing scan, so a final path segment containing a literal `@` is preserved: `gh:o/r@main//skills/foo@bar` resolves to ref `main` and subpath `skills/foo@bar`. |
 | C-REF-36 | §8.2, §8.4 | The ref-last form takes `trailing-ref`, which excludes `/`, so the two positions are not interchangeable for a slash-containing ref: `gh:o/r//skills@feature/foo` is subpath `skills@feature/foo` with NO ref (a legal subpath, not an error), while the ref-first `gh:o/r@feature/foo//skills` is ref `feature/foo` + subpath `skills`. Ref-first is the documented spelling for a slash-containing ref. |
 | C-REF-37 | §8.2 | `https://gist.github.com/<id>`, `https://gist.github.com/<id>.git`, and `https://gist.github.com/<owner>/<id>` all parse as a git source whose URL is `https://gist.github.com/<id>.git`, with no ref and no subpath. |
-| C-REF-38 | §8.2 | `https://gist.github.com/<owner>/<id>/<revision>` (40 hex characters) parses with ref `<revision>`; an explicit `@<ref>` tail wins over it. |
-| C-REF-39 | §8.2 | Any other `http(s)` path on `gist.github.com` (`/<owner>`, `/<owner>/<id>/raw/...`, `/<owner>/<id>/revisions`) is `invalid_ref`. |
+| C-REF-38 | §8.2 | `https://gist.github.com/<owner>/<id>/<revision>` and `https://gist.github.com/<id>/<revision>` (40 hex characters) parse with ref `<revision>`; an explicit `@<ref>` tail wins over it. |
+| C-REF-39 | §8.2 | Any other `http(s)` path on `gist.github.com` (`/<owner>`, `/<owner>/<id>/raw/...`, `/<owner>/<id>/revisions`), a gist link with a `#file-…` fragment, and a gist `//<file>` that is not a top-level `.md` name (`//sub/a.md`, `//notes.txt`) are `invalid_ref`. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -2514,9 +2533,10 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
 | C-INST-23 | §8.2, §9 step 5 | `crew install <gist-url>` installs one skill per top-level `.md` file that opens with YAML frontmatter. Each installed directory contains that file's bytes as `SKILL.md`, the entry's `source.path` is the file name, and files that are not candidates are ignored. |
 | C-INST-24 | §9 step 5 | A gist with a root `SKILL.md` installs as a single skill containing every file of the gist. |
-| C-INST-25 | §9 step 5, step 9 | A gist candidate that fails validation is reported as a failed skill while its valid siblings install; a gist with no candidates is `no_skills_found`. A symlink in a gist is never a candidate. |
-| C-INST-26 | §8.2, §9 step 5 | `crew install <gist-url>//<file>` installs only that file's skill, attributed to the tap for the whole gist with `source.path` `<file>` and `tracks_tap: false`. |
+| C-INST-25 | §9 step 5, step 9 | A gist candidate that fails validation is reported as a failed skill, named by its file, while its valid siblings install; a gist with no candidates is `no_skills_found`. A symlink in a gist is never a candidate. |
+| C-INST-26 | §8.2, §9 step 5 | `crew install <gist-url>//<file>` installs only that file's skill, attributed to the tap for the whole gist with `source.path` `<file>` and `tracks_tap` absent. A file the gist doesn't have is `no_skills_found` naming the file; a named file is validated whether or not it opens with frontmatter; a file reached through a symlink, or any file of a gist with a root `SKILL.md`, is `invalid_ref`. A gist dependency spelled `<gist-url>//<file>` installs only that file's skill. |
 | C-INST-27 | §9 step 6 | A bare-name dependency of a gist skill resolves to the sibling skill file in the same gist, read at the same commit. |
+| C-INST-28 | §8.2, §16.3 | `crew install --recursive` and `crew tap add --recursive` with a gist URL are `usage_error` and write nothing. |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
 
@@ -2628,7 +2648,8 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
-| C-UPD-23 | §9 step 5, §10.1.1 | For a gist installed whole: an edited skill file is updated by `crew update`; a new skill file added upstream is installed by tap re-expansion; a deleted skill file reports `source_gone` and its local install is left in place. |
+| C-UPD-38 | §9 step 5, §10.1.1 | For a gist installed whole: an edited skill file is updated by `crew update`; a new skill file added upstream is installed by tap re-expansion; a deleted skill file reports `source_gone` and its local install is left in place. For one skill installed with `//<file>`, a deleted file is likewise `source_gone`. |
+| C-UPD-39 | §8.4, §10.1 | When the recorded path of an installed skill that doesn't track its git tap (`<tap>/<skill>`, a gist `//<file>`) is replaced upstream by a symlink, `crew update` reports `source_gone` and leaves the installed bytes unchanged; nothing is read through the link. |
 
 #### C-INFO: Info (§9.1)
 
@@ -2729,8 +2750,9 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-24g | §16.2.1 | When an argument matches both a skill inside a known tap and the GitHub repository that tap lives at, both suggestions are offered; neither interpretation suppresses the other. |
 | C-TAP-24d | §8.5 / §9 | `crew install <owner>/<repo>@<ref>` and `crew info <owner>/<repo>@<ref>` preserve `@<ref>` in every suggested command and in the echoed reference. |
 | C-TAP-25 | §6.1 / §16.5 | A tap name in `config.yaml` that is not a single directory component (contains `/` or `\`, or is `.`/`..`) is rejected with `config_invalid`, and no clone-directory deletion ever targets a path resolving outside crew-owned `repos/` or legacy `taps/` roots. |
-| C-TAP-26 | §16.3, §16.5 | The tap derived for a gist is named `gist-` plus the first 8 characters of the gist ID, whether it is created by `crew install` or `crew tap add`. |
 | C-TAP-27 | §8.2, §16.3 | `crew tap add` with a `//<file>` tail on a gist URL is a `usage_error` and writes nothing. |
+| C-TAP-30 | §16.3, §16.5 | The tap derived for a gist is named `gist-` plus the first 8 characters of the gist ID, whether it is created by `crew install` or `crew tap add`. |
+| C-TAP-31 | §5.4, §8.2 | A gist tap recorded with its owner segment (`https://gist.github.com/<owner>/<id>`) is the tap for every `https` spelling of that gist: installing the gist again, or `crew tap add` of it, reuses that tap rather than creating a second one. |
 
 #### C-STATE: State and markers (§11)
 

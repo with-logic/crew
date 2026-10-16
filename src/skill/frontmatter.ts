@@ -18,33 +18,25 @@ export interface Frontmatter {
 }
 
 /**
- * True iff `raw` opens with a frontmatter delimiter: its first non-blank
- * line is `---`, the same test `extractFrontmatter` applies. A gist file
- * passing it is a skill candidate (§9 step 5, "Gists").
+ * True iff `raw` opens with a frontmatter delimiter — exactly the files
+ * `extractFrontmatter` gets past its first check. A gist file passing it
+ * is a skill candidate (§9 step 5, "Gists").
  */
 export function opensFrontmatter(raw: string): boolean {
-  const first = raw
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .find((line) => line.trim() !== "");
-  return first?.trim() === "---";
+  return openingDelimiter(linesOf(raw)) >= 0;
 }
 
 /** Extract frontmatter from a raw SKILL.md string. Throws `invalid_skill` if malformed. */
 export function extractFrontmatter(raw: string): Frontmatter {
-  const lines = raw.replace(/\r\n?/g, "\n").split("\n");
-  // Skip leading blank lines; `---` must be on the first non-blank line.
-  let i = 0;
-  while (i < lines.length && lines[i]!.trim() === "") {
-    i++;
-  }
-  if (i >= lines.length || lines[i]!.trim() !== "---") {
+  const lines = linesOf(raw);
+  const opening = openingDelimiter(lines);
+  if (opening < 0) {
     throw new CrewError(
       "invalid_skill",
       "SKILL.md is missing its YAML frontmatter — the first line should be `---`",
     );
   }
-  const start = i + 1;
+  const start = opening + 1;
   let end = -1;
   for (let j = start; j < lines.length; j++) {
     if (lines[j]!.trim() === "---") {
@@ -70,4 +62,14 @@ export function extractFrontmatter(raw: string): Frontmatter {
   }
   const body = lines.slice(end + 1).join("\n");
   return { data, body };
+}
+
+function linesOf(raw: string): string[] {
+  return raw.replace(/\r\n?/g, "\n").split("\n");
+}
+
+/** Index of the opening `---`, which must be the first non-blank line; -1 when absent. */
+function openingDelimiter(lines: readonly string[]): number {
+  const first = lines.findIndex((line) => line.trim() !== "");
+  return first >= 0 && lines[first]!.trim() === "---" ? first : -1;
 }

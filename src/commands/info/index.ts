@@ -16,12 +16,13 @@ import { baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
+import { sameTapUrl } from "../../core/repo-path.ts";
 import type { Config, StateEntry } from "../../core/types.ts";
 import { attributeRef } from "../../install/tap-attribution.ts";
+import { splitGistFile } from "../../refs/gist.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { hasSkillMd, loadSkill } from "../../skill/load.ts";
 import { withDiscoveredTapLocks } from "../../sources/discovered-tap-locks.ts";
-import { splitGistFile } from "../../sources/gist.ts";
 import { readState } from "../../state/load.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
 import { isAutoTapSource, sourceLabel, tapIndex } from "../source-label/index.ts";
@@ -71,16 +72,16 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
       return tapCandidate(source, config, ref, ctx.home);
     }
     // A gist's `//<file>` previews one skill of the whole-gist tap (§8.2).
-    const { source: target, file } = splitGistFile(source);
+    const { whole, file } = splitGistFile(source);
     const matched = config.taps.find((t) => {
-      if (target.type === "git")
-        return t.kind === "git" && t.url === target.url && t.subpath === target.subpath;
-      return t.kind === "path" && t.path === target.path;
+      if (whole.type === "git")
+        return t.kind === "git" && sameTapUrl(t.url, whole.url) && t.subpath === whole.subpath;
+      return t.kind === "path" && t.path === whole.path;
     });
     if (matched) {
       return { tap: matched, skills: skillsAtRef(matched, ref, ctx.home, file) };
     }
-    const attrib = attributeRef(target, config);
+    const attrib = attributeRef(whole, config);
     requireTap(attrib.tap);
     return { tap: attrib.tap, skills: skillsAtRef(attrib.tap, ref, ctx.home, file) };
   });

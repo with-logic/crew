@@ -13,12 +13,16 @@
  */
 
 import { join } from "node:path";
-import type { GitSource, PathSource, TapConfig } from "../core/types.ts";
-import { isGistUrl } from "../refs/gist.ts";
+import { CrewError } from "../core/errors.ts";
+import { isGistUrl } from "../core/gist-url.ts";
+import type { TapConfig } from "../core/types.ts";
+import { displayText, displayUrl } from "../refs/display-url.ts";
 import { opensFrontmatter } from "../skill/frontmatter.ts";
+import { hasSkillMd } from "../skill/load.ts";
+import { isSkillFile } from "../skill/skill-file.ts";
 import { listDir, readText } from "../util/fs.ts";
-import { isRegularFile } from "../util/regular-file.ts";
 import { assertNoSymlinkEscape } from "../util/symlink-containment.ts";
+import type { AcquiredTap } from "./acquire/index.ts";
 
 /** True when `tap` is backed by a GitHub gist and so uses the gist layout. */
 export function isGistTap(tap: Pick<TapConfig, "kind" | "url">): boolean {
@@ -27,48 +31,50 @@ export function isGistTap(tap: Pick<TapConfig, "kind" | "url">): boolean {
 
 /** The skill-file candidates at the root of a gist checkout, in name order. */
 export function gistSkillFiles(rootDir: string): string[] {
-  const files: string[] = [];
+  const paths: string[] = [];
   for (const name of listDir(rootDir).sort()) {
     const path = join(rootDir, name);
-    if (isGistSkillFile(path)) files.push(path);
+    if (isGistSkillFile(path)) paths.push(path);
   }
-  return files;
+  return paths;
 }
 
-/** A regular `.md` file whose first non-blank line opens frontmatter. A symlink never is. */
+/** A skill file whose first non-blank line opens frontmatter. A symlink never is. */
 export function isGistSkillFile(path: string): boolean {
-  return /\.md$/i.test(path) && isRegularFile(path) && opensFrontmatter(readText(path));
-}
-
-/** A source with any gist `//<file>` selection split off. */
-export interface GistSelection {
-  /** The source naming the whole gist (or the input, for anything else). */
-  readonly source: GitSource | PathSource;
-  /** The selected file, or `""` when the whole source was named. */
-  readonly file: string;
+  return isSkillFile(path) && opensFrontmatter(readText(path));
 }
 
 /**
- * Split a gist reference's `//<file>` off (§8.2). A gist tap is always
- * the whole gist; the file instead narrows the install to one of its
- * skills, the way `<tap>/<skill>` does. Every other source passes
- * through untouched, keeping its subpath on the tap.
+ * Where to expand inside an acquired gist: its root, or the one file a
+ * `//<file>` reference selected (§8.2). A gist with a root `SKILL.md` is
+ * a single skill whose other files are its resources, so no file of it
+ * can be selected on its own. Like any resolved subpath, the file must
+ * be reached without traversing a symlink (§8.4), and naming a file the
+ * gist doesn't have is `no_skills_found` naming that file.
  */
-export function splitGistFile(source: GitSource | PathSource): GistSelection {
-  if (source.type === "path" || source.subpath === "" || !isGistUrl(source.url)) {
-    return { source, file: "" };
-  }
-  return { source: { ...source, subpath: "" }, file: source.subpath };
-}
-
-/**
- * Where to expand inside an acquired gist root: the root itself, or the
- * one file a `//<file>` reference selected. Like any resolved subpath,
- * the file must be reached without traversing a symlink (§8.4).
- */
-export function gistLocation(rootDir: string, file: string): string {
+export function selectGistFile(acquired: AcquiredTap, tap: TapConfig, file: string): string {
+  const { rootDir } = acquired;
   if (file === "") return rootDir;
+  const shown = displayText(file);
+  const where = `${displayUrl(tap.url)} at ${(acquired.resolvedSha ?? "").slice(0, 8)}`;
+  if (hasSkillMd(rootDir)) {
+    throw new CrewError(
+      "invalid_ref",
+      `the gist ${where} is one skill (it has a root SKILL.md), so \`//${shown}\` can't select a file of it`,
+      { file: shown },
+      `Install the whole gist: \`crew install ${displayUrl(tap.url)}\`.`,
+    );
+  }
   const target = join(rootDir, file);
-  assertNoSymlinkEscape(rootDir, target, `gist file \`${file}\``);
+  assertNoSymlinkEscape(rootDir, target, `gist file \`${shown}\``);
+  // Matched by exact name: a case-insensitive disk would also find `PRD.md`.
+  if (!(listDir(rootDir).includes(file) && isSkillFile(target))) {
+    throw new CrewError(
+      "no_skills_found",
+      `the gist ${where} has no file \`${shown}\``,
+      { file: shown },
+      "Gist file names are case-sensitive. `crew info <gist-url>` lists the gist's skills.",
+    );
+  }
   return target;
 }

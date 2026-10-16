@@ -3,9 +3,10 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
+import { isGistUrl } from "../../core/gist-url.ts";
+import { sameTapUrl } from "../../core/repo-path.ts";
 import type { Source, TapConfig, TapSource } from "../../core/types.ts";
 import { displayText, displayUrl } from "../../refs/display-url.ts";
-import { isGistUrl } from "../../refs/gist.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { shellQuote } from "../../util/format.ts";
 
@@ -44,10 +45,11 @@ export function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {
   // §16.3: a gist tap is always the whole gist; `//<file>` names one skill of it.
   if (source.subpath.length > 0 && isGistUrl(source.url)) {
     const shown = displayText(raw);
+    const file = displayText(source.subpath);
     throw new CrewError(
       "usage_error",
-      `\`${shown}\` names one file of a gist, but a gist is added as a tap whole. Drop the \`//${displayText(source.subpath)}\`, then install one skill with \`crew install <tap>/<skill>\`.`,
-      { raw: shown, subpath: displayText(source.subpath) },
+      `\`${shown}\` names one file of a gist, but a gist is added as a tap whole. Drop the \`//${file}\` to add the gist, or install just that skill with \`crew install ${shellQuote(shown)}\`.`,
+      { raw: shown, subpath: file },
     );
   }
   return { kind: "git", url: source.url, subpath: source.subpath, path: "" };
@@ -71,7 +73,7 @@ function ownerRepoRemedy(source: TapSource): string | undefined {
 
 export function sameTap(a: TapConfig, t: TapAddTarget): boolean {
   if (a.kind !== t.kind) return false;
-  if (a.kind === "git") return a.url === t.url && a.subpath === t.subpath;
+  if (a.kind === "git") return sameTapUrl(a.url, t.url) && a.subpath === t.subpath;
   return a.path === t.path;
 }
 

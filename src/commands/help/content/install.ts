@@ -126,7 +126,7 @@ export const installHelp: CommandHelp = {
             "  bb:acme/skills                     → Bitbucket.",
             "  @acme/skills                       → Same as gh: — a handy GitHub alias.",
             "",
-            "From a GitHub gist — every .md file with frontmatter is a skill",
+            "From a GitHub gist — every top-level .md file with frontmatter is a skill",
             "  https://gist.github.com/acme/<id>     Every skill in the gist.",
             "  https://gist.github.com/<id>//prd.md  Just the skill in prd.md.",
           ],

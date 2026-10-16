@@ -13,10 +13,10 @@
  */
 
 import { CrewError } from "../core/errors.ts";
+import { isGistUrl } from "../core/gist-url.ts";
 import type { GitSource } from "../core/types.ts";
 import { normalizeBrowserUrl, stripUrlQueryAndFragment } from "./browser-url.ts";
 import { displayUrl } from "./display-url.ts";
-import { isGistUrl } from "./gist.ts";
 import { splitGitRef, splitSubpath, splitTrailingRef } from "./git-tails.ts";
 import { normalizeSubpath } from "./subpath.ts";
 

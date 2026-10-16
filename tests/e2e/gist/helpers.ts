@@ -3,21 +3,23 @@
  *
  * A gist is only recognised by its host, so these tests must hand crew a
  * real `https://gist.github.com/...` reference — and must not reach the
- * network. `serveGist` routes the gist's canonical clone URL to a local
- * repository through the git seam: the reference parser, tap naming, and
- * gist layout all see the real gist URL, while real `git` clones a local
- * `file://` repo. Any other spelling reaching git (a parse that failed to
- * canonicalize, say) is left untouched and trips the network guard.
+ * network. `useGistFixture().gist` routes the gist's canonical clone URL
+ * to a local repository through the git seam: the reference parser, tap
+ * naming, and gist layout all see the real gist URL, while real `git`
+ * clones a local `file://` repo. Any other spelling reaching git (a parse
+ * that failed to canonicalize, say) is left untouched and trips the
+ * network guard.
  */
 
+import { afterEach, beforeEach } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
-import { setGitRunner } from "../../../src/git/exec.ts";
+import { resetGitRunner, setGitRunner } from "../../../src/git/exec.ts";
 import { captureStreams } from "../../helpers/env.ts";
 import { commitAll, makeGitRepo, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 
 export const GIST_ID = "7489027d2d93c185f48a628547c043d8";
 /** The URL crew records for the gist: owner dropped, `.git` added. */
@@ -37,36 +39,60 @@ export function writeGistFiles(
   files: Record<string, string>,
   message = "edit",
 ): string {
-  for (const [name, contents] of Object.entries(files)) writeFileSync(join(dir, name), contents);
+  writeFiles(dir, files);
   return commitAll(dir, message);
 }
 
-/** A local repository laid out like a gist: every file at its root. */
-export function makeGist(files: Record<string, string>): { dir: string; sha: string } {
-  const dir = mkdtempSync(join(tmpdir(), "crew-gist-"));
-  makeGitRepo(dir);
-  const sha = writeGistFiles(dir, files, "gist");
-  return { dir, sha };
+function writeFiles(dir: string, files: Record<string, string>): void {
+  for (const [name, contents] of Object.entries(files)) writeFileSync(join(dir, name), contents);
 }
 
-/** Route clones of the gist's clone URL to `repoDir`. Returns the restore function. */
-export function serveGist(repoDir: string): () => void {
-  const previous = setGitRunner((args, options) =>
-    previous(
-      args.map((a) => (a === GIST_CLONE_URL ? `file://${repoDir}` : a)),
-      options,
-    ),
-  );
-  return () => setGitRunner(previous);
+/** What a test gets from `useGistFixture`. */
+export interface GistFixture {
+  /** claude-code's (redirected) user skills directory for the current test. */
+  readonly skills: () => string;
+  /**
+   * Serve a new gist holding `files` at its clone URL — and at any
+   * `alsoAt` URLs, for a tap recorded under another spelling. Returns
+   * the gist's repo and first commit.
+   */
+  readonly gist: (
+    files: Record<string, string>,
+    alsoAt?: readonly string[],
+  ) => { dir: string; sha: string };
 }
 
-/** Point claude-code at a fresh tmp dir. Returns that dir and the restore function. */
-export function redirectClaude(): { skills: string; restore: () => void } {
-  const skills = mkdtempSync(join(tmpdir(), "crew-gist-claude-"));
-  const saved = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
-  claudeCodeAdapter.userPath = () => skills;
-  claudeCodeAdapter.detect = () => true;
-  return { skills, restore: () => Object.assign(claudeCodeAdapter, saved) };
+/**
+ * Per-test gist plumbing: claude-code redirected to a temp dir, and
+ * `gist(files)` to lay out and serve a gist. Each test's routing is
+ * dropped in `afterEach` by resetting to the network-guarded runner, so
+ * a test that serves twice can't leak a route into the next.
+ */
+export function useGistFixture(): GistFixture {
+  let redirected: ReturnType<typeof redirectClaudeCode> | null = null;
+  beforeEach(() => {
+    redirected = redirectClaudeCode();
+  });
+  afterEach(() => {
+    resetGitRunner();
+    restoreClaudeCode(redirected!.originals);
+  });
+  return {
+    skills: () => redirected!.userRoot,
+    gist(files, alsoAt = []) {
+      const dir = mkdtempSync(join(tmpdir(), "crew-gist-"));
+      writeFiles(dir, files);
+      const { sha } = makeGitRepo(dir, "gist");
+      const served = new Set([GIST_CLONE_URL, ...alsoAt]);
+      const previous = setGitRunner((args, options) =>
+        previous(
+          args.map((a) => (served.has(a) ? `file://${dir}` : a)),
+          options,
+        ),
+      );
+      return { dir, sha };
+    },
+  };
 }
 
 /** Run the CLI against `home`, capturing output. */
@@ -77,4 +103,9 @@ export function run(
   const cap = captureStreams();
   const code = runCli(args, { home, streams: cap.streams });
   return { code, stdout: cap.stdout(), stderr: cap.stderr() };
+}
+
+/** The `--json` body of a run. */
+export function json(r: { stdout: string }): any {
+  return JSON.parse(r.stdout);
 }

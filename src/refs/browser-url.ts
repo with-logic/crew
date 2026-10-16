@@ -18,8 +18,9 @@
  */
 
 import { CrewError } from "../core/errors.ts";
+import { GIST_HOST } from "../core/gist-url.ts";
 import { displayUrl } from "./display-url.ts";
-import { GIST_HOST, gistCloneUrl } from "./gist.ts";
+import { assertNoGistFileAnchor, fromGistPage } from "./gist.ts";
 
 /** Clone URL plus whatever ref / subpath the browser URL encoded. */
 export interface BrowserUrlParts {
@@ -34,10 +35,13 @@ const PASSTHROUGH = (url: string): BrowserUrlParts => ({ url, ref: null, subpath
  * Strip `?query` and `#fragment` from an `http(s)` URL before any grammar
  * tail is parsed (§8.2). Without this, `?x=@v9` or `#//evil` would be read
  * as an explicit `@ref` / `//subpath` tail — see C-REF-26. Returns the input
- * unchanged when it is not an `http(s)` URL crew can parse.
+ * unchanged when it is not an `http(s)` URL crew can parse. A gist's
+ * per-file anchor is the one fragment that can't be dropped: it would
+ * widen the reference from one file to the whole gist.
  */
 export function stripUrlQueryAndFragment(raw: string): string {
   if (!isHttpUrl(raw)) return raw;
+  assertNoGistFileAnchor(raw);
   const cut = Math.min(indexOrEnd(raw, "?"), indexOrEnd(raw, "#"));
   return raw.slice(0, cut);
 }
@@ -54,7 +58,8 @@ function isHttpUrl(raw: string): boolean {
 
 /**
  * Normalize `raw` per §8.2. Throws `invalid_ref` for a `blob` link to a
- * non-`SKILL.md` file, or for an `http(s)` URL too malformed to parse.
+ * non-`SKILL.md` file, for a page on the gist host that isn't a gist
+ * (`./gist.ts`), or for an `http(s)` URL too malformed to parse.
  */
 export function normalizeBrowserUrl(raw: string): BrowserUrlParts {
   if (!isHttpUrl(raw)) return PASSTHROUGH(raw);
@@ -84,7 +89,7 @@ export function normalizeBrowserUrl(raw: string): BrowserUrlParts {
 
   const dash = segments.indexOf("-");
   const forge = { raw, plain, origin, segments };
-  if (host === GIST_HOST) return { ...gistCloneUrl(origin, segments), subpath: "" };
+  if (host === GIST_HOST) return fromGistPage(origin, segments);
   if (dash > 0) return fromForge(forge, dash, GITLAB_SHAPES);
   if (host === "github.com") return fromForge(forge, 2, GITHUB_SHAPES);
   if (host === "bitbucket.org") return fromForge(forge, 2, BITBUCKET_SHAPES);

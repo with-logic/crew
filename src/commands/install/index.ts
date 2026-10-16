@@ -12,6 +12,7 @@ import type { Config } from "../../core/types.ts";
 import { detectCollision } from "../../install/collision-check.ts";
 import { runInstall } from "../../install/flow.ts";
 import type { KindHint } from "../../install/resolve-ref/index.ts";
+import { rejectRecursiveGist } from "../../refs/gist.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { withTapLocks } from "../../sources/tap-lock.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
@@ -123,6 +124,7 @@ function rejectRecursiveTapRefs(ctx: CommandContext): void {
   if (!ctx.flags.extras["recursive"]) return;
   for (const raw of ctx.positional) {
     const source = parseRef(raw, ctx.cwd);
+    if (source.type === "git") rejectRecursiveGist(source.url);
     if (source.type !== "tap") continue;
     throw new CrewError(
       "usage_error",

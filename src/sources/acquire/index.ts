@@ -38,6 +38,7 @@ import { displayUrl } from "../../refs/display-url.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
+import { liveSkillPath } from "./live-skill-path.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 
 /** Output of acquisition. */
@@ -127,7 +128,8 @@ export function withAcquiredTap<T>(
  * the skill's own path makes that cost proportional to what is read
  * (§10.1).
  *
- * `fn` receives the skill directory itself, not the tap root.
+ * `fn` receives the skill's own location — its directory, or a gist's
+ * skill file — not the tap root.
  */
 export function withAcquiredSkillDir<T>(
   tap: TapConfig,
@@ -138,7 +140,7 @@ export function withAcquiredSkillDir<T>(
 ): T {
   if (ref === null || tap.kind === "path") {
     const acquired = acquireTap(tap, home);
-    return fn(acquired, join(acquired.rootDir, skillPath));
+    return fn(acquired, liveSkillPath(tap, acquired.rootDir, skillPath));
   }
   migrateTapClone(tap, home);
   const clonePath = tapClonePath(tap, home);

@@ -16,7 +16,8 @@ import { withResolutionRoots } from "../resolve-ref/roots.ts";
 import { expandSkillsAsItems } from "./expand-items.ts";
 
 /**
- * Where a candidate's skill directory lives in the acquired tree.
+ * Where a candidate skill lives in the acquired tree — its directory, or
+ * a gist's skill file (§9 step 5).
  *
  * Without a ref, `resolveTapRef` indexed the live clone and
  * `location.path` is absolute inside it. With a ref, resolution already
@@ -70,12 +71,8 @@ export function enqueueTapRef(
         expandSkillsAsItems(
           acquired.rootDir,
           matched,
-          "",
-          acquired.resolvedSha,
-          source.ref,
-          acquired.pinned,
-          explicit,
-          true,
+          acquired,
+          { baseTapPath: "", requestedRef: source.ref, explicit, tracksTap: true },
           home,
         ),
       );
@@ -107,12 +104,13 @@ export function enqueueTapRef(
           const expansion = expandSkillsAsItems(
             memberDir(acq.rootDir, member, source.ref),
             candidate.tap,
-            member.tapRelativePath,
-            acq.resolvedSha,
-            source.ref,
-            acq.pinned,
-            explicit,
-            true,
+            acq,
+            {
+              baseTapPath: member.tapRelativePath,
+              requestedRef: source.ref,
+              explicit,
+              tracksTap: true,
+            },
             home,
           );
           items.push(...expansion.items);
@@ -129,12 +127,13 @@ export function enqueueTapRef(
       expandSkillsAsItems(
         memberDir(acq.rootDir, skill.location, source.ref),
         skill.tap,
-        skill.location.tapRelativePath,
-        acq.resolvedSha,
-        source.ref,
-        acq.pinned,
-        explicit,
-        false,
+        acq,
+        {
+          baseTapPath: skill.location.tapRelativePath,
+          requestedRef: source.ref,
+          explicit,
+          tracksTap: false,
+        },
         home,
       );
     const expansion = acquired
