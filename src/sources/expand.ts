@@ -18,8 +18,8 @@
  * skill-shaped file at its root is a skill. A `//<file>` selection hands
  * this module the skill file itself, which is the one skill.
  *
- * Every case soft-fails: an invalid candidate is collected and returned
- * as a `SkippedSkill` instead of aborting the walk. The caller decides
+ * Every case soft-fails: an invalid or unreadable candidate is collected
+ * and returned as a `SkippedSkill` instead of aborting the walk. The caller decides
  * how to surface skips; the install flow reports them and exits
  * non-zero at the end, so a lone invalid skill (case 1, or a selected
  * file) still fails the command (C-INST-21). A location that produces
@@ -29,11 +29,12 @@
 import { join } from "node:path";
 import type { CrewErrorName } from "../core/errors.ts";
 import { CrewError } from "../core/errors.ts";
+import { isGistTap } from "../core/gist-url.ts";
 import type { LoadedSkill, TapConfig, TapDiscovery } from "../core/types.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
-import { gistLabel, gistSkillCandidates, isGistTap, isOneSkillGist } from "./gist.ts";
+import { gistLabel, gistSkillCandidates, isOneSkillGist } from "./gist.ts";
 import { findRecursiveSkillDirs } from "./recursive.ts";
 
 /** A skill candidate that couldn't be loaded. */

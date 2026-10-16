@@ -5,7 +5,8 @@
 import type { Source, TapConfig } from "../../core/types.ts";
 import type { AcquiredTap } from "../../sources/acquire/index.ts";
 import { expandTapSkills, type SkippedSkill } from "../../sources/expand.ts";
-import { stageIntoStore } from "../../sources/store.ts";
+import { type StoredSkill, stageIntoStore } from "../../sources/store.ts";
+import { errnoReason } from "../../util/errno.ts";
 import type { PendingItem } from "./enqueue.ts";
 
 interface ExpansionItems {
@@ -26,7 +27,9 @@ export type ItemOptions = Pick<PendingItem, "requestedRef" | "explicit" | "track
  * Each skill is staged into the store here rather than later in the
  * resolver loop: when the reference carried an `@ref`, `root` is in a
  * scratch export that is deleted as soon as acquisition scope ends
- * (§9 step 3), so the bytes must be captured while it still exists.
+ * (§9 step 3), so the bytes must be captured while it still exists. A
+ * skill with a file crew can't copy is skipped as `source_unreachable`
+ * (§9 step 8), and the rest still install.
  */
 export function expandSkillsAsItems(
   root: string,
@@ -36,17 +39,19 @@ export function expandSkillsAsItems(
   home: string,
 ): ExpansionItems {
   const { resolvedSha, pinned } = acquired;
-  const { valid, skipped } = expandTapSkills(root, tap, resolvedSha);
+  const expanded = expandTapSkills(root, tap, resolvedSha);
+  const skipped = [...expanded.skipped];
   const { baseTapPath, requestedRef, explicit, tracksTap } = options;
   const items: PendingItem[] = [];
-  for (const l of valid) {
+  for (const l of expanded.valid) {
     const subSegment = l.path === root ? "" : l.path.slice(root.length + 1);
     const tapRelativePath = baseTapPath
       ? subSegment
         ? `${baseTapPath}/${subSegment}`
         : baseTapPath
       : subSegment;
-    const staged = stageIntoStore(l.path, l.frontmatter.name, resolvedSha, home);
+    const staged = stageOrSkip(l.path, l.frontmatter.name, resolvedSha, home, skipped);
+    if (staged === null) continue;
     items.push({
       loaded: l,
       staged,
@@ -60,6 +65,28 @@ export function expandSkillsAsItems(
     });
   }
   return { items, skipped };
+}
+
+/**
+ * Stage one skill, or record it in `skipped` when one of its files can't
+ * be copied. Staging only touches the filesystem, so what it throws is an
+ * `ErrnoException`, whose `path` names the file.
+ */
+function stageOrSkip(
+  path: string,
+  name: string,
+  resolvedSha: string | null,
+  home: string,
+  skipped: SkippedSkill[],
+): StoredSkill | null {
+  try {
+    return stageIntoStore(path, name, resolvedSha, home);
+  } catch (err) {
+    const file = (err as NodeJS.ErrnoException).path ?? path;
+    const message = `couldn't copy \`${file}\` into the store — ${errnoReason(err)}`;
+    skipped.push({ path, message, code: "source_unreachable" });
+    return null;
+  }
 }
 
 export function sourceRequestedRef(source: Source): string | null {

@@ -24,11 +24,6 @@ import { isSkillFile } from "../skill/skill-file.ts";
 import { listDir, readText } from "../util/fs.ts";
 import type { AcquiredTap } from "./acquire/index.ts";
 
-/** True when `tap` is backed by a GitHub gist and so uses the gist layout. */
-export function isGistTap(tap: Pick<TapConfig, "kind" | "url">): boolean {
-  return tap.kind === "git" && isGistUrl(tap.url);
-}
-
 /**
  * True when the gist checked out at `root` has a root `SKILL.md` and so is
  * one skill. Matched by exact name — on a case-insensitive disk a skill

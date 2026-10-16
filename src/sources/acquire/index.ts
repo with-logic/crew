@@ -26,7 +26,7 @@
  * tap to acquire.
  */
 
-import { join, posix } from "node:path";
+import { join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { crewHome } from "../../core/paths.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
@@ -38,11 +38,6 @@ import { displayUrl } from "../../refs/display-url.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
-import {
-  assertExportedSkillMdInside,
-  assertStillASkill,
-  liveSkillPath,
-} from "./live-skill-path.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 
 /** Output of acquisition. */
@@ -120,49 +115,6 @@ export function withAcquiredTap<T>(
   return withExportedTree(clonePath, sha, tap.subpath, home, (rootDir) =>
     fn({ rootDir, resolvedSha: sha, pinned }),
   );
-}
-
-/**
- * Acquire only ONE skill's subtree of a tap at `ref`.
- *
- * `crew update` reads exactly `<tap root>/<entry source path>` per entry.
- * For a whole-repo tap (`subpath` empty) the general `withAcquiredTap`
- * would export the entire repository for each such entry — N full
- * exports for N skills sharing a tap and ref. Narrowing the export to
- * the skill's own path makes that cost proportional to what is read
- * (§10.1).
- *
- * `fn` receives the skill's own location — its directory, or a gist's
- * skill file — not the tap root.
- */
-export function withAcquiredSkill<T>(
-  tap: TapConfig,
-  ref: string | null,
-  tapRelativePath: string,
-  home: string,
-  fn: (acquired: Pick<AcquiredTap, "resolvedSha" | "pinned">, skillPath: string) => T,
-): T {
-  if (ref === null || tap.kind === "path") {
-    const acquired = acquireTap(tap, home);
-    return fn(acquired, liveSkillPath(tap, home, acquired.rootDir, tapRelativePath));
-  }
-  migrateTapClone(tap, home);
-  const clonePath = tapClonePath(tap, home);
-  ensureClone(tap.url, clonePath);
-  const sha = resolveRefFetchingIfNeeded(clonePath, ref);
-  const kind = classifyRef(clonePath, ref);
-  const pinned = kind === "sha" || kind === "tag";
-  const exportPath =
-    tapRelativePath.length === 0
-      ? tap.subpath
-      : tap.subpath.length > 0
-        ? posix.join(tap.subpath, tapRelativePath)
-        : tapRelativePath;
-  return withExportedTree(clonePath, sha, exportPath, home, (skillPath) => {
-    assertStillASkill(tap, skillPath, tapRelativePath);
-    assertExportedSkillMdInside(tap, skillPath, tapRelativePath);
-    return fn({ resolvedSha: sha, pinned }, skillPath);
-  });
 }
 
 /**

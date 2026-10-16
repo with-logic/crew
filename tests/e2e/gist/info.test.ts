@@ -95,7 +95,7 @@ describe("crew info of a gist", () => {
       expect(r.code).toBe(4);
       expect(json(r).error.name).toBe("invalid_skill");
       expect(json(r).error.message).toStartWith(
-        "none of the 2 skills here is valid (and 1 couldn't be read) — `b.md`",
+        "none of the 2 skills here is valid (1 of them couldn't be read) — `b.md`",
       );
     } finally {
       chmodSync(locked, 0o644);

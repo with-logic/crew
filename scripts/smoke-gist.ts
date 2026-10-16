@@ -19,6 +19,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hasMarkdownExtension } from "../src/core/gist-url.ts";
+import type { StateFile } from "../src/core/types.ts";
+import type { UpdateRow } from "../src/install/update/types.ts";
 import { opensFrontmatter } from "../src/skill/frontmatter.ts";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
@@ -30,14 +32,10 @@ interface Run {
   readonly stderr: string;
 }
 
-interface State {
-  readonly installations: { name: string; resolved_sha: string }[];
-}
-
 interface Scratch {
   readonly env: Record<string, string>;
   readonly skills: string;
-  readonly state: () => State;
+  readonly state: () => StateFile;
 }
 
 function exec(cmd: string[], env: Record<string, string> = {}): Run {
@@ -57,7 +55,7 @@ function scratchHome(): Scratch {
   return {
     env: { HOME: home, CREW_HOME: crewHome, CREW_NO_UPDATE_CHECK: "1" },
     skills: join(home, ".claude", "skills"),
-    state: () => JSON.parse(readFileSync(join(crewHome, "state.json"), "utf8")) as State,
+    state: () => JSON.parse(readFileSync(join(crewHome, "state.json"), "utf8")) as StateFile,
   };
 }
 
@@ -143,7 +141,7 @@ for (const text of files.values()) {
   );
 }
 const update = JSON.parse(crew(whole, ["update", "--json"]).stdout) as {
-  rows: { outcome: { kind: string } }[];
+  rows: UpdateRow[];
 };
 const outcomes = update.rows.map((r) => r.outcome.kind);
 check("crew update reports every skill up to date", [...new Set(outcomes)], ["up_to_date"]);

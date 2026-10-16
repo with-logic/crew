@@ -22,7 +22,8 @@ import { expandSkillsAsItems, type ItemOptions, sourceRequestedRef } from "./exp
 /**
  * How a direct reference's skills are recorded: `explicit` for a
  * reference the user typed; `tracksTap` when naming the whole source
- * subscribes to its tap (§10.1.1); `discovery` on a newly created tap.
+ * subscribes to its tap (§10.1.1). `discovery` sets recursive discovery
+ * on the source's tap — a new one, or an existing one it upgrades (§16.3).
  */
 export type DirectRefOptions = Pick<ItemOptions, "explicit" | "tracksTap"> & {
   readonly discovery?: TapDiscovery;

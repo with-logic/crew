@@ -19,7 +19,7 @@ import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
 import { loadSkill, skillFileRemedy, UNREADABLE_REMEDY } from "../../skill/load.ts";
 import { isSkillFile } from "../../skill/skill-file.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
-import { expandTapSkills } from "../../sources/expand.ts";
+import { expandTapSkills, type SkippedSkill } from "../../sources/expand.ts";
 import { selectGistFile } from "../../sources/gist.ts";
 import { toPosix } from "../../util/fs.ts";
 import type { SkillInfo } from "./render.ts";
@@ -94,31 +94,28 @@ function previewSkills(root: string, tap: TapConfig, sha: string | null): SkillI
   const { valid, skipped } = expandTapSkills(root, tap, sha);
   // An invalid skill is reported ahead of an unreadable one, whatever the
   // directory order; the reason, code, and next step all come from it.
-  const first = skipped.find((s) => s.code === "invalid_skill") ?? skipped[0];
-  if (valid.length === 0 && first) {
+  const reported = skipped.find((s) => s.code === "invalid_skill") ?? skipped[0];
+  if (valid.length === 0 && reported) {
     // A gist file's message and a read failure's already name the file;
     // a folder skill's validation message doesn't.
-    const rel = toPosix(relative(root, first.path));
-    const named = rel === "" || isSkillFile(first.path) || first.code === "source_unreachable";
-    const reason = named ? first.message : `\`${rel}\`: ${first.message}`;
-    const unreadable = skipped.filter((s) => s.code === "source_unreachable").length;
+    const rel = toPosix(relative(root, reported.path));
+    const named =
+      rel === "" || isSkillFile(reported.path) || reported.code === "source_unreachable";
+    const reason = named ? reported.message : `\`${rel}\`: ${reported.message}`;
+    const unreadableCount = skipped.filter((s) => s.code === "source_unreachable").length;
     const alsoUnreadable =
-      first.code === "invalid_skill" && unreadable > 0
-        ? ` (and ${unreadable} couldn't be read)`
+      reported.code === "invalid_skill" && unreadableCount > 0
+        ? ` (${unreadableCount} of them couldn't be read)`
         : "";
     const headline =
-      first.code === "invalid_skill"
+      reported.code === "invalid_skill"
         ? `none of the ${skipped.length} skills here is valid${alsoUnreadable}`
         : `crew couldn't read any of the ${skipped.length} skills here`;
     const message = skipped.length === 1 ? reason : `${headline} — ${reason}`;
-    const remedy =
-      first.code === "source_unreachable"
-        ? UNREADABLE_REMEDY
-        : isSkillFile(first.path)
-          ? skillFileRemedy(first.path)
-          : undefined;
     const candidates = skipped.map((s) => candidateName(root, s.path));
-    throw new CrewError(first.code, message, { path: first.path, candidates }, remedy);
+    // Named as the user knows them, never by crew's clone or scratch folders.
+    const path = candidateName(root, reported.path);
+    throw new CrewError(reported.code, message, { path, candidates }, remedyFor(reported));
   }
   return valid.map(skillInfoOf);
 }
@@ -147,4 +144,10 @@ function skillInfoOf(s: LoadedSkill): SkillInfo {
     homepage: s.frontmatter.metadata?.crew?.homepage ?? null,
     dependencies: s.frontmatter.metadata?.crew?.dependencies ?? [],
   };
+}
+
+/** The next step for the skill a failed preview reports. */
+function remedyFor(reported: SkippedSkill): string | undefined {
+  if (reported.code === "source_unreachable") return UNREADABLE_REMEDY;
+  return isSkillFile(reported.path) ? skillFileRemedy(reported.path) : undefined;
 }

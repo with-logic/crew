@@ -41,8 +41,10 @@ export interface PendingItem {
   readonly tap: TapConfig;
   readonly tapRelativePath: string;
   readonly resolvedSha: string | null;
+  /** The ref the user asked for, if any (`ResolvedSkill.ref`). */
   readonly requestedRef: string | null;
   readonly pinned: boolean;
+  /** See `ResolvedSkill.explicit`: named by the user, not pulled in as a dependency. */
   readonly explicit: boolean;
   /** See `ResolvedSkill.tracksTap` / `StateEntry.tracks_tap`. */
   readonly tracksTap: boolean;

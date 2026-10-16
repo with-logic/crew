@@ -7,6 +7,8 @@
  * ask the same questions here. It is a leaf module so every layer can.
  */
 
+import type { TapConfig } from "./types.ts";
+
 /** The only host whose repositories use the gist layout (§8.2). */
 const GIST_HOST = "gist.github.com";
 
@@ -15,6 +17,14 @@ export const GIST_ID_PATTERN = /^[0-9a-f]+$/i;
 
 /** The schemes a gist is served over. `file://` ignores its host, so it never names one. */
 const GIST_SCHEMES: ReadonlySet<string> = new Set(["https:", "http:", "ssh:"]);
+
+/**
+ * True when `tap` is backed by a GitHub gist and so uses the gist layout.
+ * A path tap has no URL of its own, so it never is one.
+ */
+export function isGistTap(tap: Pick<TapConfig, "kind" | "url">): boolean {
+  return tap.kind === "git" && isGistUrl(tap.url);
+}
 
 /**
  * True when `url` addresses a GitHub gist. A URL with a scheme is judged

@@ -12,16 +12,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runCli } from "../../src/cli/main.ts";
-import { captureStreams, makeCrewHome } from "../helpers/env.ts";
+import { runCli } from "../../../src/cli/main.ts";
+import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import {
   commitAll,
   makeGitRepo,
   makeSkill,
   makeTempDir,
   skillFrontmatter,
-} from "../helpers/fixtures.ts";
-import { redirectClaudeCode, restoreClaudeCode } from "../helpers/scoped-install.ts";
+} from "../../helpers/fixtures.ts";
+import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 
 let claude: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {

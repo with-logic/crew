@@ -7,10 +7,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runCli } from "../../src/cli/main.ts";
-import { captureStreams, makeCrewHome } from "../helpers/env.ts";
-import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
-import { redirectClaudeCode, restoreClaudeCode } from "../helpers/scoped-install.ts";
+import { runCli } from "../../../src/cli/main.ts";
+import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 
 let claude: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {

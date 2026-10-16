@@ -1,22 +1,23 @@
 /**
  * `crew update` of a skill installed at an `@<ref>` (§9 step 3, §10.1;
- * C-UPD-40): the skill is read from a scratch export of the commit, and
- * its `SKILL.md` is still never read through a link out of it.
+ * C-UPD-39, C-UPD-40): the skill is read from a scratch export of the
+ * commit, so a symlink on its recorded path makes it gone, and its
+ * `SKILL.md` is still never read through a link out of it.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runCli } from "../../src/cli/main.ts";
-import { captureStreams, makeCrewHome } from "../helpers/env.ts";
+import { runCli } from "../../../src/cli/main.ts";
+import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import {
   commitAll,
   makeGitRepo,
   makeSkill,
   makeTempDir,
   skillFrontmatter,
-} from "../helpers/fixtures.ts";
-import { redirectClaudeCode, restoreClaudeCode } from "../helpers/scoped-install.ts";
+} from "../../helpers/fixtures.ts";
+import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 
 let claude: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -48,6 +49,27 @@ test("C-UPD-40 a SKILL.md relinked out of the repository is never read at a ref"
   commitAll(repo, "link SKILL.md out of the repo");
 
   const r = run(home, ["update", "--json"]);
+  const rows: { name: string; outcome: { kind: string } }[] = JSON.parse(r.stdout).rows;
+  expect(rows.map((row) => `${row.name}:${row.outcome.kind}`)).toEqual(["demo:source_gone"]);
+  expect(readFileSync(join(claude.userRoot, "demo", "SKILL.md"), "utf8")).toContain("Original.");
+});
+
+test("C-UPD-39 a skill folder relinked at a ref is source_gone, even inside the repository", () => {
+  const home = makeCrewHome();
+  const repo = makeTempDir();
+  makeSkill(join(repo, "skills"), "demo", skillFrontmatter({ name: "demo" }), "Original.\n");
+  makeGitRepo(repo);
+  run(home, ["tap", "add", `file://${repo}`, "acme"]);
+  expect(run(home, ["install", "acme/demo@main"]).code).toBe(0);
+
+  mkdirSync(join(repo, "shared"));
+  renameSync(join(repo, "skills", "demo"), join(repo, "shared", "demo"));
+  writeFileSync(join(repo, "shared", "demo", "notes.md"), "Moved.\n");
+  symlinkSync(join("..", "shared", "demo"), join(repo, "skills", "demo"));
+  commitAll(repo, "move demo behind a link");
+
+  const r = run(home, ["update", "--json"]);
+  expect(r.code).toBe(0);
   const rows: { name: string; outcome: { kind: string } }[] = JSON.parse(r.stdout).rows;
   expect(rows.map((row) => `${row.name}:${row.outcome.kind}`)).toEqual(["demo:source_gone"]);
   expect(readFileSync(join(claude.userRoot, "demo", "SKILL.md"), "utf8")).toContain("Original.");

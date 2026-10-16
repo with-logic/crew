@@ -24,7 +24,7 @@
 
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
 import { type InstallOutcome, installSkillIntoAgents } from "../../agents/install.ts";
-import type { CrewError } from "../../core/errors.ts";
+import type { CrewError, CrewErrorName } from "../../core/errors.ts";
 import type { ResolvedSkill, Scope, StateFile } from "../../core/types.ts";
 import { upsertEntry } from "../../state/load.ts";
 import type { KeptSource } from "../duplicate-rules/index.ts";
@@ -35,7 +35,7 @@ import { buildStateEntry, rebuildRequiredBy } from "./state-entry.ts";
 export type PerAgentResult =
   | { kind: "installed"; agent: string }
   | { kind: "up_to_date"; agent: string }
-  | { kind: "failed"; agent: string; error: { code: string; message: string } };
+  | { kind: "failed"; agent: string; error: { code: CrewErrorName; message: string } };
 
 /** Per-skill install record. */
 export interface InstallRecord {

@@ -60,7 +60,7 @@ export function repairStateUnderLock(markers: readonly MarkerEntry[], home: stri
         url: marker.tap_url,
         subpath: marker.tap_subpath,
         path: marker.tap_path,
-        ...recordedDiscovery(marker.tap_url, marker.tap_discovery),
+        ...recordedDiscovery({ kind: marker.tap_kind, url: marker.tap_url }, marker.tap_discovery),
       };
       taps.set(reconstructed.name, reconstructed);
     }

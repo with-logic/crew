@@ -12,16 +12,17 @@
 
 import { existsSync } from "node:fs";
 import { cwdForEntry } from "../../agents/adapter.ts";
-import { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { hashDirectory } from "../../hash/content.ts";
 import { loadSkill } from "../../skill/load.ts";
-import { type AcquiredTap, withAcquiredSkill } from "../../sources/acquire/index.ts";
+import type { AcquiredTap } from "../../sources/acquire/index.ts";
+import { withAcquiredSkill } from "../../sources/acquire/one-skill.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { peekResolvedSha } from "./peek.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
+import { rowFor, updateErrorCode } from "./row.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
@@ -56,11 +57,7 @@ export function updateOneEntry(
         outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed"),
     };
   } catch (err) {
-    // A raw `node:fs` error can land here too (a file crew can't read while
-    // hashing or staging); its errno `.code` is no §13 name (§13: a local
-    // file crew can't read is `source_unreachable`).
-    const errno = typeof (err as NodeJS.ErrnoException).syscall === "string";
-    const code = err instanceof CrewError ? err.code : errno ? "source_unreachable" : "usage_error";
+    const code = updateErrorCode(err);
     const soft = code === "no_skills_found" || code === "invalid_ref";
     if (soft) {
       return {
@@ -83,22 +80,6 @@ export function updateOneEntry(
       bumpHardFailure: true,
     };
   }
-}
-
-/** Build an UpdateRow for a state entry, threading through project_root. */
-function rowFor(entry: StateEntry, outcome: InternalOutcome): UpdateRow {
-  const publicOutcome =
-    outcome.kind === "updated"
-      ? { kind: "updated" as const, new_sha: outcome.new_sha, per_target: outcome.per_target }
-      : outcome;
-  return {
-    name: entry.name,
-    scope: entry.scope,
-    ...(entry.project_root === undefined
-      ? {}
-      : { project_root: String(entry.project_root ?? "(unknown)") }),
-    outcome: publicOutcome,
-  };
 }
 
 function updateOne(

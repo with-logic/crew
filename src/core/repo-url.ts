@@ -34,10 +34,10 @@ export function canonicalRepoUrl(url: string): string {
   const slash = rest.search(/[/?#]/);
   const authority = slash < 0 ? rest : rest.slice(0, slash);
   const path = slash < 0 ? "" : rest.slice(slash);
-  const canonical = `${scheme}://${lowercaseHostOnly(authority)}`;
+  const origin = `${scheme}://${lowercaseHostOnly(authority)}`;
   // §8.2 "Gists": a gist is one repository whether or not its URL names the owner.
-  const gist = scheme.startsWith("http") && isGistUrl(stripped);
-  return gist ? `${canonical}${gistIdentityPath(path)}` : `${canonical}${path}`;
+  const isGist = scheme.startsWith("http") && isGistUrl(stripped);
+  return isGist ? `${origin}${gistIdentityPath(path)}` : `${origin}${path}`;
 }
 
 /**

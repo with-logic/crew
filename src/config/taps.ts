@@ -3,7 +3,7 @@
  */
 
 import { CrewError } from "../core/errors.ts";
-import { isGistUrl } from "../core/gist-url.ts";
+import { isGistTap } from "../core/gist-url.ts";
 import type { TapConfig, TapDiscovery, TapKind } from "../core/types.ts";
 import type { YamlMap, YamlValue } from "../yaml/parse.ts";
 
@@ -47,13 +47,13 @@ export function parseTapEntry(entry: YamlValue): TapConfig {
  * The `discovery` a tap row records. §8.2 "Gists": recursive discovery
  * never applies to a gist, so a gist row never records it — whether an
  * older crew wrote it to config or to a marker `doctor --repair` reads. (A
- * path tap has no URL, so it is never a gist.)
+ * path tap is never a gist, whatever URL a hand-edited row carries.)
  */
 export function recordedDiscovery(
-  url: string,
+  tap: Pick<TapConfig, "kind" | "url">,
   discovery: TapDiscovery | undefined,
 ): { discovery?: TapDiscovery } {
-  return discovery === "recursive" && !isGistUrl(url) ? { discovery } : {};
+  return discovery === "recursive" && !isGistTap(tap) ? { discovery } : {};
 }
 
 /** Serialize a normalized tap entry back to YAML. */
@@ -100,7 +100,7 @@ function parseGitTap(
     url,
     subpath,
     path: "",
-    ...recordedDiscovery(url, discovery.discovery),
+    ...recordedDiscovery({ kind: "git", url }, discovery.discovery),
   };
 }
 

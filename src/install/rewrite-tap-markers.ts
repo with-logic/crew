@@ -44,7 +44,10 @@ function maybeRewrite(installDir: string, marker: Marker, rewrite: TapMarkerRewr
   if (marker.tap_name !== rewrite.oldName) return;
   // Recomputed, not inherited: a gist never records recursive discovery (§8.2).
   const { tap_discovery: previous, ...rest } = marker;
-  const discovery = recordedDiscovery(marker.tap_url, rewrite.discovery ?? previous).discovery;
+  const discovery = recordedDiscovery(
+    { kind: marker.tap_kind, url: marker.tap_url },
+    rewrite.discovery ?? previous,
+  ).discovery;
   writeJson(join(installDir, ".crew.json"), {
     ...rest,
     tap_name: rewrite.newName,

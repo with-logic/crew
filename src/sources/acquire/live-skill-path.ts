@@ -1,20 +1,22 @@
 /**
  * Locating one installed skill again for `crew update` (§10.1): in a live
- * (unexported) tap checkout, and — `assertStillASkill` — in a commit's
- * export too.
+ * (unexported) tap checkout, with `assertExportedSkillMdInside` for a
+ * commit's export. Whether it is still a skill is `./skill-shape.ts`.
  */
 
 import { lstatSync, readlinkSync, realpathSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { CrewError } from "../../core/errors.ts";
+import { isGistTap } from "../../core/gist-url.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { hasSkillMd, UNREADABLE_REMEDY } from "../../skill/load.ts";
-import { isSkillFile } from "../../skill/skill-file.ts";
-import { errnoReason } from "../../util/errno.ts";
-import { isDirectory } from "../../util/fs.ts";
 import { climbsOut } from "../../util/relative-path.ts";
-import { isGistTap, isOneSkillGist } from "../gist.ts";
+import {
+  assertStillASkill,
+  isMissingPathError,
+  noLongerASkill,
+  unreadable,
+} from "./skill-shape.ts";
 
 /**
  * Where an installed skill now lives in a live checkout: `rootDir` joined
@@ -30,11 +32,15 @@ import { isGistTap, isOneSkillGist } from "../gist.ts";
  * inside the clone (§8.4): upstream can replace either with a link out of
  * the repository after it was installed, and following it would read
  * content that was never part of the source. That escape is `invalid_ref`,
- * also reported as `source_gone`; so is a link crew can't follow at all
- * (dangling, looping, or into somewhere unreadable). A link that stays
- * inside the repository is followed, as discovery follows skill-directory
- * links at install. A path tap is the user's own directory and, like its
- * root (`tapRootDir`), isn't held to the containment check.
+ * also reported as `source_gone`; so is a link that dangles or loops, or
+ * one crew can't resolve that points out of the repository. One crew
+ * can't resolve that points inside is a local fault (`source_unreachable`).
+ * A link that stays inside the repository is followed, as discovery
+ * follows skill-directory links at install — but never, for a skill below
+ * the root, to the clone itself or into its `.git`, which hold crew's
+ * clone metadata (a remote URL with a token, say), not the source. A path
+ * tap is the user's own directory and, like its root (`tapRootDir`),
+ * isn't held to the containment check.
  */
 export function liveSkillPath(
   tap: TapConfig,
@@ -52,9 +58,13 @@ export function liveSkillPath(
     // Measured against the repository, not the tap's subpath: a link from
     // `skills/foo` to `../shared/foo` is still inside the source.
     const clone = realpathSync(tapClonePath(tap, home));
-    assertResolvesInside(clone, location, tapRelativePath);
+    const resolved = resolveInside(clone, location, tapRelativePath);
+    const belowRoot = tapRelativePath !== "" || tap.subpath !== "";
+    if (belowRoot && isCloneMetadata(relative(clone, resolved))) {
+      throw intoCloneMetadata(tapRelativePath);
+    }
     const skillMd = join(location, "SKILL.md");
-    if (isLink(skillMd)) assertResolvesInside(clone, skillMd, tapRelativePath);
+    if (isLink(skillMd)) resolveInside(clone, skillMd, tapRelativePath);
   } else if (isGone(location)) {
     throw noLongerASkill(tapRelativePath);
   }
@@ -74,16 +84,17 @@ export function assertExportedSkillMdInside(
 ): void {
   if (isGistTap(tap)) return;
   const skillMd = join(location, "SKILL.md");
-  if (isLink(skillMd)) assertResolvesInside(realpathSync(location), skillMd, tapRelativePath);
+  if (isLink(skillMd)) resolveInside(realpathSync(location), skillMd, tapRelativePath);
 }
 
 /**
- * Throw unless `path` resolves to somewhere inside `clone` (already a real
- * path). Missing — deleted, or a dangling or looping link — is gone. A
- * link crew can't resolve is judged by where it points: out of the
- * repository it is never read; inside, the failure is a local one.
+ * The real path of `path`; throws unless it is inside `boundary`, already
+ * a real path: the clone live, or the skill's own export at a ref. Missing
+ * — deleted, or a dangling or looping link — is gone. A link crew can't
+ * resolve is judged by where it points: outside the boundary it is never
+ * read; inside, the failure is a local one.
  */
-function assertResolvesInside(clone: string, path: string, tapRelativePath: string): void {
+function resolveInside(boundary: string, path: string, tapRelativePath: string): string {
   let resolved: string;
   try {
     resolved = realpathSync(path);
@@ -91,11 +102,44 @@ function assertResolvesInside(clone: string, path: string, tapRelativePath: stri
     if (isMissingPathError(err) || (err as NodeJS.ErrnoException).code === "ELOOP") {
       throw noLongerASkill(tapRelativePath);
     }
-    const target = linkTarget(path);
-    if (target !== null && climbsOut(relative(clone, target))) throw outsideRepo(tapRelativePath);
+    if (linksOut(boundary, path)) throw outsideRepo(tapRelativePath);
     throw unreadable(path, err);
   }
-  if (climbsOut(relative(clone, resolved))) throw outsideRepo(tapRelativePath);
+  if (climbsOut(relative(boundary, resolved))) throw outsideRepo(tapRelativePath);
+  return resolved;
+}
+
+/**
+ * True when a link on the way to `path` — `path` itself, or a folder
+ * above it — points out of `boundary`. It walks up only while the path
+ * won't resolve; from there up, the real path settled where it leads.
+ */
+function linksOut(boundary: string, at: string): boolean {
+  const target = linkTarget(at);
+  if (target !== null && climbsOut(relative(boundary, target))) return true;
+  return !resolves(at) && linksOut(boundary, dirname(at));
+}
+
+function resolves(path: string): boolean {
+  try {
+    realpathSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The clone root itself (`""` from it), or anything in its `.git`. */
+function isCloneMetadata(fromClone: string): boolean {
+  return fromClone === "" || fromClone.split(sep)[0] === ".git";
+}
+
+function intoCloneMetadata(tapRelativePath: string): CrewError {
+  return new CrewError(
+    "invalid_ref",
+    `\`${tapRelativePath || "."}\` now leads to the repository's root or its \`.git\` through a symlink, so crew won't read it`,
+    { path: tapRelativePath },
+  );
 }
 
 function outsideRepo(tapRelativePath: string): CrewError {
@@ -136,56 +180,4 @@ function isGone(path: string): boolean {
     if (isMissingPathError(err)) return true;
     throw unreadable(path, err);
   }
-}
-
-/** Nothing at the path, or a path through something that isn't a folder. */
-function isMissingPathError(err: unknown): boolean {
-  const code = (err as NodeJS.ErrnoException).code;
-  return code === "ENOENT" || code === "ENOTDIR";
-}
-
-function unreadable(path: string, err: unknown): CrewError {
-  return new CrewError(
-    "source_unreachable",
-    `couldn't look at \`${path}\` — ${errnoReason(err)}`,
-    { path },
-    UNREADABLE_REMEDY,
-  );
-}
-
-/**
- * Throw `no_skills_found` when the skill at `location` — live, or in a
- * commit's export — is now the wrong kind of thing: a gist skill file
- * that isn't a regular file, a one-skill gist whose root `SKILL.md` isn't
- * (a symlink is never a gist skill file or root SKILL.md, §9 step 5), or a
- * folder skill that isn't a folder or no longer holds a `SKILL.md`.
- */
-export function assertStillASkill(
-  tap: Pick<TapConfig, "kind" | "url">,
-  location: string,
-  tapRelativePath: string,
-): void {
-  if (!stillASkill(tap, location, tapRelativePath)) throw noLongerASkill(tapRelativePath);
-}
-
-function stillASkill(
-  tap: Pick<TapConfig, "kind" | "url">,
-  location: string,
-  tapRelativePath: string,
-): boolean {
-  if (isGistTap(tap)) {
-    return tapRelativePath === "" ? isOneSkillGist(location) : isSkillFile(location);
-  }
-  // A whole-tap root skill's directory is the tap root, which acquisition
-  // already proved exists as a directory. Either way it must still hold a
-  // SKILL.md — a deleted one and a link to nowhere alike.
-  return (tapRelativePath === "" || isDirectory(location)) && hasSkillMd(location);
-}
-
-function noLongerASkill(tapRelativePath: string): CrewError {
-  return new CrewError(
-    "no_skills_found",
-    `\`${tapRelativePath || "."}\` is no longer a skill in the tap`,
-    { path: tapRelativePath },
-  );
 }
