@@ -30,10 +30,14 @@ interface Run {
   readonly stderr: string;
 }
 
+interface State {
+  readonly installations: { name: string; resolved_sha: string }[];
+}
+
 interface Scratch {
   readonly env: Record<string, string>;
   readonly skills: string;
-  readonly state: () => { installations: { name: string; resolved_sha: string }[] };
+  readonly state: () => State;
 }
 
 function exec(cmd: string[], env: Record<string, string> = {}): Run {
@@ -53,7 +57,7 @@ function scratchHome(): Scratch {
   return {
     env: { HOME: home, CREW_HOME: crewHome, CREW_NO_UPDATE_CHECK: "1" },
     skills: join(home, ".claude", "skills"),
-    state: () => JSON.parse(readFileSync(join(crewHome, "state.json"), "utf8")),
+    state: () => JSON.parse(readFileSync(join(crewHome, "state.json"), "utf8")) as State,
   };
 }
 
@@ -138,8 +142,10 @@ for (const text of files.values()) {
     text,
   );
 }
-const update = JSON.parse(crew(whole, ["update", "--json"]).stdout);
-const outcomes = update.rows.map((r: { outcome: { kind: string } }) => r.outcome.kind);
+const update = JSON.parse(crew(whole, ["update", "--json"]).stdout) as {
+  rows: { outcome: { kind: string } }[];
+};
+const outcomes = update.rows.map((r) => r.outcome.kind);
 check("crew update reports every skill up to date", [...new Set(outcomes)], ["up_to_date"]);
 
 // `//<file>` installs just that file's skill.

@@ -14,7 +14,8 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
+import { climbsOut } from "./relative-path.ts";
 
 /** Ensure a directory exists (like `mkdir -p`). */
 export function ensureDir(path: string, mode: number = 0o755): void {
@@ -93,7 +94,7 @@ export function rmrf(path: string): void {
  */
 export function isInside(root: string, candidate: string): boolean {
   const rel = relative(resolve(root), resolve(candidate));
-  return rel.length > 0 && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+  return rel.length > 0 && !climbsOut(rel);
 }
 
 /** Delete a persisted-name target only inside the crew-owned root (§16.5). */

@@ -43,6 +43,18 @@ export function parseTapEntry(entry: YamlValue): TapConfig {
   return parsePathTap(em, name, registered, discovery);
 }
 
+/**
+ * The `discovery` a git tap row records. §8.2 "Gists": recursive discovery
+ * never applies to a gist, so a gist row never records it — whether an
+ * older crew wrote it to config or to a marker `doctor --repair` reads.
+ */
+export function recordedDiscovery(
+  url: string,
+  discovery: TapDiscovery | undefined,
+): { discovery?: TapDiscovery } {
+  return discovery === "recursive" && !isGistUrl(url) ? { discovery } : {};
+}
+
 /** Serialize a normalized tap entry back to YAML. */
 export function serializeTap(t: TapConfig): YamlValue {
   if (t.kind === "git") {
@@ -52,7 +64,7 @@ export function serializeTap(t: TapConfig): YamlValue {
       registered: t.registered,
       url: t.url,
       ...(t.subpath.length > 0 ? { subpath: t.subpath } : {}),
-      ...(t.discovery === "recursive" ? { discovery: "recursive" } : {}),
+      ...recordedDiscovery(t.url, t.discovery),
     };
   }
   return {
@@ -78,11 +90,17 @@ function parseGitTap(
     );
   }
   const subpath = parseSubpath(em["subpath"]);
-  // §8.2 "Gists": recursive discovery never applies to a gist. A row an
-  // older crew recorded with it would otherwise keep claiming it in
-  // `tap list` and spread it into every new marker.
-  const applies = isGistUrl(url) ? {} : discovery;
-  return { name, kind: "git", registered, url, subpath, path: "", ...applies };
+  // A gist row an older crew recorded as recursive would otherwise keep
+  // claiming it in `tap list` and spread it into every new marker.
+  return {
+    name,
+    kind: "git",
+    registered,
+    url,
+    subpath,
+    path: "",
+    ...recordedDiscovery(url, discovery.discovery),
+  };
 }
 
 function parsePathTap(

@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
@@ -120,25 +120,6 @@ describe("crew info", () => {
     expect(code).toBe(4);
     const { error } = JSON.parse(capture.stdout());
     expect(error.message).toMatch(/^none of the 2 skills here is valid — `(alpha|beta)`: /);
-  });
-
-  test("C-INFO-03 an invalid skill is reported ahead of an unreadable one", () => {
-    const home = makeInfoHome();
-    const src = makeTempDir();
-    makeSkill(src, "a-locked", skillFrontmatter({ name: "a-locked" }));
-    makeSkill(src, "b-bad", "name: b-bad");
-    chmodSync(join(src, "a-locked", "SKILL.md"), 0o000);
-    try {
-      const capture = captureStreams();
-      const code = runCli(["info", src, "--json"], { home, streams: capture.streams });
-      expect(code).toBe(4);
-      const { error } = JSON.parse(capture.stdout());
-      expect(error.name).toBe("invalid_skill");
-      expect(error.message).toContain("`b-bad`: ");
-      expect(error.details.files.sort()).toEqual(["a-locked", "b-bad"]);
-    } finally {
-      chmodSync(join(src, "a-locked", "SKILL.md"), 0o644);
-    }
   });
 
   test("C-INFO-03 a folder whose one skill is invalid reports why instead of no skills", () => {

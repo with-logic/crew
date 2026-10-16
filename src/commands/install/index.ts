@@ -138,7 +138,7 @@ function rejectRecursiveTapRefs(ctx: CommandContext): void {
     if (source.type !== "tap") continue;
     throw new CrewError(
       "usage_error",
-      "`--recursive` only applies to direct git or path sources — for tap-name installs, run `crew tap add --recursive <url-or-path> <name>` first",
+      "`--recursive` only applies to direct git or path sources (not gists) — for tap-name installs, run `crew tap add --recursive <url-or-path> <name>` first",
     );
   }
 }

@@ -12,7 +12,7 @@
 
 import { existsSync } from "node:fs";
 import { cwdForEntry } from "../../agents/adapter.ts";
-import type { CrewError } from "../../core/errors.ts";
+import { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { hashDirectory } from "../../hash/content.ts";
 import { loadSkill } from "../../skill/load.ts";
@@ -73,7 +73,8 @@ export function updateOneEntry(
     return {
       row: rowFor(entry, {
         kind: "failed",
-        error: { code: ce.code ?? "usage_error", message: ce.message },
+        // A raw `node:fs` error has its own errno `.code`, which is no §13 name.
+        error: { code: err instanceof CrewError ? err.code : "usage_error", message: ce.message },
       }),
       updatedState: state,
       bumpHardFailure: true,

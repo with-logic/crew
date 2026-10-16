@@ -1,20 +1,21 @@
 /**
  * A gist's tap: its identity across spellings and releases, and the
  * commands that read or record it — search, tap add, doctor (§5.4,
- * §16.3, §16.5, §17; C-TAP-27, C-TAP-30, C-TAP-31).
+ * §6, §11.2, §16.3, §16.5, §16.6; C-INST-28, C-TAP-27, C-TAP-30, C-TAP-31).
  *
  * The gist is served from a local repo by `useGistFixture`; nothing here
  * touches the network.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
 import { legacyTapPath } from "../../../src/core/paths.ts";
 import { repoClonePath } from "../../../src/core/repo-path.ts";
 import { runGit } from "../../../src/git/exec.ts";
 import { readState } from "../../../src/state/load.ts";
+import { parseYaml, stringifyYaml } from "../../../src/yaml/parse.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 import {
@@ -71,6 +72,10 @@ describe("gist tap identity", () => {
     expect(existsSync(join(shared, ".git", "crew-moved"))).toBe(true);
     expect(existsSync(legacyTapPath(GIST_ID, home))).toBe(false);
 
+    const preview = run(home, ["tap", "add", GIST_PAGE_URL, "--dry-run"]);
+    expect(preview.stdout).toContain(GIST_ID);
+    expect(preview.stdout).not.toContain(GIST_TAP);
+    expect(preview.stdout).toContain(GIST_PAGE_URL);
     const added = run(home, ["tap", "add", GIST_PAGE_URL]);
     expect(added.code).toBe(0);
     // Reported as it was recorded — name and URL — not as a derived `gist-<id8>`.
@@ -83,19 +88,39 @@ describe("gist tap identity", () => {
 });
 
 describe("a gist tap recorded with recursive discovery", () => {
-  test("reads as standard discovery: recursive never applies to a gist", () => {
+  test("C-INST-28 reads as standard discovery, and is never written back as recursive", () => {
     const home = makeCrewHome();
-    const config = readConfig(home);
-    const row = { name: GIST_TAP, kind: "git" as const, registered: true, url: GIST_CLONE_URL };
-    writeConfig(
-      {
-        ...config,
-        taps: [...config.taps, { ...row, subpath: "", path: "", discovery: "recursive" }],
-      },
-      home,
-    );
+    // As crew 0.10 could write it: raw YAML, since crew itself no longer does.
+    const file = join(home, "config.yaml");
+    const raw = parseYaml(readFileSync(file, "utf8")) as { taps: unknown[] };
+    const row = { name: GIST_TAP, kind: "git", registered: true, url: GIST_CLONE_URL };
+    raw.taps.push({ ...row, discovery: "recursive" });
+    writeFileSync(file, stringifyYaml(raw as never));
+
     expect(readConfig(home).taps.find((t) => t.name === GIST_TAP)?.discovery).toBeUndefined();
     expect(run(home, ["tap", "list"]).stdout).not.toContain("recursive");
+    writeConfig(readConfig(home), home);
+    expect(readFileSync(file, "utf8")).not.toContain("recursive");
+  });
+
+  test("C-INST-28 doctor --repair doesn't rebuild a gist tap as recursive from an old marker", () => {
+    fx.gist({ "prd.md": skillFile("prd") });
+    const home = makeCrewHome();
+    expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
+    const marker = join(skillsDir(), "prd", ".crew.json");
+    writeFileSync(
+      marker,
+      readFileSync(marker, "utf8").replace(
+        '"tap_name"',
+        '"tap_discovery": "recursive",\n  "tap_name"',
+      ),
+    );
+    const config = readConfig(home);
+    writeConfig({ ...config, taps: config.taps.filter((t) => t.name !== GIST_TAP) }, home);
+
+    expect(run(home, ["doctor", "--repair"]).code).toBe(0);
+    expect(readConfig(home).taps.find((t) => t.name === GIST_TAP)?.discovery).toBeUndefined();
+    expect(readFileSync(join(home, "config.yaml"), "utf8")).not.toContain("recursive");
   });
 });
 

@@ -6,9 +6,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { chmodSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
-import { GIST_PAGE_URL, json, run, skillFile, useGistFixture } from "./helpers.ts";
+import { GIST_PAGE_URL, GIST_TAP, json, run, skillFile, useGistFixture } from "./helpers.ts";
 
 const fx = useGistFixture();
 
@@ -39,8 +41,19 @@ describe("crew info <gist-url>//<file>", () => {
       expect(r.code).toBe(4);
       expect(r.stderr + r.stdout).toContain("`bad.md`: `name: Not Valid`");
       expect(r.stderr + r.stdout).toContain("Check `bad.md`'s frontmatter");
+      const body = json(run(home, ["info", `${GIST_PAGE_URL}//bad.md`, "--json"]));
+      expect(body.error.details["candidates"]).toEqual(["bad.md"]);
     });
   }
+
+  test("an invalid skill file named through its tap points at that file's frontmatter", () => {
+    fx.gist({ "prd.md": skillFile("prd"), "bad.md": "---\nname: bad\n---\n" });
+    const home = makeCrewHome();
+    expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
+    const r = run(home, ["info", `${GIST_TAP}/bad`]);
+    expect(r.code).toBe(4);
+    expect(r.stdout + r.stderr).toContain("Check `bad.md`'s frontmatter");
+  });
 
   test("C-INFO-03 a gist whose only skill file is invalid reports why", () => {
     fx.gist({ "prd.md": "---\nname: prd\n---\n" });
@@ -52,10 +65,30 @@ describe("crew info <gist-url>//<file>", () => {
     );
   });
 
+  test("C-INFO-03 an invalid skill is reported ahead of an unreadable one listed first", () => {
+    // Gist candidates are in name order, so the unreadable `a.md` comes first.
+    fx.gist({ "a.md": skillFile("a"), "b.md": "---\nname: b\n---\n" });
+    const home = makeCrewHome();
+    expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
+    const locked = join(home, "repos", readdirSync(join(home, "repos"))[0]!, "a.md");
+    chmodSync(locked, 0o000);
+    try {
+      const r = run(home, ["info", GIST_PAGE_URL, "--json"]);
+      expect(r.code).toBe(4);
+      expect(json(r).error.name).toBe("invalid_skill");
+      expect(json(r).error.message).toStartWith(
+        "none of the 2 skills here is valid (and 1 couldn't be read) — `b.md`",
+      );
+    } finally {
+      chmodSync(locked, 0o644);
+    }
+  });
+
   test("C-INFO-03 a gist with several invalid files says how many", () => {
     fx.gist({ "a.md": "---\nname: a\n---\n", "b.md": "---\nname: b\n---\n" });
     const r = run(makeCrewHome(), ["info", GIST_PAGE_URL, "--json"]);
     expect(r.code).toBe(4);
     expect(json(r).error.message).toStartWith("none of the 2 skills here is valid — `a.md`");
+    expect(json(r).error.details["candidates"]).toEqual(["a.md", "b.md"]);
   });
 });

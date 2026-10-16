@@ -18,7 +18,7 @@
  */
 
 import { CrewError } from "../core/errors.ts";
-import { GIST_HOST } from "../core/gist-url.ts";
+import { isGistHost } from "../core/gist-url.ts";
 import { displayUrl } from "./display-url.ts";
 import { fromGistPage } from "./gist.ts";
 
@@ -86,7 +86,7 @@ export function normalizeBrowserUrl(raw: string): BrowserUrlParts {
 
   const dash = segments.indexOf("-");
   const forge = { raw, plain, origin, segments };
-  if (host === GIST_HOST) return fromGistPage(origin, segments);
+  if (isGistHost(host)) return fromGistPage(origin, segments);
   if (dash > 0) return fromForge(forge, dash, GITLAB_SHAPES);
   if (host === "github.com") return fromForge(forge, 2, GITHUB_SHAPES);
   if (host === "bitbucket.org") return fromForge(forge, 2, BITBUCKET_SHAPES);

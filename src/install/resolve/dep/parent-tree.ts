@@ -19,7 +19,9 @@ import type { PendingItem } from "../enqueue.ts";
 
 /**
  * Run `fn` with the parent skill's location in the commit its content
- * came from — or `undefined` when that is the live clone.
+ * came from — or `undefined` when no export is needed: the parent came
+ * from the live clone, or is a whole-repo root skill, which has no
+ * siblings to read.
  *
  * A parent installed at `@<ref>` was read from a scratch export of that
  * commit, which has since been deleted, so it is re-exported for the
@@ -35,16 +37,13 @@ import type { PendingItem } from "../enqueue.ts";
 export function withParentSkill<T>(
   parent: PendingItem,
   home: string,
-  fn: (parentPath: string | undefined) => T,
+  fn: (exportedPath: string | undefined) => T,
 ): T {
-  // No export when no sibling search will read it (a whole-repo root skill).
-  if (
-    parent.requestedRef === null ||
-    parent.resolvedSha === null ||
-    parent.tap.kind !== "git" ||
-    isWholeRepoRootSkill(parent.tap, parent.tapRelativePath)
-  )
+  const readFromLiveClone =
+    parent.requestedRef === null || parent.resolvedSha === null || parent.tap.kind !== "git";
+  if (readFromLiveClone || isWholeRepoRootSkill(parent.tap, parent.tapRelativePath)) {
     return fn(undefined);
+  }
   const widened: TapConfig = { ...parent.tap, subpath: enclosingSubpath(parent.tap.subpath) };
   // Inside the widened export, the parent sits at its own directory name
   // (subpath case) or at its tap-relative path (whole-repo tap case).

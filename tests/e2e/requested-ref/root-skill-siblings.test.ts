@@ -2,9 +2,9 @@
  * A repository whose root is one skill has no siblings, at a ref or not
  * (§9 step 3, step 6).
  *
- * At `@<ref>` the root skill is read from a scratch export under crew's
- * own cache, so "beside it" is other scratch directories — never the
- * source. A bare dependency must not be satisfied from there.
+ * Beside such a skill is crew's own clone directory, or — at `@<ref>` —
+ * its scratch exports: other clones and exports, never the source. A bare
+ * dependency must not be satisfied from there.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -30,24 +30,36 @@ afterEach(() => {
   claudeCodeAdapter.detect = ccOriginal.detect;
 });
 
-test("a pinned root skill's bare dependency isn't taken from crew's cache", () => {
-  const repo = makeTempDir("crew-root-skill-");
-  const parent = skillFrontmatter({ name: "parent", dependencies: ["sib"] });
-  writeFileSync(join(repo, "SKILL.md"), `---\n${parent}\n---\n`);
-  makeGitRepo(repo, "one");
-  tag(repo, "v1");
+for (const ref of ["@v1", ""]) {
+  test(`a root skill's bare dependency isn't taken from beside its clone (${ref || "no ref"})`, () => {
+    const repo = makeTempDir("crew-root-skill-");
+    const parent = skillFrontmatter({ name: "parent", dependencies: ["sib"] });
+    writeFileSync(join(repo, "SKILL.md"), `---\n${parent}\n---\n`);
+    makeGitRepo(repo, "one");
+    tag(repo, "v1");
 
-  const home = makeCrewHome();
-  // A leftover scratch export that happens to hold a skill named `sib`.
-  const leftover = join(paths(home).gitCacheDir, "deadbeef-leftover");
-  mkdirSync(leftover, { recursive: true });
-  writeFileSync(join(leftover, "SKILL.md"), `---\n${skillFrontmatter({ name: "sib" })}\n---\n`);
+    const home = makeCrewHome();
+    // Beside the clone sit other clones and crew's scratch exports: a
+    // skill named `sib` in either must not count as a sibling.
+    for (const beside of [
+      join(paths(home).reposDir, "other"),
+      join(paths(home).gitCacheDir, "x"),
+    ]) {
+      mkdirSync(beside, { recursive: true });
+      writeFileSync(join(beside, "SKILL.md"), `---\n${skillFrontmatter({ name: "sib" })}\n---\n`);
+    }
 
-  const code = runCli(["install", `file://${repo}@v1`], {
-    home,
-    streams: captureStreams().streams,
+    const capture = captureStreams();
+    const code = runCli(["install", `file://${repo}${ref}`, "--json"], {
+      home,
+      streams: capture.streams,
+    });
+
+    // Dependency resolution ran and found no `sib` — not a failure before it.
+    expect(code).toBe(4);
+    const { error } = JSON.parse(capture.stdout());
+    expect(error.name).toBe("invalid_ref");
+    expect(error.message).toContain("`sib` was not found");
+    expect(existsSync(join(ccRoot, "sib"))).toBe(false);
   });
-
-  expect(code).not.toBe(0);
-  expect(existsSync(join(ccRoot, "sib"))).toBe(false);
-});
+}

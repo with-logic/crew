@@ -28,12 +28,15 @@ export function isGistUrl(url: string): boolean {
   }
   try {
     const u = new URL(url);
-    // A leading `www.` is dropped, as browser-URL normalization does (§8.2).
-    const host = u.hostname.toLowerCase().replace(/^www\./, "");
-    return GIST_SCHEMES.has(u.protocol) && host === GIST_HOST;
+    return GIST_SCHEMES.has(u.protocol) && isGistHost(u.hostname);
   } catch {
     return false;
   }
+}
+
+/** True for the gist host, in any case, with or without a leading `www.` (§8.2). */
+export function isGistHost(hostname: string): boolean {
+  return hostname.toLowerCase().replace(/^www\./, "") === GIST_HOST;
 }
 
 /**

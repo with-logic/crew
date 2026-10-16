@@ -48,9 +48,12 @@ export interface ResolveResult {
   /** Config including any auto-taps we created. Caller writes it. */
   readonly config: Config;
   /**
-   * Skill directories that failed validation during expansion and
-   * were soft-skipped. The install command surfaces them and factors
-   * them into the exit code per PRD §9 step 9.
+   * Candidates (skill directories or gist skill files) that couldn't be
+   * loaded and were soft-skipped — including a lone root skill or a
+   * selected gist file. `invalid_skill` is a validation failure;
+   * `source_unreachable` (a SKILL.md crew couldn't read) an operational
+   * one. The install command surfaces them and factors them into the
+   * exit code per PRD §9 step 9.
    */
   readonly skipped: readonly SkippedSkill[];
 }

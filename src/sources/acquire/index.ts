@@ -43,7 +43,7 @@ import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
-  /** Materialized tap root, after its subpath (a directory). */
+  /** The tap's root directory: the clone (or path) with `subpath` applied. */
   readonly rootDir: string;
   /** Full 40-char SHA for git taps; null for path taps. */
   readonly resolvedSha: string | null;

@@ -94,7 +94,7 @@ export interface GistSelection {
 }
 
 /** True when `name` can be a gist `//<file>`: one top-level `.md` file name. */
-export function isGistFileName(name: string): boolean {
+export function isGistSkillFileName(name: string): boolean {
   return !name.includes("/") && isSkillFileName(name);
 }
 
@@ -111,7 +111,7 @@ export function splitGistFile(source: GitSource | PathSource): GistSelection {
     return { tapSource: source, gistFile: "" };
   }
   const file = source.subpath;
-  if (!isGistFileName(file)) {
+  if (!isGistSkillFileName(file)) {
     const shown = `${displayUrl(source.url)}//${displayText(file)}`;
     throw new CrewError(
       "invalid_ref",

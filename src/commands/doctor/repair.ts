@@ -13,6 +13,7 @@
  */
 
 import { readConfig, writeConfig } from "../../config/load.ts";
+import { recordedDiscovery } from "../../config/taps.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { garbageCollectStore } from "../../maintenance/gc.ts";
 import { entryKey } from "../../state/identity.ts";
@@ -59,7 +60,11 @@ export function repairStateUnderLock(markers: readonly MarkerEntry[], home: stri
         url: marker.tap_url,
         subpath: marker.tap_subpath,
         path: marker.tap_path,
-        ...(marker.tap_discovery === "recursive" ? { discovery: "recursive" } : {}),
+        ...(marker.tap_kind === "git"
+          ? recordedDiscovery(marker.tap_url, marker.tap_discovery)
+          : marker.tap_discovery === "recursive"
+            ? { discovery: "recursive" }
+            : {}),
       };
       taps.set(reconstructed.name, reconstructed);
     }

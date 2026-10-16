@@ -15,6 +15,7 @@ import { statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
+import { errnoReason } from "../util/errno.ts";
 import { exists, readText } from "../util/fs.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 import { isSkillFile } from "./skill-file.ts";
@@ -45,7 +46,7 @@ export function loadSkillName(path: string): string {
 
 /** The next step for a `SKILL.md` crew couldn't read. */
 export const UNREADABLE_REMEDY =
-  "Check that the file is readable by you (its permissions, and its folder's).";
+  "Check that it is readable by you (its permissions, and its folder's).";
 
 /** True iff `path` contains a `SKILL.md`. Does not validate. */
 export function hasSkillMd(path: string): boolean {
@@ -68,7 +69,7 @@ function readSkillMd(path: string): string {
   } catch (err) {
     throw new CrewError(
       "source_unreachable",
-      `couldn't read \`${skillMdPath}\` — ${(err as Error).message}`,
+      `couldn't read \`${skillMdPath}\` — ${errnoReason(err)}`,
       { path },
       UNREADABLE_REMEDY,
     );

@@ -11,7 +11,7 @@
  * namespace fallback can search every tap at the requested ref.
  */
 
-import { relative } from "node:path";
+import { basename, relative } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import type { Config, LoadedSkill, TapConfig, TapSource } from "../../core/types.ts";
 import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
@@ -86,8 +86,9 @@ function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
 
 /**
  * The valid skills at `root`. When it holds candidates but none is
- * valid, the preview fails with the reason, as an install of the same
- * reference would (§9.1, C-INST-21): "No skills here" would hide why.
+ * valid, the preview fails naming the reason (§9.1) — "No skills here"
+ * would hide why: `invalid_skill` if any candidate is invalid (install's
+ * verdict too), else `source_unreachable`.
  */
 function previewSkills(root: string, tap: TapConfig, sha: string | null): SkillInfo[] {
   const { valid, skipped } = expandTapSkills(root, tap, sha);
@@ -95,22 +96,31 @@ function previewSkills(root: string, tap: TapConfig, sha: string | null): SkillI
   // directory order; the reason, code, and next step all come from it.
   const first = skipped.find((s) => s.code === "invalid_skill") ?? skipped[0];
   if (valid.length === 0 && first) {
-    // A gist file's message already names it; a folder skill's doesn't.
+    // A gist file's message and a read failure's already name the file;
+    // a folder skill's validation message doesn't.
     const rel = toPosix(relative(root, first.path));
-    const reason =
-      rel === "" || isSkillFile(first.path) ? first.message : `\`${rel}\`: ${first.message}`;
-    const message =
-      skipped.length === 1
-        ? reason
-        : `none of the ${skipped.length} skills here is valid — ${reason}`;
+    const named = rel === "" || isSkillFile(first.path) || first.code === "source_unreachable";
+    const reason = named ? first.message : `\`${rel}\`: ${first.message}`;
+    const unreadable = skipped.filter((s) => s.code === "source_unreachable").length;
+    const alsoUnreadable =
+      first.code === "invalid_skill" && unreadable > 0
+        ? ` (and ${unreadable} couldn't be read)`
+        : "";
+    const headline =
+      first.code === "invalid_skill"
+        ? `none of the ${skipped.length} skills here is valid${alsoUnreadable}`
+        : `crew couldn't read any of the ${skipped.length} skills here`;
+    const message = skipped.length === 1 ? reason : `${headline} — ${reason}`;
     const remedy =
       first.code === "source_unreachable"
         ? UNREADABLE_REMEDY
         : isSkillFile(first.path)
           ? skillFileRemedy(first.path)
           : undefined;
-    const files = skipped.map((s) => toPosix(relative(root, s.path)) || ".");
-    throw new CrewError(first.code, message, { path: first.path, files }, remedy);
+    const candidates = skipped.map((s) =>
+      s.path === root ? basename(s.path) : toPosix(relative(root, s.path)),
+    );
+    throw new CrewError(first.code, message, { path: first.path, candidates }, remedy);
   }
   return valid.map(skillInfoOf);
 }

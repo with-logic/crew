@@ -56,11 +56,7 @@ export interface InstallFlowResult {
    * descriptions, tap attribution, etc. when rendering human output.
    */
   readonly resolved: readonly ResolvedSkill[];
-  /**
-   * Skill directories that failed validation and were soft-skipped
-   * during multi-skill expansion. Empty for single-skill installs
-   * (those hard-fail before reaching here).
-   */
+  /** Soft-skipped candidates; see `ResolveResult.skipped` (`./resolve/index.ts`). */
   readonly skipped: readonly SkippedSkill[];
 }
 

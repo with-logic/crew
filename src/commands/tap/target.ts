@@ -7,7 +7,7 @@ import { CrewError } from "../../core/errors.ts";
 import { isGistUrl } from "../../core/gist-url.ts";
 import type { Source, TapConfig, TapSource } from "../../core/types.ts";
 import { displayText, displayUrl } from "../../refs/display-url.ts";
-import { isGistFileName } from "../../refs/gist.ts";
+import { isGistSkillFileName } from "../../refs/gist.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { shellQuote } from "../../util/format.ts";
 
@@ -47,7 +47,7 @@ export function parseTapAddTarget(raw: string, cwd: string): TapAddTarget {
   if (source.subpath.length > 0 && isGistUrl(source.url)) {
     const shown = displayText(raw);
     const file = displayText(source.subpath);
-    const remedy = isGistFileName(source.subpath)
+    const remedy = isGistSkillFileName(source.subpath)
       ? `Drop the \`//${file}\` to add the gist, or install just that skill with \`crew install ${shellQuote(shown)}\`.`
       : `Drop the \`//${file}\` to add the gist. A gist's skills are the \`.md\` files at its top level.`;
     throw new CrewError(

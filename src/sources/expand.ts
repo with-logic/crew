@@ -43,8 +43,11 @@ export interface SkippedSkill {
   /** Human-readable reason from the underlying `CrewError`. */
   readonly message: string;
   /** The error code: `invalid_skill`, or `source_unreachable` for a file crew couldn't read. */
-  readonly code: CrewErrorName;
+  readonly code: SkipCode;
 }
+
+/** Why a candidate was skipped (§9 step 4): its own fault, or unreadable. */
+export type SkipCode = Extract<CrewErrorName, "invalid_skill" | "source_unreachable">;
 
 /** Result of an expansion: the valid skills plus any children skipped. */
 export interface ExpansionResult {
@@ -68,7 +71,7 @@ export function discoveryOf(tap: Pick<TapConfig, "kind" | "url" | "discovery">):
 /** Expand `root` the way `tap` lays out skills; a gist is named by its URL and `sha` in errors. */
 export function expandTapSkills(root: string, tap: TapConfig, sha: string | null): ExpansionResult {
   const mode = discoveryOf(tap);
-  return expandSkills(root, mode, mode === "gist" ? gistLabel(tap, sha) : undefined);
+  return mode === "gist" ? expandGist(root, gistLabel(tap, sha)) : expandSkills(root, mode);
 }
 
 /** Case 1: `root` is itself one skill. */
@@ -77,33 +80,32 @@ export function isRootSkill(root: string, mode: DiscoveryMode): boolean {
 }
 
 /**
- * Expand `root` into loaded skills plus any skipped candidates.
+ * Expand a gist checkout (§9 step 5, "Gists"): one skill if it has a root
+ * `SKILL.md`, the one file a `//<file>` selection resolved to, or else
+ * every skill candidate at its root. `label` names the gist (URL and
+ * commit) in the `no_skills_found` error.
+ */
+function expandGist(root: string, label: string): ExpansionResult {
+  if (isOneSkillGist(root) || isSkillFile(root)) return loadCandidates([root]);
+  const result = loadCandidates(gistSkillCandidates(root));
+  if (hasCandidates(result)) return result;
+  throw new CrewError(
+    "no_skills_found",
+    `the gist ${label} has no skills — expected a root SKILL.md, or \`.md\` files that open with YAML frontmatter (\`---\`)`,
+    { path: root },
+    "Each skill in a gist is one `.md` file whose frontmatter declares its `name` and `description`.",
+  );
+}
+
+/**
+ * Expand a non-gist `root` into loaded skills plus any skipped candidates.
  * Validation failures (at any level) are recorded in `skipped`
  * rather than thrown — the caller decides exit code and output.
  * `no_skills_found` is still thrown when neither a valid skill nor
- * a validation failure is present (zero candidates). For a gist,
- * `gistLabel` (`sources/gist.ts`) names it in that error; other sources
- * are named by their path.
+ * a validation failure is present (zero candidates).
  */
-export function expandSkills(
-  root: string,
-  mode: DiscoveryMode,
-  gistLabel?: string,
-): ExpansionResult {
-  // A gist's `//<file>` selection resolves to the skill file itself (§8.2).
-  if (isRootSkill(root, mode) || (mode === "gist" && isSkillFile(root))) {
-    return loadCandidates([root]);
-  }
-  if (mode === "gist") {
-    const gistResult = loadCandidates(gistSkillCandidates(root));
-    if (hasCandidates(gistResult)) return gistResult;
-    throw new CrewError(
-      "no_skills_found",
-      `the gist ${gistLabel ?? `at \`${root}\``} has no skills — expected a root SKILL.md, or \`.md\` files that open with YAML frontmatter (\`---\`)`,
-      { path: root },
-      "Each skill in a gist is one `.md` file whose frontmatter declares its `name` and `description`.",
-    );
-  }
+export function expandSkills(root: string, mode: Exclude<DiscoveryMode, "gist">): ExpansionResult {
+  if (hasSkillMd(root)) return loadCandidates([root]);
   const skillsDir = join(root, "skills");
   const result = isDirectory(skillsDir)
     ? collectWithNamespaces(skillsDir)
@@ -175,9 +177,10 @@ function pushSoft(candidate: string, valid: LoadedSkill[], skipped: SkippedSkill
   try {
     valid.push(loadSkill(candidate));
   } catch (err) {
-    // `loadSkill` throws only `CrewError` — read failures included — whose
-    // `code` is typed as a non-null `CrewErrorName`. No fallback needed.
+    // `loadSkill` throws only `CrewError`: `source_unreachable` for a
+    // `SKILL.md` it couldn't read, `invalid_skill` for the rest (§9 step 4).
     const ce = err as CrewError;
-    skipped.push({ path: candidate, message: ce.message, code: ce.code });
+    const code = ce.code === "source_unreachable" ? "source_unreachable" : "invalid_skill";
+    skipped.push({ path: candidate, message: ce.message, code });
   }
 }

@@ -33,7 +33,8 @@ export function isGistTap(tap: Pick<TapConfig, "kind" | "url">): boolean {
  * True when the gist checked out at `root` has a root `SKILL.md` and so is
  * one skill. Matched by exact name — on a case-insensitive disk a skill
  * file called `skill.md` would otherwise pass for it — and only as a
- * regular file: a symlink is never part of a gist skill (§9 step 5).
+ * regular file: a symlink is never a gist skill file or root SKILL.md
+ * (§9 step 5).
  */
 export function isOneSkillGist(root: string): boolean {
   return listDir(root).includes("SKILL.md") && isSkillFile(join(root, "SKILL.md"));
@@ -77,7 +78,7 @@ export function gistLabel(tap: Pick<TapConfig, "url">, sha: string | null): stri
  * single skill whose other files are its resources, so no file of it
  * can be selected on its own. The file must not be a symlink (§8.4),
  * and naming a file the gist doesn't have is `no_skills_found` listing
- * the files it does.
+ * its skill files.
  */
 export function selectGistFile(
   acquired: AcquiredTap,

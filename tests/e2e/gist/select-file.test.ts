@@ -90,7 +90,7 @@ describe("crew install <gist-url>//<file>", () => {
     expect(r.stderr + r.stdout).toContain("The gist has no skills:");
   });
 
-  test("a skill file crew can't read says so, naming the file", () => {
+  test("C-INFO-03 a skill file crew can't read says so, naming the file (exit 5)", () => {
     fx.gist({ "prd.md": skillFile("prd") });
     const home = makeCrewHome();
     expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
@@ -102,7 +102,7 @@ describe("crew install <gist-url>//<file>", () => {
       expect(json(r).error.name).toBe("source_unreachable");
       expect(json(r).error.message).toMatch(/^couldn't read `\S+\/prd\.md` — EACCES/);
       const human = run(home, ["info", `${GIST_PAGE_URL}//prd.md`]);
-      expect(human.stdout + human.stderr).toContain("Check that the file is readable by you");
+      expect(human.stdout + human.stderr).toContain("Check that it is readable by you");
     } finally {
       chmodSync(join(home, "repos", clone, "prd.md"), 0o644);
     }
@@ -140,8 +140,10 @@ describe("crew install <gist-url>//<file>", () => {
   test("C-INST-26 a gist with a root SKILL.md takes no //<file>", () => {
     const { sha } = fx.gist({ "SKILL.md": skillFile("whole"), "helper.md": skillFile("helper") });
     // The suggested whole-gist command keeps the user's pin.
-    const pinned = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}@${sha}//helper.md`]);
-    expect(pinned.stdout + pinned.stderr).toContain(`crew install ${GIST_CLONE_URL}@${sha}`);
+    for (const command of ["install", "info"]) {
+      const pinned = run(makeCrewHome(), [command, `${GIST_PAGE_URL}@${sha}//helper.md`]);
+      expect(pinned.stdout + pinned.stderr).toContain(`crew install ${GIST_CLONE_URL}@${sha}`);
+    }
     for (const file of ["SKILL.md", "helper.md"]) {
       const r = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//${file}`, "--json"]);
       expect(r.code).toBe(4);

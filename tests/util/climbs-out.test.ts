@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { climbsOut } from "../../src/util/symlink-containment.ts";
+import { climbsOut } from "../../src/util/relative-path.ts";
 
 describe("climbsOut", () => {
   for (const rel of ["..", "../x", "../../x/y", "/abs/x"]) {

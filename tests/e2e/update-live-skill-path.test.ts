@@ -84,6 +84,18 @@ describe("crew update of a <tap>/<skill> install", () => {
     expect(installed()).toContain("Original.");
   });
 
+  test("C-UPD-11 a skill whose parent folder became a file upstream is source_gone", () => {
+    const { home, repo } = installFromGitTap();
+    expect(installed()).toContain("Original.");
+    rmSync(join(repo, "skills"), { recursive: true });
+    writeFileSync(join(repo, "skills"), "now a file\n");
+    commitAll(repo, "skills is a file now");
+
+    const r = run(home, ["update", "--json"]);
+    expect(r.code).toBe(0);
+    expect(outcomes(r)).toEqual(["demo:source_gone"]);
+  });
+
   test("C-UPD-11 a skill folder replaced by a file upstream is source_gone", () => {
     const { home, repo } = installFromGitTap();
     expect(installed()).toContain("Original.");
@@ -94,6 +106,21 @@ describe("crew update of a <tap>/<skill> install", () => {
     const r = run(home, ["update", "--json"]);
     expect(r.code).toBe(0);
     expect(outcomes(r)).toEqual(["demo:source_gone"]);
+  });
+
+  test("C-UPD-11 a skill folder whose name starts with `..` is inside the repository", () => {
+    const home = makeCrewHome();
+    const repo = makeTempDir();
+    makeSkill(repo, "..foo", skillFrontmatter({ name: "demo" }), "Original.\n");
+    makeGitRepo(repo);
+    run(home, ["tap", "add", `file://${repo}`, "acme"]);
+    expect(run(home, ["install", "acme/demo"]).code).toBe(0);
+    makeSkill(repo, "..foo", skillFrontmatter({ name: "demo" }), "Edited.\n");
+    commitAll(repo, "edit demo");
+
+    const r = run(home, ["update", "--json"]);
+    expect(outcomes(r)).toEqual(["demo:updated"]);
+    expect(installed()).toContain("Edited.");
   });
 
   test("C-UPD-39 a symlink that stays inside the repository updates normally", () => {
@@ -126,7 +153,8 @@ describe("crew update of a <tap>/<skill> install", () => {
       const r = run(home, ["update", "--json"]);
       expect(r.code).toBe(1);
       expect(outcomes(r)).toEqual(["demo:failed"]);
-      expect(r.stdout).toContain("source_unreachable");
+      const [row] = JSON.parse(r.stdout).rows;
+      expect(row.outcome.error.code).toBe("source_unreachable");
     } finally {
       chmodSync(join(tapDir, "skills"), 0o755);
     }

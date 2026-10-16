@@ -40,7 +40,7 @@ export interface SiblingHit {
  * Look for `depName` as a sibling skill of `parentTapPath`. Returns
  * null if not found (the dep walker will try cross-tap resolution next).
  *
- * `parent.parentPath`, when set, is the parent skill's own location (its
+ * `parent.exportedPath`, when set, is the parent skill's own location (its
  * directory, or a gist's skill file) inside an already-materialized
  * export of a pinned commit. Siblings must be discovered there, not in
  * the live clone: staging HEAD's bytes while recording the parent's SHA
@@ -48,7 +48,7 @@ export interface SiblingHit {
  * (§9 step 3).
  */
 export function findSiblingDep(
-  parent: { tap: TapConfig; tapRelativePath: string; parentPath?: string | undefined },
+  parent: { tap: TapConfig; tapRelativePath: string; exportedPath?: string | undefined },
   depName: string,
   home: string,
   config: Config,
@@ -57,7 +57,7 @@ export function findSiblingDep(
   const tapClone = tapClonePath(parent.tap, home);
   const tapRoot = tapRootDir(tapClone, parent.tap);
   // The parent's own location inside the tap; its siblings share its parent directory.
-  const parentPath = parent.parentPath ?? join(tapRoot, parent.tapRelativePath);
+  const parentPath = parent.exportedPath ?? join(tapRoot, parent.tapRelativePath);
   const siblingParent = join(parentPath, "..");
   const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
   const matches: { entryName: string; siblingPath: string; loaded: LoadedSkill }[] = [];

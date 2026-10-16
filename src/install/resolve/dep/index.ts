@@ -59,11 +59,11 @@ export function enqueueDeps(
     // `findSiblingDep` can register an auto tap, so each hit carries the
     // config to carry forward; threading it through the loop is what
     // keeps a batched walk equivalent to resolving one at a time.
-    const found = withParentSkill(parent, home, (parentPath) => {
+    const found = withParentSkill(parent, home, (exportedPath) => {
       const hits: PendingItem[] = [];
       for (const dep of bare) {
         const sibling = findSiblingDep(
-          { tap: parent.tap, tapRelativePath: parent.tapRelativePath, parentPath },
+          { tap: parent.tap, tapRelativePath: parent.tapRelativePath, exportedPath },
           dep.source.name,
           home,
           current,

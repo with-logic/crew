@@ -32,7 +32,7 @@ export const installHelp: CommandHelp = {
     {
       flag: "--recursive",
       description:
-        "For direct git/path sources, fall back to bounded recursive discovery when standard tap layouts find no skills.",
+        "For direct git/path sources (not gists), fall back to bounded recursive discovery when standard tap layouts find no skills.",
     },
     {
       flag: "--from-git <git-source>",
