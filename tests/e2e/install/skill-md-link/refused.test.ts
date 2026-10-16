@@ -74,6 +74,19 @@ for (const [what, link] of [
     },
   ],
   ["past a missing folder, with a `..` that climbs out", () => "missing/../../x.md"],
+  [
+    "with a `..` two folders down, into a folder link that leads out",
+    (folder: string) => {
+      const outside = makeTempDir();
+      writeFileSync(
+        join(outside, "SKILL.md"),
+        `---\n${skillFrontmatter({ name: "linked" })}\n---\n`,
+      );
+      mkdirSync(join(folder, "a", "b"), { recursive: true });
+      symlinkSync(outside, join(folder, "a", "c"));
+      return "a/b/../c/SKILL.md";
+    },
+  ],
   ["past a missing folder, back to the folder's .crew.json", () => "missing/../.crew.json"],
   // APFS folds the long s (U+017F) to `s`, so it finds the marker.
   ["to `.crew.jſon`, which a case-insensitive disk finds as crew's marker", () => ".crew.jſon"],
@@ -154,17 +167,6 @@ test("C-SPEC-15 at a ref, a SKILL.md linking out of a selected folder is invalid
   // Only `skills/foo` is exported at the ref, so the link dangles there.
   const r = install(makeCrewHome(), `file://${repo}@main//skills/foo`);
   expect(r.code).toBe(4);
-  expect(r.out).toContain("reached through a link crew won't follow");
-});
-
-test("C-SPEC-15 a SKILL.md link whose text isn't UTF-8 is refused, never followed", () => {
-  // On Linux a folder could carry those very bytes as its name and lead
-  // anywhere; the text crew would check decodes to a different name.
-  const notUtf8 = Buffer.from([0xff, 0x2f, 0x78, 0x2e, 0x6d, 0x64]); // "\xff/x.md"
-  const src = sourceWithLink(() => notUtf8);
-  const r = install(makeCrewHome(), src);
-  expect(r.code).toBe(1);
-  expect(readdirSync(claude.userRoot)).toEqual(["good"]);
   expect(r.out).toContain("reached through a link crew won't follow");
 });
 

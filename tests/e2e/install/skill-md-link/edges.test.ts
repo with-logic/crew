@@ -1,6 +1,7 @@
 /**
  * Edges of the SKILL.md link rule at install (§9 step 4; C-SPEC-15): a
- * source named with a trailing slash is held to it the same; a chain
+ * source named with a trailing slash is held to it the same; link text
+ * that isn't UTF-8 is refused, never followed; a chain
  * longer than crew's limit is refused; and a failure to look on the way
  * names the path that failed, not SKILL.md (§13; C-SPEC-16).
  */
@@ -41,7 +42,8 @@ test("C-SPEC-15 a skill named with a trailing slash is held to the .crew.json ru
 test("C-SPEC-15 a chain longer than crew's limit is refused", () => {
   const src = sourceWithLink((folder) => {
     let target = "body.md";
-    for (let i = 0; i < 33; i++) {
+    // SKILL.md plus 32 more: 33 links, one over crew's limit of 32.
+    for (let i = 0; i < 32; i++) {
       symlinkSync(target, join(folder, `hop${i}`));
       target = `hop${i}`;
     }
@@ -63,8 +65,21 @@ test("C-SPEC-16 a path on the way crew can't look into is named, not SKILL.md", 
   chmodSync(sub, 0o666);
   try {
     const r = install(makeCrewHome(), src);
+    expect(r.code).toBe(1);
+    expect(readdirSync(claude.userRoot)).toEqual(["good"]);
     expect(r.out).toMatch(/couldn't look at `\S+\/linked\/sub\/body\.md`/);
   } finally {
     chmodSync(sub, 0o755);
   }
+});
+
+test("C-SPEC-15 a SKILL.md link whose text isn't UTF-8 is refused, never followed", () => {
+  // On Linux a folder could carry those very bytes as its name and lead
+  // anywhere; the text crew would check decodes to a different name.
+  const notUtf8 = Buffer.from([0xff, 0x2f, 0x78, 0x2e, 0x6d, 0x64]); // "\xff/x.md"
+  const src = sourceWithLink(() => notUtf8);
+  const r = install(makeCrewHome(), src);
+  expect(r.code).toBe(1);
+  expect(readdirSync(claude.userRoot)).toEqual(["good"]);
+  expect(r.out).toContain("reached through a link crew won't follow");
 });

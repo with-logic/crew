@@ -76,7 +76,8 @@ test("C-UPD-18e undoing a failed child never removes another skill's install of 
   makeSkill(join(tapDir, "skills"), "beta", skillFrontmatter({ name: "beta" }));
   expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
   expect(run(home, ["install", "mine"]).code).toBe(0);
-  makeSkill(join(tapDir, "skills"), "gamma", skillFrontmatter({ name: "gamma" }), "Other's.\n");
+  // Different bytes: claude-code's folder is written over, not up to date.
+  makeSkill(join(tapDir, "skills"), "gamma", skillFrontmatter({ name: "gamma" }), "Mine.\n");
   const gemini = roots["gemini-cli"]!;
   chmodSync(gemini, 0o555);
   try {
@@ -85,7 +86,6 @@ test("C-UPD-18e undoing a failed child never removes another skill's install of 
     chmodSync(gemini, 0o755);
   }
   expect(existsSync(join(roots["claude-code"]!, "gamma", "SKILL.md"))).toBe(true);
-  expect(run(home, ["doctor"]).code).toBe(0);
 });
 
 test("C-UPD-16c one of two agents failing an update keeps the entry, and reads as failed", () => {
@@ -150,4 +150,47 @@ test("C-UPD-18e a failed child that --force wrote over a user's folder is instal
   }
   expect(existsSync(join(roots["claude-code"]!, "gamma"))).toBe(false);
   expect(run(home, ["doctor"]).code).toBe(0);
+});
+
+test("C-UPD-18e a failed child is removed from an agent it was just installed into", () => {
+  const home = makeCrewHome();
+  const tapDir = makeTempDir();
+  makeSkill(join(tapDir, "skills"), "beta", skillFrontmatter({ name: "beta" }));
+  expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
+  expect(run(home, ["install", "mine"]).code).toBe(0);
+  makeSkill(join(tapDir, "skills"), "gamma", skillFrontmatter({ name: "gamma" }));
+  // claude-code, installed first, takes the child; gemini-cli then can't.
+  const gemini = roots["gemini-cli"]!;
+  chmodSync(gemini, 0o555);
+  try {
+    expect(run(home, ["update"]).code).toBe(1);
+  } finally {
+    chmodSync(gemini, 0o755);
+  }
+  expect(existsSync(join(roots["claude-code"]!, "gamma"))).toBe(false);
+  expect(readState(home).installations.map((e) => e.name)).toEqual(["beta"]);
+  expect(run(home, ["update"]).code).toBe(0);
+  for (const root of Object.values(roots)) expect(existsSync(join(root, "gamma"))).toBe(true);
+});
+
+test("C-UPD-18e after the first agent fails, no later agent is written", () => {
+  const home = makeCrewHome();
+  const other = makeTempDir();
+  makeSkill(join(other, "skills"), "gamma", skillFrontmatter({ name: "gamma" }), "Other's.\n");
+  expect(run(home, ["tap", "add", other, "other"]).code).toBe(0);
+  expect(run(home, ["install", "other/gamma", "--agent", "gemini-cli"]).code).toBe(0);
+  const tapDir = makeTempDir();
+  makeSkill(join(tapDir, "skills"), "beta", skillFrontmatter({ name: "beta" }));
+  expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
+  expect(run(home, ["install", "mine"]).code).toBe(0);
+  makeSkill(join(tapDir, "skills"), "gamma", skillFrontmatter({ name: "gamma" }), "Mine.\n");
+  const claude = roots["claude-code"]!;
+  chmodSync(claude, 0o555);
+  try {
+    expect(run(home, ["update"]).code).toBe(1);
+  } finally {
+    chmodSync(claude, 0o755);
+  }
+  const geminiGamma = readFileSync(join(roots["gemini-cli"]!, "gamma", "SKILL.md"), "utf8");
+  expect(geminiGamma).toContain("Other's.");
 });

@@ -58,6 +58,13 @@ for (const [what, link] of [
     },
   ],
   [
+    "with two `..`s back up to the folder",
+    (folder: string) => {
+      mkdirSync(join(folder, "a", "b"), { recursive: true });
+      return "a/b/../../body.md";
+    },
+  ],
+  [
     "with a `..` that stays inside it",
     (folder: string) => {
       mkdirSync(join(folder, "docs"));

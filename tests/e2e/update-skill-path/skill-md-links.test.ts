@@ -147,6 +147,9 @@ for (const ref of ["", "@main"]) {
       expect(r.code).toBe(1);
       const [row] = JSON.parse(r.stdout).rows;
       expect([row.outcome.kind, row.outcome.error.code]).toEqual(["failed", "invalid_skill"]);
+      expect(row.outcome.error.message).toMatch(
+        /^the SKILL\.md of `skills\/demo` is reached through/,
+      );
       expect(installed()).toContain("Original.");
     });
   }
