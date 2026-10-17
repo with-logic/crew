@@ -13,6 +13,7 @@
  * next time. What each answer is read from on disk: `./disk.ts`.
  */
 
+import { sep } from "node:path";
 import type { LoadedSkill } from "../../core/types.ts";
 import type { SourceBoundary } from "../../sources/source-boundary.ts";
 import type { StoredSkill } from "../../sources/store.ts";
@@ -39,17 +40,22 @@ export interface SiblingReader {
   readonly readEntry: (entry: string, boundary: SourceBoundary) => SiblingEntry;
 }
 
+/** An entry name `candidatesFor` gave: one of the directory's own, so `entry` knows it. */
+export type SiblingName = string & { readonly __brand: "SiblingName" };
+
 /** One sibling directory, indexed once per resolution. */
 export interface SiblingDir {
   /** The repository its folders must stay inside; null for a path source or a gist. */
   readonly boundary: SourceBoundary;
   /** The entries a dependency `name` may be — named for it, or declaring it — in walk order. */
-  candidatesFor(name: string): readonly string[];
+  candidatesFor(name: string): readonly SiblingName[];
   /** What `entry`, one of the directory's entries, is. */
-  entry(entry: string): SiblingEntry;
+  entry(entry: SiblingName): SiblingEntry;
 }
 
 export interface SiblingScan {
+  /** Drop every answer read from inside `root` — an export let go — so a later ask reads afresh. */
+  forget(root: string): void;
   /** `path` indexed through `reader` the first time it's wanted this resolution; that index after. */
   indexDir(path: string, reader: SiblingReader): SiblingDir;
   /** The skill `load()` gives the first time `path` loads this resolution; that skill after. */
@@ -63,6 +69,12 @@ export function makeSiblingScan(): SiblingScan {
   const loaded = new Map<string, LoadedSkill>();
   const staged = new Map<string, StoredSkill>();
   return {
+    forget(root) {
+      const under = (key: string): boolean => key === root || key.startsWith(root + sep);
+      for (const answers of [dirs, loaded, staged]) {
+        for (const key of answers.keys()) if (under(key)) answers.delete(key);
+      }
+    },
     indexDir: (path, reader) => remember(dirs, path, () => indexDir(reader)),
     loaded: (path, load) => remember(loaded, path, load),
     staged: (key, stage) => remember(staged, key, stage),
@@ -96,9 +108,10 @@ function indexDir(reader: SiblingReader): SiblingDir {
     boundary,
     candidatesFor(name) {
       const found = new Set([...(byStem.get(name) ?? []), ...(byDeclared.get(name) ?? [])]);
-      return [...found].sort((a, b) => order.get(a)! - order.get(b)!);
+      // Each is one of the directory's entries, which `facts` holds.
+      return [...found].sort((a, b) => order.get(a)! - order.get(b)!) as SiblingName[];
     },
-    // Every candidate is one of the directory's entries.
+    // A `SiblingName` came from `candidatesFor`, so `facts` holds it.
     entry: (entry) => facts.get(entry)!,
   };
 }

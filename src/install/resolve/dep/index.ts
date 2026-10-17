@@ -26,9 +26,13 @@ export interface DependencyReads {
   readonly siblings: SiblingScan;
 }
 
-/** Fresh shared reads for one resolution. */
+/**
+ * Fresh shared reads for one resolution. An export let go takes what was
+ * read from it along, so nothing kept points into a deleted tree.
+ */
 export function makeDependencyReads(home: string): DependencyReads {
-  return { trees: makeParentTrees(home), siblings: makeSiblingScan() };
+  const siblings = makeSiblingScan();
+  return { trees: makeParentTrees(home, (root) => siblings.forget(root)), siblings };
 }
 
 /**
@@ -37,8 +41,8 @@ export function makeDependencyReads(home: string): DependencyReads {
  * A parent installed at an explicit ref has its siblings read at the
  * parent's commit (§9 step 3), which means exporting that commit; doing it
  * per dependency, or per parent, would re-export the same tree once for
- * each edge. `reads` holds one export per tap and commit for the whole
- * resolution, and one reading of each sibling directory.
+ * each edge. `reads` holds one export per tap and commit while it is among
+ * the few held at once, and one reading of each sibling directory.
  *
  * What matters here is whether the parent carries a ref at all, not
  * whether that ref is `pinned` (§11.1): a parent at `@<branch>` is

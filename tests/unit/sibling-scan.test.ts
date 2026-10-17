@@ -22,8 +22,38 @@ function readerOf(entries: readonly string[]): SiblingReader {
 test("a dependency's candidates keep the directory's walk order", () => {
   const dir = makeSiblingScan().indexDir("/siblings", readerOf(["other", "dep", "another"]));
   // `dep` is named for the dependency, yet listed where the walk found it.
-  expect(dir.candidatesFor("dep")).toEqual(["other", "dep", "another"]);
-  expect(dir.entry("dep")).toEqual({ skill: true, leadsOut: false, declared: "dep" });
+  const candidates = dir.candidatesFor("dep");
+  expect(candidates as readonly string[]).toEqual(["other", "dep", "another"]);
+  expect(dir.entry(candidates[1]!)).toEqual({ skill: true, leadsOut: false, declared: "dep" });
+});
+
+test("forgetting a root drops what was read inside it, and only that", () => {
+  const scan = makeSiblingScan();
+  const listed: string[] = [];
+  const indexed = (path: string): void => {
+    scan.indexDir(path, {
+      ...readerOf(["dep"]),
+      list: () => {
+        listed.push(path);
+        return ["dep"];
+      },
+    });
+  };
+  const loads: string[] = [];
+  const load = (path: string): void => {
+    scan.loaded(path, () => {
+      loads.push(path);
+      return { path, frontmatter: { name: "dep", description: "D." } };
+    });
+  };
+  // An export's root, a folder in it, and one beside it whose name only starts the same.
+  for (const path of ["/exp-a", "/exp-a/skills", "/exp-ab/skills"]) indexed(path);
+  load("/exp-a/skills/dep");
+  scan.forget("/exp-a");
+  for (const path of ["/exp-a", "/exp-a/skills", "/exp-ab/skills"]) indexed(path);
+  load("/exp-a/skills/dep");
+  expect(listed).toEqual(["/exp-a", "/exp-a/skills", "/exp-ab/skills", "/exp-a", "/exp-a/skills"]);
+  expect(loads).toEqual(["/exp-a/skills/dep", "/exp-a/skills/dep"]);
 });
 
 test("a directory is indexed once per scan", () => {

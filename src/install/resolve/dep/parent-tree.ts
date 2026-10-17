@@ -5,9 +5,10 @@
  * A dependency named by a bare name is looked for beside its parent
  * first. "Beside" means "in the same commit the parent's bytes came
  * from", so when the parent was read at an explicit `@<ref>` this module
- * re-exports that commit for the sibling walk — once per tap and commit
- * for the whole resolution, however many parents read it — and turns a
- * hit into a pending item carrying the parent's ref and SHA.
+ * re-exports that commit for the sibling walk — once per tap and commit,
+ * however many parents read it, while it stays among the few held at once
+ * (`MAX_HELD_EXPORTS`) — and turns a hit into a pending item carrying the
+ * parent's ref and SHA.
  */
 
 import { join, posix } from "node:path";
@@ -19,7 +20,15 @@ import { isWholeRepoRootSkill, type SiblingHit } from "../../dep-resolution.ts";
 import type { SiblingScan } from "../../siblings/index.ts";
 import type { PendingItem } from "../enqueue.ts";
 
-/** The commits parents' siblings are read at, each exported once per resolution. */
+/**
+ * The most commit exports a resolution holds at once. Each is a whole
+ * tree, so one reading siblings at many commits keeps only the few it read
+ * most recently; one it let go is exported again if a later parent needs
+ * it. A sibling found in it was staged into the store already (§9 step 8).
+ */
+export const MAX_HELD_EXPORTS = 4;
+
+/** The commits parents' siblings are read at, each exported once while it is held. */
 export interface ParentTrees {
   /**
    * The parent skill's location in the commit its content came from — or
@@ -27,11 +36,13 @@ export interface ParentTrees {
    * source (a clone with no ref, or a path tap), or is a whole-repo root
    * skill, which has no siblings to read.
    */
-  locate(parent: PendingItem): string | undefined;
+  locate(
+    parent: Pick<PendingItem, "tap" | "tapRelativePath" | "resolvedSha" | "requestedRef">,
+  ): string | undefined;
   /**
-   * Delete every export `locate` made: the resolution's last step, so none
+   * Delete every export still held: the resolution's last step, so none
    * outlives it. Never throws: one crew can't remove is left, noted under
-   * `--verbose` (`exportTree`).
+   * `--verbose` (`exportTree`), as is one let go earlier.
    */
   release(): void;
 }
@@ -47,9 +58,15 @@ export interface ParentTrees {
  * Siblings sit beside the parent, so when the tap's subpath IS the
  * parent directory the export has to widen to the enclosing directory;
  * exporting the subpath alone would contain no siblings at all.
+ * `onRelease` is told each export's root as it goes, evicted or released.
  */
-export function makeParentTrees(home: string): ParentTrees {
+export function makeParentTrees(home: string, onRelease: (root: string) => void): ParentTrees {
+  // Least recently read first: a hit moves to the end.
   const held = new Map<string, HeldTap>();
+  const drop = (tree: HeldTap): void => {
+    onRelease(tree.acquired.rootDir);
+    tree.release();
+  };
   return {
     locate(parent) {
       const usesLiveSource =
@@ -59,11 +76,15 @@ export function makeParentTrees(home: string): ParentTrees {
       }
       const widened: TapConfig = { ...parent.tap, subpath: enclosingSubpath(parent.tap.subpath) };
       const key = JSON.stringify([widened.name, widened.subpath, parent.resolvedSha]);
-      let tree = held.get(key);
-      if (tree === undefined) {
-        // Another root's fetch can move a branch; siblings use the captured commit (§9 step 3).
-        tree = holdAcquiredTap(widened, parent.resolvedSha, home);
-        held.set(key, tree);
+      // Another root's fetch can move a branch; siblings use the captured commit (§9 step 3).
+      const tree = held.get(key) ?? holdAcquiredTap(widened, parent.resolvedSha, home);
+      held.delete(key);
+      held.set(key, tree);
+      // The one just read is the most recent, so it is never the one let go.
+      for (const [oldest, old] of held) {
+        if (held.size <= MAX_HELD_EXPORTS) break;
+        held.delete(oldest);
+        drop(old);
       }
       // Inside the widened export, the parent sits at its own directory name
       // (subpath case) or at its tap-relative path (whole-repo tap case).
@@ -76,7 +97,7 @@ export function makeParentTrees(home: string): ParentTrees {
     release() {
       const trees = [...held.values()];
       held.clear();
-      for (const tree of trees) tree.release();
+      for (const tree of trees) drop(tree);
     },
   };
 }

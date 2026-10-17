@@ -102,9 +102,29 @@ interface UpdateRun {
  * project root). State keeps the recorded path until the update succeeds.
  */
 function isRelocated(entry: StateEntry, state: StateFile): boolean {
-  const identity = entryIdentity(entry);
-  const recorded = state.installations.find((e) => entryIdentity(e) === identity);
-  return recorded !== undefined && recorded.source.path !== entry.source.path;
+  const recorded = recordedPathsOf(state).get(entryIdentity(entry));
+  return recorded !== undefined && recorded !== entry.source.path;
+}
+
+/**
+ * Each install's recorded path by identity, built once per state an update
+ * run passes — not once per entry, which over every entry would be
+ * quadratic. State's list is replaced, never changed in place, so a list
+ * stands for its contents.
+ */
+const recordedPaths = new WeakMap<readonly StateEntry[], ReadonlyMap<string, string>>();
+
+function recordedPathsOf(state: StateFile): ReadonlyMap<string, string> {
+  const known = recordedPaths.get(state.installations);
+  if (known !== undefined) return known;
+  const paths = new Map<string, string>();
+  for (const e of state.installations) {
+    // The first entry of an identity is the one recorded, as `find` would take.
+    const identity = entryIdentity(e);
+    if (!paths.has(identity)) paths.set(identity, e.source.path);
+  }
+  recordedPaths.set(state.installations, paths);
+  return paths;
 }
 
 function updateOne(

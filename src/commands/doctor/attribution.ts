@@ -20,10 +20,20 @@ export function checkMarkerAttribution(
   markers: readonly MarkerEntry[],
 ): Finding[] {
   const findings: Finding[] = [];
+  // State's entries by location, in state order, so each marker looks at
+  // only the entries there instead of all of state.
+  const byLocation = new Map<string, StateEntry[]>();
+  for (const e of stateEntries) {
+    const key = locationKey(e.name, e.scope, e.project_root ?? null);
+    const here = byLocation.get(key);
+    if (here) here.push(e);
+    else byLocation.set(key, [e]);
+  }
   for (const m of markers) {
     const marker = m.record.marker;
+    const here = byLocation.get(locationKey(marker.name, m.record.scope, m.projectRoot ?? null));
     // A marker no entry owns is check 2's.
-    const entry = stateEntries.find((e) => ownsInstall(e, m));
+    const entry = here?.find((e) => ownsInstall(e, m));
     if (entry === undefined) continue;
     if (marker.tap_name === entry.source.tap && marker.path === entry.source.path) continue;
     // Only the path differs: a copy ahead of state (a relocation whose
@@ -40,6 +50,11 @@ export function checkMarkerAttribution(
     });
   }
   return findings;
+}
+
+/** An install's location — skill, scope, project root (`sameInstall`) — as one map key. */
+function locationKey(name: string, scope: string, projectRoot: string | null): string {
+  return JSON.stringify([name, scope, projectRoot]);
 }
 
 /** A tap and a skill's path in it, as a message names them. */

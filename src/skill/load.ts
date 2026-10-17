@@ -33,7 +33,6 @@ export function loadSkill(path: string): LoadedSkill {
   return withSkillFileErrors(path, (subject) => ({
     path,
     frontmatter: validateFrontmatter(extractFrontmatter(raw, subject).data, subject),
-    skillMd: raw,
   }));
 }
 
