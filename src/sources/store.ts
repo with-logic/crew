@@ -18,7 +18,7 @@ import { CrewError } from "../core/errors.ts";
 import { crewHome, paths, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
-import { removeEach, withLeftBehind } from "../util/cleanup.ts";
+import { appendLeftBehind, removeEach } from "../util/cleanup.ts";
 import { copyTree } from "../util/copy.ts";
 import { errnoReason, isGoneError, unreadablePathError } from "../util/errno.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
@@ -97,7 +97,7 @@ function stage(
     // copy's sides apart; a partial copy is never left for `crew doctor`,
     // unless crew can't remove it, which the error then names.
     const fault = stagingError(err as NodeJS.ErrnoException, skillPath, home);
-    throw withLeftBehind(fault, removeEach([staging]));
+    throw appendLeftBehind(fault, removeEach([staging]));
   }
 
   const contentHash = hashDirectory(storePath);

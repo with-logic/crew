@@ -14,7 +14,7 @@ import { realpathSync } from "node:fs";
 import { installSkillIntoAgents, isSafetyRefusal } from "../../agents/install.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import { type StoredSkill, stageIntoStore } from "../../sources/store.ts";
-import { withLeftBehind } from "../../util/cleanup.ts";
+import { appendLeftBehind } from "../../util/cleanup.ts";
 import { jsonText } from "../../util/json.ts";
 import { adaptersNamed, type DestGroup, groupAgentsByDest } from "../dest-groups.ts";
 import { newChildEntry } from "./entry.ts";
@@ -52,7 +52,7 @@ export function installNewTapChild(args: NewTapChild, opts: NewTapChildRun): Sta
   const run = installIntoGroups(args, groups, { cwd, staged, force });
   // Not recorded means installed nowhere: the copies this child just
   // made in other agents go, so nothing is left that state doesn't know.
-  if (run.failure !== null) throw withLeftBehind(run.failure, removeChildCopies(run.copies));
+  if (run.failure !== null) throw appendLeftBehind(run.failure, removeChildCopies(run.copies));
   if (run.installedInto.length === 0) return null;
   return newChildEntry(args, staged.contentHash, run.installedInto);
 }

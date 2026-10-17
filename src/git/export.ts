@@ -26,7 +26,7 @@ import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
-import { removeEach, withLeftBehind } from "../util/cleanup.ts";
+import { appendLeftBehind, removeEach } from "../util/cleanup.ts";
 import { ensureDir } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { type GitProcessError, runGit } from "./exec.ts";
@@ -62,7 +62,7 @@ export function exportTreeAt(clonePath: string, sha: string, subpath: string, de
     // `runGit` only throws `GitProcessError`. The failure stays the one
     // reported, naming the scratch index if crew couldn't remove it.
     const failure = exportFailure(err as GitProcessError, sha, subpath, pathspec, clonePath);
-    throw withLeftBehind(failure, removeEach([indexFile]));
+    throw appendLeftBehind(failure, removeEach([indexFile]));
   }
   // An index crew can't remove is left beside the export, which stands.
   removeEach([indexFile]);
@@ -136,7 +136,7 @@ export function exportTree(
     return { location, remove: () => removeScratch(dest) };
   } catch (err) {
     // The export's own failure stays the error; a folder left behind is named in it.
-    throw withLeftBehind(err as Error, removeEach([dest]));
+    throw appendLeftBehind(err as Error, removeEach([dest]));
   }
 }
 

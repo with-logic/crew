@@ -22,11 +22,11 @@ export function removeEach(paths: readonly string[]): string[] {
 }
 
 /**
- * `failure`, about to be rethrown, its message extended in place to name
- * what was `left` behind; its code and details stay its own. Unchanged
- * when nothing was left.
+ * Append to `failure`'s message, in place, a note naming what was `left`
+ * behind, and return it to rethrow; its code and details stay its own.
+ * Unchanged when nothing was left.
  */
-export function withLeftBehind<T extends Error>(failure: T, left: readonly string[]): T {
+export function appendLeftBehind<T extends Error>(failure: T, left: readonly string[]): T {
   if (left.length > 0) failure.message += `; left in place: ${left.join(", ")}`;
   return failure;
 }
