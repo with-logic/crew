@@ -2186,7 +2186,7 @@ Deterministic SHA-256 over file contents and relative paths. Used for detecting 
 Algorithm:
 
 1. Walk the directory. Exclude `.crew.json` at the root of the walk. Do not follow symlinks out of the directory.
-2. Collect every regular file as a tuple `(relative_path, sha256(file_bytes))`. Relative paths use POSIX separators (`/`) regardless of platform; a backslash in a name is part of the name, never a separator.
+2. Collect every regular file as a tuple `(relative_path, sha256(file_bytes))`. Relative paths use POSIX separators (`/`) regardless of platform, and a backslash in a name is hashed as `/` too, as every release has; crew never reads one as a separator when it locates a file.
 3. Sort the tuples by `relative_path` using byte-wise comparison.
 4. Initialize a SHA-256 accumulator. For each tuple in sorted order, feed it: `relative_path` as UTF-8 bytes, then `0x00`, then the lowercase hex of the file SHA, then `0x0A`.
 5. The final digest in lowercase hex, prefixed with `sha256:`, is the content hash.
