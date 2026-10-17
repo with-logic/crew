@@ -1,5 +1,6 @@
 /** Types shared by tap re-expansion passes (§10.1.1). */
 
+import { CrewError } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import type { FailureCode } from "../../util/errno.ts";
 
@@ -15,6 +16,14 @@ interface RowSubject {
 export interface TapReexpandError {
   readonly code: FailureCode;
   readonly message: string;
+  /** The next step, when the failure names one (§13). */
+  readonly remedy?: string;
+}
+
+/** A row's error for thrown `err`: `code`, its message, and its next step when it has one. */
+export function reexpandErrorOf(code: FailureCode, err: unknown): TapReexpandError {
+  const remedy = err instanceof CrewError ? err.remedy : null;
+  return { code, message: (err as Error).message, ...(remedy ? { remedy } : {}) };
 }
 
 /**
@@ -29,6 +38,12 @@ export type TapReexpandRow =
 export type TapErrorRow = RowSubject & {
   readonly kind: "tap_error";
   readonly error: TapReexpandError;
+  /**
+   * The group failed as a whole — its tap couldn't be acquired, or its
+   * skills listed (§10.1.1 step 1) — rather than this child: there is one
+   * such row per member, and human output shows the tap once.
+   */
+  readonly whole_tap?: true;
 };
 
 /** Narrows a row to a failure, for the renderers that list them. */

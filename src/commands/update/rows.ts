@@ -14,7 +14,7 @@ import type { TapErrorRow } from "../../install/tap-reexpand/types.ts";
 import { hasFailedTarget } from "../../install/update/public-row.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { displayText } from "../../refs/display-url.ts";
-import { shortenHome } from "../../util/format.ts";
+import { plural, shortenHome } from "../../util/format.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 
@@ -125,17 +125,58 @@ export function nameCell(row: UpdateRow, style: Styler): string {
 }
 
 /**
- * A failed new child's two lines: its name, tap, and code; then why.
- * Both are escaped (§5.2): an unnamed candidate's row is named by a
- * folder a repository's author chose, and its message may carry a raw
- * filesystem error, so neither may move the cursor or forge a line.
+ * The human lines for re-expansion failures, and how many failures they
+ * count as: each failed child on its own, and a group that failed as a
+ * whole (`whole_tap`) once for its tap — one fault, not one per skill
+ * (§10.1.1 step 1).
+ */
+export function tapErrorBlocks(
+  rows: readonly TapErrorRow[],
+  symbol: string,
+  style: Styler,
+): { lines: string[]; failures: number } {
+  const lines: string[] = [];
+  const wholeTaps = new Map<string, { row: TapErrorRow; skills: number }>();
+  let failures = 0;
+  for (const row of rows) {
+    const seen = row.whole_tap ? wholeTaps.get(row.tap) : undefined;
+    if (seen) {
+      seen.skills++;
+    } else {
+      failures++;
+      if (row.whole_tap) wholeTaps.set(row.tap, { row, skills: 1 });
+      else lines.push(...tapErrorLines(row, symbol, style));
+    }
+  }
+  for (const { row, skills } of wholeTaps.values()) {
+    const tap = style.bold(sanitizeLine(row.tap));
+    const count = style.dim(`(${plural(skills, "skill")})`);
+    lines.push(`${symbol} couldn't re-expand tap ${tap} ${count} ${style.red(row.error.code)}`);
+    lines.push(...detailLines(row, style));
+  }
+  return { lines, failures };
+}
+
+/**
+ * A failed new child's lines: its name, tap, and code; then why, and the
+ * next step when there is one. All are escaped (§5.2): an unnamed
+ * candidate's row is named by a folder a repository's author chose, and
+ * its message may carry a raw filesystem error, so none may move the
+ * cursor or forge a line.
  */
 export function tapErrorLines(row: TapErrorRow, symbol: string, style: Styler): string[] {
   const name = style.bold(sanitizeLine(row.name));
   return [
     `${symbol} ${name} ${style.dim(`(from ${sanitizeLine(row.tap)})`)} ${style.red(row.error.code)}`,
-    style.dim(`  ${sanitizeLine(displayText(row.error.message))}`),
+    ...detailLines(row, style),
   ];
+}
+
+/** Why `row` failed, and what to do, each on its own escaped line. */
+function detailLines(row: TapErrorRow, style: Styler): string[] {
+  const lines = [style.dim(`  ${sanitizeLine(displayText(row.error.message))}`)];
+  if (row.error.remedy) lines.push(style.dim(`  ${sanitizeLine(row.error.remedy)}`));
+  return lines;
 }
 
 /** Group re-expansion rows by tap name, preserving encounter order. */

@@ -10,7 +10,7 @@
 
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { CrewError } from "../core/errors.ts";
+import { CrewError, type CrewErrorName } from "../core/errors.ts";
 import { markerTapFields } from "../core/marker.ts";
 import type { Marker, Scope, TapConfig } from "../core/types.ts";
 import { CREW_INSTALLED_BY } from "../core/version.ts";
@@ -89,10 +89,11 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
             );
         }
         // Same hash, same name, same resolved SHA, same owners, recorded
-        // under the same tap → up-to-date, no-op. A copy whose marker names
-        // another tap is rewritten, so a move reaches every agent the
-        // install targets (§5.4). (The same tap at another path would be
-        // another source: a name conflict, refused before this.)
+        // under the same tap at the same path → up-to-date, no-op. A copy
+        // whose marker names another tap is rewritten, so a move reaches
+        // every agent the install targets (§5.4); one at another path is
+        // a skill relocated upstream, whose marker follows it (§10.1,
+        // C-UPD-37).
         const mergedAdapters = mergeAdapters(priorAdapters, incomingAdapters);
         const sameAdapters =
           mergedAdapters.length === priorAdapters.length &&
@@ -101,6 +102,7 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
           existingMarker.resolved_sha === input.resolvedSha &&
           existingMarker.content_hash === input.contentHash &&
           existingMarker.tap_name === input.tap.name &&
+          existingMarker.path === input.tapRelativePath &&
           sameAdapters &&
           !input.force
         )
@@ -150,18 +152,21 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
 }
 
 /** The codes of §7.3's safety checks: each refuses one agent, and is no failure. */
-const SAFETY_REFUSALS: ReadonlySet<string> = new Set([
+const SAFETY_REFUSALS = [
   "customized",
   "inconsistent_marker",
   "untracked_directory",
-]);
+] as const satisfies readonly CrewErrorName[];
+
+/** A §7.3 safety check's code. */
+export type SafetyRefusal = (typeof SAFETY_REFUSALS)[number];
 
 /**
  * True when `err` is a §7.3 safety check refusing to overwrite an agent's
  * copy — which skips that agent — rather than a failure to install there.
  */
-export function isSafetyRefusal(err: unknown): err is CrewError {
-  return err instanceof CrewError && SAFETY_REFUSALS.has(err.code);
+export function isSafetyRefusal(err: unknown): err is CrewError & { readonly code: SafetyRefusal } {
+  return err instanceof CrewError && (SAFETY_REFUSALS as readonly string[]).includes(err.code);
 }
 
 /** Union of two adapter-name lists, sorted and deduplicated. */

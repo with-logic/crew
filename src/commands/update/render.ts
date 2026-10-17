@@ -12,7 +12,7 @@ import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { columns, plural } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
-import { formatRowParts, groupByTap, nameCell, tapErrorLines } from "./rows.ts";
+import { formatRowParts, groupByTap, nameCell, tapErrorBlocks } from "./rows.ts";
 
 /** A tap or namespace the user selected, with how many entries it expanded to. */
 export interface CollectionSummary {
@@ -109,10 +109,14 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   // staged (§9 step 8), or couldn't be written into an agent. Each names
   // the subject and the reason — "tap acme (invalid_skill)" alone would
   // tell the user nothing.
-  const errorRows = input.tapReexpandRows.filter(isTapErrorRow);
-  for (const r of errorRows) lines.push(...tapErrorLines(r, style.symbol("fail"), style));
+  const errors = tapErrorBlocks(
+    input.tapReexpandRows.filter(isTapErrorRow),
+    style.symbol("fail"),
+    style,
+  );
+  lines.push(...errors.lines);
 
-  const totals = tally(input.rows, addedRows.length, errorRows.length);
+  const totals = tally(input.rows, addedRows.length, errors.failures);
   lines.push("");
   lines.push(style.dim(formatTotals(totals, dryRun)));
 

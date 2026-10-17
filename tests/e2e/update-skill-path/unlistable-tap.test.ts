@@ -58,3 +58,32 @@ test("C-SPEC-18 a tap whose skills/ crew can't list fails alone; another tap's n
       .sort(),
   ).toEqual(["w", "x", "y"]);
 });
+
+test("C-SPEC-18 a tap that fails as a whole reads as one failure, with its next step", () => {
+  const home = makeCrewHome();
+  const tapDir = trackedTap(home, "tb", "w");
+  makeSkill(join(tapDir, "skills"), "v", skillFrontmatter({ name: "v" }));
+  expect(run(home, ["install", "tb"]).code).toBe(0);
+  // Searchable, not listable: `v` and `w` still update; the tap can't be re-expanded.
+  chmodSync(join(tapDir, "skills"), 0o311);
+  let human: { code: number; stdout: string };
+  let json: { tap_reexpand_rows: { whole_tap?: boolean; error: { remedy?: string } }[] };
+  try {
+    human = run(home, ["update"]);
+    json = JSON.parse(run(home, ["update", "--json"]).stdout);
+  } finally {
+    chmodSync(join(tapDir, "skills"), 0o755);
+  }
+  expect(human.code).toBe(1);
+  const lines = human.stdout.split("\n");
+  expect(lines.filter((l) => l.includes("couldn't re-expand tap tb (2 skills)"))).toHaveLength(1);
+  expect(lines.some((l) => l.includes("(from tb)"))).toBe(false);
+  expect(human.stdout).toContain("Check that it is readable by you");
+  expect(human.stdout).toContain("2 up to date · 1 failure");
+  // `--json` keeps a row per member, each marked as the tap's.
+  const rows = json.tap_reexpand_rows;
+  expect(rows.map((row) => [row.whole_tap, row.error.remedy])).toEqual([
+    [true, expect.stringContaining("readable by you")],
+    [true, expect.stringContaining("readable by you")],
+  ]);
+});

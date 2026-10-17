@@ -7,7 +7,7 @@
  * target applies, or a safety check (§7.3) refused every one. An agent
  * folder crew can't write throws, so the child is reported and retried,
  * not recorded without that agent — and is removed from the agents it
- * was just installed into (`./rollback.ts`), so it is installed nowhere.
+ * was just installed into (`./removal.ts`), so it is installed nowhere.
  */
 
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
@@ -17,7 +17,7 @@ import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import { type StoredSkill, stageIntoStore } from "../../sources/store.ts";
 import { withLeftBehind } from "../../util/cleanup.ts";
 import { newChildEntry } from "./entry.ts";
-import { type ChildCopy, removeChildCopies } from "./rollback.ts";
+import { type ChildCopy, removeChildCopies } from "./removal.ts";
 
 /** A newly-detected child of a tracked tap, and where its group is installed. */
 export interface NewTapChild {

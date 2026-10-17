@@ -10,7 +10,7 @@
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import type { UnnamedCandidate } from "../unnamed-candidates.ts";
 import { withinNamespaces } from "./additions.ts";
-import type { TapErrorRow } from "./types.ts";
+import { reexpandErrorOf, type TapErrorRow } from "./types.ts";
 
 export interface UnnamedInput {
   readonly unnamed: readonly UnnamedCandidate[];
@@ -27,13 +27,12 @@ export function reportUnnamed(input: UnnamedInput): TapErrorRow[] {
   for (const candidate of input.unnamed) {
     if (memberPaths.has(candidate.tapRelativePath)) continue;
     if (!withinNamespaces(candidate.tapRelativePath, input.namespaces)) continue;
-    const { code, message } = candidate.error;
     rows.push({
       name: candidate.tapRelativePath,
       scope: input.scope,
       tap: input.tap.name,
       kind: "tap_error",
-      error: { code, message },
+      error: reexpandErrorOf(candidate.error.code, candidate.error),
     });
   }
   return rows;

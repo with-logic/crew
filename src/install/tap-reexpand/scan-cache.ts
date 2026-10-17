@@ -34,9 +34,11 @@ export interface TapScanCache {
   acquire(tap: TapConfig, home: string): AcquiredTapScan;
   /**
    * Walk a tap's children, memoised. Kept separate from `acquire`
-   * because a filesystem error while walking (an unreadable directory,
-   * say) is a local fault that must propagate, not be reported as the
-   * tap being unreachable.
+   * because the two fail differently: a tap crew can't acquire is
+   * unreachable, while a child set it can't list (`skills/` unreadable,
+   * C-SPEC-18) is the local filesystem's fault, `source_unreachable`
+   * naming the folder. Either fails only this group, as `tap_error` rows
+   * (`./group.ts`).
    */
   children(tap: TapConfig, home: string, rootDir: string): TapChildren;
   /** Full validation (§9 step 4) for one child — a directory, or a gist's skill file — memoised. */

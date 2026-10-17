@@ -88,19 +88,14 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
   // new dependency seeds. Recomputing closure by their names could
   // adopt an unrelated install's dependencies on a tap we never locked.
   // The selection is read back with every relocation applied, so a
-  // relocated entry still matches itself (§10.1).
+  // relocated entry still matches itself and is walked at its new path
+  // (§10.1, C-UPD-37). State keeps the recorded path: only the entry's
+  // own successful update writes the new one, with its marker and SHA.
   const targetEntries = entriesAfterReexpansion(
     withEntries(current, [...reexpanded.updated, ...reexpanded.added]),
     subjects,
     initialSelected,
   );
-  // A relocated path is recorded only for an entry this run updates, so
-  // its marker and SHA move with it; one outside the selection keeps the
-  // path it was installed from until its own update (§10.1.1 step 1).
-  const targeted = new Set(targetEntries.map(entryIdentity));
-  for (const entry of reexpanded.updated) {
-    if (targeted.has(entryIdentity(entry))) current = upsertEntry(current, entry);
-  }
   current = withEntries(current, reexpanded.added);
   for (const entry of targetEntries) {
     if (sourceGone.has(entryIdentity(entry))) {

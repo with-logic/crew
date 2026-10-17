@@ -77,19 +77,17 @@ test("C-UPD-18e a copy edited before the child failed is left, and named", () =>
   expect(readFileSync(join(r.copy, "SKILL.md"), "utf8")).toEndWith("Mine.\n");
 });
 
+/** Rewrite one field of the marker in `copy`. */
+function rewriteMarker(copy: string, field: string, value: string): void {
+  const marker = JSON.parse(readFileSync(join(copy, ".crew.json"), "utf8"));
+  writeFileSync(join(copy, ".crew.json"), JSON.stringify({ ...marker, [field]: value }));
+}
+
 /** Changes to a copy's marker alone; its content, which the hash covers, stays as written (§12.1). */
 const MARKER_ONLY: readonly (readonly [string, (copy: string) => void])[] = [
   ["deleted", (copy) => rmSync(join(copy, ".crew.json"))],
-  [
-    "rewritten",
-    (copy) => {
-      const marker = JSON.parse(readFileSync(join(copy, ".crew.json"), "utf8"));
-      writeFileSync(
-        join(copy, ".crew.json"),
-        JSON.stringify({ ...marker, content_hash: "sha256:0" }),
-      );
-    },
-  ],
+  ["rewritten to another hash", (copy) => rewriteMarker(copy, "content_hash", "sha256:0")],
+  ["rewritten to another skill's name", (copy) => rewriteMarker(copy, "name", "other")],
 ];
 
 for (const [what, act] of MARKER_ONLY) {
