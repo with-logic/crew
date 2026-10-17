@@ -18,6 +18,7 @@ import {
 import type { CurrentTapChild } from "../tap-children.ts";
 import type { InstallNewChild, TapReexpandRow } from "./index.ts";
 import type { TapScanCache } from "./scan-cache.ts";
+import { reexpandErrorOf } from "./types.ts";
 
 export interface AdditionsInput {
   readonly children: readonly CurrentTapChild[];
@@ -94,7 +95,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
         scope: input.scope,
         tap: input.tap.name,
         kind: "tap_error",
-        error: { code: loadError.code, message: loadError.message },
+        error: reexpandErrorOf(loadError.code, loadError),
       });
       continue;
     }
@@ -126,13 +127,12 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       // A child crew can't stage (a file it can't read, §9 step 8), or
       // can't write into an agent's folder, fails that child alone.
       hardFailure = true;
-      const error = { code: failureCodeOf(err), message: (err as Error).message };
       rows.push({
         name: child.name,
         scope: input.scope,
         tap: input.tap.name,
         kind: "tap_error",
-        error,
+        error: reexpandErrorOf(failureCodeOf(err), err),
       });
       continue;
     }

@@ -14,6 +14,7 @@ import { existsSync } from "node:fs";
 import { cwdForEntry } from "../../agents/adapter.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import { withAcquiredSkill } from "../../sources/acquire/one-skill.ts";
+import { entryIdentity } from "../../state/collections/index.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { crewErrorNameOf } from "../../util/errno.ts";
@@ -97,13 +98,8 @@ interface UpdateRun {
  * project root). State keeps the recorded path until the update succeeds.
  */
 function isRelocated(entry: StateEntry, state: StateFile): boolean {
-  const recorded = state.installations.find(
-    (e) =>
-      e.source.tap === entry.source.tap &&
-      e.name === entry.name &&
-      e.scope === entry.scope &&
-      (e.project_root ?? null) === (entry.project_root ?? null),
-  );
+  const identity = entryIdentity(entry);
+  const recorded = state.installations.find((e) => entryIdentity(e) === identity);
   return recorded !== undefined && recorded.source.path !== entry.source.path;
 }
 

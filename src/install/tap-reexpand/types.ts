@@ -39,11 +39,12 @@ export type TapErrorRow = RowSubject & {
   readonly kind: "tap_error";
   readonly error: TapReexpandError;
   /**
-   * The group failed as a whole — its tap couldn't be acquired, or its
-   * skills listed (§10.1.1 step 1) — rather than this child: there is one
-   * such row per member, and human output shows the tap once.
+   * The group (§10.1.1: tap, scope, project, ref) failed as a whole — its
+   * tap couldn't be acquired, or its skills listed (step 1) — rather than
+   * this child: there is one such row per member, and human output shows
+   * each distinct failure once.
    */
-  readonly whole_tap?: true;
+  readonly whole_group?: true;
 };
 
 /** Narrows a row to a failure, for the renderers that list them. */

@@ -67,7 +67,7 @@ test("C-SPEC-18 a tap that fails as a whole reads as one failure, with its next 
   // Searchable, not listable: `v` and `w` still update; the tap can't be re-expanded.
   chmodSync(join(tapDir, "skills"), 0o311);
   let human: { code: number; stdout: string };
-  let json: { tap_reexpand_rows: { whole_tap?: boolean; error: { remedy?: string } }[] };
+  let json: { tap_reexpand_rows: { whole_group?: boolean; error: { remedy?: string } }[] };
   try {
     human = run(home, ["update"]);
     json = JSON.parse(run(home, ["update", "--json"]).stdout);
@@ -82,8 +82,27 @@ test("C-SPEC-18 a tap that fails as a whole reads as one failure, with its next 
   expect(human.stdout).toContain("2 up to date · 1 failure");
   // `--json` keeps a row per member, each marked as the tap's.
   const rows = json.tap_reexpand_rows;
-  expect(rows.map((row) => [row.whole_tap, row.error.remedy])).toEqual([
+  expect(rows.map((row) => [row.whole_group, row.error.remedy])).toEqual([
     [true, expect.stringContaining("readable by you")],
     [true, expect.stringContaining("readable by you")],
   ]);
+});
+
+test("C-SPEC-18 crew outdated never calls a tap it couldn't re-expand up to date", () => {
+  const home = makeCrewHome();
+  // The test home's unreachable `core` tap would mark the run unchecked on its own.
+  expect(run(home, ["tap", "remove", "core", "--force"]).code).toBe(0);
+  const tapDir = trackedTap(home, "tb", "w");
+  chmodSync(join(tapDir, "skills"), 0o311);
+  let out: string;
+  try {
+    out = run(home, ["outdated"]).stdout.replace(/\s+/g, " ");
+  } finally {
+    chmodSync(join(tapDir, "skills"), 0o755);
+  }
+  expect(out).toContain("couldn't re-expand tap tb (1 skill)");
+  expect(out).toContain(
+    "Nothing known to be out of date, but some collections couldn't be checked.",
+  );
+  expect(out).not.toContain("Everything is up to date");
 });

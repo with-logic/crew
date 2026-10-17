@@ -2,7 +2,7 @@
  * Walk one tracked tap revision and collect re-expansion outcomes
  * (§10.1.1). A revision crew can't acquire, or whose skills it can't list
  * (`skills/` unreadable, C-SPEC-18), fails this group alone: each member
- * is a `whole_tap` `tap_error` row, and the rest of the run proceeds.
+ * is a `whole_group` `tap_error` row, and the rest of the run proceeds.
  */
 
 import { CrewError } from "../../core/errors.ts";
@@ -49,7 +49,7 @@ export function reexpandGroup(input: GroupInput): TapReexpandResult {
 }
 
 /**
- * The group failing as a whole: a `whole_tap` `tap_error` row for each
+ * The group failing as a whole: a `whole_group` `tap_error` row for each
  * member, carrying the failure's next step.
  */
 function groupFailure(input: GroupInput, err: unknown): TapReexpandResult {
@@ -65,7 +65,7 @@ function groupFailure(input: GroupInput, err: unknown): TapReexpandResult {
       scope: m.scope,
       tap: input.tap.name,
       kind: "tap_error",
-      whole_tap: true,
+      whole_group: true,
       error,
     })),
   };

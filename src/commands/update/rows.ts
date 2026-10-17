@@ -126,9 +126,10 @@ export function nameCell(row: UpdateRow, style: Styler): string {
 
 /**
  * The human lines for re-expansion failures, and how many failures they
- * count as: each failed child on its own, and a group that failed as a
- * whole (`whole_tap`) once for its tap — one fault, not one per skill
- * (§10.1.1 step 1).
+ * count as: each failed child on its own, and each distinct failure of a
+ * group as a whole (`whole_group`) once — one fault, not one per skill
+ * (§10.1.1 step 1). Groups of one tap that failed the same way are one
+ * fault; ones that failed differently are each shown and counted.
  */
 export function tapErrorBlocks(
   rows: readonly TapErrorRow[],
@@ -136,25 +137,26 @@ export function tapErrorBlocks(
   style: Styler,
 ): { lines: string[]; failures: number } {
   const lines: string[] = [];
-  const wholeTaps = new Map<string, { row: TapErrorRow; skills: number }>();
-  let failures = 0;
+  const faults = new Map<string, { row: TapErrorRow; skills: Set<string> }>();
+  let children = 0;
   for (const row of rows) {
-    const seen = row.whole_tap ? wholeTaps.get(row.tap) : undefined;
-    if (seen) {
-      seen.skills++;
-    } else {
-      failures++;
-      if (row.whole_tap) wholeTaps.set(row.tap, { row, skills: 1 });
-      else lines.push(...tapErrorLines(row, symbol, style));
+    if (!row.whole_group) {
+      children++;
+      lines.push(...tapErrorLines(row, symbol, style));
+      continue;
     }
+    const key = JSON.stringify([row.tap, row.error.code, row.error.message]);
+    const fault = faults.get(key) ?? { row, skills: new Set<string>() };
+    fault.skills.add(row.name);
+    faults.set(key, fault);
   }
-  for (const { row, skills } of wholeTaps.values()) {
+  for (const { row, skills } of faults.values()) {
     const tap = style.bold(sanitizeLine(row.tap));
-    const count = style.dim(`(${plural(skills, "skill")})`);
+    const count = style.dim(`(${plural(skills.size, "skill")})`);
     lines.push(`${symbol} couldn't re-expand tap ${tap} ${count} ${style.red(row.error.code)}`);
     lines.push(...detailLines(row, style));
   }
-  return { lines, failures };
+  return { lines, failures: children + faults.size };
 }
 
 /**
@@ -164,7 +166,7 @@ export function tapErrorBlocks(
  * its message may carry a raw filesystem error, so none may move the
  * cursor or forge a line.
  */
-export function tapErrorLines(row: TapErrorRow, symbol: string, style: Styler): string[] {
+function tapErrorLines(row: TapErrorRow, symbol: string, style: Styler): string[] {
   const name = style.bold(sanitizeLine(row.name));
   return [
     `${symbol} ${name} ${style.dim(`(from ${sanitizeLine(row.tap)})`)} ${style.red(row.error.code)}`,

@@ -159,7 +159,7 @@ const SAFETY_REFUSALS = [
 ] as const satisfies readonly CrewErrorName[];
 
 /** A §7.3 safety check's code. */
-export type SafetyRefusal = (typeof SAFETY_REFUSALS)[number];
+type SafetyRefusal = (typeof SAFETY_REFUSALS)[number];
 
 /**
  * True when `err` is a §7.3 safety check refusing to overwrite an agent's

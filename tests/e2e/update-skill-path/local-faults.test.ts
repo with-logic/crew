@@ -125,6 +125,10 @@ test("C-UPD-18e C-UPD-40 a tracked tap's new child crew can't copy fails alone; 
       "tap_error",
       "source_unreachable",
     ]);
+    // Human output names the child and gives its next step.
+    const human = run(home, ["update"]).stdout.replace(/\s+/g, " ");
+    expect(human).toContain("alpha (from mine) source_unreachable");
+    expect(human).toContain("Check that it is readable by you");
   } finally {
     chmodSync(join(alpha, "extra.txt"), 0o644);
   }

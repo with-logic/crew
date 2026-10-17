@@ -1471,9 +1471,12 @@ between resolution and targeting:
   recorded only by the entry's own successful update, with its marker and
   commit: a relocated entry is reinstalled even when its content didn't
   change, so its marker's `path` follows. One whose update fails (an agent
-  folder crew can't write, say) keeps its entry, path and marker as they
-  were, as does a relocated entry outside the selection (re-expanded only
-  because a sibling was selected), until its own update.
+  folder crew can't write, say) keeps its recorded path and commit, as
+  does a relocated entry outside the selection (re-expanded only because
+  a sibling was selected), until its own update. An agent that did take
+  a failed update's new copy is ahead of state until then — `crew doctor`
+  reports it as `marker_attribution_drift` — and the retry brings state
+  and every marker together.
 
 1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<selector>...`, it is the subset of taps that host the selected entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run: other taps and every per-skill update still process. A tap the user named *as a tap selector* is the exception — the run did not do what was asked, so its refresh failure is a hard failure (exit 1) in addition to the warning, even when nothing is installed from that tap. A tap that merely happens to be configured, or that backs a selected entry without having been named, stays a warning.
 2. Build the list of skills to consider:
@@ -1585,10 +1588,10 @@ On every `crew update` run, for each group of state entries sharing
    (§9 step 5, "Folder links"), so it is a candidate without a name
    (step 2). A tap whose `skills/` folder crew can't list (§9 step 5,
    C-SPEC-18) fails this group alone: each member is reported as a
-   `tap_error` with `source_unreachable`, marked `whole_tap` — human
-   output shows the tap once, as one failure, with the error's next
-   step — and the run goes on with its other groups and entries, then
-   exits 1. The
+   `tap_error` with `source_unreachable`, marked `whole_group` — human
+   output shows each distinct failure of a tap's groups once, counted as
+   one failure, with the error's next step — and the run goes on with
+   its other groups and entries, then exits 1. The
    group's own `ref` is what gets materialized, exactly as in §9 step 3:
    a whole-tap install at `@<tag|branch|sha>` MUST be re-expanded
    against that revision, not the tap's default branch. Otherwise
@@ -2643,7 +2646,7 @@ Implementations and test suites refer to criteria by ID.
 | C-SPEC-15 | §9 step 4 | A `SKILL.md` that isn't a regular file (a directory, say), or that is reached through a link crew won't follow — absolute text, text that isn't UTF-8, or a `..` that climbs above the folder anywhere on the way (even to come back, past a folder link, after a part that doesn't exist, or out to a file crew can't read), a chain that loops or runs longer than 8 links, or one that reaches the folder's `.crew.json` under such a name (`.CREW.JSON`, `.crew.jſon`, or `.crew.json` with a U+200C inside) — fails validation with a message naming it, while the source's valid skills install; nothing is read through such a link, at a ref too. A `SKILL.md` linked to a file inside its folder through relative links that stay inside it — directly, through another link, through a folder link such as `current -> v1`, or with a `..` such as `docs/../real.md` — is valid, and installs readable. After a part that doesn't exist, nothing later on the way is looked up: each name is judged as written, and a link there is never read. |
 | C-SPEC-16 | §9 steps 4, 6, 8 | A `SKILL.md` crew can't read, or another file of the skill it can't read while staging, is reported as `source_unreachable` naming the file; that skill is skipped while the source's other skills install, and no partial copy is left in the store — one crew can't remove is named in that error rather than replacing it. A dependency beside its parent that crew can't load — it can't look into the folder, or the `SKILL.md` is unreadable or invalid — fails the install with that reason, naming the dependency, and is never taken from another tap; crew's own store failing is one error naming the store. |
 | C-SPEC-17 | §9 steps 5, 6; §10.1.1 | In a git source, a skill folder, a namespace, or `skills/` itself that is a symlink staying inside the repository is discovered through it. One that leads out of the repository, or to its root or `.git`, is never read: at install it is an `invalid_skill` candidate while the source's other skills install (at the root, only when it holds a `SKILL.md`); a dependency beside its parent whose folder leads out fails the install, naming the dependency, while any other such sibling is passed over; `crew search` leaves it out, a `<tap>/<skill>` or `<tap>/<namespace>/<skill>` reference to it or to a skill below it fails with that `invalid_skill`, and re-expansion on `crew update` reports it as a failed new child named by its location (C-UPD-18c). A path source isn't held to this. A link whose text runs through another link is judged where the OS resolves it: `skills/evil -> link/..`, with `link` leading out, leads out. |
-| C-SPEC-18 | §9 step 5 | A folder under `skills/`, or under a namespace there, that crew can't list is reported as a failed skill with `source_unreachable` while the source's other skills install. A `skills/` folder or source location crew can't list is `source_unreachable` for the whole source, never an unexpected error; on `crew update`, a tracked tap's `skills/` crew can't list fails that tap's group as a `whole_tap` `tap_error` for each member — one line for the tap in human output, counted as one failure, with the error's next step — while the rest of the run proceeds — another tap's new child is installed and recorded — and the run exits 1. At the root (case 3) and in recursive discovery, a folder crew can't list is passed over. |
+| C-SPEC-18 | §9 step 5 | A folder under `skills/`, or under a namespace there, that crew can't list is reported as a failed skill with `source_unreachable` while the source's other skills install. A `skills/` folder or source location crew can't list is `source_unreachable` for the whole source, never an unexpected error; on `crew update`, a tracked tap's `skills/` crew can't list fails that tap's group as a `whole_group` `tap_error` for each member — one line per distinct failure in human output, each counted once, with the error's next step (groups of one tap that fail differently each get their own line) — while the rest of the run proceeds — another tap's new child is installed and recorded — and the run exits 1. At the root (case 3) and in recursive discovery, a folder crew can't list is passed over. |
 
 #### C-INST: Install (§9)
 
@@ -2812,7 +2815,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-34 | §10.1.1 | One tap installed as a whole at both user and project scope re-expands both groups: a newly added sibling is installed into each. |
 | C-UPD-35 | §10.1 | A tap named as a selector whose refresh fails is a hard failure (exit 1), even with nothing installed from it; an unnamed configured tap whose refresh fails remains a warning and the run exits 0. |
 | C-UPD-36 | §10.1, §10.1.1 | A namespace selector bounds re-expansion additions to that namespace: a child added upstream under a different namespace of the same tap is not installed. Naming the tap installs both. |
-| C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. Only the entry's own successful update records the new path, reinstalling it even when its content is unchanged so its marker's `path` follows; one whose update fails keeps its entry, path and marker as they were. A relocated entry outside the selection keeps its recorded path, matching its marker, until an update selects it. |
+| C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. Only the entry's own successful update records the new path, reinstalling it even when its content is unchanged so its marker's `path` follows; one whose update fails keeps its recorded path and commit — an agent that did take the new copy is ahead of state until the retry, which brings state and every marker to the new path. A relocated entry outside the selection keeps its recorded path, matching its marker, until an update selects it. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |

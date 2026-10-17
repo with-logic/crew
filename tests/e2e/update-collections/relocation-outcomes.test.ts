@@ -2,15 +2,17 @@
  * What a relocation leaves when the update doesn't take (PRD §10.1,
  * C-UPD-16c, C-UPD-37): the new path is recorded only by the entry's own
  * successful update, with its marker and commit. One whose update fails
- * keeps its recorded path, entry and marker as they were, and the next
- * run moves them; a moved skill whose content didn't change is
- * reinstalled, so its marker follows instead of drifting from state.
+ * keeps its recorded path and commit — an agent that took the new copy is
+ * ahead of state until then — and the next run moves them all; a moved
+ * skill whose content didn't change is reinstalled, so its marker follows
+ * instead of drifting from state.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../../src/agents/codex.ts";
 import type { Marker } from "../../../src/core/types.ts";
 import { readState } from "../../../src/state/load.ts";
 import { readJson } from "../../../src/util/json.ts";
@@ -71,6 +73,50 @@ test("C-UPD-16c C-UPD-37 a moved skill whose update fails keeps its entry and pa
 
   expect(run(home, ["update", "mover"]).code).toBe(0);
   expect(recordedPaths(home)).toEqual(["skills/beta/mover", "skills/beta/mover"]);
+});
+
+test("C-UPD-37 when one of two agents fails a moved skill's update, state keeps its path until a retry brings both", () => {
+  const codexRoot = makeTempDir("upd-coll-rc-");
+  const { userPath, detect } = codexAdapter;
+  codexAdapter.userPath = () => codexRoot;
+  codexAdapter.detect = () => true;
+  try {
+    const home = freshHome();
+    const repo = buildNamespacedTap("upd-coll-r3-", { alpha: ["mover"] });
+    run(home, ["tap", "add", `file://${repo}`, "acme"]);
+    expect(run(home, ["install", "acme"]).code).toBe(0);
+    const before = readState(home).installations.find((e) => e.name === "mover");
+    moveMover(repo);
+    commitAll(repo, "move mover to beta");
+    bump(repo, join("skills", "beta"), "mover", "mover-v2");
+
+    chmodSync(codexRoot, 0o555);
+    try {
+      expect(run(home, ["update", "mover"]).code).toBe(1);
+    } finally {
+      chmodSync(codexRoot, 0o755);
+    }
+    // State keeps the recorded path and commit; claude-code, which took the
+    // new copy, is ahead of it until the retry.
+    expect(readState(home).installations.find((e) => e.name === "mover")).toEqual(before);
+    const codexPath = () => readJson<Marker>(join(codexRoot, "mover", ".crew.json")).path;
+    expect([...recordedPaths(home), codexPath()]).toEqual([
+      "skills/alpha/mover",
+      "skills/beta/mover",
+      "skills/alpha/mover",
+    ]);
+    expect(doctorCodes(home)).toEqual(["marker_attribution_drift"]);
+
+    expect(run(home, ["update", "mover"]).code).toBe(0);
+    expect([...recordedPaths(home), codexPath()]).toEqual([
+      "skills/beta/mover",
+      "skills/beta/mover",
+      "skills/beta/mover",
+    ]);
+    expect(doctorCodes(home)).toEqual([]);
+  } finally {
+    Object.assign(codexAdapter, { userPath, detect });
+  }
 });
 
 test("C-UPD-37 a path tap's skill moved with its content unchanged is reinstalled; doctor finds nothing", () => {
