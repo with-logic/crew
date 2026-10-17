@@ -14,11 +14,12 @@
  */
 
 import { lstatSync, readlinkSync, realpathSync } from "node:fs";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
+import { toPosix } from "../util/fs.ts";
 import { climbsOut } from "../util/relative-path.ts";
 
 /**
@@ -62,15 +63,48 @@ export function leadsOutOfSource(boundary: SourceBoundary, folder: string): bool
 }
 
 /**
- * Where `folder` really is: its real parent, then — while it is a link —
- * where its text leads. Discovery has just seen that it is a folder, so
- * every folder above it can be searched and resolves; the folder itself
+ * Where `folder` really is, found as the OS finds it: from its real
+ * parent, each part of the way in turn, a link's text read from the
+ * folder the link sits in. A `..` climbs from where the parts before it
+ * really lead — never from the text, which would let `link/..` stand for
+ * the folder holding `link` when `link` leads elsewhere. The folder itself
  * is never resolved whole, so one crew can't search is found the same way
  * on every platform (Bun's `realpathSync` refuses one on some).
  */
 function realFolder(folder: string): string {
-  const at = join(realpathSync(dirname(folder)), basename(folder));
-  return lstatSync(at).isSymbolicLink() ? realFolder(resolve(dirname(at), readlinkSync(at))) : at;
+  return follow(realpathSync(dirname(folder)), basename(folder), { left: MAX_FOLDER_LINKS });
+}
+
+/**
+ * More links than any OS follows in one path (Linux allows 40): discovery
+ * has just seen that `folder` is a folder, so the OS resolved it in fewer.
+ */
+const MAX_FOLDER_LINKS = 40;
+
+/** `text`, relative to real folder `dir` unless absolute, resolved part by part. */
+function follow(dir: string, text: string, links: { left: number }): string {
+  let at = isAbsolute(text) ? sep : dir;
+  for (const part of text.split(sep)) {
+    if (part === "" || part === ".") continue;
+    // `at` is real, so its parent is where `..` leads.
+    if (part === "..") {
+      at = dirname(at);
+      continue;
+    }
+    const next = join(at, part);
+    if (!lstatSync(next).isSymbolicLink()) {
+      at = next;
+      continue;
+    }
+    if (--links.left < 0) throw new Error(`too many links resolving \`${next}\``);
+    at = follow(at, readlinkSync(next), links);
+  }
+  return at;
+}
+
+/** `outOfSourceError` naming `folder` by its location in `boundary`'s repository. */
+export function outOfSourceAt(boundary: NonNullable<SourceBoundary>, folder: string): CrewError {
+  return outOfSourceError(folder, toPosix(relative(boundary.root, folder)));
 }
 
 /**

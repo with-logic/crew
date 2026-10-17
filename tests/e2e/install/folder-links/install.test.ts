@@ -37,7 +37,7 @@ test("C-SPEC-17 a skill folder linked out of the repository is invalid, never re
   const r = crew(home, ["install", `file://${repo}`]);
   expect(r.code).toBe(1);
   expect(installed()).toEqual(["good"]);
-  expect(r.out).toMatch(new RegExp(`\\/skills\\/evil\` ${OUT}`));
+  expect(r.out).toContain(`\`skills/evil\` ${OUT}`);
   expect(storedNames(home)).toEqual(["good"]);
 });
 
@@ -51,7 +51,7 @@ test("C-SPEC-17 a namespace linked out is refused as one candidate, never listed
   const r = crew(makeCrewHome(), ["install", `file://${repo}`]);
   expect(r.code).toBe(1);
   expect(installed()).toEqual(["good"]);
-  expect(r.out).toMatch(new RegExp(`\\/skills\\/team\` ${OUT}`));
+  expect(r.out).toContain(`\`skills/team\` ${OUT}`);
   expect(r.out).not.toContain("team/x");
 });
 
@@ -71,7 +71,7 @@ test("C-SPEC-17 a `skills/` linked out of the repository is one invalid candidat
   }
   expect(r.code).toBe(4);
   expect(installed()).toEqual([]);
-  expect(r.out).toMatch(new RegExp(`\\/skills\` ${OUT}`));
+  expect(r.out).toContain(`\`skills\` ${OUT}`);
 });
 
 test("C-SPEC-17 links that stay inside the repository are followed", () => {
@@ -97,8 +97,8 @@ test("C-SPEC-17 a folder linked to the repository's root or its .git is refused"
   const r = crew(makeCrewHome(), ["install", `file://${repo}`]);
   expect(r.code).toBe(1);
   expect(installed()).toEqual(["good"]);
-  expect(r.out).toMatch(new RegExp(`\\/skills\\/up\` ${OUT}`));
-  expect(r.out).toMatch(new RegExp(`\\/skills\\/meta\` ${OUT}`));
+  expect(r.out).toContain(`\`skills/up\` ${OUT}`);
+  expect(r.out).toContain(`\`skills/meta\` ${OUT}`);
 });
 
 test("C-SPEC-17 at the root, a link out is a candidate only when it holds a SKILL.md", () => {
@@ -113,7 +113,7 @@ test("C-SPEC-17 at the root, a link out is a candidate only when it holds a SKIL
   const r = crew(makeCrewHome(), ["install", `file://${repo}`]);
   expect(r.code).toBe(1);
   expect(installed()).toEqual(["good"]);
-  expect(r.out).toMatch(new RegExp(`\\/evil\` ${OUT}`));
+  expect(r.out).toContain(`\`evil\` ${OUT}`);
   expect(r.out).not.toContain("docs");
 });
 
@@ -127,7 +127,7 @@ test("C-SPEC-17 a commit read at a ref is held to its own export", () => {
   const r = crew(makeCrewHome(), ["install", `file://${repo}@v1`]);
   expect(r.code).toBe(1);
   expect(installed()).toEqual(["good"]);
-  expect(r.out).toMatch(new RegExp(`\\/skills\\/evil\` ${OUT}`));
+  expect(r.out).toContain(`\`skills/evil\` ${OUT}`);
 });
 
 for (const at of ["", "@v1"]) {
