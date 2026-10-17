@@ -6,16 +6,14 @@
  * are unread rather than absent.
  */
 
-import { join } from "node:path";
-import { baseFor, cwdForEntry } from "../../agents/adapter.ts";
+import { installDirOf } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import type { StateEntry } from "../../core/types.ts";
-import { hasUsableProjectRoot } from "../../state/validation.ts";
 import type { Finding } from "./checks.ts";
 import type { UnreadablePath } from "./markers.ts";
 
 /** Whether `entry`'s install in `agent` sits where crew couldn't read. */
-export type HiddenInstall = (entry: StateEntry, agent: string) => boolean;
+export type IsHiddenInstall = (entry: StateEntry, agent: string) => boolean;
 
 /** One `unreadable_marker` finding per path crew couldn't read. */
 export function unreadableFindings(unreadable: readonly UnreadablePath[]): Finding[] {
@@ -30,14 +28,15 @@ export function unreadableFindings(unreadable: readonly UnreadablePath[]): Findi
   return findings;
 }
 
-/** The test for installs `unreadable` hides, resolving user-scope folders against `cwd`. */
-export function hiddenInstalls(unreadable: readonly UnreadablePath[], cwd: string): HiddenInstall {
+/**
+ * The test for installs `unreadable` hides. An entry's folder is found
+ * from the entry alone (§11.1): a project entry's from its root, and one
+ * whose root locates nothing (check 8 reports it) is hidden by nothing.
+ */
+export function isHiddenBy(unreadable: readonly UnreadablePath[]): IsHiddenInstall {
   return (entry, agent) => {
     const adapter = agentByName(agent);
-    // An unusable project root locates nothing (§11.1; check 8 reports it).
-    if (!adapter || (entry.scope === "project" && !hasUsableProjectRoot(entry))) return false;
-    const base = baseFor(adapter, entry.scope, cwdForEntry(entry, cwd));
-    const dir = join(base, entry.name);
-    return base !== "" && unreadable.some((u) => dir === u.hides || dir.startsWith(`${u.hides}/`));
+    const dir = adapter ? installDirOf(entry, adapter) : "";
+    return dir !== "" && unreadable.some((u) => dir === u.hides || dir.startsWith(`${u.hides}/`));
   };
 }

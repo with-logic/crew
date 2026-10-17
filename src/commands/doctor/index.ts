@@ -27,7 +27,7 @@ import { applyRepairs } from "./coordinator.ts";
 import { buildMarkerIndex } from "./markers.ts";
 import { renderDoctor } from "./render.ts";
 import { isRepairableCode } from "./repairable.ts";
-import { hiddenInstalls, unreadableFindings } from "./unreadable.ts";
+import { isHiddenBy, unreadableFindings } from "./unreadable.ts";
 
 export function doctorCommand(ctx: CommandContext): CommandOutput {
   const verify = Boolean(ctx.flags.extras["verify"]);
@@ -47,7 +47,7 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   const state = readState(home);
   const stateEntries = state.installations;
   const { markers, unreadable } = buildMarkerIndex(stateEntries, ctx.cwd);
-  const hidden = hiddenInstalls(unreadable, ctx.cwd);
+  const hidden = isHiddenBy(unreadable);
 
   findings.push(...unreadableFindings(unreadable));
   findings.push(...checkStateMarkerDrift(stateEntries, markers, hidden));

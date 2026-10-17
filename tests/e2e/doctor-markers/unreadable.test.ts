@@ -1,15 +1,18 @@
 /**
  * Doctor's check 9 (§11.2; C-STATE-05a): a marker crew can't read or
- * parse, or a skills folder it can't list or look into, is an
+ * parse, one that is no complete marker (`null`, or missing a field crew
+ * records), or a skills folder it can't list or look into, is an
  * `unreadable_marker` finding naming the path. The run doesn't fail on
  * it, doesn't also call the entries it hides `state_entry_without_marker`,
- * and `--repair` keeps those entries: their markers are unread, not absent.
+ * and `--repair` keeps those entries — their markers are unread, not
+ * absent — and writes no tap from them.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { codexAdapter } from "../../../src/agents/codex.ts";
+import { readConfig } from "../../../src/config/load.ts";
 import { readState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { buildRepo, codes, doctor, must, redirectAgents } from "./helpers.ts";
@@ -58,11 +61,48 @@ const UNREADABLE: readonly (readonly [
     },
   ],
   [
+    "a marker that is JSON null",
+    "not a JSON object",
+    (root) => {
+      const marker = join(root, "a", ".crew.json");
+      writeFileSync(marker, "null");
+      return [marker, () => {}];
+    },
+  ],
+  [
+    "a marker missing the fields crew records",
+    "not a crew marker: missing or invalid `schema_version`",
+    (root) => {
+      const marker = join(root, "a", ".crew.json");
+      writeFileSync(marker, JSON.stringify({ agents: ["codex"], name: "a" }));
+      return [marker, () => {}];
+    },
+  ],
+  [
+    "a marker holding a field of the wrong kind",
+    "not a crew marker: missing or invalid `tap_kind`",
+    (root) => {
+      const marker = join(root, "a", ".crew.json");
+      const real = JSON.parse(readFileSync(marker, "utf8")) as object;
+      writeFileSync(marker, JSON.stringify({ ...real, tap_kind: "svn" }));
+      return [marker, () => {}];
+    },
+  ],
+  [
     "a skills folder crew can't list",
     "EACCES",
     (root) => {
       chmodSync(root, 0o000);
       return [root, () => chmodSync(root, 0o755)];
+    },
+  ],
+  [
+    "a skills folder below one crew can't search",
+    "EACCES",
+    (root) => {
+      const parent = dirname(root);
+      chmodSync(parent, 0o600);
+      return [root, () => chmodSync(parent, 0o755)];
     },
   ],
   [
@@ -94,6 +134,8 @@ for (const [what, reason, make] of UNREADABLE) {
       expect(repaired.code).toBe(1);
       const a = readState(home).installations.find((e) => e.name === "a");
       expect(a?.agents).toEqual(["codex"]);
+      // Nothing from a marker crew couldn't use was written as a tap.
+      expect(readConfig(home).taps.every((t) => typeof t.name === "string")).toBe(true);
     } finally {
       undo();
     }

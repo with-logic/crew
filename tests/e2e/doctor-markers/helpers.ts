@@ -4,6 +4,7 @@
  * both, and read doctor's findings.
  */
 
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../src/agents/codex.ts";
@@ -19,12 +20,17 @@ import {
 
 type Redirect = Pick<typeof codexAdapter, "userPath" | "detect">;
 
-/** Point claude-code and codex at fresh skills folders, both detected; returns an undo. */
+/**
+ * Point claude-code and codex at fresh skills folders, both detected;
+ * returns an undo. Each folder sits in a parent of its own, so a test can
+ * make that parent one crew can't search.
+ */
 export function redirectAgents(): { restore: () => void } {
   const originals: (readonly [Redirect, Redirect])[] = [];
   for (const adapter of [claudeCodeAdapter, codexAdapter]) {
     originals.push([adapter, { userPath: adapter.userPath, detect: adapter.detect }]);
-    const root = makeTempDir("crew-agent-");
+    const root = join(makeTempDir("crew-agent-"), "skills");
+    mkdirSync(root);
     adapter.userPath = () => root;
     adapter.detect = () => true;
   }

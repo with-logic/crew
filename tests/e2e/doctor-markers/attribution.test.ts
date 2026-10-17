@@ -1,7 +1,7 @@
 /**
  * Doctor's check 10 (§11.2; C-STATE-05b): a marker whose tap or path its
  * state entry doesn't share — a copy a move couldn't relabel (§5.4) — is
- * a `marker_tap_drift` warning naming both, and `--repair` changes
+ * a `marker_attribution_drift` warning naming both, and `--repair` changes
  * neither the entry nor the marker.
  */
 
@@ -9,8 +9,9 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { codexAdapter } from "../../../src/agents/codex.ts";
+import { runCli } from "../../../src/cli/main.ts";
 import { readState } from "../../../src/state/load.ts";
-import { makeCrewHome } from "../../helpers/env.ts";
+import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { tagRepo } from "../../helpers/fixtures.ts";
 import { BOTH, buildRepo, codes, doctor, must, redirectAgents } from "./helpers.ts";
 
@@ -40,7 +41,7 @@ test("C-STATE-05b a copy a move couldn't relabel is reported, and --repair leave
   const plain = doctor(home);
   // A warning: nothing is broken, so doctor still exits 0.
   expect(plain.code).toBe(0);
-  expect(codes(plain.findings)).toEqual(["marker_tap_drift:warn"]);
+  expect(codes(plain.findings)).toEqual(["marker_attribution_drift:warn"]);
   const message = plain.findings[0]!.message;
   expect(message).toContain(`\`${copy}\` names tap \`${narrow}\`,`);
   expect(message).toContain(`on tap \`${entry.source.tap}\` at \`skills/a\``);
@@ -49,7 +50,20 @@ test("C-STATE-05b a copy a move couldn't relabel is reported, and --repair leave
   expect(doctor(home, ["--repair"]).code).toBe(0);
   expect(readState(home).installations.find((e) => e.name === "a")!.source).toEqual(entry.source);
   expect(readFileSync(join(copy, ".crew.json"), "utf8")).toBe(marker);
-  expect(codes(doctor(home).findings)).toEqual(["marker_tap_drift:warn"]);
+  expect(codes(doctor(home).findings)).toEqual(["marker_attribution_drift:warn"]);
+});
+
+test("C-STATE-05b a marker's own text is printed escaped, so it can't forge output", () => {
+  const home = makeCrewHome();
+  const repo = buildRepo(["a"]);
+  must(home, ["install", `file://${repo}`, ...BOTH]);
+  const markerPath = join(codexAdapter.userPath(), "a", ".crew.json");
+  const marker = JSON.parse(readFileSync(markerPath, "utf8")) as object;
+  writeFileSync(markerPath, JSON.stringify({ ...marker, path: "x\u001b[2J\n✓ FORGED" }));
+  const cap = captureStreams();
+  expect(runCli(["doctor"], { home, streams: cap.streams })).toBe(0);
+  expect(cap.stdout()).toContain("x\\x1b[2J\\x0a✓ FORGED");
+  expect(cap.stdout()).not.toContain("\u001b[2J");
 });
 
 for (const [what, change, named] of [
@@ -68,7 +82,7 @@ for (const [what, change, named] of [
     const marker = JSON.parse(readFileSync(markerPath, "utf8")) as { tap_name: string };
     writeFileSync(markerPath, JSON.stringify({ ...marker, ...change }));
     const plain = doctor(home);
-    expect(codes(plain.findings)).toEqual(["marker_tap_drift:warn"]);
+    expect(codes(plain.findings)).toEqual(["marker_attribution_drift:warn"]);
     const tap = marker.tap_name;
     expect(plain.findings[0]!.message).toContain(
       `names ${named.replace("`T`", `\`${tap}\``)}, but crew's records put a on tap \`${tap}\` at \`skills/a\``,

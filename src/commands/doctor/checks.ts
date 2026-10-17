@@ -13,13 +13,15 @@ import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import { hashDirectory } from "../../hash/content.ts";
 import { orphanStoreEntries } from "../../maintenance/gc.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
+import { errnoReason } from "../../util/errno.ts";
 import { isDirectory } from "../../util/fs.ts";
-import type { MarkerEntry } from "./markers.ts";
-import type { HiddenInstall } from "./unreadable.ts";
+import type { DoctorCode } from "./codes.ts";
+import { type MarkerEntry, ownsInstall } from "./markers.ts";
+import type { IsHiddenInstall } from "./unreadable.ts";
 
 export interface Finding {
   readonly level: "ok" | "warn" | "error";
-  readonly code: string;
+  readonly code: DoctorCode;
   readonly message: string;
 }
 
@@ -32,20 +34,13 @@ export interface Finding {
 export function checkStateMarkerDrift(
   stateEntries: readonly StateEntry[],
   markers: readonly MarkerEntry[],
-  hidden: HiddenInstall,
+  hidden: IsHiddenInstall,
 ): Finding[] {
   const findings: Finding[] = [];
   for (const entry of stateEntries) {
     for (const targetName of entry.agents) {
       if (hidden(entry, targetName)) continue;
-      const match = markers.find(
-        (m) =>
-          m.record.marker.name === entry.name &&
-          m.record.scope === entry.scope &&
-          (m.projectRoot ?? null) === (entry.project_root ?? null) &&
-          m.record.marker.agents.includes(targetName),
-      );
-      if (!match) {
+      if (!markers.some((m) => ownsInstall(entry, m, [targetName]))) {
         findings.push({
           level: "error",
           code: "state_entry_without_marker",
@@ -55,16 +50,7 @@ export function checkStateMarkerDrift(
     }
   }
   for (const m of markers) {
-    const ownedByAny = m.record.marker.agents.some((a) =>
-      stateEntries.some(
-        (e) =>
-          e.name === m.record.marker.name &&
-          e.scope === m.record.scope &&
-          (e.project_root ?? null) === (m.projectRoot ?? null) &&
-          e.agents.includes(a),
-      ),
-    );
-    if (!ownedByAny) {
+    if (!stateEntries.some((e) => ownsInstall(e, m))) {
       findings.push({
         level: "error",
         code: "marker_without_state",
@@ -77,12 +63,24 @@ export function checkStateMarkerDrift(
 
 /**
  * Check 3: content hash drift. Mutates `markers[i].currentHash` so that
- * `doctor-repair.ts` can reuse the value without re-hashing.
+ * `doctor-repair.ts` can reuse the value without re-hashing. An install
+ * folder crew can't read all of is check 9's (§11.2), and the others are
+ * still checked.
  */
-export function checkContentHashDrift(markers: MarkerEntry[]): Finding[] {
+export function checkContentHashDrift(markers: readonly MarkerEntry[]): Finding[] {
   const findings: Finding[] = [];
   for (const m of markers) {
-    const actual = hashDirectory(m.record.installDir);
+    let actual: string;
+    try {
+      actual = hashDirectory(m.record.installDir);
+    } catch (err) {
+      findings.push({
+        level: "error",
+        code: "unreadable_marker",
+        message: `crew can't read all of \`${m.record.installDir}\` (${errnoReason(err)}), so it can't check it for local edits`,
+      });
+      continue;
+    }
     m.currentHash = actual;
     if (actual !== m.record.marker.content_hash) {
       findings.push({

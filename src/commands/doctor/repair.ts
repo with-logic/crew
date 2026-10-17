@@ -20,8 +20,8 @@ import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
-import type { MarkerEntry } from "./markers.ts";
-import type { HiddenInstall } from "./unreadable.ts";
+import { type MarkerEntry, ownsInstall, sameInstall } from "./markers.ts";
+import type { IsHiddenInstall } from "./unreadable.ts";
 
 /**
  * True when the entry is project-scope and its recorded root is gone,
@@ -45,7 +45,7 @@ function isUnreadableProjectEntry(entry: StateEntry): boolean {
  */
 export function repairStateUnderLock(
   markers: readonly MarkerEntry[],
-  hidden: HiddenInstall,
+  hidden: IsHiddenInstall,
   home: string,
 ): void {
   {
@@ -87,13 +87,7 @@ export function repairStateUnderLock(
       (entry) =>
         isUnreadableProjectEntry(entry) ||
         entry.agents.some((agent) => hidden(entry, agent)) ||
-        markers.some(
-          (m) =>
-            m.record.marker.name === entry.name &&
-            m.record.scope === entry.scope &&
-            (m.projectRoot ?? null) === (entry.project_root ?? null) &&
-            entry.agents.some((t) => m.record.marker.agents.includes(t)),
-        ),
+        markers.some((m) => ownsInstall(entry, m)),
     );
     current = { schema_version: 1, installations: keep };
 
@@ -102,12 +96,7 @@ export function repairStateUnderLock(
     // a path-shared install yields one state entry listing every owner.
     for (const m of markers) {
       const marker = m.record.marker;
-      const existing = current.installations.find(
-        (e) =>
-          e.name === marker.name &&
-          e.scope === m.record.scope &&
-          (e.project_root ?? null) === (m.projectRoot ?? null),
-      );
+      const existing = current.installations.find((e) => sameInstall(e, m));
       if (existing) {
         const missing = marker.agents.filter((a) => !existing.agents.includes(a));
         if (missing.length > 0) {

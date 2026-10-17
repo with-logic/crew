@@ -19,7 +19,7 @@ import { type AutoupdateRepair, repairAutoupdateDrift } from "./autoupdate.ts";
 import { checkAutoupdateDrift } from "./checks.ts";
 import type { MarkerEntry } from "./markers.ts";
 import { repairStateUnderLock } from "./repair.ts";
-import type { HiddenInstall } from "./unreadable.ts";
+import type { IsHiddenInstall } from "./unreadable.ts";
 
 /**
  * Apply every repair §11.2 permits and report what the scheduler step
@@ -28,7 +28,7 @@ import type { HiddenInstall } from "./unreadable.ts";
  */
 export function applyRepairs(
   markers: readonly MarkerEntry[],
-  hidden: HiddenInstall,
+  hidden: IsHiddenInstall,
   home: string,
 ): AutoupdateRepair[] {
   return withStateLock(() => {

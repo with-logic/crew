@@ -14,24 +14,27 @@
 
 import { lstatSync } from "node:fs";
 import { join } from "node:path";
-import { type AgentAdapter, baseFor, cwdForEntry } from "../agents/adapter.ts";
+import { installDirOf } from "../agents/adapter.ts";
 import { readMarkerAt } from "../agents/marker-read.ts";
 import { ALL_AGENTS } from "../agents/registry.ts";
 import { readConfig, writeConfig } from "../config/load.ts";
 import { paths } from "../core/paths.ts";
 import { cloneStillReferenced, tapClonePath } from "../core/repo-path.ts";
-import type { StateEntry, StateFile } from "../core/types.ts";
+import type { StateFile } from "../core/types.ts";
 import { withTapLocks } from "../sources/tap-lock.ts";
-import { hasUsableProjectRoot } from "../state/validation.ts";
 import { rmrfInside } from "../util/fs.ts";
 import { assertNoSymlinkEscape } from "../util/symlink-containment.ts";
 
-/** What a collection did: the auto taps it dropped, or what held it back. */
-export interface AutoTapCollection {
-  readonly collected: readonly string[];
-  /** The marker crew couldn't read, so it kept every auto tap that would have gone. */
-  readonly withheld?: { readonly marker: string; readonly kept: readonly string[] };
-}
+/**
+ * What a collection did: the auto taps it dropped (none, when nothing
+ * would go), or the marker crew couldn't read, so it kept every auto tap
+ * that would have gone.
+ */
+export type AutoTapCollection =
+  | { readonly kind: "collected"; readonly taps: readonly string[] }
+  | { readonly kind: "withheld"; readonly markerPath: string; readonly kept: readonly string[] };
+
+const NOTHING_COLLECTED: AutoTapCollection = { kind: "collected", taps: [] };
 
 /**
  * Drop every auto tap nothing names: no state entry is attributed to it,
@@ -46,14 +49,14 @@ export function garbageCollectAutoTaps(state: StateFile, home: string): AutoTapC
   const attributed = new Set(state.installations.map((e) => e.source.tap));
   const candidates = config.taps.filter((t) => !(t.registered || attributed.has(t.name)));
   // Reading the entries' markers is the costly part: skip it when nothing would go.
-  if (candidates.length === 0) return { collected: [] };
+  if (candidates.length === 0) return NOTHING_COLLECTED;
   const named = scanMarkerTaps(state);
   if ("unreadable" in named) {
     const kept = candidates.map((t) => t.name);
-    return { collected: [], withheld: { marker: named.unreadable, kept } };
+    return { kind: "withheld", markerPath: named.unreadable, kept };
   }
   const removed = candidates.filter((t) => !named.has(t.name));
-  if (removed.length === 0) return { collected: [] };
+  if (removed.length === 0) return NOTHING_COLLECTED;
   const survivors = config.taps.filter((t) => !removed.includes(t));
   withTapLocks(removed, home, () => {
     writeConfig({ ...config, taps: survivors }, home);
@@ -67,16 +70,22 @@ export function garbageCollectAutoTaps(state: StateFile, home: string): AutoTapC
       // Path taps own no clone dir; nothing to delete.
     }
   });
-  return { collected: removed.map((t) => t.name) };
+  return { kind: "collected", taps: removed.map((t) => t.name) };
 }
 
-/** The stderr warning a withheld collection gets (§16.5): which taps stay, and why. */
+/**
+ * The stderr warning a withheld collection gets (§16.5): which taps stay,
+ * why, and what collects them once crew can read the marker. Install
+ * collects only after a re-attribution, so it points at uninstall.
+ */
 export function collectionWarnings(collection: AutoTapCollection): string[] {
-  const held = collection.withheld;
-  if (held === undefined) return [];
-  const taps = held.kept.map((name) => `\`${name}\``).join(", ");
+  if (collection.kind === "collected") return [];
+  const { kept, markerPath } = collection;
+  const one = kept.length === 1;
+  const taps = kept.map((name) => `\`${name}\``).join(", ");
+  const [noun, them, which] = one ? ["auto tap", "it", "a tap"] : ["auto taps", "them", "the taps"];
   return [
-    `warning: kept auto tap ${taps}: crew can't read \`${held.marker}\`, which might still name it. Check its permissions (and its folder's); a later install or uninstall removes a tap nothing names.`,
+    `warning: kept ${noun} ${taps}: crew can't read \`${markerPath}\`, which might still name ${them}. Check its permissions (and its folder's); once crew can read it, a later \`crew uninstall\` removes ${which} nothing names.`,
   ];
 }
 
@@ -118,17 +127,6 @@ function scanMarkerTaps(state: StateFile): ReadonlySet<string> | { readonly unre
     }
   }
   return named;
-}
-
-/**
- * `entry`'s install folder in `adapter`; "" where there is none: the
- * adapter has no folder at its scope, or the entry is a project one whose
- * root is missing, relative, or not a string (§11.1), which locates nothing.
- */
-function installDirOf(entry: StateEntry, adapter: AgentAdapter): string {
-  if (entry.scope === "project" && !hasUsableProjectRoot(entry)) return "";
-  const base = baseFor(adapter, entry.scope, cwdForEntry(entry, ""));
-  return base === "" ? "" : join(base, entry.name);
 }
 
 /**

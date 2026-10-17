@@ -71,7 +71,9 @@ test("C-UPD-17a an uninstall whose collection a marker holds back warns, naming 
   ]);
   expect(human!.code).toBe(0);
   const marker = join(codexAdapter.userPath(), "y", ".crew.json");
-  expect(human!.err).toContain(`warning: kept auto tap \`${xTap}\`: crew can't read \`${marker}\``);
+  expect(human!.err.trimEnd()).toBe(
+    `warning: kept auto tap \`${xTap}\`: crew can't read \`${marker}\`, which might still name it. Check its permissions (and its folder's); once crew can read it, a later \`crew uninstall\` removes a tap nothing names.`,
+  );
   expect(tapKept(home, xTap)).toBe(true);
   // A later run held back again lists the same warning in its JSON.
   expect(warningsOf(json!)).toEqual([expect.stringContaining(`\`${xTap}\``)]);
@@ -80,6 +82,21 @@ test("C-UPD-17a an uninstall whose collection a marker holds back warns, naming 
   expect(warningsOf(later)).toEqual([]);
   expect(later.err).toBe("");
   expect(tapKept(home, xTap)).toBe(false);
+});
+
+test("C-UPD-17a a collection that keeps several taps says so in the plural", () => {
+  const home = makeCrewHome();
+  const repoX = installXY(home);
+  if (run(home, ["install", `file://${repoX}//skills/w`, ...CLAUDE]).code !== 0)
+    throw new Error("crew install w failed");
+  const [xTap, wTap] = [tapOf(home, "x"), tapOf(home, "w")];
+  const [held] = whileHidden(home, [["uninstall", "x", "w", "--yes"]]);
+  expect(held!.code).toBe(0);
+  const taps = [xTap, wTap].map((t) => `\`${t}\``);
+  expect(held!.err).toMatch(/^warning: kept auto taps `[^`]+`, `[^`]+`: crew can't read /);
+  for (const tap of taps) expect(held!.err).toContain(tap);
+  expect(held!.err).toContain("which might still name them.");
+  expect(held!.err).toContain("a later `crew uninstall` removes the taps nothing names.");
 });
 
 for (const mode of ["human", "json"] as const) {

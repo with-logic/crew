@@ -11,21 +11,24 @@
  * physical marker would be read once per adapter. We dedupe by
  * `(scope, installDir)` so each marker appears exactly once in the index.
  *
- * A marker crew can't read or parse, or a skills folder it can't list,
+ * A marker crew can't read or parse, one missing a field it records
+ * (`isCompleteMarker`), or a skills folder it can't list or look at,
  * doesn't stop the walk: it is recorded as unreadable (check 9), so the
- * checks report it and repair keeps the state entries it hides.
+ * checks report it and repair keeps the state entries it hides — and
+ * writes nothing from such a marker. `agents/list.ts` lists installs too,
+ * but for callers that stop at the first marker they can't read.
  */
 
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { type AgentAdapter, baseFor, type InstalledSkillRecord } from "../../agents/adapter.ts";
-import { asMarkerObject, isNotAMarkerError } from "../../agents/marker-read.ts";
+import { isCompleteMarker, markerFieldProblem } from "../../agents/marker-fields.ts";
+import { inspectMarkerAt } from "../../agents/marker-read.ts";
 import { ALL_AGENTS } from "../../agents/registry.ts";
 import type { Marker, Scope, StateEntry } from "../../core/types.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { errnoReason, isGoneError } from "../../util/errno.ts";
 import { isDirectory } from "../../util/fs.ts";
-import { tryReadJson } from "../../util/json.ts";
 
 export interface MarkerEntry {
   record: InstalledSkillRecord;
@@ -44,8 +47,26 @@ export interface UnreadablePath {
 
 /** Every marker doctor could read, and every path it couldn't. */
 export interface MarkerIndex {
-  readonly markers: MarkerEntry[];
+  readonly markers: readonly MarkerEntry[];
   readonly unreadable: readonly UnreadablePath[];
+}
+
+/** True when `m` is a marker of `entry`'s skill at `entry`'s location: its scope and project root. */
+export function sameInstall(entry: StateEntry, m: MarkerEntry): boolean {
+  return (
+    m.record.marker.name === entry.name &&
+    m.record.scope === entry.scope &&
+    (m.projectRoot ?? null) === (entry.project_root ?? null)
+  );
+}
+
+/** True when `m` is `entry`'s marker, owned by one of `agents` (by default, the entry's). */
+export function ownsInstall(
+  entry: StateEntry,
+  m: MarkerEntry,
+  agents: readonly string[] = entry.agents,
+): boolean {
+  return sameInstall(entry, m) && agents.some((a) => m.record.marker.agents.includes(a));
 }
 
 export function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: string): MarkerIndex {
@@ -87,39 +108,47 @@ function readInstalls(
   unreadable: Map<string, UnreadablePath>,
 ): InstalledSkillRecord[] {
   const base = baseFor(adapter, scope, root);
-  if (base === "" || !isDirectory(base)) return [];
+  if (base === "") return [];
+  const note = (path: string, reason: string, hides: string) =>
+    unreadable.set(path, { path, reason, hides });
   const records: InstalledSkillRecord[] = [];
-  for (const name of listOrNote(base, unreadable)) {
+  for (const name of listOrNote(base, note)) {
     const installDir = join(base, name);
-    const marker = readOrNote(installDir, unreadable);
+    const marker = readOrNote(installDir, (path, reason) => note(path, reason, installDir));
     // A marker this adapter doesn't own is another adapter's to list.
-    if (!(marker && Array.isArray(marker.agents) && marker.agents.includes(adapter.name))) continue;
-    records.push({ adapter: adapter.name, scope, installDir, marker: marker as Marker });
+    if (!marker?.agents.includes(adapter.name)) continue;
+    records.push({ adapter: adapter.name, scope, installDir, marker });
   }
   return records;
 }
 
-/** `base`'s entries; none, noted, when crew can't list it. */
-function listOrNote(base: string, unreadable: Map<string, UnreadablePath>): string[] {
+type Note = (path: string, reason: string, hides: string) => void;
+
+/**
+ * `base`'s entries; none when it is gone or no folder. Noted, and none,
+ * when crew can't list it — or can't look at it at all, a folder above it
+ * being one crew can't search.
+ */
+function listOrNote(base: string, note: Note): string[] {
   try {
+    if (!statSync(base).isDirectory()) return [];
     return readdirSync(base);
   } catch (err) {
-    unreadable.set(base, { path: base, reason: errnoReason(err), hides: base });
+    if (!isGoneError(err)) note(base, errnoReason(err), base);
     return [];
   }
 }
 
 /**
- * The marker in `installDir`, or null where there is none to read: no
+ * The marker in `installDir`, or null where there is none to use: no
  * install folder, no marker, or a path that can't hold one. One crew
- * can't read or parse, or a folder it can't look into, is noted.
+ * can't read or parse, one that is no complete marker (§7.5), or a folder
+ * it can't look into, is noted.
  */
 function readOrNote(
   installDir: string,
-  unreadable: Map<string, UnreadablePath>,
-): ReturnType<typeof asMarkerObject> {
-  const note = (path: string, reason: string) =>
-    unreadable.set(path, { path, reason, hides: installDir });
+  note: (path: string, reason: string) => void,
+): Marker | null {
   try {
     if (!statSync(installDir).isDirectory()) return null;
   } catch (err) {
@@ -127,15 +156,13 @@ function readOrNote(
     return null;
   }
   const path = join(installDir, ".crew.json");
-  let value: unknown;
-  try {
-    value = tryReadJson<unknown>(path);
-  } catch (err) {
-    if (err instanceof SyntaxError) note(path, "not valid JSON");
-    else if (!isNotAMarkerError(err)) note(path, errnoReason(err));
+  const read = inspectMarkerAt(installDir);
+  if (read.kind === "none") return null;
+  if (read.kind !== "marker") {
+    note(path, read.reason);
     return null;
   }
-  const marker = asMarkerObject(value);
-  if (value !== null && marker === null) note(path, "not a JSON object");
-  return marker;
+  if (isCompleteMarker(read.marker)) return read.marker;
+  note(path, `not a crew marker: missing or invalid \`${markerFieldProblem(read.marker)}\``);
+  return null;
 }
