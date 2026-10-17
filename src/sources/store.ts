@@ -18,6 +18,7 @@ import { CrewError } from "../core/errors.ts";
 import { crewHome, paths, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
+import { removeEach, withLeftBehind } from "../util/cleanup.ts";
 import { copyTree } from "../util/copy.ts";
 import { errnoReason, isGoneError, unreadablePathError } from "../util/errno.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
@@ -84,16 +85,19 @@ function stage(
 
   const staging = `${storePath}.staging-${Date.now()}`;
   if (exists(staging)) rmrf(staging);
+  // Looked at before copying: a skill file crew can't look at is already
+  // `source_unreachable` naming it, and must not be classified again.
+  const skillFile = isSkillFile(skillPath);
   try {
-    copySkill(skillPath, staging);
+    copySkill(skillPath, skillFile, staging);
     ensureDir(join(storePath, "..")); // parents
     atomicReplace(staging, storePath);
   } catch (err) {
     // Classified first, while the staging folder is still there to tell a
-    // copy's sides apart; a partial copy is never left for `crew doctor`.
+    // copy's sides apart; a partial copy is never left for `crew doctor`,
+    // unless crew can't remove it, which the error then names.
     const fault = stagingError(err as NodeJS.ErrnoException, skillPath, home);
-    rmrf(staging);
-    throw fault;
+    throw withLeftBehind(fault, removeEach([staging]));
   }
 
   const contentHash = hashDirectory(storePath);
@@ -125,8 +129,11 @@ export function stagingError(
   // copy whose destination folder is gone means crew's staging folder was.
   const dest = (err as { dest?: string }).dest;
   const storeSide = err.syscall === "symlink" || (dest !== undefined && !existsSync(dirname(dest)));
-  const inSkill = !(storeSide || climbsOut(relative(skillPath, file)));
-  if (inSkill && (err.syscall !== "copyfile" || isGoneError(err) || !isReadable(file))) {
+  const outsideSkill = climbsOut(relative(skillPath, file));
+  // A copy names its source file even when writing failed: only a copy
+  // whose source is gone, or crew can't read, failed on the skill's file.
+  const failedOnSkillFile = err.syscall !== "copyfile" || isGoneError(err) || !isReadable(file);
+  if (!(storeSide || outsideSkill) && failedOnSkillFile) {
     return unreadablePathError(file, err, "read");
   }
   const store = paths(home).storeDir;
@@ -139,11 +146,12 @@ export function stagingError(
 }
 
 /**
- * Copy a skill's files into `dest`. A gist skill is a single file, and
- * it becomes the `SKILL.md` of its own directory (§9 step 8).
+ * Copy a skill's files into `dest`. A gist skill (`skillFile`) is a
+ * single file, and it becomes the `SKILL.md` of its own directory (§9
+ * step 8).
  */
-function copySkill(source: string, dest: string): void {
-  if (isSkillFile(source)) {
+function copySkill(source: string, skillFile: boolean, dest: string): void {
+  if (skillFile) {
     ensureDir(dest);
     copyFileSync(source, join(dest, "SKILL.md"));
   } else {

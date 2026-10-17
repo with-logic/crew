@@ -13,11 +13,24 @@
  * bytes from outside the source.
  */
 
-import { lstatSync } from "node:fs";
+import { lstatSync, type Stats } from "node:fs";
 import { hasMarkdownExtension } from "../core/gist-url.ts";
+import { isGoneError, unreadablePathError } from "../util/errno.ts";
 
-/** True iff `path` is a skill file: a regular `.md` file. */
+/**
+ * True iff `path` is a skill file: a regular `.md` file. Nothing usable
+ * there (§10.1's gone) is no skill file; any other failure to look — a
+ * folder on the way crew can't search, say — throws `source_unreachable`
+ * naming `path` (§13), so a caller never sees a raw filesystem error.
+ */
 export function isSkillFile(path: string): boolean {
   if (!hasMarkdownExtension(path)) return false;
-  return lstatSync(path, { throwIfNoEntry: false })?.isFile() ?? false;
+  let entry: Stats;
+  try {
+    entry = lstatSync(path);
+  } catch (err) {
+    if (isGoneError(err)) return false;
+    throw unreadablePathError(path, err);
+  }
+  return entry.isFile();
 }

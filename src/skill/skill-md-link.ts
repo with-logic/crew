@@ -96,11 +96,13 @@ function isRefusedSkillMdLink(folder: string): boolean {
     // The link is replaced by its text, which starts from `dir`.
     depth--;
     hops++;
-    // Read as bytes: text that isn't UTF-8 decodes lossily, and the
-    // kernel would follow a different name than the one checked.
     const raw = readlinkSync(at, { encoding: "buffer" });
     const text = raw.toString("utf8");
-    if (isAbsolute(text) || !Buffer.from(text).equals(raw) || hops > MAX_HOPS) return true;
+    // Read as bytes: text that isn't UTF-8 decodes lossily, and the
+    // kernel would follow a different name than the one checked.
+    const notUtf8 = !Buffer.from(text).equals(raw);
+    const pastHopLimit = hops > MAX_HOPS;
+    if (isAbsolute(text) || notUtf8 || pastHopLimit) return true;
     const parts = text.split(sep).filter((p) => p !== "" && p !== ".");
     for (let i = parts.length - 1; i >= 0; i--) pending.push(parts[i]!);
   }
