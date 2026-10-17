@@ -61,6 +61,7 @@ describe("crew info of a gist", () => {
       expect(r.stderr + r.stdout).toContain("`bad.md`: `name: Not Valid`");
       expect(r.stderr + r.stdout).toContain("Check `bad.md`'s frontmatter");
       const body = json(run(home, ["info", `${GIST_PAGE_URL}//bad.md`, "--json"]));
+      expect(body.error.name).toBe("invalid_skill");
       expect(body.error.details["candidates"]).toEqual(["bad.md"]);
       expect(body.error.details["path"]).toBe("bad.md");
     });

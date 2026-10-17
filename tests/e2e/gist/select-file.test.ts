@@ -73,10 +73,9 @@ describe("crew install <gist-url>//<file>", () => {
       const { error } = json(r);
       expect(error.name).toBe("no_skills_found");
       expect(error.message).toMatch(
-        new RegExp(
-          `^the gist https://gist\\.github\\.com/\\S+ at [0-9a-f]{8} has no file \`${file}\`$`,
-        ),
+        /^the gist https:\/\/gist\.github\.com\/\S+ at [0-9a-f]{8} has no file `/,
       );
+      expect(error.message.endsWith(`has no file \`${file}\``)).toBe(true);
       expect(error.details["files"]).toEqual(["build.md", "prd.md"]);
     }
     const human = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//missing.md`]);

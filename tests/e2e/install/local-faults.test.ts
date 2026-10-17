@@ -25,10 +25,30 @@ beforeEach(() => {
 });
 afterEach(() => restoreClaudeCode(claude.originals));
 
-function install(home: string, args: string[]): { code: number; json: any } {
+/** The parts of `crew install --json` these tests read. */
+interface InstallJson {
+  readonly error: {
+    readonly name: string;
+    readonly message: string;
+    readonly details: {
+      readonly path?: string;
+      readonly dependency?: string;
+      readonly store?: string;
+    };
+  };
+  readonly records: readonly {
+    readonly agents: readonly {
+      readonly kind: string;
+      readonly error: { readonly code: string; readonly message: string };
+    }[];
+  }[];
+  readonly skipped: readonly { readonly path: string; readonly code: string }[];
+}
+
+function install(home: string, args: string[]): { code: number; json: InstallJson } {
   const cap = captureStreams();
   const code = runCli(["install", ...args, "--json"], { home, streams: cap.streams });
-  return { code, json: JSON.parse(cap.stdout()) };
+  return { code, json: JSON.parse(cap.stdout()) as InstallJson };
 }
 
 /** Run `fn` with `path` at `mode`, restoring it after. */
@@ -62,7 +82,7 @@ test("an agent folder crew can't write fails that agent, naming the folder", () 
   withMode(claude.userRoot, 0o555, () => {
     const r = install(makeCrewHome(), [src]);
     expect(r.code).toBe(1);
-    const [agent] = r.json.records[0].agents;
+    const agent = r.json.records[0]!.agents[0]!;
     // Not the source's fault: reported by the agent folder's own error.
     expect([agent.kind, agent.error.code]).toEqual(["failed", "EACCES"]);
     expect(agent.error.message).toContain(claude.userRoot);
@@ -158,9 +178,7 @@ test("C-SPEC-16 a dependency from a tap that crew can't copy is skipped; its dep
   withMode(join(b, "notes.txt"), 0o000, () => {
     const r = install(home, [join(src, "a")]);
     expect(r.code).toBe(1);
-    expect(r.json.skipped.map((s: { path: string; code: string }) => [s.path, s.code])).toEqual([
-      [b, "source_unreachable"],
-    ]);
+    expect(r.json.skipped.map((s) => [s.path, s.code])).toEqual([[b, "source_unreachable"]]);
   });
   expect(readdirSync(claude.userRoot)).toEqual(["a"]);
 });

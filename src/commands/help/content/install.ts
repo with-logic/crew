@@ -1,3 +1,8 @@
+/**
+ * Help entry for `crew install`. Implements PRD §5.5 for the command of
+ * §5.1, §8.2 (references, gists included), and §9.
+ */
+
 import type { CommandHelp } from "./types.ts";
 
 export const installHelp: CommandHelp = {

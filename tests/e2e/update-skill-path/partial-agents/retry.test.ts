@@ -47,13 +47,13 @@ test("C-UPD-16c one of two agents failing an update keeps the entry, and reads a
   makeSkill(tapDir, "demo", skillFrontmatter({ name: "demo" }), "Original.\n");
   expect(run(home, ["tap", "add", tapDir, "mine"]).code).toBe(0);
   expect(run(home, ["install", "mine/demo"]).code).toBe(0);
-  const before = readState(home).installations[0]!.content_hash;
+  const before = readState(home).installations[0];
   makeSkill(tapDir, "demo", skillFrontmatter({ name: "demo" }), "Edited.\n");
   whileReadOnly(agents.roots["claude-code"], () => {
     const r = run(home, ["update"]);
     expect(r.code).toBe(1);
     expect(r.stdout).toMatch(/\[fail\] demo\s+failed\s+claude-code: EACCES/);
     expect(r.stdout).not.toContain("gemini-cli: ");
-    expect(readState(home).installations[0]!.content_hash).toBe(before);
+    expect(readState(home).installations).toEqual([before!]);
   });
 });

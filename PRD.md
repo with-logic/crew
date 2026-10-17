@@ -1310,7 +1310,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - The skill's `source.path` is the file's name (e.g. `prd.md`).
    - A `//<file>` reference (§8.2) expands to exactly the named file, which is validated per step 4 whether or not it opens with frontmatter. The name is matched exactly, case included. A name that is not a regular file of the gist at the resolved commit is `no_skills_found`, with an error naming the file and listing the gist's skill files; a name reached through a symlink is `invalid_ref` (§8.4). A gist with a root `SKILL.md` is one skill, so no file of it can be selected: a `//<file>` on such a gist is `invalid_ref`.
 
-   A location that produces zero valid skills through the applicable case aborts with `no_skills_found`.
+   A location that produces no skill candidates through the applicable case aborts with `no_skills_found`. Candidates that are found but all fail validation are not `no_skills_found`: each is reported as a failed skill, and the run ends `invalid_skill` (step 9).
    - Multi-skill expansions are how the user gets every skill in a tap installed at once. Each child becomes an independent state entry attributed to the same tap (`source.tap`); upstream additions to that tap are picked up automatically by `crew update` (§10.1.1).
 6. **Resolve dependencies.** For each skill in the install set, read `metadata.crew.dependencies` and add each to the install set. Continue recursively until no new dependencies appear. Cycles are allowed and terminate naturally (a skill already in the set is not re-added).
    - **Install order:** the install set is ordered topologically — every dependency is installed before the skills that depend on it. Ordering uses the *resolved* name of each dependency (the `name` its `SKILL.md` declares), not the tail of the reference that selected it: a dependency referenced as `./dep-directory` but declaring `name: dep` is still ordered before its dependent. When a cycle makes a strict ordering impossible, any order that respects the acyclic part is valid; the resulting installs are identical either way.
@@ -2150,7 +2150,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 |---|---|---|
 | `invalid_ref` | 4 | The skill reference failed to parse (§8.4), or names something its source can't serve as asked: a `//<file>` on a one-skill gist, or reached through a symlink (§9 step 5). |
 | `invalid_skill` | 4 | A skill (directory, or gist skill file) failed spec validation. Message names the failing field. |
-| `no_skills_found` | 4 | A directory source expanded to zero valid skills, or a gist has no skill files (or no file a `//<file>` named). |
+| `no_skills_found` | 4 | A directory source expanded to no skill candidates, or a gist has no skill files (or no file a `//<file>` named). Candidates that all fail validation are `invalid_skill`. |
 | `source_unreachable` | 5 | Network or git failure acquiring a source, a local file in it crew can't read (§9 steps 4, 8, §10.1), or crew's own store it can't use (§9 step 8). |
 | `ref_not_found` | 5 | Ref doesn't exist in the repo. |
 | `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
@@ -2609,7 +2609,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-08 | §9 step 5 | Nested skills more than one level deep are NOT installed by directory expansion. |
 | C-INST-08b | §9 step 5 | `crew install gh:owner/repo` pointed at a repo with no root `SKILL.md` but a `skills/` directory containing skill subdirectories installs every valid child of `skills/`. The source root itself is not walked. |
 | C-INST-08c | §9 step 5 | `crew install --recursive gh:owner/repo` pointed at a trusted repo whose standard layouts expose no skill candidates finds valid nested skills up to the bounded recursive depth and records their tap-relative paths. Without `--recursive`, the same source produces `no_skills_found`. |
-| C-INST-09 | §9 | A directory source that expands to zero valid skills produces error `no_skills_found`, exit 4. |
+| C-INST-09 | §9 | A directory source that expands to no skill candidates produces error `no_skills_found`, exit 4. One whose candidates all fail validation is `invalid_skill` instead (C-INST-21). |
 | C-INST-10 | §9 | `resolved_sha` in state and in the marker is always a 40-character hex commit SHA for git and tap sources. |
 | C-INST-11 | §9 | Installing an already-installed skill at the same SHA prints "already installed" and exits 0. |
 | C-INST-12 | §5.4 | Installing an already-installed skill from the same source at a different ref performs an update. |

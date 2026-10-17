@@ -14,17 +14,31 @@
  * Needs network access; it is never part of `bun test`.
  */
 
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hasMarkdownExtension } from "../src/core/gist-url.ts";
 import type { StateFile } from "../src/core/types.ts";
 import type { UpdateRow } from "../src/install/update/types.ts";
-import { opensFrontmatter } from "../src/skill/frontmatter.ts";
+import { extractFrontmatter, opensFrontmatter } from "../src/skill/frontmatter.ts";
+import { validateFrontmatterName } from "../src/skill/validate.ts";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const DEFAULT_GIST = "https://gist.github.com/stevekrenzel/7489027d2d93c185f48a628547c043d8";
+
+/** Every scratch folder this run made, removed however it exits. */
+const scratchDirs: string[] = [];
+process.on("exit", () => {
+  for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+/** A fresh scratch folder under the system temp folder, removed on exit. */
+function scratchDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  scratchDirs.push(dir);
+  return dir;
+}
 
 interface Run {
   readonly code: number;
@@ -49,7 +63,7 @@ function exec(cmd: string[], env: Record<string, string> = {}): Run {
 
 /** A scratch user, with claude-code detectable, so nothing touches the real home. */
 function scratchHome(): Scratch {
-  const home = mkdtempSync(join(tmpdir(), "crew-smoke-gist-"));
+  const home = scratchDir("crew-smoke-gist-");
   mkdirSync(join(home, ".claude"));
   const crewHome = join(home, ".crew");
   return {
@@ -94,8 +108,13 @@ function skillFilesAt(dir: string, rev: string): Map<string, string> {
   return files;
 }
 
+/** The skill name a skill file declares, read the way crew reads it (§9 step 4). */
 function declaredName(skillMd: string): string {
-  return /^name:\s*["']?([a-z0-9-]+)/m.exec(skillMd)?.[1] ?? fail("a skill file has no name");
+  try {
+    return validateFrontmatterName(extractFrontmatter(skillMd).data);
+  } catch (err) {
+    return fail(`a skill file has no valid name: ${(err as Error).message}`);
+  }
 }
 
 function namesOf(files: Map<string, string>): string[] {
@@ -108,7 +127,7 @@ const page = (process.argv[2] ?? DEFAULT_GIST).replace(/\/+$/, "");
 const id = page.split("/").pop() ?? fail(`can't read a gist ID from ${page}`);
 
 // An independent clone: the gist as GitHub serves it, with no crew involved.
-const direct = mkdtempSync(join(tmpdir(), "crew-smoke-gist-direct-"));
+const direct = scratchDir("crew-smoke-gist-direct-");
 const clone = exec(["git", "clone", "--quiet", `https://gist.github.com/${id}.git`, direct]);
 if (clone.code !== 0) fail(`git clone failed\n${clone.stderr}`);
 const revisions = git(direct, ["rev-list", "HEAD"]).trim().split("\n");

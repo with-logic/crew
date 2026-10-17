@@ -1,3 +1,5 @@
+/** What a tap is and how one is laid out, gists included, for the homepage (§16.1, §16.3). */
+
 import { Button } from "../primitives/Button";
 import { Acc, Cmt, CodeBlock, Key, Ok, Prompt } from "../primitives/CodeBlock";
 import { Container } from "../primitives/Container";

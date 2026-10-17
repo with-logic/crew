@@ -142,7 +142,16 @@ describe("reading a gist tap", () => {
     expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
     const r = run(home, ["search", "prd", "--json"]);
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain(GIST_TAP);
+    const body = JSON.parse(r.stdout) as {
+      hits: { tap: string; name: string }[];
+      warnings: string[];
+    };
+    expect(body.hits.map((h) => ({ tap: h.tap, name: h.name }))).toContainEqual({
+      tap: GIST_TAP,
+      name: "prd",
+    });
+    // The only warning is the test home's unreachable `core` tap.
+    expect(body.warnings.filter((w) => !w.includes("`core`"))).toEqual([]);
     expect(r.stdout).not.toContain("Not Valid");
   });
 
