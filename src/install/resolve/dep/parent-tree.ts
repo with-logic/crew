@@ -21,7 +21,7 @@ import type { SiblingScan } from "../../siblings/index.ts";
 import type { PendingItem } from "../enqueue.ts";
 
 /**
- * The most commit exports a resolution holds at once. Each is a whole
+ * The maximum number of commit exports a resolution holds at once. Each is a whole
  * tree, so one reading siblings at many commits keeps only the few it read
  * most recently; one it let go is exported again if a later parent needs
  * it. A sibling found in it was staged into the store already (§9 step 8).

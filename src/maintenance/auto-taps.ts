@@ -58,7 +58,8 @@ export function garbageCollectAutoTaps(state: StateFile, home: string): AutoTapC
   }
   const removed = candidates.filter((t) => !named.has(t.name));
   if (removed.length === 0) return NOTHING_COLLECTED;
-  const survivors = config.taps.filter((t) => !removed.includes(t));
+  const going = new Set(removed.map((t) => t.name));
+  const survivors = config.taps.filter((t) => !going.has(t.name));
   withTapLocks(removed, home, () => {
     writeConfig({ ...config, taps: survivors }, home);
     const reposDir = paths(home).reposDir;
@@ -95,12 +96,14 @@ export function collectionWarnings(collection: AutoTapCollection): string[] {
 }
 
 /**
- * The taps the crew markers in `state`'s entries' install folders name —
- * in every agent, so a copy state doesn't list counts too; each folder read
- * once (agents share some, §7.2) — or the first marker that might name a
- * tap and can't be read: any in a folder one of an entry's agents
- * installs into, and elsewhere one whose file crew can see. Any other
- * folder crew can't search names nothing.
+ * The taps named by the crew markers at each state entry's location, in
+ * every agent's install folder — not only the agents the entry lists, so a
+ * copy crew wrote but never recorded counts too — each folder read once
+ * (agents share some, §7.2). Or, instead, the first marker crew can't read
+ * that might name a tap, which withholds collection: any unreadable marker
+ * in a folder one of an entry's agents installs into, and elsewhere only
+ * one whose `.crew.json` crew can see. Any other folder crew can't search
+ * names nothing.
  */
 function scanMarkerTaps(state: StateFile): ReadonlySet<string> | { readonly unreadable: string } {
   // Settled over all of state first: a folder two entries share (a project

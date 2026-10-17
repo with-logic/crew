@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
 import {
   asMarkerObject,
-  isNotAMarkerError,
+  isMarkerAbsenceError,
   readMarkerAt,
   type UncheckedMarker,
 } from "../../agents/marker-read.ts";
@@ -163,7 +163,7 @@ function strictMarker(installDir: string): UncheckedMarker | null {
   try {
     return asMarkerObject(tryReadJson<unknown>(join(installDir, ".crew.json")));
   } catch (err) {
-    if (isNotAMarkerError(err)) return null;
+    if (isMarkerAbsenceError(err)) return null;
     throw err;
   }
 }

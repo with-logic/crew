@@ -12,7 +12,7 @@
 
 import { join } from "node:path";
 import { SCOPES, type Scope } from "../core/scope.ts";
-import { TAP_KINDS, type TapKind } from "../core/tap.ts";
+import { isTapDiscovery, TAP_KINDS, type TapKind } from "../core/tap.ts";
 import type { Marker } from "../core/types.ts";
 import { errnoReason, isGoneError } from "../util/errno.ts";
 import { readText } from "../util/fs.ts";
@@ -41,7 +41,7 @@ export type MarkerInspection =
  * marker it can't parse (§5.4), while `readMarkerAt` counts it as naming
  * nothing.
  */
-export function isNotAMarkerError(err: unknown): boolean {
+export function isMarkerAbsenceError(err: unknown): boolean {
   return isGoneError(err) || (err as NodeJS.ErrnoException).code === "EISDIR";
 }
 
@@ -73,7 +73,7 @@ export function inspectMarkerAt(installDir: string): MarkerInspection {
   try {
     text = readText(join(installDir, ".crew.json"));
   } catch (err) {
-    return isNotAMarkerError(err)
+    return isMarkerAbsenceError(err)
       ? { kind: "none" }
       : { kind: "unreadable", reason: errnoReason(err) };
   }
@@ -107,7 +107,7 @@ const FIELD_CHECKS: { readonly [K in keyof Marker]-?: (value: unknown) => boolea
   tap_url: isString,
   tap_subpath: isString,
   tap_path: isString,
-  tap_discovery: (value) => value === undefined || value === "recursive",
+  tap_discovery: (value) => value === undefined || isTapDiscovery(value),
   path: isString,
   ref: isStringOrNull,
   resolved_sha: isStringOrNull,

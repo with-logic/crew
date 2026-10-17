@@ -28,7 +28,7 @@ export function opensFrontmatter(raw: string): boolean {
 }
 
 /** Bytes read at a time while looking for a file's first non-blank line. */
-const HEAD_CHUNK = 4096;
+const HEAD_CHUNK_BYTES = 4096;
 
 /**
  * `opensFrontmatter` for the file at `path`, read only as far as decides
@@ -40,12 +40,13 @@ export function fileOpensFrontmatter(path: string): boolean {
   const fd = openSync(path, "r");
   try {
     const decoder = new TextDecoder();
-    const chunk = new Uint8Array(HEAD_CHUNK);
+    const chunk = new Uint8Array(HEAD_CHUNK_BYTES);
     let head = "";
     for (;;) {
-      const read = readSync(fd, chunk);
-      head = (head + decoder.decode(chunk.subarray(0, read), { stream: read > 0 })).trimStart();
-      const opens = firstLineOpens(head, read === 0);
+      const bytesRead = readSync(fd, chunk);
+      const decoded = decoder.decode(chunk.subarray(0, bytesRead), { stream: bytesRead > 0 });
+      head = (head + decoded).trimStart();
+      const opens = firstLineOpens(head, bytesRead === 0);
       if (opens !== undefined) return opens;
       // Undecided, `head` is at most `---` and spaces: they decide alike.
       head = head.slice(0, 3);

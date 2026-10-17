@@ -5,7 +5,14 @@
 /** Every tap kind, for checks of a value read from disk. */
 export const TAP_KINDS = ["git", "path"] as const;
 export type TapKind = (typeof TAP_KINDS)[number];
-export type TapDiscovery = "recursive";
+/** Every non-standard discovery mode a tap may record (§6.1); absent means standard. */
+export const TAP_DISCOVERIES = ["recursive"] as const;
+export type TapDiscovery = (typeof TAP_DISCOVERIES)[number];
+
+/** True for a discovery mode crew knows (`TAP_DISCOVERIES`). */
+export function isTapDiscovery(value: unknown): value is TapDiscovery {
+  return (TAP_DISCOVERIES as readonly unknown[]).includes(value);
+}
 
 /** A tap configured in config.yaml. */
 export interface TapConfig {
