@@ -69,17 +69,17 @@ describe("C-TAP-20 auto-tap creation on `crew install <git-url>`", () => {
   });
 
   test("auto-tap derivation preserves leading digits", () => {
-    const { deriveAutoTapName } =
+    const { deriveDefaultTapName } =
       require("../../../src/install/tap-naming.ts") as typeof import("../../../src/install/tap-naming.ts");
-    expect(deriveAutoTapName("gh:foo/3d-skills", "")).toBe("3d-skills");
+    expect(deriveDefaultTapName("gh:foo/3d-skills", "")).toBe("3d-skills");
   });
 
   test("auto-tap suffix keeps incrementing past -2 when multiple names are taken", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo("crew-triple-", ["x"]);
-    const { deriveAutoTapName } =
+    const { deriveDefaultTapName } =
       require("../../../src/install/tap-naming.ts") as typeof import("../../../src/install/tap-naming.ts");
-    const derived = deriveAutoTapName(`file://${repo}`, "");
+    const derived = deriveDefaultTapName(`file://${repo}`, "");
     const altA = buildTapRepo("crew-triple-alt-a-", ["a"]);
     const altB = buildTapRepo("crew-triple-alt-b-", ["b"]);
     // Claim both `derived` and `<derived>-2` with unrelated repos.
@@ -104,11 +104,11 @@ describe("C-TAP-20 auto-tap creation on `crew install <git-url>`", () => {
   test("auto-tap name is suffixed -2 when the derived name collides", () => {
     const home = makeCrewHome();
     const repo = buildTapRepo("crew-auto-collide-", ["item"]);
-    const { deriveAutoTapName } =
+    const { deriveDefaultTapName } =
       require("../../../src/install/tap-naming.ts") as typeof import("../../../src/install/tap-naming.ts");
     // What name would auto-tap derivation pick? Claim it first under a
     // DIFFERENT (but cloneable) repo so auto creation must suffix.
-    const derived = deriveAutoTapName(`file://${repo}`, "");
+    const derived = deriveDefaultTapName(`file://${repo}`, "");
     const otherRepo = buildTapRepo("crew-auto-collide-alt-", ["other"]);
     runCli(["tap", "add", `file://${otherRepo}`, derived], {
       home,

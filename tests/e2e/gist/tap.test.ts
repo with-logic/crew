@@ -172,7 +172,10 @@ describe("reading a gist tap", () => {
     expect(r.code).toBe(4);
     expect(json(r).error.name).toBe("usage_error");
     const human = run(home, ["tap", "add", `${GIST_PAGE_URL}//prd.md`]);
-    expect(human.stderr + human.stdout).toContain(`crew install ${GIST_PAGE_URL}//prd.md`);
+    const advice = (human.stderr + human.stdout).replace(/\s+/g, " ");
+    expect(advice).toContain(`crew install ${GIST_PAGE_URL}//prd.md`);
+    // Unread, the gist may have a root SKILL.md, where no file can be picked.
+    expect(advice).toContain("unless the gist has a root `SKILL.md`, which makes it one skill");
     // A name that can't be a gist skill file gets no install suggestion that would fail too.
     const notes = run(home, ["tap", "add", `${GIST_PAGE_URL}//notes.txt`]);
     expect(notes.code).toBe(4);

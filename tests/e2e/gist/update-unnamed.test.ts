@@ -14,6 +14,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setGitRunner } from "../../../src/git/exec.ts";
+import { rowLabel } from "../../../src/install/tap-reexpand/types.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { cloneDirForTap } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
@@ -38,7 +39,7 @@ afterEach(() => restoreClaudeCode(claude.originals));
 /** Each re-expansion row of an update as `name:kind:code`, sorted. */
 function reexpandRows(r: { stdout: string }): string[] {
   return json(r)
-    .tap_reexpand_rows.map((row) => `${row.name}:${row.kind}:${row.error?.code ?? ""}`)
+    .tap_reexpand_rows.map((row) => `${rowLabel(row)}:${row.kind}:${row.error?.code ?? ""}`)
     .sort();
 }
 
@@ -51,7 +52,7 @@ test("C-UPD-18c a new gist file whose `name` is invalid fails, named by its file
   const r = run(home, ["update", "--json"]);
   expect(r.code).toBe(1);
   expect(reexpandRows(r)).toEqual(["broken.md:tap_error:invalid_skill", "build:added:"]);
-  const broken = json(r).tap_reexpand_rows.find((row) => row.name === "broken.md")!;
+  const broken = json(r).tap_reexpand_rows.find((row) => rowLabel(row) === "broken.md")!;
   expect(broken.error?.message).toContain("broken.md");
   expect(readFileSync(join(claude.userRoot, "build", "SKILL.md"), "utf8")).toBe(skillFile("build"));
   expect(existsSync(join(claude.userRoot, "Bad_Name"))).toBe(false);

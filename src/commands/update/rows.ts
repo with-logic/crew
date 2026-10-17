@@ -10,7 +10,7 @@
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
-import type { TapErrorRow } from "../../install/tap-reexpand/types.ts";
+import { rowLabel, type TapErrorRow } from "../../install/tap-reexpand/types.ts";
 import { hasFailedTarget } from "../../install/update/public-row.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { displayText } from "../../refs/display-url.ts";
@@ -147,7 +147,7 @@ export function tapErrorBlocks(
     }
     const key = JSON.stringify([row.tap, row.error.code, row.error.message]);
     const fault = faults.get(key) ?? { row, skills: new Set<string>() };
-    fault.skills.add(row.name);
+    fault.skills.add(rowLabel(row));
     faults.set(key, fault);
   }
   for (const { row, skills } of faults.values()) {
@@ -167,7 +167,7 @@ export function tapErrorBlocks(
  * cursor or forge a line.
  */
 function tapErrorLines(row: TapErrorRow, symbol: string, style: Styler): string[] {
-  const name = style.bold(sanitizeLine(row.name));
+  const name = style.bold(sanitizeLine(rowLabel(row)));
   return [
     `${symbol} ${name} ${style.dim(`(from ${sanitizeLine(row.tap)})`)} ${style.red(row.error.code)}`,
     ...detailLines(row, style),
@@ -186,8 +186,8 @@ export function groupByTap(rows: readonly TapReexpandRow[]): Map<string, string[
   const out = new Map<string, string[]>();
   for (const r of rows) {
     const names = out.get(r.tap);
-    if (names) names.push(r.name);
-    else out.set(r.tap, [r.name]);
+    if (names) names.push(rowLabel(r));
+    else out.set(r.tap, [rowLabel(r)]);
   }
   return out;
 }

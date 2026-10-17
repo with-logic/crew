@@ -4,12 +4,28 @@ import { CrewError } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import type { FailureCode } from "../../util/errno.ts";
 
-/** What every re-expansion row names. */
+/** What a skill's re-expansion row names. */
 interface RowSubject {
-  /** The skill's name — or, for a candidate whose name crew can't read, its location in the tap. */
   readonly name: string;
   readonly scope: Scope;
   readonly tap: string;
+}
+
+/**
+ * What a failure row names for a candidate whose name crew can't read
+ * (C-UPD-18c): its location in the tap, and no skill name, so `--json`
+ * never passes a path off as one.
+ */
+interface UnnamedSubject {
+  readonly tap_path: string;
+  readonly name?: never;
+  readonly scope: Scope;
+  readonly tap: string;
+}
+
+/** How a row is shown: its skill's name, or an unnamed candidate's location in the tap. */
+export function rowLabel(row: RowSubject | UnnamedSubject): string {
+  return "tap_path" in row ? row.tap_path : row.name;
 }
 
 /** Why a child failed: a §13 name, or an agent folder's errno code (see `failureCodeOf`). */
@@ -34,8 +50,8 @@ export type TapReexpandRow =
   | (RowSubject & { readonly kind: "added" | "would_add" | "source_gone"; readonly error?: never })
   | TapErrorRow;
 
-/** A re-expansion row reporting a failure. */
-export type TapErrorRow = RowSubject & {
+/** A re-expansion row reporting a failure: a skill's, or an unnamed candidate's. */
+export type TapErrorRow = (RowSubject | UnnamedSubject) & {
   readonly kind: "tap_error";
   readonly error: TapReexpandError;
   /**

@@ -123,6 +123,15 @@ function namesOf(files: Map<string, string>): string[] {
 
 const installedNames = (scratch: Scratch): string[] => readdirSync(scratch.skills).sort();
 
+/** Each skill state records, with the commit it records it at: `name@sha`, sorted. */
+const recorded = (scratch: Scratch): string[] =>
+  tagEach(scratch.state().installations.map((e) => [e.name, `@${e.resolved_sha}`]));
+
+/** Each `[name, suffix]` as `name` + `suffix`, sorted. */
+function tagEach(rows: readonly (readonly [string, string])[]): string[] {
+  return rows.map(([name, suffix]) => name + suffix).sort();
+}
+
 const page = (process.argv[2] ?? DEFAULT_GIST).replace(/\/+$/, "");
 const id = page.split("/").pop() ?? fail(`can't read a gist ID from ${page}`);
 
@@ -133,9 +142,7 @@ if (clone.code !== 0) fail(`git clone failed\n${clone.stderr}`);
 const revisions = git(direct, ["rev-list", "HEAD"]).trim().split("\n");
 const head = revisions[0]!;
 if (git(direct, ["ls-tree", "--name-only", head]).split("\n").includes("SKILL.md")) {
-  fail(
-    `${page} has a root SKILL.md, so it is one skill — point this script at a gist of skill files`,
-  );
+  fail(`${page} has a root SKILL.md (one skill) — point this at a gist of skill files`);
 }
 const files = skillFilesAt(direct, head);
 if (files.size === 0) fail(`${page} has no skill files to check against`);
@@ -145,12 +152,8 @@ process.stdout.write(`gist ${id} at ${head.slice(0, 8)}: ${namesOf(files).join("
 const whole = scratchHome();
 crew(whole, ["install", page]);
 check("the page URL installs every skill", installedNames(whole), namesOf(files));
-const shas = whole.state().installations.map((e) => e.resolved_sha);
-check(
-  "every skill is recorded at the gist's HEAD (rerun if the gist moved)",
-  [...new Set(shas)],
-  [head],
-);
+const atHead = tagEach(namesOf(files).map((name) => [name, `@${head}`]));
+check("every skill is recorded at the gist's HEAD (rerun if it moved)", recorded(whole), atHead);
 for (const text of files.values()) {
   const name = declaredName(text);
   check(
@@ -159,11 +162,10 @@ for (const text of files.values()) {
     text,
   );
 }
-const update = JSON.parse(crew(whole, ["update", "--json"]).stdout) as {
-  rows: UpdateRow[];
-};
-const outcomes = update.rows.map((r) => r.outcome.kind);
-check("crew update reports every skill up to date", [...new Set(outcomes)], ["up_to_date"]);
+const update = JSON.parse(crew(whole, ["update", "--json"]).stdout) as { rows: UpdateRow[] };
+const outcomes = tagEach(update.rows.map((r) => [r.name, `:${r.outcome.kind}`]));
+const allUpToDate = tagEach(namesOf(files).map((name) => [name, ":up_to_date"]));
+check("crew update reports every skill up to date", outcomes, allUpToDate);
 
 // `//<file>` installs just that file's skill.
 const [file, text] = [...files.entries()][0]!;
@@ -179,12 +181,12 @@ const pinned = scratchHome();
 crew(pinned, ["install", `${page}/${oldest}`]);
 const then = skillFilesAt(direct, oldest);
 check(
-  `a revision page installs that revision's skills ${label}`,
+  `a revision page installs its revision's skills ${label}`,
   installedNames(pinned),
   namesOf(then),
 );
-const pinnedShas = pinned.state().installations.map((e) => e.resolved_sha);
-check("…recorded at that revision", [...new Set(pinnedShas)], [oldest]);
+const atOldest = tagEach(namesOf(then).map((name) => [name, `@${oldest}`]));
+check("…each recorded at that revision", recorded(pinned), atOldest);
 for (const bytes of then.values()) {
   const name = declaredName(bytes);
   check(

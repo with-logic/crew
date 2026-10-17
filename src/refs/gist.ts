@@ -24,9 +24,13 @@ interface GistPage {
   readonly revision: string | null;
 }
 
-/** How to name a gist and its parts, for every rejected gist reference. */
+/**
+ * How to name a gist and its parts, for every rejected gist reference.
+ * crew hasn't read the gist here, so file selection comes with its one
+ * exception: a gist with a root `SKILL.md` is one skill (C-INST-26).
+ */
 const GIST_FORMS =
-  "Use the gist's page, `https://gist.github.com/<owner>/<id>`. Add `//<file>.md` to install one of its skills, or `@<sha>` to pin a revision.";
+  "Use the gist's page, `https://gist.github.com/<owner>/<id>`. Add `//<file>.md` to install one of its skills (unless it has a root `SKILL.md`, which makes the whole gist one skill), or `@<sha>` to pin a revision.";
 
 /**
  * Rewrite a gist page URL (already stripped of query, fragment, and

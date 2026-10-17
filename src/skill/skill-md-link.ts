@@ -25,9 +25,11 @@ export const SKILL_MD_NOT_A_FILE_REMEDY =
   "Make the skill's SKILL.md a regular file, or a link to another file inside the skill's folder (not `.crew.json`), with every link on the way relative and never climbing above the folder.";
 
 /**
- * crew's limit on a chain, well under the system's own (32 links on macOS,
- * 40 on Linux), which also counts any link in the path to wherever the
- * skill is installed — so a chain crew allows reads there too.
+ * crew's limit on the links of a chain inside the skill's folder, well
+ * under the system's own (32 links on macOS, 40 on Linux). It bounds only
+ * those: the system also counts every link on the path to the folder —
+ * wherever the skill is installed — so it leaves room for them, but can't
+ * promise every such path stays within the system's limit.
  */
 const MAX_HOPS = 8;
 

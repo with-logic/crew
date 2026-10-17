@@ -23,6 +23,7 @@ import { cloneStillReferenced, tapClonePath } from "../core/repo-path.ts";
 import type { StateFile } from "../core/types.ts";
 import { withTapLocks } from "../sources/tap-lock.ts";
 import { rmrfInside } from "../util/fs.ts";
+import { safePath, sanitizeLine } from "../util/redact.ts";
 import { assertNoSymlinkEscape } from "../util/symlink-containment.ts";
 
 /**
@@ -76,18 +77,20 @@ export function garbageCollectAutoTaps(state: StateFile, home: string): AutoTapC
 /**
  * The stderr warning a withheld collection gets (§16.5): which taps stay,
  * why, and what collects them once crew can read the marker. Install
- * collects only after a re-attribution, so it points at uninstall.
+ * collects only after a re-attribution, so it points at uninstall. The
+ * marker's path and the tap names are escaped (§5.2): a folder's name, or
+ * a hand-edited tap name, may hold control characters.
  */
 export function collectionWarnings(collection: AutoTapCollection): string[] {
   if (collection.kind === "collected") return [];
   const { kept, markerPath } = collection;
   const one = kept.length === 1;
-  const taps = kept.map((name) => `\`${name}\``).join(", ");
+  const taps = kept.map((name) => `\`${sanitizeLine(name)}\``).join(", ");
   const [tapNoun, pronoun, removedPhrase] = one
     ? ["auto tap", "it", "a tap"]
     : ["auto taps", "them", "the taps"];
   return [
-    `warning: kept ${tapNoun} ${taps}: crew can't read \`${markerPath}\`, which might still name ${pronoun}. Check its permissions (and its folder's); once crew can read it, a later \`crew uninstall\` removes ${removedPhrase} nothing names.`,
+    `warning: kept ${tapNoun} ${taps}: crew can't read \`${safePath(markerPath)}\`, which might still name ${pronoun}. Check its permissions (and its folder's); once crew can read it, a later \`crew uninstall\` removes ${removedPhrase} nothing names.`,
   ];
 }
 

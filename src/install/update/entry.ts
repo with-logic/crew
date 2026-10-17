@@ -2,9 +2,13 @@
  * Per-skill update logic for `crew update` (§10.1).
  *
  * Given one state entry, look up its tap, acquire it, and either:
- *   - report `up_to_date` if the resolved SHA / content hash hasn't moved;
+ *   - report `up_to_date` if the resolved SHA / content hash hasn't moved
+ *     and the skill is still where state records it;
  *   - report `skipped` if the entry is pinned and not forced;
- *   - re-stage and re-install if the SHA moved (`./apply.ts`).
+ *   - re-stage and re-install (`./apply.ts`) if the SHA moved, if a pinned
+ *     entry is forced (`--force`, §10.1 step 3b), or if the skill moved to
+ *     another path in its tap at the same SHA — a relocation (C-UPD-37),
+ *     reinstalled so every copy's marker records the new path.
  *
  * Tap re-expansion (additions / source_gone) lives in `tap-reexpand/index.ts`;
  * this module handles only the per-existing-entry update.

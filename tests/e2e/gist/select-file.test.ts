@@ -124,6 +124,8 @@ describe("crew install <gist-url>//<file>", () => {
     for (const command of ["install", "info"]) {
       const pinned = run(makeCrewHome(), [command, `${GIST_PAGE_URL}@${sha}//helper.md`]);
       expect(pinned.stdout + pinned.stderr).toContain(`crew install ${GIST_CLONE_URL}@${sha}`);
+      // Its advice is the whole gist, never another file to pick.
+      expect(pinned.stdout + pinned.stderr).not.toContain("//<file>");
     }
     for (const file of ["SKILL.md", "helper.md"]) {
       const r = run(makeCrewHome(), ["install", `${GIST_PAGE_URL}//${file}`, "--json"]);

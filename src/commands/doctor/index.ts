@@ -46,10 +46,10 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
 
   const state = readState(home);
   const stateEntries = state.installations;
-  const { markers, unreadable } = buildMarkerIndex(stateEntries, ctx.cwd);
-  const hidden = isHiddenBy(unreadable);
+  const { markers, uncheckedPaths } = buildMarkerIndex(stateEntries, ctx.cwd);
+  const hidden = isHiddenBy(uncheckedPaths);
 
-  findings.push(...unreadableFindings(unreadable));
+  findings.push(...unreadableFindings(uncheckedPaths));
   findings.push(...checkStateMarkerDrift(stateEntries, markers, hidden));
   findings.push(...checkMarkerAttribution(stateEntries, markers));
   if (verify) findings.push(...checkContentHashDrift(markers));

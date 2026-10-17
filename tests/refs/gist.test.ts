@@ -10,7 +10,7 @@ import type { CrewError } from "../../src/core/errors.ts";
 import { gistIdentityPath, isGistUrl } from "../../src/core/gist-url.ts";
 import { canonicalRepoUrl } from "../../src/core/repo-url.ts";
 import type { GitSource, PathSource } from "../../src/core/types.ts";
-import { deriveAutoTapName } from "../../src/install/tap-naming.ts";
+import { deriveDefaultTapName } from "../../src/install/tap-naming.ts";
 import { splitGistFile } from "../../src/refs/gist.ts";
 import { parseRef } from "../../src/refs/parse.ts";
 
@@ -80,6 +80,7 @@ describe("gist URLs", () => {
       expect(err.code).toBe("invalid_ref");
       expect(err.message).toContain("isn't a gist page crew can install from");
       expect(err.remedy).toContain("//<file>.md");
+      expect(err.remedy).toContain("unless it has a root `SKILL.md`");
     });
   }
 
@@ -184,8 +185,8 @@ describe("gist repository identity", () => {
 
 describe("gist tap names", () => {
   test("C-TAP-30 a gist tap is named gist-<first 8 of the ID>", () => {
-    expect(deriveAutoTapName(CLONE, "")).toBe("gist-7489027d");
-    expect(deriveAutoTapName(`git@gist.github.com:${ID}.git`, "")).toBe("gist-7489027d");
-    expect(deriveAutoTapName("https://gist.github.com/1234.git", "")).toBe("gist-1234");
+    expect(deriveDefaultTapName(CLONE, "")).toBe("gist-7489027d");
+    expect(deriveDefaultTapName(`git@gist.github.com:${ID}.git`, "")).toBe("gist-7489027d");
+    expect(deriveDefaultTapName("https://gist.github.com/1234.git", "")).toBe("gist-1234");
   });
 });

@@ -7,7 +7,7 @@ import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { repoClonePath } from "../../../src/core/repo-path.ts";
 import type { TapConfig } from "../../../src/core/types.ts";
-import { deriveAutoTapName } from "../../../src/install/tap-naming.ts";
+import { deriveDefaultTapName } from "../../../src/install/tap-naming.ts";
 import { tapLockTarget } from "../../../src/sources/tap-lock.ts";
 import { readState } from "../../../src/state/load.ts";
 import { acquireLock } from "../../../src/util/advisory-lock.ts";
@@ -51,7 +51,7 @@ test("C-CONC-01 a narrowed install waits for the sibling repository clone lock",
   const sha = commitAll(repo, "three sibling dependencies");
   tagRepo(repo, "v1");
   const url = `file://${repo}`;
-  const siblingName = deriveAutoTapName(url, "beta");
+  const siblingName = deriveDefaultTapName(url, "beta");
   const siblingTap: TapConfig = {
     name: siblingName,
     kind: "git",

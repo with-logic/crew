@@ -10,7 +10,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmodSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { TapReexpandRow } from "../../../../src/install/tap-reexpand/types.ts";
+import { rowLabel, type TapReexpandRow } from "../../../../src/install/tap-reexpand/types.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { commitAll, makeTempDir } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
@@ -94,7 +94,7 @@ test("C-SPEC-17 C-UPD-18c re-expansion on update reports a new child linked out 
   const r = crew(home, ["update", "--json"]);
   expect(r.code).toBe(1);
   const rows = (JSON.parse(r.out) as UpdateJson).tap_reexpand_rows.map(
-    (row) => `${row.name}:${row.kind}:${row.error?.code ?? ""}`,
+    (row) => `${rowLabel(row)}:${row.kind}:${row.error?.code ?? ""}`,
   );
   expect(rows.sort()).toEqual(["alias:added:", "skills/evil:tap_error:invalid_skill"]);
   expect(readdirSync(claude.userRoot).sort()).toEqual(["alias", "good"]);

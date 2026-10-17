@@ -16,7 +16,7 @@
 
 import { isGistUrl } from "../core/gist-url.ts";
 
-export function deriveAutoTapName(url: string, subpath: string): string {
+export function deriveDefaultTapName(url: string, subpath: string): string {
   const repoTail = lastSegment(url);
   const repoBase = repoTail.endsWith(".git") ? repoTail.slice(0, -4) : repoTail;
   if (isGistUrl(url)) return sanitize(`gist-${repoBase.slice(0, 8)}`);

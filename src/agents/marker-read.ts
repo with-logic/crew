@@ -51,11 +51,20 @@ export function asMarkerObject(value: unknown): UncheckedMarker | null {
   return value as UncheckedMarker;
 }
 
+/**
+ * What `readMarkerAt` makes of each inspection that found no marker it can
+ * pass on — every such kind, so a new one must be placed here.
+ */
+const NO_MARKER: { readonly [K in "unreadable" | "invalid"]: MarkerRead } = {
+  invalid: { kind: "none" },
+  unreadable: { kind: "unreadable" },
+};
+
 /** The marker in `installDir`, classified; never throws. One that is no marker object names nothing. */
 export function readMarkerAt(installDir: string): MarkerRead {
   const read = inspectMarkerAt(installDir);
   if (read.kind === "marker" || read.kind === "none") return read;
-  return read.kind === "invalid" ? { kind: "none" } : { kind: "unreadable" };
+  return NO_MARKER[read.kind];
 }
 
 /** The marker in `installDir`, classified with the reason it is no marker; never throws. */

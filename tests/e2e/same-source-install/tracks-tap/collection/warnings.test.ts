@@ -6,11 +6,12 @@
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { codexAdapter } from "../../../../../src/agents/codex.ts";
 import { runCli } from "../../../../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../../../../helpers/env.ts";
+import { makeTempDir } from "../../../../helpers/fixtures.ts";
 import { buildRepo } from "../../helpers.ts";
 import { BOTH, CLAUDE, redirectAgents, tapKept, tapOf } from "../helpers.ts";
 
@@ -119,3 +120,17 @@ for (const mode of ["human", "json"] as const) {
     expect(warningsOf(again!)).toEqual([]);
   });
 }
+
+test("C-UPD-17a the warning escapes control characters in the marker's path", () => {
+  // A skills folder whose name a terminal would take as commands and a new line.
+  const root = join(makeTempDir("crew-agent-"), "evil\x1b[2J\nskills");
+  mkdirSync(root, { recursive: true });
+  codexAdapter.userPath = () => root;
+  const home = makeCrewHome();
+  installXY(home);
+  const [held] = whileHidden(home, [["uninstall", "x", "--yes"]]);
+  expect(held!.code).toBe(0);
+  expect(held!.err).toContain("evil\\x1b[2J\\x0askills");
+  expect(held!.err).not.toContain("\x1b");
+  expect(held!.err.trimEnd().split("\n")).toHaveLength(1);
+});

@@ -87,6 +87,8 @@ for (const [which, nth] of [
         .installations.map((e) => e.name)
         .sort(),
     ).toEqual(["a", "shared"]);
+    // The one export left is the sealed one, and nothing else is.
+    expect(existsSync(sealed)).toBe(true);
     expect(readdirSync(scratch)).toHaveLength(1);
     expect(r.stderr).toContain(`left the scratch export \`${sealed}\``);
     expect(r.stderr).toContain("`crew cache clean` removes it");

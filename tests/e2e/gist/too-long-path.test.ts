@@ -17,6 +17,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { copyFileSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { repoClonePath } from "../../../src/core/repo-path.ts";
+import { rowLabel } from "../../../src/install/tap-reexpand/types.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 import {
@@ -85,7 +86,7 @@ test("C-UPD-18c a gist file crew can't look at, fetched by an update, fails as a
   writeGistFiles(dir, { [LONG]: skillFile("long") });
   const r = run(home, ["update", "--json"]);
   expect(r.code).toBe(1);
-  const rows = json(r).tap_reexpand_rows.map((row) => `${row.name}:${row.error?.code}`);
+  const rows = json(r).tap_reexpand_rows.map((row) => `${rowLabel(row)}:${row.error?.code}`);
   expect(rows).toEqual([`${LONG}:source_unreachable`]);
   expect(readdirSync(claude.userRoot)).toEqual(["prd"]);
 });

@@ -6,8 +6,11 @@
  *
  *   1. ADDITIONS — children present upstream but not in state: validate
  *      in full (§9 step 4) and install via the caller-provided
- *      `installNewChild` callback. A child that fails validation is
- *      reported as a `tap_error` and never installed.
+ *      `installNewChild` callback. A child that fails validation, that
+ *      crew can't name, can't stage (§9 step 8), or can't install into an
+ *      agent's folder is reported as a `tap_error` and installed nowhere:
+ *      not recorded, and removed from any agent it was just installed
+ *      into (C-UPD-18e).
  *   2. SOURCE_GONE — entries in state attributed to this tap whose skill
  *      is no longer upstream (§10.1.1 step 3): report; preserve local
  *      install.

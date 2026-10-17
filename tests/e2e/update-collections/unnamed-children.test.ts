@@ -8,9 +8,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { rmSync, symlinkSync } from "node:fs";
+import { readdirSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
+import { rowLabel } from "../../../src/install/tap-reexpand/types.ts";
+import { readState } from "../../../src/state/load.ts";
 import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { buildNamespacedTap, freshHome, installedBody, type RunResult, run } from "./helpers.ts";
 
@@ -31,7 +33,7 @@ afterEach(() => {
 function reexpandRows(r: RunResult): string[] {
   return r
     .json()
-    .tap_reexpand_rows.map((row) => `${row.name}:${row.kind}:${row.error?.code ?? ""}`)
+    .tap_reexpand_rows.map((row) => `${rowLabel(row)}:${row.kind}:${row.error?.code ?? ""}`)
     .sort();
 }
 
@@ -70,10 +72,15 @@ describe("crew update and new children it can't name", () => {
     const real = run(home, ["update", "--json"]);
     expect(real.code).toBe(1);
     expect(reexpandRows(real)).toEqual(["fmt:added:", ...failures]);
-    const bad = real.json().tap_reexpand_rows.find((row) => row.name === "skills/eng/bad")!;
+    const bad = real.json().tap_reexpand_rows.find((row) => rowLabel(row) === "skills/eng/bad")!;
+    // Named by its place in the tap, never as a skill: it has no name.
+    expect(["tap_path" in bad && bad.tap_path, bad.name]).toEqual(["skills/eng/bad", undefined]);
     expect(bad.error?.message).toContain("name");
     expect(installedBody(ccRoot, "fmt")).toContain("name: fmt");
-    expect(() => installedBody(ccRoot, "bad")).toThrow();
+    // Installed nowhere, and not recorded.
+    expect(readdirSync(ccRoot)).not.toContain("bad");
+    const recorded = readState(home).installations.map((e) => e.source.path);
+    expect(recorded).not.toContain("skills/eng/bad");
 
     // The human output names each and counts it among the failures.
     const human = run(home, ["update"]);

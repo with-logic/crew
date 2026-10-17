@@ -7,13 +7,13 @@
 import { repoClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { ensureClone } from "../../git/repo/index.ts";
-import { deriveAutoTapName } from "../../install/tap-naming.ts";
+import { deriveDefaultTapName } from "../../install/tap-naming.ts";
 import { withTapLocks } from "../../sources/tap-lock.ts";
 import { exists, rmrf } from "../../util/fs.ts";
 import type { TapAddTarget } from "./target.ts";
 
 export function deriveName(target: TapAddTarget): string {
-  if (target.kind === "git") return deriveAutoTapName(target.url, target.subpath);
+  if (target.kind === "git") return deriveDefaultTapName(target.url, target.subpath);
   return target.path.split("/").filter(Boolean).pop() ?? "local";
 }
 

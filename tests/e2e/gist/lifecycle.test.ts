@@ -9,12 +9,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { readState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
-import { commitAll, makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 import {
   GIST_CLONE_URL,
@@ -85,7 +84,7 @@ describe("crew update on a gist", () => {
     const { dir } = fx.gist({ "prd.md": skillFile("prd") });
     const home = makeCrewHome();
     expect(run(home, ["install", `${GIST_PAGE_URL}//prd.md`]).code).toBe(0);
-    const outside = mkdtempSync(join(tmpdir(), "crew-outside-"));
+    const outside = makeTempDir("crew-outside-");
     makeSkill(outside, "prd", skillFrontmatter({ name: "prd" }), "Not from the gist.\n");
     rmSync(join(dir, "prd.md"));
     symlinkSync(join(outside, "prd"), join(dir, "prd.md"));
@@ -117,7 +116,7 @@ describe("crew update of a gist //<file> that became a link", () => {
 describe("crew update of a one-skill gist whose SKILL.md became a link", () => {
   for (const ref of ["", "@main"]) {
     test(`C-UPD-39 is source_gone for ${GIST_TAP}/whole${ref}, never read through the link`, () => {
-      const outside = mkdtempSync(join(tmpdir(), "crew-outside-"));
+      const outside = makeTempDir("crew-outside-");
       makeSkill(outside, "whole", skillFrontmatter({ name: "whole" }), "Not from the gist.\n");
       const { dir } = fx.gist({ "SKILL.md": skillFile("whole"), "notes.md": "notes\n" });
       const home = makeCrewHome();

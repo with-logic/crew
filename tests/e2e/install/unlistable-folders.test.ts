@@ -29,7 +29,8 @@ interface Run {
     readonly error?: { readonly name: string; readonly message: string };
     readonly skipped?: readonly { readonly path: string; readonly code: string }[];
     readonly tap_reexpand_rows?: readonly {
-      readonly name: string;
+      readonly name?: string;
+      readonly tap_path?: string;
       readonly kind: string;
       readonly error?: { readonly code: string };
     }[];
@@ -153,6 +154,6 @@ test("C-SPEC-18 a new child folder crew can't list is reported on update; the ru
   mkdirSync(locked);
   const r = sealed(locked, () => crew(home, ["update"]));
   expect(r.code).toBe(1);
-  const rows = r.json.tap_reexpand_rows?.map((row) => [row.name, row.kind, row.error?.code]);
+  const rows = r.json.tap_reexpand_rows?.map((row) => [row.tap_path, row.kind, row.error?.code]);
   expect(rows).toEqual([["skills/locked", "tap_error", "source_unreachable"]]);
 });

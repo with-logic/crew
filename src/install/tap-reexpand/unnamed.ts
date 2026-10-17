@@ -1,7 +1,7 @@
 /**
  * Re-expansion rows for the candidates discovery couldn't name (§10.1.1
  * step 2, C-UPD-18c). Each is a new child crew can't install, so it fails,
- * named by its location in the tap since it has no name — unless an entry
+ * named by its location in the tap (`tap_path`) since it has no name — unless an entry
  * of the group is installed from that location: its own update reports it
  * (step 3). Real and dry runs report alike; a namespace-only run reports
  * only what it could have added.
@@ -28,7 +28,7 @@ export function reportUnnamed(input: UnnamedInput): TapErrorRow[] {
     if (memberPaths.has(candidate.tapRelativePath)) continue;
     if (!withinNamespaces(candidate.tapRelativePath, input.namespaces)) continue;
     rows.push({
-      name: candidate.tapRelativePath,
+      tap_path: candidate.tapRelativePath,
       scope: input.scope,
       tap: input.tap.name,
       kind: "tap_error",

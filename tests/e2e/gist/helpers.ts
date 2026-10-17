@@ -12,15 +12,14 @@
  */
 
 import { afterEach } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { resetGitRunner, runGit, setGitRunner } from "../../../src/git/exec.ts";
 import type { TapReexpandRow } from "../../../src/install/tap-reexpand/types.ts";
 import type { Outcome } from "../../../src/install/update/types.ts";
 import { captureStreams } from "../../helpers/env.ts";
-import { commitAll, makeGitRepo, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { commitAll, makeGitRepo, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 
 export const GIST_ID = "7489027d2d93c185f48a628547c043d8";
 /** The URL crew records for the gist: owner dropped, `.git` added. */
@@ -83,7 +82,7 @@ export function useGistFixture(): GistFixture {
   afterEach(() => resetGitRunner());
   return {
     gist(files, alsoAt = []) {
-      const dir = mkdtempSync(join(tmpdir(), "crew-gist-"));
+      const dir = makeTempDir("crew-gist-");
       writeFiles(dir, files);
       const { sha } = makeGitRepo(dir, "gist");
       const served = new Set([GIST_CLONE_URL, ...alsoAt]);
