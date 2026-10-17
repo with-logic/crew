@@ -72,7 +72,7 @@ function groupsByDest(args: NewTapChild, cwd: string): Map<string, AgentAdapter[
 /** What installing into the groups did, up to the failure that stopped it, if one did. */
 interface GroupsRun {
   readonly installedInto: readonly string[];
-  /** The copies to take back if the child fails. */
+  /** The copies to remove if the child fails. */
   readonly copies: readonly ChildCopy[];
   readonly failure: Error | null;
 }
@@ -89,7 +89,7 @@ function installIntoGroups(
   const installedInto: string[] = [];
   // A folder that already held a crew marker naming this skill is a
   // recorded install, and is kept; any other this call installed into —
-  // new, or replaced by `--force` — is taken back if the child fails.
+  // new, or replaced by `--force` — is removed if the child fails.
   const copies: ChildCopy[] = [];
   const { contentHash, storePath } = opts.staged;
   for (const [dest, group] of groups) {
