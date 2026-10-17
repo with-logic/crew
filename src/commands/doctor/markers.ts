@@ -73,9 +73,9 @@ export function ownsInstall(
 
 export function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: string): MarkerIndex {
   const markers: MarkerEntry[] = [];
-  const unreadable = new Map<string, UncheckedPath>();
+  const unchecked = new Map<string, UncheckedPath>();
   const note: Note = (path, reason, hides, kind = "unreadable") =>
-    unreadable.set(path, { path, reason, hides, kind });
+    unchecked.set(path, { path, reason, hides, kind });
   const seen = new Set<string>();
   const projectRoots = new Set<string>([cwd]);
   for (const e of stateEntries) {
@@ -104,5 +104,5 @@ export function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: strin
       }
     }
   }
-  return { markers, uncheckedPaths: [...unreadable.values()] };
+  return { markers, uncheckedPaths: [...unchecked.values()] };
 }

@@ -10,7 +10,7 @@
  * update skipped it as customized), and the reinstall brings it in line.
  */
 
-import type { StateEntry } from "../../core/types.ts";
+import type { Scope, StateEntry } from "../../core/types.ts";
 import type { Finding } from "./checks.ts";
 import { type MarkerEntry, ownsInstall } from "./markers.ts";
 
@@ -53,7 +53,7 @@ export function checkMarkerAttribution(
 }
 
 /** An install's location — skill, scope, project root (`sameInstall`) — as one map key. */
-function locationKey(name: string, scope: string, projectRoot: string | null): string {
+function locationKey(name: string, scope: Scope, projectRoot: string | null): string {
   return JSON.stringify([name, scope, projectRoot]);
 }
 
