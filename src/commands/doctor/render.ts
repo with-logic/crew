@@ -23,6 +23,8 @@ const CODE_LABELS: Record<string, string> = {
   autoupdate_not_loaded: "autoupdate is enabled but the background updater isn't loaded",
   autoupdate_unexpectedly_loaded: "autoupdate is off but the background updater is still loaded",
   config_invalid: "~/.crew/config.yaml couldn't be parsed",
+  unreadable_marker: "crew can't read an install's marker or skills folder",
+  marker_tap_drift: "an install's marker names a different tap than crew's records",
 };
 
 const CODE_GROUPS: Record<string, string> = {
@@ -35,6 +37,8 @@ const CODE_GROUPS: Record<string, string> = {
   autoupdate_not_loaded: "Autoupdate",
   autoupdate_unexpectedly_loaded: "Autoupdate",
   config_invalid: "Config",
+  unreadable_marker: "State",
+  marker_tap_drift: "State",
 };
 
 const GROUP_ORDER = ["Agents", "State", "Autoupdate", "Config", "Storage", "Other"];

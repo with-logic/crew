@@ -21,6 +21,7 @@ import { readState, writeState } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
 import type { MarkerEntry } from "./markers.ts";
+import type { HiddenInstall } from "./unreadable.ts";
 
 /**
  * True when the entry is project-scope and its recorded root is gone,
@@ -42,7 +43,11 @@ function isUnreadableProjectEntry(entry: StateEntry): boolean {
  * lock-free so that the scheduler step can run under the same lock
  * without nesting a second acquisition, which would deadlock.
  */
-export function repairStateUnderLock(markers: readonly MarkerEntry[], home: string): void {
+export function repairStateUnderLock(
+  markers: readonly MarkerEntry[],
+  hidden: HiddenInstall,
+  home: string,
+): void {
   {
     let config = readConfig(home);
     let current = readState(home);
@@ -76,10 +81,12 @@ export function repairStateUnderLock(markers: readonly MarkerEntry[], home: stri
     // in that sense: `buildMarkerIndex` never walked that root, so its
     // marker is unread rather than absent. §11.2 leaves a moved project
     // to the user, so dropping the entry here would silently discard
-    // the only record of the install.
+    // the only record of the install. So, likewise, is one whose marker
+    // crew couldn't read (check 9): unread, not absent.
     const keep = current.installations.filter(
       (entry) =>
         isUnreadableProjectEntry(entry) ||
+        entry.agents.some((agent) => hidden(entry, agent)) ||
         markers.some(
           (m) =>
             m.record.marker.name === entry.name &&

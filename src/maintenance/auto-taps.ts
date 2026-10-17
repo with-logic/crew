@@ -26,24 +26,34 @@ import { hasUsableProjectRoot } from "../state/validation.ts";
 import { rmrfInside } from "../util/fs.ts";
 import { assertNoSymlinkEscape } from "../util/symlink-containment.ts";
 
+/** What a collection did: the auto taps it dropped, or what held it back. */
+export interface AutoTapCollection {
+  readonly collected: readonly string[];
+  /** The marker crew couldn't read, so it kept every auto tap that would have gone. */
+  readonly withheld?: { readonly marker: string; readonly kept: readonly string[] };
+}
+
 /**
  * Drop every auto tap nothing names: no state entry is attributed to it,
  * and no crew marker in an entry's install folders, in any agent, names
  * it. A marker crew can't read might name any of them, so while one is
  * found nothing is collected: a leftover tap row is harmless; a marker
- * naming a deleted tap is not. Returns the names collected, so callers can
- * report or assert on them.
+ * naming a deleted tap is not. Returns what it did, so callers can report
+ * it (`collectionWarnings`) or assert on it.
  */
-export function garbageCollectAutoTaps(state: StateFile, home: string): string[] {
+export function garbageCollectAutoTaps(state: StateFile, home: string): AutoTapCollection {
   const config = readConfig(home);
   const attributed = new Set(state.installations.map((e) => e.source.tap));
   const candidates = config.taps.filter((t) => !(t.registered || attributed.has(t.name)));
   // Reading the entries' markers is the costly part: skip it when nothing would go.
-  if (candidates.length === 0) return [];
+  if (candidates.length === 0) return { collected: [] };
   const named = scanMarkerTaps(state);
-  if (named === "unreadable") return [];
+  if ("unreadable" in named) {
+    const kept = candidates.map((t) => t.name);
+    return { collected: [], withheld: { marker: named.unreadable, kept } };
+  }
   const removed = candidates.filter((t) => !named.has(t.name));
-  if (removed.length === 0) return [];
+  if (removed.length === 0) return { collected: [] };
   const survivors = config.taps.filter((t) => !removed.includes(t));
   withTapLocks(removed, home, () => {
     writeConfig({ ...config, taps: survivors }, home);
@@ -57,18 +67,28 @@ export function garbageCollectAutoTaps(state: StateFile, home: string): string[]
       // Path taps own no clone dir; nothing to delete.
     }
   });
-  return removed.map((t) => t.name);
+  return { collected: removed.map((t) => t.name) };
+}
+
+/** The stderr warning a withheld collection gets (§16.5): which taps stay, and why. */
+export function collectionWarnings(collection: AutoTapCollection): string[] {
+  const held = collection.withheld;
+  if (held === undefined) return [];
+  const taps = held.kept.map((name) => `\`${name}\``).join(", ");
+  return [
+    `warning: kept auto tap ${taps}: crew can't read \`${held.marker}\`, which might still name it. Check its permissions (and its folder's); a later install or uninstall removes a tap nothing names.`,
+  ];
 }
 
 /**
  * The taps the crew markers in `state`'s entries' install folders name —
  * in every agent, so a copy state doesn't list counts too; each folder read
- * once (agents share some, §7.2) — or "unreadable" as soon as one that
- * might name a tap can't be read: any in a folder one of an entry's agents
+ * once (agents share some, §7.2) — or the first marker that might name a
+ * tap and can't be read: any in a folder one of an entry's agents
  * installs into, and elsewhere one whose file crew can see. Any other
  * folder crew can't search names nothing.
  */
-function scanMarkerTaps(state: StateFile): ReadonlySet<string> | "unreadable" {
+function scanMarkerTaps(state: StateFile): ReadonlySet<string> | { readonly unreadable: string } {
   // Settled over all of state first: a folder two entries share (a project
   // root at the user's home, say) is one an entry's agent installs into no
   // matter which entry the scan reaches it from first.
@@ -89,7 +109,8 @@ function scanMarkerTaps(state: StateFile): ReadonlySet<string> | "unreadable" {
       const read = readMarkerAt(installDir);
       if (read.kind === "none") continue;
       if (read.kind === "unreadable") {
-        if (agentFolders.has(installDir) || markerFileVisible(installDir)) return "unreadable";
+        if (agentFolders.has(installDir) || markerFileVisible(installDir))
+          return { unreadable: join(installDir, ".crew.json") };
         continue;
       }
       const tap = read.marker.tap_name;

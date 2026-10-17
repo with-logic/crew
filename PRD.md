@@ -294,7 +294,13 @@ but the existing entry is attributed to an **auto** tap (§16.5) while the
 incoming install comes through a tap that also covers that location, the
 entry is re-attributed: `state.source` and the install-site markers are
 rewritten to the incoming tap, and the installed bytes are left alone.
-Implementations SHOULD say so in human output. An entry attributed to a
+Implementations SHOULD say so in human output, and likewise for an entry
+an install starts or stops tracking its tap (§11.1); output stays as it
+was for an entry whose tap and tracking didn't change. `--json` carries
+each such change in `attribution_changes`: `{ name, scope, tap }` with the
+entry's tap after the install, plus `moved_from` (the tap it left) when it
+moved and `tracks_tap` (the new value) when that changed. A `--dry-run`
+reports the changes the install would make. An entry attributed to a
 **registered** tap is never re-attributed — the user named that tap
 deliberately — and is simply reported as already installed. An entry
 that tracks its tap (§11.1) moves only together with its subscription,
@@ -2105,6 +2111,8 @@ nothing.
 6. `config.yaml` parses.
 7. If autoupdate is enabled in config, the platform scheduler is actually loaded.
 8. For every project-scope entry, `project_root` exists on disk and a `.crew.json` marker lives under `<project_root>/<adapter-base>/<name>/`. A `project_root` that no longer exists produces a `missing_project_root` finding (warn, not error — the user may have simply moved the project, and the right fix is a `crew uninstall` from their new location).
+9. Every marker, and every agent skills folder doctor walks, can be read. A marker crew can't read or parse, or a folder it can't list, produces an `unreadable_marker` finding (error) naming the path, rather than failing the run; check 1 doesn't also report the state entries whose markers it hides.
+10. Each marker names the tap and path its state entry is attributed to (`tap_name` and `path` against `source.tap` and `source.path`). A marker that disagrees — a copy a move couldn't relabel (§5.4), say — produces a `marker_tap_drift` finding (warn).
 
 `--verify` includes check 3 (hash recomputation); without it, check 3 is skipped for speed.
 
@@ -2118,6 +2126,8 @@ nothing.
 `--repair` never overwrites user-customized skills. Its filesystem changes are confined to `~/.crew/`, the agent skill directories it already manages, and Crew’s own platform scheduler files (§10.2), including the macOS attribution bundle.
 
 Findings outside that list are **not repairable** and MUST NOT be counted as addressed by any `--repair` run or preview. `customized`, `agent_missing`, and `config_invalid` need a human decision; `missing_project_root` is a heads-up whose remedy (per check 8) is the user's own `crew uninstall`, not a repair. Autoupdate drift (check 7) IS repairable — see the reconciliation bullet above — but only counts as addressed when its repair result reports success; a failed reconciliation leaves the finding standing.
+
+`unreadable_marker` and `marker_tap_drift` aren't repairable either. A `--repair` run MUST NOT delete a state entry whose marker it couldn't read (check 9): that marker is unread, not absent. Nor does it re-point state at a marker's tap (check 10): markers are authoritative (§11.1), but the entry's other copies name the tap state records, so the one copy is the user's to reinstall (`crew install <ref> --agent <agent> --force`).
 
 A `--repair` run MUST NOT delete a state entry solely because its `project_root` is missing. Check 8 defines a vanished project root as the user's to resolve, so the entry is preserved for them to act on; deleting it would discard the only record of the install.
 
@@ -2424,7 +2434,7 @@ When `crew install` is given a reference that resolves to a source not currently
 Auto taps are functionally indistinguishable from registered taps for `crew update`, `crew tap update`, `crew search`, and `crew install <tap-name>` purposes. The only differences are:
 
 - They appear with `kind: auto` in `crew tap list`.
-- They are garbage-collected once nothing names them: their last associated state entry goes away, through uninstall or re-attribution to a broader tap (§5.4), and no crew marker in a state entry's install folders, in any agent, names them either (a copy a move couldn't relabel, or one crew wrote but never recorded). A path there that can't hold a marker (nothing there, or a link that dangles or loops, §10.1; a file where the folder goes; a folder where the marker goes) or a marker crew can't parse names nothing. A marker crew can't read (permission denied, say) might name any tap, so while one is found nothing is collected: a leftover tap row is harmless, a marker naming a deleted tap is not. A folder crew can't search counts as such a marker where one of a state entry's agents installs into it; in any other folder only a `.crew.json` crew can see there counts, and a folder it can't search names nothing. The tap row is dropped from `config.yaml` and the local clone is deleted, unless another configured tap still points at the same repository (§6). (Registered taps are not garbage-collected.)
+- They are garbage-collected once nothing names them: their last associated state entry goes away, through uninstall or re-attribution to a broader tap (§5.4), and no crew marker in a state entry's install folders, in any agent, names them either (a copy a move couldn't relabel, or one crew wrote but never recorded). A path there that can't hold a marker (nothing there, or a link that dangles or loops, §10.1; a file where the folder goes; a folder where the marker goes) or a marker crew can't parse names nothing. A marker crew can't read (permission denied, say) might name any tap, so while one is found nothing is collected: a leftover tap row is harmless, a marker naming a deleted tap is not. The command that would have collected says so: a warning on stderr naming the marker it couldn't read and the auto taps it kept, also listed in its `--json` `warnings`. A folder crew can't search counts as such a marker where one of a state entry's agents installs into it; in any other folder only a `.crew.json` crew can see there counts, and a folder it can't search names nothing. The tap row is dropped from `config.yaml` and the local clone is deleted, unless another configured tap still points at the same repository (§6). (Registered taps are not garbage-collected.)
 - A user can convert an auto tap to registered by running `crew tap add <url-or-path>` against the same source — this idempotent promotion preserves the existing clone and installed skills.
 
 Because auto-tap names are crew's bookkeeping rather than something the
@@ -2636,6 +2646,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-13j | §5.4 | Path taps use the same rule with the directory in place of the repo: installing `/src/skills/foo` and then `/src` reaches one canonical location, so the second install is a duplicate, not a `name_conflict`. |
 | C-INST-13k | §10.1.1, §5.4 | When two tap rows cover one source, a child installed while re-expanding the first is not installed again by the second in the same run. |
 | C-INST-13l | §5.4, §11.1 | A re-attributed entry takes the incoming install's `tracks_tap` when that install is of the whole tap at the ref the entry ends at; a narrower install never clears it. |
+| C-INST-13o | §5.4, §11.1 | An install that moves an entry to another tap, or starts or stops it tracking its tap, says so in human output and lists the change in `--json` `attribution_changes` (`moved_from` and `tracks_tap` only where they changed); a `--dry-run` reports the same changes, and an install that changes neither reports none. |
 | C-INST-13m | §5.4 | A move whose markers can't follow — a marker crew can't parse, or one in a folder crew can't write, in an agent the install doesn't target or in any agent of an entry the install finds already installed — is refused before the install writes config, markers, or state, in a `--dry-run` too; a marker naming another tap isn't the move's and doesn't stop it. |
 | C-INST-13n | §5.4 | A reinstall that moves an entry rewrites its copy in every agent the install targets, one otherwise up to date included, and reports a copy it can't write or parse for that agent alone (exit 1 when no agent took the skill, 0 otherwise). Once it succeeds, the entry's markers in agents it doesn't target follow; a failed copy's marker follows where crew can rewrite it (keeping its local edits, hash, and SHA); one crew can't parse names nothing; one it can't read or rewrite keeps naming the old tap, which this and any later collection keep. |
 | C-INST-14 | §5.4 | `--force` on a `name_conflict` is NOT honored (the spec forbids `--force` overriding name conflicts). |
@@ -2737,6 +2748,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-16b | §10.1.1 | A whole-tap install at an explicit `@<ref>` is re-expanded against that ref: a child added to the tap's default branch but absent at the ref is NOT installed, and a child present at the ref is installed carrying that ref and the group's `pinned` value. An entry at the default branch that a whole-tap install at a ref finds already installed on the same commit stays there, and doesn't start tracking the tap — moved onto that tap or not (§5.4, §11.1); one the install reinstalls (a new commit, `--force`, a new agent) moves to the ref and tracks it there, even off an auto tap of its own; one whose reinstall fails is left as it was, still tracking its own tap. An install that reinstalls a tracking entry alone at another ref records it there without `tracks_tap`. |
 | C-UPD-16c | §10.1, §13 | A `crew update` run in which any skill failed for a reason outside the soft set (`source_gone` / `no_skills_found` / `invalid_ref`) exits 1. A failure crew cannot classify MUST NOT be reported as a `failed` row on a run that exits 0. An agent whose skills folder crew can't write is such a failure: the skill's row reads as failed in human output, its entry keeps its previous state, and the next run tries again. |
 | C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`; its clone is deleted only when no remaining configured tap references that repository. Registered taps are NOT garbage-collected by uninstall, and neither is an auto tap a crew marker in a state entry's install folder, in any agent, still names. While such a marker can't be read, or a folder one of a state entry's agents installs into can't be searched, no auto tap is collected; one left this way goes at a later collection once nothing names it. Any other folder crew can't search names nothing. A missing, relative, or non-string project root locates no folder. |
+| C-UPD-17a | §16.5 | A collection held back by a marker crew can't read warns on stderr, naming that marker and the auto taps kept, and lists the warning in `--json` `warnings`, at uninstall and at install. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps — the one thing it does change — then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, store entries, and state are byte-identical before and after; `--json` carries `dry_run: true`. |
 | C-UPD-18a | §10.1.1, §14 | `crew update --dry-run` against a home with no `state.json` leaves it absent: the state lock is never acquired, so neither the state file nor its lock is created. |
 | C-UPD-18b | §10.1.1 | `--force --dry-run` previews a pinned skill whose upstream moved as `would_update` (rather than `skipped`) and still writes nothing. |
@@ -2883,6 +2895,8 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-04 | §11.1 | `pinned: true` in state iff the ref was a SHA or a tag at install time. |
 | C-STATE-04b | §9 step 3, §11.1 | `resolved_sha` equals the commit the requested ref resolves to, and the entry's `content_hash` is the hash of that commit's bytes. |
 | C-STATE-05 | §11.2 | `crew doctor` detects state-vs-marker drift and reports every inconsistency. |
+| C-STATE-05a | §11.2 | A marker crew can't read or parse, or an agent skills folder it can't list, is reported as `unreadable_marker` (error) naming the path, without failing the run or reporting the state entries it hides as `state_entry_without_marker`; `--repair` keeps those entries. |
+| C-STATE-05b | §11.2 | A marker whose `tap_name` or `path` disagrees with its state entry's `source` is reported as `marker_tap_drift` (warn); `--repair` changes neither. |
 | C-STATE-06 | §11.2 | `crew doctor --repair` reconstructs `state.json` from markers if `state.json` is deleted. |
 | C-STATE-07 | §11.2 | `crew doctor --verify` recomputes content hashes and reports mismatches. |
 | C-STATE-08 | §11.2 | `crew doctor --repair` confines filesystem changes to `~/.crew/`, the managed skill directories, and Crew’s own platform scheduler files (§10.2), including the macOS attribution bundle. |

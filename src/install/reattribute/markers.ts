@@ -53,15 +53,15 @@ export function followMoves(
   taps: readonly TapConfig[],
   cwd: string,
 ): void {
+  // Indexed once: a lookup per moved skill and agent, not a scan of every record.
+  const tookIt = new Set<string>();
+  for (const rec of records) {
+    for (const a of rec.agents) {
+      if (a.kind !== "failed") tookIt.add(outcomeKey(rec.name, rec.scope, a.agent));
+    }
+  }
   const current = targetedFolders(made, agents, cwd, (move, agent) =>
-    records.some(
-      (rec) =>
-        rec.name === move.name &&
-        rec.scope === move.scope &&
-        rec.agents.some(
-          (a) => a.agent === agent.name && (a.kind === "installed" || a.kind === "up_to_date"),
-        ),
-    ),
+    tookIt.has(outcomeKey(move.name, move.scope, agent.name)),
   );
   const failed = new Set<string>();
   for (const folder of targetedFolders(made, agents, cwd)) {
@@ -93,6 +93,11 @@ export function targetedFolders(
     }
   }
   return folders;
+}
+
+/** One skill's outcome in one agent, as a comparable string. */
+function outcomeKey(name: string, scope: string, agent: string): string {
+  return JSON.stringify([name, scope, agent]);
 }
 
 /** A marker a move claims: one still naming the move's old tap. */

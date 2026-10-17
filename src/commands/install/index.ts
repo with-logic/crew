@@ -18,6 +18,7 @@ import { withTapLocks } from "../../sources/tap-lock.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promptBareNameAmbiguity } from "./ambiguity-prompt.ts";
 import { promptForCollision } from "./collision-prompt.ts";
+import { installExitCode } from "./exit-code.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { renderInstall } from "./render/index.ts";
@@ -75,35 +76,13 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     throw withKnownTapInstallSuggestions(err, refs, config, ctx.cwd, kindHint);
   }
 
-  // Exit-code rules (PRD §9 step 9). Per-skill outcome is
-  // "succeeded" iff the skill validated AND at least one agent
-  // install succeeded. Skipped candidates are validation failures unless
-  // crew couldn't read them (operational, like failed agent installs).
-  const succeeded = result.summary.records.filter((r) => r.anySuccess).length;
-  const validationFailures = result.skipped.filter((s) => s.code === "invalid_skill").length;
-  const operationalFailures =
-    result.summary.records.filter((r) => !r.anySuccess).length +
-    (result.skipped.length - validationFailures);
-  const failed = operationalFailures + validationFailures;
-  const allAlreadyInstalled =
-    result.alreadyInstalled.length > 0 && result.summary.records.length === 0;
-  let exitCode = 0;
-  if (failed === 0) {
-    exitCode = 0; // Every attempted skill succeeded, or nothing to do.
-  } else if (succeeded > 0 || allAlreadyInstalled) {
-    exitCode = 1; // Partial success.
-  } else if (validationFailures > 0) {
-    exitCode = 4; // Zero succeeded; at least one invalid skill.
-  } else {
-    exitCode = 1; // Zero succeeded; purely operational failures.
-  }
-
   const human = renderInstall(
     {
       records: result.summary.records,
       alreadyInstalled: result.alreadyInstalled,
       resolved: result.resolved,
       skipped: result.skipped,
+      changes: result.changes,
       dryRun: ctx.flags.dryRun,
       cwd: ctx.cwd,
       width: ctx.width,
@@ -112,12 +91,15 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   );
 
   return {
-    exitCode,
+    exitCode: installExitCode(result),
     human,
+    stderr: result.warnings,
     json: {
       already_installed: result.alreadyInstalled,
       records: result.summary.records,
       skipped: result.skipped.map(({ remedy: _humanOnly, ...skip }) => skip),
+      attribution_changes: result.changes,
+      warnings: result.warnings,
       dry_run: ctx.flags.dryRun,
     },
   };

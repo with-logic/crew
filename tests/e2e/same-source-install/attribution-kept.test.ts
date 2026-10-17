@@ -53,7 +53,7 @@ describe("C-INST-13c attribution the move must not take", () => {
 
     const second = install(home, `file://${repo}`);
     expect(second.code).toBe(0);
-    expect(second.out).not.toContain("now tracked via");
+    expect(second.out).not.toContain("moved from");
 
     const entry = readState(home).installations.find((e) => e.name === "docx")!;
     expect(entry.source.tap).toBe("mine");

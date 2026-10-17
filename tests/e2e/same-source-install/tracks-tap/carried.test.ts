@@ -57,7 +57,7 @@ describe("re-attribution and whole-tap tracking", () => {
     // for the tap, so the subscription must move with the attribution.
     const second = install(home, `file://${repo}`);
     expect(second.code).toBe(0);
-    expect(second.out).toContain("now tracked via");
+    expect(second.out).toContain("moved from");
 
     const after = readState(home).installations.find((e) => e.name === "solo");
     expect(after?.source.tap).not.toBe(narrowTap);

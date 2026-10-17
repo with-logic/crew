@@ -30,6 +30,10 @@ import type { Finding } from "./checks.ts";
  *
  * Deliberately absent:
  *   - `customized`, `agent_missing`, `config_invalid` — need a human.
+ *   - `unreadable_marker` — permissions are the user's to fix; repair
+ *     keeps the state entries such a marker hides.
+ *   - `marker_tap_drift` — re-pointing state at one copy's marker would
+ *     move the entry's other copies; the user reinstalls that copy.
  *   - `missing_project_root` — `checks.ts` documents that removing a
  *     vanished project's install isn't doctor's job, so it is a
  *     permanent heads-up rather than pending work.

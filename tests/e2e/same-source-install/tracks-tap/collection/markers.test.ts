@@ -11,12 +11,13 @@
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { claudeCodeAdapter } from "../../../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../../../../src/agents/gemini-cli.ts";
-import { readState, writeState } from "../../../../../src/state/load.ts";
+import { paths } from "../../../../../src/core/paths.ts";
+import { readState } from "../../../../../src/state/load.ts";
 import { makeCrewHome } from "../../../../helpers/env.ts";
 import { makeTempDir, tagRepo } from "../../../../helpers/fixtures.ts";
 import { buildRepo } from "../../helpers.ts";
@@ -91,12 +92,10 @@ for (const kind of ["missing", "relative", "non-string"] as const) {
     const root = malformedRoot(kind, aTap);
     const state = readState(home);
     const z = state.installations.find((e) => e.name === "z")!;
-    const malformed = {
-      ...z,
-      scope: "project",
-      ...(root === undefined ? {} : { project_root: root }),
-    } as unknown as typeof z;
-    writeState({ schema_version: 1, installations: [...state.installations, malformed] }, home);
+    // Not a state entry crew would write, so written as the bytes on disk.
+    const malformed = { ...z, scope: "project", project_root: root };
+    const installations = [...state.installations, malformed];
+    writeFileSync(paths(home).stateFile, JSON.stringify({ schema_version: 1, installations }));
 
     expect(crew(home, ["uninstall", "a", "--yes"])).toBe(0);
     expect(tapKept(home, aTap)).toBe(false);

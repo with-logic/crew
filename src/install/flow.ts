@@ -16,14 +16,16 @@
 import { readConfig, writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
 import type { Config, ResolvedSkill, Scope } from "../core/types.ts";
-import { garbageCollectAutoTaps } from "../maintenance/auto-taps.ts";
+import { collectionWarnings, garbageCollectAutoTaps } from "../maintenance/auto-taps.ts";
 import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { computeAgentSet } from "./agent-set.ts";
+import { type AttributionChange, attributionChanges } from "./attribution-changes.ts";
 import { assertTapsPresent, mergeAutoTaps } from "./config-merge.ts";
 import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules/index.ts";
 import { type InstallSummary, performInstall } from "./perform/index.ts";
+import { previewInstall } from "./preview.ts";
 import { promoteFlags } from "./promote-flags.ts";
 import { applyReattributions, movesMade } from "./reattribute/index.ts";
 import { followMoves, rewriteReattributedMarkers } from "./reattribute/markers.ts";
@@ -60,6 +62,10 @@ export interface InstallFlowResult {
   readonly resolved: readonly ResolvedSkill[];
   /** Soft-skipped candidates; see `ResolveResult.skipped` (`./resolve/index.ts`). */
   readonly skipped: readonly SkippedSkill[];
+  /** Entries whose tap or tracking the install changed (§5.4, C-INST-13o). */
+  readonly changes: readonly AttributionChange[];
+  /** Stderr warnings: an auto-tap collection a marker held back (§16.5). */
+  readonly warnings: readonly string[];
 }
 
 /** Run the install flow end-to-end. */
@@ -95,27 +101,14 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
   const currentState = readState(home);
 
   if (options.dryRun) {
-    const preview = applyDuplicateRules(
-      resolvedAll,
-      currentState,
-      options.scope,
+    const preview = previewInstall(resolvedAll, currentState, agents, {
+      scope: options.scope,
       cwd,
-      duplicateOptions,
-    );
-    // The preview refuses what the run would (§5.4).
-    preflightMoves(preview, agents, cwd);
-    const summary = performInstall(preview.toInstall, agents, options.scope, cwd, currentState, {
       force: options.force,
-      dryRun: true,
       requiredBy,
-      allResolved: resolvedAll,
+      duplicates: duplicateOptions,
     });
-    return {
-      summary,
-      alreadyInstalled: preview.alreadyInstalled,
-      resolved: resolvedAll,
-      skipped,
-    };
+    return { ...preview, resolved: resolvedAll, skipped, warnings: [] };
   }
 
   // Everything below decides what to write, so it must run against state
@@ -123,6 +116,8 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
   // snapshot and lock acquisition would otherwise let us report a skill
   // as "already installed" that is no longer there.
   let alreadyInstalled: readonly AlreadyInstalled[] = [];
+  let changes: readonly AttributionChange[] = [];
+  let warnings: readonly string[] = [];
   const summary = withStateLock(() => {
     // Replay resolver additions onto fresh config under the lock (§14),
     // retaining concurrent removals and rejecting source replacements.
@@ -173,13 +168,16 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     const madeMoves = movesMade(analysis.movesOnSuccess, promoted);
     followMoves(madeMoves, result.records, agents, configWithAutoTaps.taps, cwd);
     writeState(promoted, home);
+    changes = attributionChanges(freshState, promoted);
     // An auto tap nothing names any more — no entry, no marker — after
-    // re-attribution is crew's own bookkeeping, and goes with its clone (§16.5).
-    if (reattributions.length + madeMoves.length > 0) garbageCollectAutoTaps(promoted, home);
+    // re-attribution is crew's own bookkeeping, and goes with its clone;
+    // one an unreadable marker might name stays, with a warning (§16.5).
+    if (reattributions.length + madeMoves.length > 0)
+      warnings = collectionWarnings(garbageCollectAutoTaps(promoted, home));
     return { ...result, newState: promoted };
   }, home);
 
-  return { summary, alreadyInstalled, resolved: resolvedAll, skipped };
+  return { summary, alreadyInstalled, changes, resolved: resolvedAll, skipped, warnings };
 }
 
 // Keep `RequiredByMap` exported under this module's name for consumers.

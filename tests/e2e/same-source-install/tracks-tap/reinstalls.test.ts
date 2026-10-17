@@ -63,6 +63,8 @@ for (const { how, at, flags, edit } of REINSTALLS) {
     expect(tapOf(home, "a")).not.toBe(ownTap);
     const ref = at === "" ? "-" : "v1";
     expect(tracking(home)).toEqual([`a:auto:${ref}:true`, `b:auto:${ref}:true`]);
+    // One whole tap, not two auto taps that happen to read alike.
+    expect(tapOf(home, "a")).toBe(tapOf(home, "b"));
     // Its own one-skill tap, left with nothing, is collected; every marker
     // follows, an agent the run found up to date included.
     expect(readConfig(home).taps.some((t) => t.name === ownTap)).toBe(false);

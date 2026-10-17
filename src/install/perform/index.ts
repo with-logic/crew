@@ -130,7 +130,8 @@ export function performInstall(
     }
     const anySuccess = successfulAgents.length > 0;
     records.push({ name: skill.name, scope, agents: perAgent, anySuccess });
-    if (!options.dryRun && anySuccess) {
+    // A dry run records state too, unwritten: what the run would change (C-INST-13o).
+    if (anySuccess) {
       state = upsertEntry(
         state,
         buildStateEntry(skill, scope, successfulAgents, state, options, cwd),

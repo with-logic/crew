@@ -19,15 +19,20 @@ import { type AutoupdateRepair, repairAutoupdateDrift } from "./autoupdate.ts";
 import { checkAutoupdateDrift } from "./checks.ts";
 import type { MarkerEntry } from "./markers.ts";
 import { repairStateUnderLock } from "./repair.ts";
+import type { HiddenInstall } from "./unreadable.ts";
 
 /**
  * Apply every repair §11.2 permits and report what the scheduler step
  * did. Read-only doctor runs never call this — acquiring the lock
  * would create `state.json` on a fresh home (§14).
  */
-export function applyRepairs(markers: readonly MarkerEntry[], home: string): AutoupdateRepair[] {
+export function applyRepairs(
+  markers: readonly MarkerEntry[],
+  hidden: HiddenInstall,
+  home: string,
+): AutoupdateRepair[] {
   return withStateLock(() => {
-    repairStateUnderLock(markers, home);
+    repairStateUnderLock(markers, hidden, home);
     const fresh = readConfig(home);
     return repairAutoupdateDrift(checkAutoupdateDrift(fresh), fresh, home);
   }, home);

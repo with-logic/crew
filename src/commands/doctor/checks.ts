@@ -15,6 +15,7 @@ import { orphanStoreEntries } from "../../maintenance/gc.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
 import type { MarkerEntry } from "./markers.ts";
+import type { HiddenInstall } from "./unreadable.ts";
 
 export interface Finding {
   readonly level: "ok" | "warn" | "error";
@@ -25,15 +26,18 @@ export interface Finding {
 /**
  * Check 1 & 2: state ↔ markers drift. With path sharing (§7.2), a
  * single marker's `adapters` list covers multiple adapter names, so we
- * check the list-overlap instead of a scalar equality.
+ * check the list-overlap instead of a scalar equality. An install whose
+ * marker crew couldn't read (`hidden`) is check 9's, not missing.
  */
 export function checkStateMarkerDrift(
   stateEntries: readonly StateEntry[],
   markers: readonly MarkerEntry[],
+  hidden: HiddenInstall,
 ): Finding[] {
   const findings: Finding[] = [];
   for (const entry of stateEntries) {
     for (const targetName of entry.agents) {
+      if (hidden(entry, targetName)) continue;
       const match = markers.find(
         (m) =>
           m.record.marker.name === entry.name &&
