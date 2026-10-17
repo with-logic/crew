@@ -4,9 +4,11 @@
  * failed copy — reported for that agent — follows where crew can read and
  * rewrite its marker (a copy with local edits keeps its bytes, hash, and
  * SHA but moves); one it can't read or rewrite — unwritable, locked,
- * unreadable, wrong-shaped — keeps naming the old tap, which is kept, by
- * this install and by any later collection (which reads the markers), so
- * nothing names a tap that's gone. One crew can't parse names nothing.
+ * unreadable — keeps naming the old tap, which is kept, by this install
+ * and by any later collection (which reads the markers, and collects
+ * nothing while one can't be read), so nothing names a tap that's gone.
+ * One crew can't parse names nothing; a wrong-shaped one isn't the
+ * move's, though the tap it names is kept just the same.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -99,34 +101,23 @@ const STUCK_MARKERS: readonly (readonly [string, (marker: string) => () => void]
 ];
 
 for (const [what, spoil] of STUCK_MARKERS) {
-  test(`C-INST-13n a failed copy whose marker ${what} keeps the old tap; the run goes on`, () => {
+  test(`C-INST-13n C-UPD-17 a failed copy whose marker ${what} keeps the old tap, now and later`, () => {
     const { home, repo, ownTap } = setUp(BOTH);
     const marker = join(codexAdapter.userPath(), "a", ".crew.json");
     const restore = spoil(marker);
     try {
       expect(crew(home, ["install", `file://${repo}@v1`, ...BOTH, "--force"])).toBe(0);
+      expect(tapOf(home, "a")).not.toBe(ownTap);
+      expect(tapOf(home, "b")).toBe(tapOf(home, "a"));
+      expect(tapKept(home, ownTap)).toBe(true);
+      // Nor does a later collection take it, the marker still as it was.
+      expect(crew(home, ["uninstall", "b", "--yes"])).toBe(0);
+      expect(tapKept(home, ownTap)).toBe(true);
     } finally {
       restore();
     }
-    expect(tapOf(home, "a")).not.toBe(ownTap);
-    expect(tapOf(home, "b")).toBe(tapOf(home, "a"));
-    expect(tapKept(home, ownTap)).toBe(true);
   });
 }
-
-test("C-INST-13n an old tap a stuck copy still names survives a later uninstall", () => {
-  const { home, repo, ownTap } = setUp(BOTH);
-  const copy = join(codexAdapter.userPath(), "a");
-  chmodSync(copy, 0o555);
-  try {
-    expect(crew(home, ["install", `file://${repo}@v1`, ...BOTH, "--force"])).toBe(0);
-  } finally {
-    chmodSync(copy, 0o755);
-  }
-  expect(crew(home, ["uninstall", "b", "--yes"])).toBe(0);
-  expect(markerTap(codexAdapter.userPath(), "a")).toBe(ownTap);
-  expect(tapKept(home, ownTap)).toBe(true);
-});
 
 test("C-INST-13n a copy whose marker crew can't parse is passed over; the move goes on", () => {
   const { home, repo, ownTap } = setUp(BOTH);

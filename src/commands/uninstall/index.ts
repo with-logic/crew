@@ -65,8 +65,9 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
     : withStateLock(() => {
         const plan = runUninstall(ctx, prune, agentFilter);
         writeState(plan.state, ctx.home);
-        // Auto-tap GC: any auto tap with no remaining state entries is
-        // dropped from config and its clone deleted. Registered taps stay.
+        // Auto-tap GC: an auto tap no state entry or marker names any more
+        // is dropped from config and its clone deleted (§16.5). Registered
+        // taps stay.
         garbageCollectAutoTaps(plan.state, ctx.home);
         return plan;
       }, ctx.home);

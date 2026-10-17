@@ -314,11 +314,12 @@ parse, for that agent alone. Once it succeeds, the entry's markers in
 agents it doesn't target follow the move, and so does a failed copy's
 marker where crew can rewrite it (a copy with local edits keeps its
 bytes); one crew can't parse names nothing, and one it can't read or
-rewrite keeps naming the old tap, which therefore stays (§16.5). A marker that must follow and can't — one crew can't parse,
-or one in a folder crew can't write, in an agent the install doesn't
-target or in any agent of an entry it finds already installed — refuses
-the move before the install writes anything: config, markers, or state
-(a dry run refuses it too).
+rewrite keeps naming the old tap, which therefore stays (§16.5). A
+marker that must follow and can't — one crew can't parse, or one in a
+folder crew can't write, in an agent the install doesn't target or in
+any agent of an entry it finds already installed — refuses the move
+before the install writes anything: config, markers, or state (a dry run
+refuses it too).
 
 ### 5.5 Help output
 
@@ -2414,7 +2415,7 @@ When `crew install` is given a reference that resolves to a source not currently
 Auto taps are functionally indistinguishable from registered taps for `crew update`, `crew tap update`, `crew search`, and `crew install <tap-name>` purposes. The only differences are:
 
 - They appear with `kind: auto` in `crew tap list`.
-- They are garbage-collected once nothing names them: their last associated state entry goes away, through uninstall or re-attribution to a broader tap (§5.4), and no crew marker at a state entry's install folders names them either (a copy a move couldn't relabel). The tap row is dropped from `config.yaml` and the local clone is deleted, unless another configured tap still points at the same repository (§6). (Registered taps are not garbage-collected.)
+- They are garbage-collected once nothing names them: their last associated state entry goes away, through uninstall or re-attribution to a broader tap (§5.4), and no crew marker at a state entry's install folders names them either (a copy a move couldn't relabel). A marker crew can't read might name any tap, so while one is found nothing is collected: a leftover tap row is harmless, a marker naming a deleted tap is not. The tap row is dropped from `config.yaml` and the local clone is deleted, unless another configured tap still points at the same repository (§6). (Registered taps are not garbage-collected.)
 - A user can convert an auto tap to registered by running `crew tap add <url-or-path>` against the same source — this idempotent promotion preserves the existing clone and installed skills.
 
 Because auto-tap names are crew's bookkeeping rather than something the

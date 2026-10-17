@@ -8,6 +8,7 @@
 
 import { join } from "node:path";
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
+import { type MarkerRead, readMarkerAt } from "../../agents/marker-read.ts";
 import { ALL_AGENTS } from "../../agents/registry.ts";
 import type { Marker, TapConfig } from "../../core/types.ts";
 import { tryReadJson, writeJson } from "../../util/json.ts";
@@ -35,9 +36,9 @@ export function rewriteReattributedMarkers(
  * reinstalls moved (§5.4): every one still naming the old tap, except in
  * the folders the install left current (`records` show the agent
  * installed or up to date). A targeted copy whose install failed — and was
- * reported — follows where crew can rewrite its marker; one it can't read
- * or rewrite is left as it is, and its old tap returned so this install
- * doesn't collect it. One crew can't parse names nothing, and is left.
+ * reported — follows where crew can read and rewrite its marker, and is
+ * left as it is where it can't; auto-tap collection reads the markers, so
+ * the old tap such a marker names stays (§16.5).
  */
 export function followMoves(
   made: readonly Reattribution[],
@@ -45,7 +46,7 @@ export function followMoves(
   agents: readonly AgentAdapter[],
   taps: readonly TapConfig[],
   cwd: string,
-): ReadonlySet<string> {
+): void {
   const current = targetedFolders(made, agents, cwd, (move, agent) =>
     records.some(
       (rec) =>
@@ -61,14 +62,11 @@ export function followMoves(
     if (!current.has(folder)) failed.add(folder);
   }
   const tapsByName = new Map(taps.map((t) => [t.name, t]));
-  const stillNamed = new Set<string>();
   for (const m of markersToMove(made, cwd, { skip: current, tolerate: failed })) {
-    if (failed.has(m.installDir)) {
-      // Reported already; a marker crew can't rewrite keeps the old tap.
-      if (!tryRewriteMarker(m, tapsByName)) stillNamed.add(m.move.fromTap);
-    } else rewriteMarker(m, tapsByName);
+    // A failed copy was reported already: one crew can't rewrite is left.
+    if (failed.has(m.installDir)) tryRewriteMarker(m, tapsByName);
+    else rewriteMarker(m, tapsByName);
   }
-  return stillNamed;
 }
 
 /**
@@ -92,13 +90,10 @@ export function targetedFolders(
   return folders;
 }
 
-/**
- * A marker a move claims: one still naming the move's old tap — or, in a
- * tolerated folder, one crew couldn't read (`undefined`), which might.
- */
+/** A marker a move claims: one still naming the move's old tap. */
 interface MarkerToMove {
   readonly installDir: string;
-  readonly marker: Marker | undefined;
+  readonly marker: Marker;
   readonly move: Reattribution;
 }
 
@@ -110,9 +105,9 @@ function rootOf(move: Reattribution, cwd: string): string {
 /**
  * The markers `moves` claim, once per folder — agents sharing a skills
  * folder (§7.2) share its one marker — never reading a folder in `skip`.
- * In a folder in `tolerate`, a marker crew can't parse names nothing, and
- * one it can't read is claimed as `undefined`; elsewhere a failed read
- * throws. A marker whose `agents` isn't a list isn't anyone's.
+ * A folder in `tolerate` whose marker crew can't read or parse is passed
+ * over (`readMarkerAt`); elsewhere a failed read throws. A marker whose
+ * `agents` isn't a list belongs to no agent, so no move claims it.
  */
 export function markersToMove(
   moves: readonly Reattribution[],
@@ -128,12 +123,9 @@ export function markersToMove(
       const base = baseFor(adapter, move.scope, rootOf(move, cwd));
       const installDir = join(base, move.name);
       if (base === "" || seen.has(installDir)) continue;
-      const marker = readMarker(installDir, folders.tolerate?.has(installDir) === true);
-      if (marker === "unknown") {
-        seen.add(installDir);
-        found.push({ installDir, marker: undefined, move });
-        continue;
-      }
+      const marker = folders.tolerate?.has(installDir)
+        ? markerIn(readMarkerAt(installDir))
+        : tryReadJson<Marker>(join(installDir, ".crew.json"));
       // No marker, one this adapter doesn't own, or one for another
       // skill or tap: not this move's. The old tap may still own other
       // skills, so only markers naming it move.
@@ -147,34 +139,22 @@ export function markersToMove(
   return found;
 }
 
-/**
- * The marker in `installDir`. A `tolerant` read returns null instead of
- * throwing for one crew can't parse (it names nothing), and "unknown" for
- * one it can't read (it might name a tap).
- */
-function readMarker(installDir: string, tolerant: boolean): Marker | null | "unknown" {
-  try {
-    return tryReadJson<Marker>(join(installDir, ".crew.json"));
-  } catch (err) {
-    if (!tolerant) throw err;
-    return err instanceof SyntaxError ? null : "unknown";
-  }
+function markerIn(read: MarkerRead): Marker | null {
+  return read.kind === "marker" ? read.marker : null;
 }
 
-/** Rewrite a failed copy's marker if crew can; false when it can't read or replace it. */
-function tryRewriteMarker(m: MarkerToMove, tapsByName: ReadonlyMap<string, TapConfig>): boolean {
-  if (m.marker === undefined) return false;
+/** Rewrite a failed copy's marker if crew can; one it can't replace (a locked file, say) is left. */
+function tryRewriteMarker(m: MarkerToMove, tapsByName: ReadonlyMap<string, TapConfig>): void {
   try {
     rewriteMarker(m, tapsByName);
-    return true;
   } catch {
-    return false;
+    // The copy's failure was reported; collection keeps the tap it names.
   }
 }
 
 function rewriteMarker(m: MarkerToMove, tapsByName: ReadonlyMap<string, TapConfig>): void {
   const tap = tapsByName.get(m.move.toTap);
-  if (!tap || m.marker === undefined) return;
+  if (!tap) return;
   // `tap_discovery` describes the DESTINATION tap, so it can't be
   // inherited from the old marker: a move onto a non-recursive tap that
   // kept the old flag would mislead `doctor --repair`.

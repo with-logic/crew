@@ -14,32 +14,36 @@
 
 import { join } from "node:path";
 import { baseFor } from "../agents/adapter.ts";
+import { readMarkerAt } from "../agents/marker-read.ts";
 import { ALL_AGENTS } from "../agents/registry.ts";
 import { readConfig, writeConfig } from "../config/load.ts";
 import { paths } from "../core/paths.ts";
 import { cloneStillReferenced, tapClonePath } from "../core/repo-path.ts";
-import type { Marker, StateFile } from "../core/types.ts";
+import type { StateFile, TapConfig } from "../core/types.ts";
 import { withTapLocks } from "../sources/tap-lock.ts";
+import { hasUsableProjectRoot } from "../state/validation.ts";
 import { rmrfInside } from "../util/fs.ts";
-import { tryReadJson } from "../util/json.ts";
 import { assertNoSymlinkEscape } from "../util/symlink-containment.ts";
 
 /**
- * Drop every auto tap that backs no state entry, isn't named by a marker
- * at an entry's install folders, and isn't in `stillNamed` (taps a marker
- * crew couldn't read still names). Returns the names collected, so
- * callers can report or assert on them.
+ * Drop every auto tap nothing names: no state entry is attributed to it,
+ * and no crew marker at an entry's install folders names it. A marker crew
+ * can't read might name any of them, so while one is found nothing is
+ * collected — a leftover tap row is harmless; a marker naming a deleted
+ * tap is not. Returns the names collected, so callers can report or assert
+ * on them.
  */
-export function garbageCollectAutoTaps(
-  state: StateFile,
-  home: string,
-  stillNamed: ReadonlySet<string> = new Set(),
-): string[] {
+export function garbageCollectAutoTaps(state: StateFile, home: string): string[] {
   const config = readConfig(home);
-  const inUse = new Set([...state.installations.map((e) => e.source.tap), ...stillNamed]);
-  if (config.taps.every((t) => t.registered || inUse.has(t.name))) return [];
-  for (const tap of tapsNamedByMarkers(state)) inUse.add(tap);
-  const survivors = config.taps.filter((t) => t.registered || inUse.has(t.name));
+  const inUse = new Set(state.installations.map((e) => e.source.tap));
+  const keeps = (t: TapConfig) => t.registered || inUse.has(t.name);
+  // Reading every entry's markers is the costly part: skip it when state
+  // alone keeps every tap.
+  if (config.taps.every(keeps)) return [];
+  const markers = tapsNamedByMarkers(state);
+  if (markers.unreadable) return [];
+  for (const tap of markers.named) inUse.add(tap);
+  const survivors = config.taps.filter(keeps);
   if (survivors.length === config.taps.length) return [];
   const removed = config.taps.filter((t) => !survivors.includes(t));
   withTapLocks(removed, home, () => {
@@ -57,28 +61,30 @@ export function garbageCollectAutoTaps(
   return removed.map((t) => t.name);
 }
 
-/** The taps the crew markers at `state`'s install folders name, in every agent. */
-function tapsNamedByMarkers(state: StateFile): Set<string> {
+/**
+ * The taps the crew markers at `state`'s install folders name, each
+ * folder read once (agents share some, §7.2), and whether one couldn't
+ * be read.
+ */
+function tapsNamedByMarkers(state: StateFile): { named: Set<string>; unreadable: boolean } {
   const named = new Set<string>();
+  const seen = new Set<string>();
+  let unreadable = false;
   for (const entry of state.installations) {
-    // A project entry with no recorded root has no folder to look in.
-    if (entry.scope === "project" && !entry.project_root) continue;
+    // §11.1: a missing or relative project root locates nothing.
+    if (entry.scope === "project" && !hasUsableProjectRoot(entry)) continue;
+    const root = hasUsableProjectRoot(entry) ? entry.project_root : "";
     for (const adapter of ALL_AGENTS) {
-      const base = baseFor(adapter, entry.scope, entry.project_root ?? "");
-      if (base === "") continue;
-      const tap = markerTapAt(join(base, entry.name));
-      if (tap !== null) named.add(tap);
+      const base = baseFor(adapter, entry.scope, root);
+      const installDir = join(base, entry.name);
+      if (base === "" || seen.has(installDir)) continue;
+      seen.add(installDir);
+      const read = readMarkerAt(installDir);
+      if (read.kind === "unreadable") unreadable = true;
+      if (read.kind === "marker" && typeof read.marker.tap_name === "string") {
+        named.add(read.marker.tap_name);
+      }
     }
   }
-  return named;
-}
-
-/** The tap the marker in `installDir` names; null when there is none crew can read. */
-function markerTapAt(installDir: string): string | null {
-  try {
-    const marker = tryReadJson<Marker>(join(installDir, ".crew.json"));
-    return typeof marker?.tap_name === "string" ? marker.tap_name : null;
-  } catch {
-    return null;
-  }
+  return { named, unreadable };
 }
