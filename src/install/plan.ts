@@ -5,9 +5,10 @@
  * changes included — is what the run does: duplicate rules, the move
  * preflight, up-front moves, the install, then promotions.
  *
- * Planning writes nothing itself. The one thing the real run does in the
- * middle — writing config and the up-front markers once nothing is
- * refused — is its `beforeInstall` hook.
+ * Planning writes no config or state itself. In the real run the install
+ * writes the agents' copies and their markers, and the run's
+ * `beforeInstall` hook writes config and the up-front markers once
+ * nothing is refused; a dry run writes nothing.
  */
 
 import type { AgentAdapter } from "../agents/adapter.ts";
@@ -39,7 +40,7 @@ export interface InstallPlan {
   readonly analysis: DuplicateAnalysis;
   readonly summary: InstallSummary;
   /** `summary.newState` with the analysis' promotions applied (§11.1). */
-  readonly after: StateFile;
+  readonly promoted: StateFile;
   readonly changes: readonly AttributionChange[];
 }
 
@@ -75,6 +76,6 @@ export function planInstall(
     },
   );
   const projectRoot = run.scope === "project" ? run.cwd : null;
-  const after = promoteFlags(summary.newState, analysis.promotions, run.scope, projectRoot);
-  return { analysis, summary, after, changes: attributionChanges(state, after) };
+  const promoted = promoteFlags(summary.newState, analysis.promotions, run.scope, projectRoot);
+  return { analysis, summary, promoted, changes: attributionChanges(state, promoted) };
 }

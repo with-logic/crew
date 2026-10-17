@@ -28,6 +28,7 @@ import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
 import { removeEach, withLeftBehind } from "../util/cleanup.ts";
 import { ensureDir, rmrf } from "../util/fs.ts";
+import { progress } from "../util/progress.ts";
 import { type GitProcessError, runGit } from "./exec.ts";
 import { assertNoSymlinkEscape } from "./tree-safety.ts";
 
@@ -96,7 +97,11 @@ function exportFailure(
 /** A scratch export of a commit: the source root inside it, and how to delete it. */
 export interface ExportedTree {
   readonly location: string;
-  /** Delete the export. IO errors propagate; `crew cache clean` removes leftovers. */
+  /**
+   * Delete the export. Never throws: one crew can't remove must not replace
+   * its holder's result or error, so it is left — noted under `--verbose`,
+   * naming it — for `crew cache clean`.
+   */
   readonly remove: () => void;
 }
 
@@ -127,7 +132,7 @@ export function exportTree(
     exportTreeAt(clonePath, sha, subpath, dest);
     const location = subpath.length > 0 ? join(dest, subpath) : dest;
     assertNoSymlinkEscape(dest, location, subpath);
-    return { location, remove: () => rmrf(dest) };
+    return { location, remove: () => removeScratch(dest) };
   } catch (err) {
     // The export's own failure stays the error; a folder left behind is named in it.
     throw withLeftBehind(err as Error, removeEach([dest]));
@@ -136,8 +141,8 @@ export function exportTree(
 
 /**
  * Run `fn` against a scratch export of `sha` (`exportTree`), then delete
- * it when `fn` returns or throws. Cleanup can throw on an IO/permission
- * failure and replace the callback result.
+ * it when `fn` returns or throws; an export crew can't delete is left,
+ * never replacing `fn`'s result or error.
  */
 export function withExportedTree<T>(
   clonePath: string,
@@ -151,6 +156,13 @@ export function withExportedTree<T>(
     return fn(tree.location);
   } finally {
     tree.remove();
+  }
+}
+
+/** Remove the scratch export at `dest`; one crew can't remove is noted under `--verbose`. */
+function removeScratch(dest: string): void {
+  for (const left of removeEach([dest])) {
+    progress(`left the scratch export ${left}; \`crew cache clean\` removes it`);
   }
 }
 

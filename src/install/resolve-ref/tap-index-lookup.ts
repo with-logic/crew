@@ -10,8 +10,10 @@
 import { posix } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { gistSkillStem, isGistTap } from "../../core/gist-url.ts";
+import { namespaceOf } from "../../core/namespace.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { indexTap, namespaceOf, type TapIndex } from "../tap-index.ts";
+import { unreadablePathError } from "../../util/errno.ts";
+import { indexTap, type TapIndex } from "../tap-index.ts";
 import type { NonTapNameCandidate, TapRoots } from "./types.ts";
 
 /** Index `tap`, reading from its exported root when one was supplied. */
@@ -19,15 +21,21 @@ export function indexTapAt(tap: TapConfig, home: string, roots: TapRoots): TapIn
   return indexTap(tap, home, roots[tap.name]);
 }
 
-/** `tap`'s index, or what kept crew from building it. */
-export type IndexAttempt = { readonly index: TapIndex } | { readonly failure: unknown };
+/** `tap`'s index, or the error that kept crew from building it. */
+export type IndexAttempt =
+  | { readonly kind: "indexed"; readonly index: TapIndex }
+  | { readonly kind: "failed"; readonly failure: CrewError };
 
 /** Index `tap`, keeping the failure rather than throwing it. */
 export function tryIndexTap(tap: TapConfig, home: string, roots: TapRoots): IndexAttempt {
   try {
-    return { index: indexTapAt(tap, home, roots) };
-  } catch (failure) {
-    return { failure };
+    return { kind: "indexed", index: indexTapAt(tap, home, roots) };
+  } catch (err) {
+    // Indexing names its own failures; a raw filesystem error left over is
+    // a tap crew can't read all the same (§13), never a miss.
+    const at = (err as NodeJS.ErrnoException).path ?? roots[tap.name] ?? tap.name;
+    const failure = err instanceof CrewError ? err : unreadablePathError(at, err);
+    return { kind: "failed", failure };
   }
 }
 
@@ -39,7 +47,7 @@ export function tryIndexTap(tap: TapConfig, home: string, roots: TapRoots): Inde
  */
 export function safeIndex(tap: TapConfig, home: string, roots: TapRoots): TapIndex | null {
   const attempt = tryIndexTap(tap, home, roots);
-  return "index" in attempt ? attempt.index : null;
+  return attempt.kind === "indexed" ? attempt.index : null;
 }
 
 /**

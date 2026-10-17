@@ -3,14 +3,17 @@
  *
  * This module ties the pieces together:
  *
- *   1. Parse each ref → acquire → validate → expand → resolve deps
- *      (in `./resolve.ts`).
- *   2. Compute the active target set (in `./target-set.ts`).
- *   3. Detect "already installed" and "name conflict" against the current
- *      state (§5.4; in `./duplicate-rules/index.ts`).
- *   4. Perform the installs (in `./perform/index.ts`).
- *   5. Write state back under the lock, and return a structured summary
+ *   1. Resolve each ref: acquire, validate, expand, and resolve its
+ *      dependencies (`./resolve/index.ts`).
+ *   2. Compute the agents to install into (`./agent-set.ts`).
+ *   3. Under the state lock, run the install's plan (`./plan.ts`):
+ *      duplicate rules (§5.4), the move preflight, the install itself
+ *      (`./perform/index.ts`), and promotions (§11.1).
+ *   4. Move the markers that follow a reinstall, write state, collect
+ *      auto taps nothing names (§16.5), and return a structured summary
  *      the CLI layer can format.
+ *
+ * A dry run plans the same way and writes nothing (`./preview.ts`).
  */
 
 import { readConfig, writeConfig } from "../config/load.ts";
@@ -29,7 +32,7 @@ import { planInstall } from "./plan.ts";
 import { previewInstall } from "./preview.ts";
 import { movesMade } from "./reattribute/index.ts";
 import { followMoves, rewriteReattributedMarkers } from "./reattribute/markers.ts";
-import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
+import { resolveInstallSet } from "./resolve/index.ts";
 import type { KindHint } from "./resolve-ref/index.ts";
 import { rewriteDiscoveryUpgradeMarkers } from "./rewrite-tap-markers.ts";
 
@@ -140,7 +143,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
         rewriteReattributedMarkers(upFront, configWithAutoTaps.taps, cwd);
       },
     );
-    const { analysis, summary: result, after: promoted } = plan;
+    const { analysis, summary: result, promoted } = plan;
     const { reattributions } = analysis;
     alreadyInstalled = analysis.alreadyInstalled;
     changes = plan.changes;
@@ -161,7 +164,3 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
 
   return { summary, alreadyInstalled, changes, resolved: resolvedAll, skipped, warnings };
 }
-
-// Keep `RequiredByMap` exported under this module's name for consumers.
-// Re-export `AlreadyInstalled` for legacy callers of this module.
-export type { AlreadyInstalled, RequiredByMap };

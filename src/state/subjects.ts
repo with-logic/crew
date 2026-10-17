@@ -11,6 +11,7 @@
  * raw input when unmatched so error messages can echo exactly what the user typed.
  */
 
+import { namespaceOf } from "../core/namespace.ts";
 import type { StateEntry, StateFile, TapSource } from "../core/types.ts";
 import { parseRef } from "../refs/parse.ts";
 
@@ -61,8 +62,5 @@ function matchesTapSource(entry: StateEntry, source: TapSource): boolean {
 
 /** The namespace an entry lives under (`skills/<ns>/<name>`), or null. */
 export function namespaceForEntry(entry: StateEntry): string | null {
-  const parts = entry.source.path.split("/");
-  // §16 tap index paths use `skills/<namespace>/<name>` only for namespaced skills.
-  if (parts.length === 3 && parts[0] === "skills") return parts[1]!;
-  return null;
+  return namespaceOf(entry.source.path);
 }

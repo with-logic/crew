@@ -113,7 +113,8 @@ function isTapDirectory(path: string): boolean {
  * exactly `acquireTap` and `fn` sees the live clone. With a ref, the
  * commit is resolved first — an unknown ref is `ref_not_found` (exit 5,
  * §13) — and `fn` sees a scratch export of that commit that is deleted
- * when `fn` returns or throws.
+ * when `fn` returns or throws. One crew can't delete is left, noted under
+ * `--verbose`, and never replaces `fn`'s result or error.
  */
 export function withAcquiredTap<T>(
   tap: TapConfig,
@@ -132,7 +133,7 @@ export function withAcquiredTap<T>(
 /** An acquired tap kept for as long as its holder needs it. */
 export interface HeldTap {
   readonly acquired: AcquiredTap;
-  /** Delete the scratch export behind it, if any. */
+  /** Delete the scratch export behind it, if any. Never throws (`exportTree`). */
   readonly release: () => void;
 }
 

@@ -25,10 +25,10 @@ import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../core/types.ts";
 import { loadSkill } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
-import { leadsOutOfSource, outOfSourceError, sourceBoundary } from "../sources/source-boundary.ts";
+import { outOfSourceError, sourceBoundary } from "../sources/source-boundary.ts";
 import { listSourceDir } from "../sources/source-dir.ts";
 import { toPosix } from "../util/fs.ts";
-import { assertCanLookForSkillMd, declaredName, isSiblingSkill } from "./siblings/disk.ts";
+import { assertCanLookForSkillMd, readSiblingEntry } from "./siblings/disk.ts";
 import type { SiblingScan } from "./siblings/index.ts";
 import { attributeRef } from "./tap-attribution.ts";
 
@@ -70,12 +70,13 @@ export function findSiblingDep(
   const matches: { entryName: string; siblingPath: string; loaded: LoadedSkill }[] = [];
   const isGist = isGistTap(parent.tap);
   const stem = (entry: string): string => (isGist ? gistSkillStem(entry) : entry);
-  const dir = siblings.dir(siblingParent, {
+  const dir = siblings.indexDir(siblingParent, {
     list: () => withDependencyErrors(depName, siblingParent, () => listSourceDir(siblingParent)),
     stem,
     // A gist's files are never folders, so it has no boundary to check.
-    boundary: () => (isGist ? null : sourceBoundary(parent.tap, home, parentPath)),
-    declares: (entry, boundary) => declaredName(parent.tap, join(siblingParent, entry), boundary),
+    readBoundary: () => (isGist ? null : sourceBoundary(parent.tap, home, parentPath)),
+    readEntry: (entry, boundary) =>
+      readSiblingEntry(parent.tap, join(siblingParent, entry), boundary),
   });
   for (const entryName of dir.candidatesFor(depName)) {
     const siblingPath = join(siblingParent, entryName);
@@ -88,8 +89,10 @@ export function findSiblingDep(
       if (!isGist) {
         withDependencyErrors(depName, siblingPath, () => assertCanLookForSkillMd(siblingPath));
       }
-      if (!isSiblingSkill(parent.tap, siblingPath)) continue;
-      if (dir.boundary !== null && leadsOutOfSource(dir.boundary, siblingPath)) {
+      // What the entry is was read when the directory was indexed.
+      const sibling = dir.entry(entryName);
+      if (!sibling.skill) continue;
+      if (dir.boundary !== null && sibling.leadsOut) {
         const shown = toPosix(relative(dir.boundary.root, siblingPath));
         throw dependencyError(depName, siblingPath, outOfSourceError(siblingPath, shown));
       }

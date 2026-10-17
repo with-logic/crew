@@ -6,13 +6,15 @@
  * code. A candidate in another namespace, or found by recursive discovery
  * outside `skills/`, doesn't answer a three-segment reference; and a
  * `<tap>/<skill>` whose tap crew can't read at all fails with that tap's
- * error rather than as not found.
+ * error rather than as not found — unless a namespace of that name in
+ * another tap answers it.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { makeCrewHome } from "../../helpers/env.ts";
+import { runCli } from "../../../src/cli/main.ts";
+import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 import { crew, gitRepo, link, outsideSkill, skillAt } from "./folder-links/helpers.ts";
@@ -29,6 +31,14 @@ function withTap(source: string, ...flags: string[]): string {
   const added = crew(home, ["tap", "add", ...flags, source, "mine"]);
   if (added.code !== 0) throw new Error(`crew tap add failed: ${added.out}`);
   return home;
+}
+
+/** `crew <args> --json` against `home`: its exit code and error name (or null). */
+function failure(home: string, args: string[]): [number, string | null] {
+  const cap = captureStreams();
+  const code = runCli([...args, "--json"], { home, streams: cap.streams });
+  const body = JSON.parse(cap.stdout()) as { error?: { name: string } };
+  return [code, body.error?.name ?? null];
 }
 
 /** A skill folder `name` under `parent` whose declared `name` is invalid. */
@@ -70,10 +80,8 @@ test("C-REF-40 a candidate in another namespace doesn't answer a three-segment r
   badSkillAt(join(tap, "skills", "team"), "bad");
   skillAt(join(tap, "skills", "other"), "good");
   const home = withTap(tap);
-  const here = crew(home, ["install", "mine/team/bad"]);
-  expect([here.code, here.out.includes("(invalid_skill)")]).toEqual([4, true]);
-  const elsewhere = crew(home, ["install", "mine/other/bad"]);
-  expect([elsewhere.code, elsewhere.out.includes("(invalid_ref)")]).toEqual([4, true]);
+  expect(failure(home, ["install", "mine/team/bad"])).toEqual([4, "invalid_skill"]);
+  expect(failure(home, ["install", "mine/other/bad"])).toEqual([4, "invalid_ref"]);
 });
 
 test("C-REF-40 a recursive find outside skills/ has no namespace to answer for", () => {
@@ -81,11 +89,9 @@ test("C-REF-40 a recursive find outside skills/ has no namespace to answer for",
   badSkillAt(join(tap, "x", "ns"), "bar");
   skillAt(join(tap, "x", "ns"), "good");
   const home = withTap(tap, "--recursive");
-  const r = crew(home, ["install", "mine/ns/bar"]);
-  expect([r.code, r.out.includes("(invalid_ref)")]).toEqual([4, true]);
+  expect(failure(home, ["install", "mine/ns/bar"])).toEqual([4, "invalid_ref"]);
   // As `<tap>/<skill>` it is the tap's own candidate, refused for its name.
-  const own = crew(home, ["install", "mine/bar"]);
-  expect([own.code, own.out.includes("(invalid_skill)")]).toEqual([4, true]);
+  expect(failure(home, ["install", "mine/bar"])).toEqual([4, "invalid_skill"]);
 });
 
 test("C-REF-40 a <tap>/<skill> whose tap crew can't read fails with that tap's error", () => {
@@ -102,4 +108,22 @@ test("C-REF-40 a <tap>/<skill> whose tap crew can't read fails with that tap's e
   } finally {
     chmodSync(skills, 0o755);
   }
+});
+
+test("C-REF-40 a <tap>/<skill> whose tap crew can't read is answered by a namespace elsewhere", () => {
+  const tap = makeTempDir();
+  skillAt(join(tap, "skills"), "good");
+  const other = makeTempDir();
+  // In `other`, `mine` is a namespace holding `baz`.
+  skillAt(join(other, "skills", "mine"), "baz");
+  const home = withTap(tap);
+  expect(crew(home, ["tap", "add", other, "other"]).code).toBe(0);
+  const skills = join(tap, "skills");
+  chmodSync(skills, 0o000);
+  try {
+    expect(failure(home, ["install", "mine/baz"])).toEqual([0, null]);
+  } finally {
+    chmodSync(skills, 0o755);
+  }
+  expect(readdirSync(claude.userRoot)).toEqual(["baz"]);
 });

@@ -46,8 +46,8 @@ export function resolveThreeSegment(
   const match = locs.find((l) => l.namespace === source.namespace);
   if (!match) {
     // A candidate there crew couldn't name says why it isn't found (C-REF-40).
-    const unnamed = unnamedCandidateError(tap, index, source.name, source.namespace);
-    if (unnamed) throw unnamed;
+    const candidateError = unnamedCandidateError(tap, index, source.name, source.namespace);
+    if (candidateError) throw candidateError;
     throw new CrewError(
       "invalid_ref",
       `\`${source.tap}/${source.namespace}/${source.name}\` doesn't exist — no skill \`${source.name}\` found in namespace \`${source.namespace}\` of tap \`${source.tap}\``,
@@ -67,11 +67,11 @@ export function resolveTwoSegment(
   const first = source.tap!;
   const second = source.name;
   const tap = config.taps.find((t) => t.name === first);
-  // The named tap is indexed once: its skills answer the tap reading, and
-  // what it couldn't name — or why it couldn't be read — explains a miss.
-  const named = tap ? tryIndexTap(tap, home, roots) : null;
-  const namedIndex = named !== null && "index" in named ? named.index : null;
-  const asTapSkill = tap && namedIndex ? lookupInIndex(tap, namedIndex, second) : null;
+  // The referenced tap is indexed once: its skills answer the tap reading,
+  // and what it couldn't name — or why it couldn't be read — explains a miss.
+  const tapAttempt = tap ? tryIndexTap(tap, home, roots) : null;
+  const tapIndex = tapAttempt?.kind === "indexed" ? tapAttempt.index : null;
+  const asTapSkill = tap && tapIndex ? lookupInIndex(tap, tapIndex, second) : null;
 
   // Collect namespace candidates: `<first>` is a namespace in some tap
   // that holds a skill named `<second>`.
@@ -100,12 +100,12 @@ export function resolveTwoSegment(
       `\`${first}/${second}\` is a namespaced skill in multiple taps`,
     );
   }
-  // A candidate the named tap couldn't name says why it isn't found
-  // (C-REF-40); a tap crew couldn't read at all says that instead (§13).
-  const unnamed = tap && namedIndex ? unnamedCandidateError(tap, namedIndex, second, null) : null;
-  if (unnamed) throw unnamed;
-  if (named !== null && "failure" in named && named.failure instanceof CrewError) {
-    throw named.failure;
-  }
+  // A candidate the referenced tap couldn't name says why it isn't found
+  // (C-REF-40); a referenced tap crew couldn't read at all says that
+  // instead (§8.3), once no namespace in another tap answers it.
+  const candidateError =
+    tap && tapIndex ? unnamedCandidateError(tap, tapIndex, second, null) : null;
+  if (candidateError) throw candidateError;
+  if (tapAttempt?.kind === "failed") throw tapAttempt.failure;
   throw twoSegmentMissError(first, second, source.ref);
 }

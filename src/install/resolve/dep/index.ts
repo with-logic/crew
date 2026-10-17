@@ -17,8 +17,9 @@ import { makeParentTrees, type ParentTrees, siblingItems } from "./parent-tree.t
 
 /**
  * What one resolution's dependency walk reads once and shares across
- * every parent: the commits siblings are read at, and what each sibling
- * directory holds. The resolver releases `trees` when it is done.
+ * every parent: the commits siblings are read at, what each sibling
+ * directory holds, and each found sibling's loaded skill and store entry.
+ * The resolver releases `trees` when it is done.
  */
 export interface DependencyReads {
   readonly trees: ParentTrees;

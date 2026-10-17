@@ -27,6 +27,7 @@
  */
 
 import { basename, relative } from "node:path";
+import { namespaceOf } from "../core/namespace.ts";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
@@ -77,16 +78,6 @@ export interface TapIndex {
 
 /** What the walk itself finds: the index but for the candidates it couldn't name. */
 type IndexedSkills = Omit<TapIndex, "unnamed">;
-
-/**
- * The namespace of the skill at `tapRelativePath`: `<ns>` for
- * `skills/<ns>/<name>`, the one layout with a namespace (§9 step 5 case
- * 2); null for any other location, a recursive find's included.
- */
-export function namespaceOf(tapRelativePath: string): string | null {
-  const parts = tapRelativePath.split("/");
-  return parts.length === 3 && parts[0] === "skills" ? parts[1]! : null;
-}
 
 /** Resolve a tap's on-disk root, materializing a git clone if needed. */
 export function tapRoot(tap: TapConfig, home: string): string {

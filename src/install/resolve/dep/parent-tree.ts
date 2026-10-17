@@ -15,8 +15,6 @@ import type { Config, TapConfig } from "../../../core/types.ts";
 import { type HeldTap, holdAcquiredTap } from "../../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { stageIntoStore } from "../../../sources/store.ts";
-import { errnoReason } from "../../../util/errno.ts";
-import { progress } from "../../../util/progress.ts";
 import { isWholeRepoRootSkill, type SiblingHit } from "../../dep-resolution.ts";
 import type { SiblingScan } from "../../siblings/index.ts";
 import type { PendingItem } from "../enqueue.ts";
@@ -32,7 +30,8 @@ export interface ParentTrees {
   locate(parent: PendingItem): string | undefined;
   /**
    * Delete every export `locate` made: the resolution's last step, so none
-   * outlives it. Never throws: one crew can't remove is left, and noted.
+   * outlives it. Never throws: one crew can't remove is left, noted under
+   * `--verbose` (`exportTree`).
    */
   release(): void;
 }
@@ -77,16 +76,7 @@ export function makeParentTrees(home: string): ParentTrees {
     release() {
       const trees = [...held.values()];
       held.clear();
-      for (const tree of trees) {
-        try {
-          tree.release();
-        } catch (err) {
-          // One export crew can't remove must neither keep the rest nor
-          // replace the resolution's own result or error: it is crew's
-          // scratch, and `crew cache clean` takes it.
-          progress(`left a scratch export crew couldn't remove — ${errnoReason(err)}`);
-        }
-      }
+      for (const tree of trees) tree.release();
     },
   };
 }
@@ -107,7 +97,7 @@ function enclosingSubpath(subpath: string): string {
  */
 export function siblingItems(
   sibling: SiblingHit,
-  parent: PendingItem,
+  parent: Pick<PendingItem, "resolvedSha" | "requestedRef" | "pinned">,
   home: string,
   siblings: SiblingScan,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {

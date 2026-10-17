@@ -7,6 +7,7 @@
  * (`--dry-run`) or install it.
  */
 
+import { namespaceOf } from "../../core/namespace.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import { failureCodeOf } from "../../util/errno.ts";
 import {
@@ -15,7 +16,6 @@ import {
   noteInstalled,
 } from "../installed-lookup.ts";
 import type { CurrentTapChild } from "../tap-children.ts";
-import { namespaceOf } from "../tap-index.ts";
 import type { InstallNewChild, TapReexpandRow } from "./index.ts";
 import type { TapScanCache } from "./scan-cache.ts";
 

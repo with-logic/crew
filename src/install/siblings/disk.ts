@@ -15,23 +15,25 @@ import { isGistSkillCandidate } from "../../sources/gist.ts";
 import { leadsOutOfSource, type SourceBoundary } from "../../sources/source-boundary.ts";
 import { isGoneError, unreadablePathError } from "../../util/errno.ts";
 import { isDirectory } from "../../util/fs.ts";
-
-/** A sibling is a skill directory — or, in a gist, a skill file (§9 step 5). */
-export function isSiblingSkill(tap: TapConfig, path: string): boolean {
-  if (isGistTap(tap)) return isGistSkillCandidate(path);
-  return isDirectory(path) && hasSkillMd(path);
-}
+import type { SiblingEntry } from "./index.ts";
 
 /**
- * The name the sibling at `path` declares, when it is a skill that stays
- * inside `boundary`; null otherwise, and when its name can't be read.
+ * What the sibling at `path` is: a skill directory — or, in a gist, a
+ * skill file (§9 step 5) — whether it leads out of `boundary`, and the
+ * name it declares when it is a skill inside it whose name can be read.
  */
-export function declaredName(
+export function readSiblingEntry(
   tap: TapConfig,
   path: string,
   boundary: SourceBoundary,
-): string | null {
-  if (!isSiblingSkill(tap, path) || leadsOutOfSource(boundary, path)) return null;
+): SiblingEntry {
+  const skill = isGistTap(tap) ? isGistSkillCandidate(path) : isDirectory(path) && hasSkillMd(path);
+  const leadsOut = skill && leadsOutOfSource(boundary, path);
+  return { skill, leadsOut, declared: skill && !leadsOut ? nameOrNull(path) : null };
+}
+
+/** The name the skill at `path` declares; null when it can't be read. */
+function nameOrNull(path: string): string | null {
   try {
     return loadSkillName(path);
   } catch {

@@ -3,6 +3,7 @@
  */
 
 import { join, relative } from "node:path";
+import { namespaceOf } from "../../core/namespace.ts";
 import type { LoadedSkill } from "../../core/types.ts";
 import { cloneRepo } from "../../git/repo/index.ts";
 import { checkoutSha } from "../../git/repo/refs.ts";
@@ -47,16 +48,10 @@ function knownTapSkill(root: string, skill: LoadedSkill): KnownTapSkill {
   const path = toPosix(relative(root, skill.path));
   return {
     name: skill.frontmatter.name,
-    namespace: namespaceFor(path),
+    namespace: namespaceOf(path),
     description: skill.frontmatter.description,
     path,
   };
-}
-
-function namespaceFor(path: string): string | null {
-  const parts = path.split("/");
-  if (parts.length === 3 && parts[0] === "skills") return parts[1]!;
-  return null;
 }
 
 function compareKnownTapSkills(a: KnownTapSkill, b: KnownTapSkill): number {

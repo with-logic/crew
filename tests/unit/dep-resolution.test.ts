@@ -7,7 +7,6 @@ import { CrewError } from "../../src/core/errors.ts";
 import type { Config, TapConfig } from "../../src/core/types.ts";
 import { findSiblingDep } from "../../src/install/dep-resolution.ts";
 import { siblingItems } from "../../src/install/resolve/dep/parent-tree.ts";
-import type { PendingItem } from "../../src/install/resolve/enqueue.ts";
 import { makeSiblingScan } from "../../src/install/siblings/index.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -141,7 +140,7 @@ describe("findSiblingDep", () => {
     expect(fresh.loaded.frontmatter.description).toBe("Second.");
 
     const home = makeTempDir("dep-resolution-home-");
-    const item = { resolvedSha: null, requestedRef: null, pinned: false } as PendingItem;
+    const item = { resolvedSha: null, requestedRef: null, pinned: false };
     const staged = siblingItems(first, item, home, siblings).items[0]!.staged;
     expect(siblingItems(again, item, home, siblings).items[0]!.staged).toBe(staged);
   });
