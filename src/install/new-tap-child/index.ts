@@ -11,9 +11,8 @@
  */
 
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
-import { installSkillIntoAgents } from "../../agents/install.ts";
+import { installSkillIntoAgents, isSafetyRefusal } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
-import { CrewError } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import { type StoredSkill, stageIntoStore } from "../../sources/store.ts";
 import { withLeftBehind } from "../../util/cleanup.ts";
@@ -75,7 +74,7 @@ interface GroupsRun {
   readonly installedInto: readonly string[];
   /** The copies to take back if the child fails. */
   readonly copies: readonly ChildCopy[];
-  readonly failure: unknown;
+  readonly failure: Error | null;
 }
 
 /**
@@ -114,10 +113,12 @@ function installIntoGroups(
       }
     } catch (err) {
       // A safety check refusing one agent (§7.3) leaves the child out of
-      // it, as on an install; an agent folder crew can't write fails the
-      // child (§10.1.1), so it is retried rather than recorded without it.
-      if (err instanceof CrewError) continue;
-      return { installedInto, copies, failure: err };
+      // it, as on an install; any other error — an agent folder crew can't
+      // write or read — fails the child (§10.1.1), so it is retried rather
+      // than recorded without it.
+      if (isSafetyRefusal(err)) continue;
+      // `installSkillIntoAgents` throws only `Error`s: `CrewError`, or fs.
+      return { installedInto, copies, failure: err as Error };
     }
   }
   return { installedInto, copies, failure: null };

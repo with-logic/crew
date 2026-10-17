@@ -1,4 +1,4 @@
-/** Synchronous filesystem, walking, and atomic replacement helpers (§6, §12.1). */
+/** Synchronous filesystem and atomic replacement helpers (§6, §12.1). */
 
 import {
   accessSync,
@@ -16,7 +16,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
-import { unreadablePathError } from "./errno.ts";
 import { climbsOut } from "./relative-path.ts";
 
 /** Ensure a directory exists (like `mkdir -p`). */
@@ -122,12 +121,13 @@ export function isDirectory(path: string): boolean {
 
 /**
  * List immediate children of a directory, or `[]` if the directory is
- * absent. One crew can't list is `source_unreachable` naming it (§13),
- * never a raw filesystem error.
+ * absent. One crew can't list throws the raw filesystem error: whose
+ * fault it is — the source's, an agent folder's, the store's — is the
+ * caller's to say (`listSourceDir` for a source, §9 step 5).
  */
 export function listDir(path: string): string[] {
   if (!isDirectory(path)) return [];
-  return readNames(path);
+  return readdirSync(path);
 }
 
 /** True when crew can list `dir` and look at what's in it. */
@@ -137,15 +137,6 @@ export function canList(dir: string): boolean {
     return true;
   } catch {
     return false;
-  }
-}
-
-/** The names in directory `dir`; `source_unreachable` naming it when crew can't list it. */
-function readNames(dir: string): string[] {
-  try {
-    return readdirSync(dir);
-  } catch (err) {
-    throw unreadablePathError(dir, err, "read");
   }
 }
 

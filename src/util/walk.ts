@@ -1,8 +1,8 @@
 /**
  * Walking a directory tree without following links (CLAUDE.md design
  * decision #9): content hashing (§12.1), recursive discovery (§9 step
- * 5.4), and cache sizing. A folder crew can't list is `source_unreachable`
- * (`listDir`).
+ * 5.4), and cache sizing. A folder crew can't list throws the raw
+ * filesystem error, for the caller to classify (`listDir`).
  */
 
 import { lstatSync } from "node:fs";

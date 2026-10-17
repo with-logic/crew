@@ -12,14 +12,16 @@
  *
  * Below `skills/`, the source's index of skills, a folder crew can't list
  * might hold a skill, so it is a candidate too, and the loader reports why
- * it can't be read (§9 step 4); at the root, one holds none crew can see.
- * A `skills/` folder or root crew can't list is `source_unreachable`.
+ * it can't be read (§9 step 4). At the root, a folder crew can't list
+ * holds no `SKILL.md` it can see, so it is passed over. A `skills/` folder
+ * or root crew can't list is `source_unreachable` (`listSourceDir`).
  */
 
 import { join } from "node:path";
 import { hasSkillMd } from "../skill/load.ts";
-import { canList, isDirectory, listDir } from "../util/fs.ts";
+import { canList, isDirectory } from "../util/fs.ts";
 import { leadsOutOfSource, type SourceBoundary } from "./source-boundary.ts";
+import { listSourceDir } from "./source-dir.ts";
 
 /** The candidate skill folders under `root`, in walk order. */
 export function standardSkillFolders(root: string, boundary: SourceBoundary): string[] {
@@ -27,26 +29,26 @@ export function standardSkillFolders(root: string, boundary: SourceBoundary): st
   if (!isDirectory(skillsDir)) return skillChildren(root);
   if (leadsOutOfSource(boundary, skillsDir)) return [skillsDir];
   const found: string[] = [];
-  for (const name of listDir(skillsDir)) {
+  for (const name of listSourceDir(skillsDir)) {
     const child = join(skillsDir, name);
     if (!isDirectory(child)) continue;
     // A namespace is listed only once it is known to stay inside.
-    if (indexedSkill(child) || leadsOutOfSource(boundary, child)) found.push(child);
+    if (mayHoldSkill(child) || leadsOutOfSource(boundary, child)) found.push(child);
     // Exactly one level of namespace; other folders (docs, scripts) hold none.
-    else found.push(...skillChildren(child, indexedSkill));
+    else found.push(...skillChildren(child, mayHoldSkill));
   }
   return found;
 }
 
 /** Below `skills/`: a folder holding a `SKILL.md`, or one crew can't list that might. */
-function indexedSkill(folder: string): boolean {
+function mayHoldSkill(folder: string): boolean {
   return hasSkillMd(folder) || !canList(folder);
 }
 
 /** The folders directly in `dir` that `isSkill` accepts — by default, those holding a `SKILL.md`. */
 function skillChildren(dir: string, isSkill: (folder: string) => boolean = hasSkillMd): string[] {
   const found: string[] = [];
-  for (const name of listDir(dir)) {
+  for (const name of listSourceDir(dir)) {
     const child = join(dir, name);
     if (isDirectory(child) && isSkill(child)) found.push(child);
   }

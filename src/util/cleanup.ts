@@ -26,7 +26,7 @@ export function removeEach(paths: readonly string[]): string[] {
  * what was `left` behind; its code and details stay its own. Unchanged
  * when nothing was left.
  */
-export function withLeftBehind<T>(failure: T, left: readonly string[]): T {
-  if (left.length > 0) (failure as Error).message += `; left in place: ${left.join(", ")}`;
+export function withLeftBehind<T extends Error>(failure: T, left: readonly string[]): T {
+  if (left.length > 0) failure.message += `; left in place: ${left.join(", ")}`;
   return failure;
 }

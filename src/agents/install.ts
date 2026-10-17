@@ -149,6 +149,21 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
   return { kind: "installed", replacedSameName };
 }
 
+/** The codes of §7.3's safety checks: each refuses one agent, and is no failure. */
+const SAFETY_REFUSALS: ReadonlySet<string> = new Set([
+  "customized",
+  "inconsistent_marker",
+  "untracked_directory",
+]);
+
+/**
+ * True when `err` is a §7.3 safety check refusing to overwrite an agent's
+ * copy — which skips that agent — rather than a failure to install there.
+ */
+export function isSafetyRefusal(err: unknown): err is CrewError {
+  return err instanceof CrewError && SAFETY_REFUSALS.has(err.code);
+}
+
 /** Union of two adapter-name lists, sorted and deduplicated. */
 function mergeAdapters(a: readonly string[], b: readonly string[]): string[] {
   return [...new Set([...a, ...b])].sort();

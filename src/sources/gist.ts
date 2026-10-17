@@ -22,8 +22,8 @@ import { displayText, displayUrl } from "../refs/display-url.ts";
 import { fileOpensFrontmatter } from "../skill/frontmatter.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
 import { unreadablePathError } from "../util/errno.ts";
-import { listDir } from "../util/fs.ts";
 import type { AcquiredTap } from "./acquire/index.ts";
+import { listSourceDir } from "./source-dir.ts";
 
 /**
  * True when the gist checked out at `root` has a root `SKILL.md` and so is
@@ -41,13 +41,13 @@ export function isOneSkillGist(root: string): boolean {
  * included, on a case-insensitive disk too — that can be a skill file.
  */
 export function isExactSkillFile(dir: string, name: string): boolean {
-  return listDir(dir).includes(name) && isSkillFile(join(dir, name));
+  return listSourceDir(dir).includes(name) && isSkillFile(join(dir, name));
 }
 
 /** The skill candidates at the root of a gist checkout, in name order. */
 export function gistSkillCandidates(root: string): string[] {
   const paths: string[] = [];
-  for (const name of listDir(root).sort()) {
+  for (const name of listSourceDir(root).sort()) {
     const path = join(root, name);
     if (isGistSkillCandidate(path)) paths.push(path);
   }
@@ -107,7 +107,7 @@ export function selectGistFile(
   }
   const target = join(rootDir, gistFile);
   // Matched by exact name: a case-insensitive disk would also find `PRD.md`.
-  const present = listDir(rootDir).includes(gistFile);
+  const present = listSourceDir(rootDir).includes(gistFile);
   // `gistFile` is one top-level name (`splitGistFile`), so the file itself
   // is the only place a link could be (§8.4).
   if (present && isLink(target)) {

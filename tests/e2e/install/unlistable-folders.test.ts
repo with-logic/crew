@@ -4,7 +4,9 @@
  * `source_unreachable` while the source's other skills install — at
  * install and on update's re-expansion. A `skills/` folder or a source
  * crew can't list is `source_unreachable` for the whole source, never an
- * unexpected error; recursive discovery passes such a folder over.
+ * unexpected error. At the root, and in recursive discovery, such a
+ * folder is passed over. (On update, a tap whose `skills/` crew can't
+ * list: `../update-skill-path/unlistable-tap.test.ts`.)
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -93,6 +95,30 @@ test("C-SPEC-18 a source crew can't list is source_unreachable", () => {
   }
 });
 
+test("C-SPEC-18 a folder at the root crew can't list is passed over", () => {
+  const src = makeTempDir();
+  makeSkill(src, "good", skillFrontmatter({ name: "good" }));
+  const locked = join(src, "locked");
+  mkdirSync(locked);
+  const r = sealed(locked, () => crew(makeCrewHome(), ["install", src]));
+  expect(r.code).toBe(0);
+  expect(r.json.skipped).toEqual([]);
+  expect(readdirSync(claude.userRoot)).toEqual(["good"]);
+});
+
+test("C-SPEC-18 a source recursive discovery can list but not look into is source_unreachable", () => {
+  const parent = makeTempDir();
+  const src = join(parent, "src");
+  makeSkill(join(src, "deep"), "good", skillFrontmatter({ name: "good" }));
+  chmodSync(src, 0o444);
+  try {
+    const r = crew(makeCrewHome(), ["install", "--recursive", src]);
+    expect([r.code, r.json.error?.name]).toEqual([5, "source_unreachable"]);
+  } finally {
+    chmodSync(src, 0o755);
+  }
+});
+
 test("C-SPEC-18 recursive discovery passes over a folder crew can't list", () => {
   const src = makeTempDir();
   makeSkill(join(src, "deep", "nested"), "good", skillFrontmatter({ name: "good" }));
@@ -112,6 +138,6 @@ test("C-SPEC-18 a new child folder crew can't list is reported on update; the ru
   mkdirSync(locked);
   const r = sealed(locked, () => crew(home, ["update"]));
   expect(r.code).toBe(1);
-  const rows = r.json.tap_reexpand_rows?.map((row) => [row.kind, row.error?.code]);
-  expect(rows).toEqual([["tap_error", "source_unreachable"]]);
+  const rows = r.json.tap_reexpand_rows?.map((row) => [row.name, row.kind, row.error?.code]);
+  expect(rows).toEqual([["skills/locked", "tap_error", "source_unreachable"]]);
 });

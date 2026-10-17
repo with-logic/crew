@@ -239,7 +239,7 @@ the right format. This keeps every command trivially testable.
 `crew doctor --repair` reconstructs state from markers. Do not invert
 this hierarchy.
 
-**9. Never follow symlinks out of a skill.** `src/util/fs.ts` walks
+**9. Never follow symlinks out of a skill.** `src/util/walk.ts` walks
 with `lstatSync`; `src/hash/content.ts` and `src/util/copy.ts` both
 honor symlinks as-is. Violating this would hash or copy arbitrary
 filesystem content.

@@ -8,9 +8,8 @@
  */
 
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
-import { installSkillIntoAgents } from "../../agents/install.ts";
+import { installSkillIntoAgents, isSafetyRefusal } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
-import { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { failureCodeOf } from "../../util/errno.ts";
 import type { PerAgentUpdate } from "./types.ts";
@@ -75,9 +74,9 @@ function installGroup(
       });
     }
   } catch (err) {
-    // A safety check refusing to overwrite (§7.3) skips the agent; an agent
-    // folder crew can't write is a raw filesystem error, and a failure.
-    if (err instanceof CrewError) {
+    // A safety check refusing to overwrite (§7.3) skips the agent; any other
+    // error — an agent folder crew can't write or read — is a failure.
+    if (isSafetyRefusal(err)) {
       for (const a of group) perTarget.push({ agent: a.name, kind: "skipped", reason: err.code });
       return;
     }
