@@ -10,19 +10,34 @@ import type { Config, TapConfig, TapSource } from "../../../core/types.ts";
 import { parseRef } from "../../../refs/parse.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { findSiblingDep } from "../../dep-resolution.ts";
+import { makeSiblingScan, type SiblingScan } from "../../sibling-scan.ts";
 import { enqueueDirectRef } from "../direct-ref.ts";
 import { enqueueTapRef, type PendingItem } from "../enqueue.ts";
-import { siblingItems, withParentSkill } from "./parent-tree.ts";
+import { makeParentTrees, type ParentTrees, siblingItems } from "./parent-tree.ts";
+
+/**
+ * What one resolution's dependency walk reads once and shares across
+ * every parent: the commits siblings are read at, and what each sibling
+ * directory holds. The resolver releases `trees` when it is done.
+ */
+export interface DependencyReads {
+  readonly trees: ParentTrees;
+  readonly siblings: SiblingScan;
+}
+
+/** Fresh shared reads for one resolution. */
+export function makeDependencyReads(home: string): DependencyReads {
+  return { trees: makeParentTrees(home), siblings: makeSiblingScan() };
+}
 
 /**
  * Resolve and enqueue items for every dependency of one parent.
  *
- * Batched deliberately. A parent installed at an explicit ref has its
- * siblings read at the parent's commit (§9 step 3), which means
- * exporting that commit; doing it per dependency re-exports the same
- * tree once for each edge. One export serves them all, and the export's
- * lifetime still ends with this call, so nothing outlives the scratch
- * directory.
+ * A parent installed at an explicit ref has its siblings read at the
+ * parent's commit (§9 step 3), which means exporting that commit; doing it
+ * per dependency, or per parent, would re-export the same tree once for
+ * each edge. `reads` holds one export per tap and commit for the whole
+ * resolution, and one reading of each sibling directory.
  *
  * What matters here is whether the parent carries a ref at all, not
  * whether that ref is `pinned` (§11.1): a parent at `@<branch>` is
@@ -33,10 +48,10 @@ export function enqueueDeps(
   depRefs: readonly string[],
   parent: PendingItem,
   config: Config,
-  cwd: string,
-  home: string,
+  context: { readonly cwd: string; readonly home: string; readonly reads: DependencyReads },
   requireTap: (tap: TapConfig) => void,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
+  const { cwd, home, reads } = context;
   const items: PendingItem[] = [];
   const skipped: SkippedSkill[] = [];
   let current = config;
@@ -56,30 +71,27 @@ export function enqueueDeps(
 
   const unresolved: string[] = [];
   if (bare.length > 0) {
+    const exportedPath = reads.trees.locate(parent);
     // `findSiblingDep` can register an auto tap, so each hit carries the
     // config to carry forward; threading it through the loop is what
     // keeps a batched walk equivalent to resolving one at a time.
-    const found = withParentSkill(parent, home, (exportedPath) => {
-      const hits: PendingItem[] = [];
-      for (const dep of bare) {
-        const sibling = findSiblingDep(
-          { tap: parent.tap, tapRelativePath: parent.tapRelativePath, exportedPath },
-          dep.source.name,
-          home,
-          current,
-        );
-        // A miss falls through to the cross-tap search below, which
-        // does not need the parent's tree.
-        if (sibling) {
-          requireTap(sibling.tap);
-          const produced = siblingItems(sibling, parent, home);
-          hits.push(...produced.items);
-          current = produced.config;
-        } else unresolved.push(dep.raw);
-      }
-      return hits;
-    });
-    items.push(...found);
+    for (const dep of bare) {
+      const sibling = findSiblingDep(
+        { tap: parent.tap, tapRelativePath: parent.tapRelativePath, exportedPath },
+        dep.source.name,
+        home,
+        current,
+        reads.siblings,
+      );
+      // A miss falls through to the cross-tap search below, which
+      // does not need the parent's tree.
+      if (sibling) {
+        requireTap(sibling.tap);
+        const produced = siblingItems(sibling, parent, home);
+        items.push(...produced.items);
+        current = produced.config;
+      } else unresolved.push(dep.raw);
+    }
   }
 
   for (const depRef of [...unresolved, ...others]) {

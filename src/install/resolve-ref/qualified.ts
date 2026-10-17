@@ -16,7 +16,7 @@
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapSource } from "../../core/types.ts";
 import { ambiguityError, twoSegmentMissError } from "./errors.ts";
-import { indexTapAt, lookupInTap, safeIndex } from "./tap-index-lookup.ts";
+import { indexTapAt, lookupInTap, refusalFor, safeIndex } from "./tap-index-lookup.ts";
 import type { NonTapNameCandidate, TapRoots } from "./types.ts";
 
 /** `<tap>/<namespace>/<skill>` — unambiguous, so it matches or throws. */
@@ -39,6 +39,9 @@ export function resolveThreeSegment(
   const locs = index.skills.get(source.name) ?? [];
   const match = locs.find((l) => l.namespace === source.namespace);
   if (!match) {
+    // A candidate crew refused there says why it isn't found (C-SPEC-17).
+    const refused = refusalFor(index, source.name, source.namespace);
+    if (refused) throw refused;
     throw new CrewError(
       "invalid_ref",
       `\`${source.tap}/${source.namespace}/${source.name}\` doesn't exist — no skill \`${source.name}\` found in namespace \`${source.namespace}\` of tap \`${source.tap}\``,
@@ -87,5 +90,7 @@ export function resolveTwoSegment(
       `\`${first}/${second}\` is a namespaced skill in multiple taps`,
     );
   }
+  const refused = tap ? refusalFor(safeIndex(tap, home, roots), second, null) : null;
+  if (refused) throw refused;
   throw twoSegmentMissError(first, second, source.ref);
 }

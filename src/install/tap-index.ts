@@ -11,7 +11,9 @@
  *
  * The index is intentionally optimistic: it validates only the
  * declared `name`; full SKILL.md validation still happens at install
- * or search-render time.
+ * or search-render time. A candidate whose name it can't read isn't
+ * indexed, but is listed in `unloadable`, so re-expansion can report it
+ * (§10.1.1 step 2).
  *
  * Namespace rules (§9 step 5 case 2): a namespace is a directory
  * directly under `skills/` that contains no `SKILL.md` of its own
@@ -20,14 +22,15 @@
  * A gist (§9 step 5, "Gists") has no directories: its index is the
  * skill files at its root, each located by its file name. In any other
  * git tap, a folder that leads out of the repository through a link is
- * left out, unread (§9 step 5, "Folder links").
+ * never read (§9 step 5, "Folder links"): it is listed in `unloadable`
+ * with that refusal.
  */
 
-import { basename, join, relative } from "node:path";
+import { basename, relative } from "node:path";
+import type { CrewError } from "../core/errors.ts";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
-import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
 import {
   type DiscoveryMode,
@@ -38,8 +41,15 @@ import {
 import { gistSkillCandidates } from "../sources/gist.ts";
 import { migrateTapClone } from "../sources/migrate-clones.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
-import { leadsOutOfSource, sourceBoundary } from "../sources/source-boundary.ts";
-import { isDirectory, listDir, toPosix } from "../util/fs.ts";
+import { standardSkillFolders } from "../sources/skill-folders.ts";
+import { leadsOutOfSource, outOfSourceError, sourceBoundary } from "../sources/source-boundary.ts";
+import { toPosix } from "../util/fs.ts";
+import {
+  type LoadFailures,
+  nameOrFailure,
+  type UnloadableCandidate,
+  unloadableAt,
+} from "./unloadable-candidates.ts";
 
 /** Location of one skill inside a tap. */
 export interface SkillLocation {
@@ -62,7 +72,12 @@ export interface TapIndex {
   readonly skills: ReadonlyMap<string, readonly SkillLocation[]>;
   /** Namespace name → its skill children. */
   readonly namespaces: ReadonlyMap<string, readonly SkillLocation[]>;
+  /** Candidates whose name couldn't be read, so aren't in `skills`. */
+  readonly unloadable: readonly UnloadableCandidate[];
 }
+
+/** What the walk itself finds: the index but for the candidates it couldn't name. */
+type IndexedSkills = Omit<TapIndex, "unloadable">;
 
 /** Resolve a tap's on-disk root, materializing a git clone if needed. */
 export function tapRoot(tap: TapConfig, home: string): string {
@@ -87,6 +102,22 @@ export function tapRoot(tap: TapConfig, home: string): string {
  */
 export function indexTap(tap: TapConfig, home: string, rootOverride?: string): TapIndex {
   const root = rootOverride ?? tapRoot(tap, home);
+  const failures: LoadFailures = new Map();
+  const found = walkTap(tap, home, root, failures);
+  return { ...found, unloadable: unloadableAt(root, failures) };
+}
+
+/** The walk behind `indexTap`, recording in `failures` each candidate it can't name. */
+function walkTap(
+  tap: TapConfig,
+  home: string,
+  root: string,
+  failures: LoadFailures,
+): IndexedSkills {
+  const skillNameForIndex = (path: string): string | null => nameOrFailure(path, failures);
+  const refuse = (path: string, err: CrewError): void => {
+    failures.set(path, { code: err.code, message: err.message });
+  };
   const skills = new Map<string, SkillLocation[]>();
   const namespaces = new Map<string, SkillLocation[]>();
 
@@ -118,79 +149,40 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
     return { skills, namespaces };
   }
 
-  // §9 step 5 "Folder links": a folder leading out of the repository is
-  // never listed or read, so it is left out of the index.
+  // Cases 2–3, the same candidates install finds. §9 step 5 "Folder
+  // links": one leading out of the repository is never listed or read —
+  // a candidate refused unnamed, which re-expansion reports (C-SPEC-17).
   const boundary = sourceBoundary(tap, home, root);
-  const inside = (folder: string): boolean => !leadsOutOfSource(boundary, folder);
-  const skillsDir = join(root, "skills");
-  if (isDirectory(skillsDir)) {
-    // Case 2: walk under skills/
-    for (const name of inside(skillsDir) ? listDir(skillsDir) : []) {
-      const child = join(skillsDir, name);
-      if (!(isDirectory(child) && inside(child))) continue;
-      if (hasSkillMd(child)) {
-        const skillName = skillNameForIndex(child);
-        if (skillName === null) continue;
-        addSkill({
-          name: skillName,
-          namespace: null,
-          path: child,
-          tapRelativePath: `skills/${name}`,
-        });
-        continue;
-      }
-      // Possibly a namespace: look at its children.
-      for (const childName of listDir(child)) {
-        const grandchild = join(child, childName);
-        if (!isDirectory(grandchild)) continue;
-        if (!(hasSkillMd(grandchild) && inside(grandchild))) continue;
-        const skillName = skillNameForIndex(grandchild);
-        if (skillName === null) continue;
-        addSkill({
-          name: skillName,
-          namespace: name,
-          path: grandchild,
-          tapRelativePath: `skills/${name}/${childName}`,
-        });
-      }
+  for (const folder of standardSkillFolders(root, boundary)) {
+    const tapRelativePath = toPosix(relative(root, folder));
+    if (leadsOutOfSource(boundary, folder)) {
+      refuse(folder, outOfSourceError(folder));
+      continue;
     }
-    return maybeRecursiveIndex(mode, root, skills, namespaces, addSkill);
-  }
-
-  // Case 3: walk one level under root.
-  for (const name of listDir(root)) {
-    const child = join(root, name);
-    if (!isDirectory(child)) continue;
-    if (!(hasSkillMd(child) && inside(child))) continue;
-    const skillName = skillNameForIndex(child);
+    const skillName = skillNameForIndex(folder);
     if (skillName === null) continue;
-    addSkill({ name: skillName, namespace: null, path: child, tapRelativePath: name });
+    // `skills/<namespace>/<skill>` is the one layout with a namespace.
+    const parts = tapRelativePath.split("/");
+    const namespace = parts.length === 3 ? parts[1]! : null;
+    addSkill({ name: skillName, namespace, path: folder, tapRelativePath });
   }
-  return maybeRecursiveIndex(mode, root, skills, namespaces, addSkill);
+  return maybeRecursiveIndex(mode, root, { skills, namespaces }, addSkill, skillNameForIndex);
 }
 
 function maybeRecursiveIndex(
   mode: DiscoveryMode,
   root: string,
-  skills: Map<string, SkillLocation[]>,
-  namespaces: Map<string, SkillLocation[]>,
+  found: IndexedSkills,
   addSkill: (loc: SkillLocation) => void,
-): TapIndex {
+  skillNameForIndex: (path: string) => string | null,
+): IndexedSkills {
   // The walk follows no link, so every folder it finds is inside `root`.
-  if (skills.size > 0 || !fallsBackToRecursive(mode)) return { skills, namespaces };
+  if (found.skills.size > 0 || !fallsBackToRecursive(mode)) return found;
   for (const dir of findRecursiveSkillDirs(root)) {
     const tapRelativePath = toPosix(relative(root, dir));
     const skillName = skillNameForIndex(dir);
     if (skillName === null) continue;
     addSkill({ name: skillName, namespace: null, path: dir, tapRelativePath });
   }
-  return { skills, namespaces };
-}
-
-function skillNameForIndex(path: string): string | null {
-  try {
-    return loadSkillName(path);
-  } catch {
-    return null;
-  }
+  return found;
 }

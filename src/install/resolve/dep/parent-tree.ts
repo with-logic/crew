@@ -5,56 +5,74 @@
  * A dependency named by a bare name is looked for beside its parent
  * first. "Beside" means "in the same commit the parent's bytes came
  * from", so when the parent was read at an explicit `@<ref>` this module
- * re-exports that commit for the sibling walk and turns a hit into a
- * pending item carrying the parent's ref and SHA.
+ * re-exports that commit for the sibling walk — once per tap and commit
+ * for the whole resolution, however many parents read it — and turns a
+ * hit into a pending item carrying the parent's ref and SHA.
  */
 
 import { join, posix } from "node:path";
 import type { Config, TapConfig } from "../../../core/types.ts";
-import { withAcquiredTap } from "../../../sources/acquire/index.ts";
+import { type HeldTap, holdAcquiredTap } from "../../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { stageIntoStore } from "../../../sources/store.ts";
 import { isWholeRepoRootSkill, type SiblingHit } from "../../dep-resolution.ts";
 import type { PendingItem } from "../enqueue.ts";
 
+/** The commits parents' siblings are read at, each exported once per resolution. */
+export interface ParentTrees {
+  /**
+   * The parent skill's location in the commit its content came from — or
+   * `undefined` when no export is needed: the parent came from the live
+   * source (a clone with no ref, or a path tap), or is a whole-repo root
+   * skill, which has no siblings to read.
+   */
+  locate(parent: PendingItem): string | undefined;
+  /** Delete every export `locate` made: the resolution's last step, so none outlives it. */
+  release(): void;
+}
+
 /**
- * Run `fn` with the parent skill's location in the commit its content
- * came from — or `undefined` when no export is needed: the parent came
- * from the live clone, or is a whole-repo root skill, which has no
- * siblings to read.
- *
  * A parent installed at `@<ref>` was read from a scratch export of that
  * commit, which has since been deleted, so it is re-exported for the
- * sibling walk. A parent with NO ref came from the live clone and needs
- * no export — `fn` gets `undefined` and the lookup uses its usual root.
- * The test is the presence of a ref, not `pinned`: a `@<branch>` parent
- * is unpinned but was still read from that branch's commit.
+ * sibling walk. A parent with NO ref came from the live source and needs
+ * no export: the lookup uses its usual root. The test is the presence of
+ * a ref, not `pinned`: a `@<branch>` parent is unpinned but was still read
+ * from that branch's commit.
  *
  * Siblings sit beside the parent, so when the tap's subpath IS the
  * parent directory the export has to widen to the enclosing directory;
  * exporting the subpath alone would contain no siblings at all.
  */
-export function withParentSkill<T>(
-  parent: PendingItem,
-  home: string,
-  fn: (exportedPath: string | undefined) => T,
-): T {
-  const readFromLiveClone =
-    parent.requestedRef === null || parent.resolvedSha === null || parent.tap.kind !== "git";
-  if (readFromLiveClone || isWholeRepoRootSkill(parent.tap, parent.tapRelativePath)) {
-    return fn(undefined);
-  }
-  const widened: TapConfig = { ...parent.tap, subpath: enclosingSubpath(parent.tap.subpath) };
-  // Inside the widened export, the parent sits at its own directory name
-  // (subpath case) or at its tap-relative path (whole-repo tap case).
-  const rel =
-    parent.tap.subpath.length > 0
-      ? posix.join(posix.basename(parent.tap.subpath), parent.tapRelativePath)
-      : parent.tapRelativePath;
-  // Another root's fetch can move a branch; siblings use the captured commit (§9 step 3).
-  return withAcquiredTap(widened, parent.resolvedSha, home, (acq) =>
-    fn(rel.length > 0 ? join(acq.rootDir, rel) : acq.rootDir),
-  );
+export function makeParentTrees(home: string): ParentTrees {
+  const held = new Map<string, HeldTap>();
+  return {
+    locate(parent) {
+      const usesLiveSource =
+        parent.requestedRef === null || parent.resolvedSha === null || parent.tap.kind !== "git";
+      if (usesLiveSource || isWholeRepoRootSkill(parent.tap, parent.tapRelativePath)) {
+        return undefined;
+      }
+      const widened: TapConfig = { ...parent.tap, subpath: enclosingSubpath(parent.tap.subpath) };
+      const key = JSON.stringify([widened.name, widened.subpath, parent.resolvedSha]);
+      let tree = held.get(key);
+      if (tree === undefined) {
+        // Another root's fetch can move a branch; siblings use the captured commit (§9 step 3).
+        tree = holdAcquiredTap(widened, parent.resolvedSha, home);
+        held.set(key, tree);
+      }
+      // Inside the widened export, the parent sits at its own directory name
+      // (subpath case) or at its tap-relative path (whole-repo tap case).
+      const rel =
+        parent.tap.subpath.length > 0
+          ? posix.join(posix.basename(parent.tap.subpath), parent.tapRelativePath)
+          : parent.tapRelativePath;
+      return rel.length > 0 ? join(tree.acquired.rootDir, rel) : tree.acquired.rootDir;
+    },
+    release() {
+      for (const tree of held.values()) tree.release();
+      held.clear();
+    },
+  };
 }
 
 /**

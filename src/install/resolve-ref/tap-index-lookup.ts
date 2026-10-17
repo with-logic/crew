@@ -7,6 +7,7 @@
  * than the shared clone's checked-out revision (§9 step 3).
  */
 
+import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { indexTap, type TapIndex } from "../tap-index.ts";
 import type { NonTapNameCandidate, TapRoots } from "./types.ts";
@@ -28,6 +29,31 @@ export function safeIndex(tap: TapConfig, home: string, roots: TapRoots): TapInd
   } catch {
     return null;
   }
+}
+
+/**
+ * Why a reference to `name` (under `namespace`, when given) finds nothing
+ * indexed: a candidate at its location that crew couldn't name — a folder
+ * that leads out of the repository (C-SPEC-17), say — or one above it,
+ * `skills/` or the namespace. Null when there is none: the name is
+ * simply missing. A gist's candidate is its file, named without `.md`.
+ */
+export function refusalFor(
+  index: TapIndex | null,
+  name: string,
+  namespace: string | null,
+): CrewError | null {
+  const above = new Set(["skills", ...(namespace === null ? [] : [`skills/${namespace}`])]);
+  for (const candidate of index?.unloadable ?? []) {
+    const parts = candidate.tapRelativePath.split("/");
+    const leaf = parts[parts.length - 1]!.replace(/\.md$/, "");
+    const inNamespace = namespace === null || parts[1] === namespace;
+    if ((leaf === name && inNamespace) || above.has(candidate.tapRelativePath)) {
+      const { code, message } = candidate.error;
+      return new CrewError(code, message, { path: candidate.path });
+    }
+  }
+  return null;
 }
 
 /** The skill named `name` inside `tap`, preferring an unnamespaced match. */

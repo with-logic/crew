@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { CrewError } from "../../src/core/errors.ts";
 import type { Config, TapConfig } from "../../src/core/types.ts";
 import { findSiblingDep } from "../../src/install/dep-resolution.ts";
+import { makeSiblingScan } from "../../src/install/sibling-scan.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
 function pathTap(path: string): TapConfig {
@@ -50,6 +51,7 @@ describe("findSiblingDep", () => {
       "dep",
       "/unused",
       configWith(pathTap(root)),
+      makeSiblingScan(),
     );
 
     expect(hit?.loaded.frontmatter.name).toBe("dep");
@@ -67,6 +69,7 @@ describe("findSiblingDep", () => {
       "missing",
       "/unused",
       configWith(pathTap(root)),
+      makeSiblingScan(),
     );
     expect(hit).toBeNull();
   });
@@ -83,6 +86,7 @@ describe("findSiblingDep", () => {
         "dep",
         "/unused",
         configWith(pathTap(root)),
+        makeSiblingScan(),
       ),
     ).toThrow(CrewError);
   });
@@ -93,8 +97,28 @@ describe("findSiblingDep", () => {
       "dep",
       "/unused",
       configWith(gitTap()),
+      makeSiblingScan(),
     );
 
     expect(hit).toBeNull();
+  });
+
+  test("one scan reads each sibling's name once for every lookup that shares it", () => {
+    const root = makeTempDir("dep-resolution-");
+    makeSkill(root, "parent-source", skillFrontmatter({ name: "parent" }));
+    makeSkill(root, "dep-source", skillFrontmatter({ name: "dep" }));
+    const parent = { tap: pathTap(root), tapRelativePath: "parent-source" };
+    const config = configWith(pathTap(root));
+    const siblings = makeSiblingScan();
+    expect(findSiblingDep(parent, "dep", "/unused", config, siblings)?.tapRelativePath).toBe(
+      "dep-source",
+    );
+
+    // Renamed on disk: the shared scan still answers from its first read,
+    // while a fresh one reads it again.
+    makeSkill(root, "dep-source", skillFrontmatter({ name: "renamed" }));
+    expect(findSiblingDep(parent, "renamed", "/unused", config, siblings)).toBeNull();
+    const fresh = findSiblingDep(parent, "renamed", "/unused", config, makeSiblingScan());
+    expect(fresh?.tapRelativePath).toBe("dep-source");
   });
 });

@@ -18,7 +18,8 @@
  * would add an undeclared dependency.
  *
  * `withExportedTree` wraps the common "use it, then delete it" shape so
- * normal success and failure share a cleanup scope.
+ * normal success and failure share a cleanup scope; `exportTree` hands
+ * the export to a caller that keeps it longer.
  */
 
 import { mkdtempSync } from "node:fs";
@@ -91,20 +92,50 @@ function exportFailure(
   );
 }
 
+/** A scratch export of a commit: the source root inside it, and how to delete it. */
+export interface ExportedTree {
+  readonly location: string;
+  /** Delete the export. IO errors propagate; `crew cache clean` removes leftovers. */
+  readonly remove: () => void;
+}
+
 /**
- * Run `fn` against a scratch export of `sha`, then delete the scratch
- * directory when `fn` returns or throws. Cleanup IO errors propagate;
- * `crew cache clean` can remove any leftover scratch directories.
+ * Export `sha` into a scratch directory the caller deletes with `remove`
+ * — after one callback (`withExportedTree`), or after a whole resolution
+ * that reads the same commit for many skills.
  *
- * `fn` receives the location matching the source root: the export root
- * when `subpath` is empty, otherwise the subpath inside it — a directory,
- * or the file itself when the subpath names a gist skill file. That
- * location is checked for symlink escapes first, because §9 step 3
- * requires every byte crew reads to come from the requested commit: a
- * repository can commit a symlink at the subpath itself, and following it
- * would read content from outside that commit entirely. Each export sits
- * directly under the git cache, which is how discovery finds the
- * repository a location below it must stay in (`sourceBoundary`).
+ * `location` matches the source root: the export root when `subpath` is
+ * empty, otherwise the subpath inside it — a directory, or the file itself
+ * when the subpath names a gist skill file. It is checked for symlink
+ * escapes first, because §9 step 3 requires every byte crew reads to come
+ * from the requested commit: a repository can commit a symlink at the
+ * subpath itself, and following it would read content from outside that
+ * commit entirely. Each export sits directly under the git cache, which is
+ * how discovery finds the repository a location below it must stay in
+ * (`sourceBoundary`). A failed export leaves nothing behind.
+ */
+export function exportTree(
+  clonePath: string,
+  sha: string,
+  subpath: string,
+  home: string,
+): ExportedTree {
+  const dest = makeScratchDir(paths(home).gitCacheDir, sha);
+  try {
+    exportTreeAt(clonePath, sha, subpath, dest);
+    const location = subpath.length > 0 ? join(dest, subpath) : dest;
+    assertNoSymlinkEscape(dest, location, subpath);
+    return { location, remove: () => rmrf(dest) };
+  } catch (err) {
+    rmrf(dest);
+    throw err;
+  }
+}
+
+/**
+ * Run `fn` against a scratch export of `sha` (`exportTree`), then delete
+ * it when `fn` returns or throws. Cleanup can throw on an IO/permission
+ * failure and replace the callback result.
  */
 export function withExportedTree<T>(
   clonePath: string,
@@ -113,16 +144,11 @@ export function withExportedTree<T>(
   home: string,
   fn: (location: string) => T,
 ): T {
-  const dest = makeScratchDir(paths(home).gitCacheDir, sha);
+  const tree = exportTree(clonePath, sha, subpath, home);
   try {
-    exportTreeAt(clonePath, sha, subpath, dest);
-    const location = subpath.length > 0 ? join(dest, subpath) : dest;
-    assertNoSymlinkEscape(dest, location, subpath);
-    return fn(location);
+    return fn(tree.location);
   } finally {
-    // Cleanup can throw on an IO/permission failure and replace the callback
-    // result. Any leftover scratch export can be removed by `crew cache clean`.
-    rmrf(dest);
+    tree.remove();
   }
 }
 

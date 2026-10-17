@@ -73,11 +73,10 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
       // Name the child and the reason, as `crew update` does: a child
       // that failed validation is the user's to fix, and "tap acme
       // (invalid_skill)" alone would not tell them which skill broke.
-      const code = r.error?.code ?? "unreachable";
       lines.push(
-        `${style.symbol("warn")} ${style.bold(r.name)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
+        `${style.symbol("warn")} ${style.bold(r.name)} ${style.dim(`(from ${r.tap})`)} ${style.red(r.error.code)}`,
       );
-      if (r.error?.message) lines.push(style.dim(`  ${r.error.message}`));
+      lines.push(style.dim(`  ${r.error.message}`));
     }
   }
   if (lines.length > 0) lines.push("");

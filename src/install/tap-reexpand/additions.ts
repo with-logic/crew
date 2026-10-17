@@ -42,11 +42,18 @@ export interface AdditionsInput {
   readonly namespaces: ReadonlySet<string> | null;
 }
 
-/** The namespace a child lives under (`skills/<ns>/<name>`), or null. */
-function namespaceForChild(child: CurrentTapChild): string | null {
-  const parts = child.tapRelativePath.split("/");
-  if (parts.length === 3 && parts[0] === "skills") return parts[1]!;
-  return null;
+/**
+ * Whether a run may add the child at `tapRelativePath`: any, when
+ * unbounded (`null`); else only one under a namespace it named
+ * (`skills/<ns>/<name>`, §10.1.1).
+ */
+export function withinNamespaces(
+  tapRelativePath: string,
+  namespaces: ReadonlySet<string> | null,
+): boolean {
+  if (namespaces === null) return true;
+  const parts = tapRelativePath.split("/");
+  return parts.length === 3 && parts[0] === "skills" && namespaces.has(parts[1]!);
 }
 
 export interface AdditionsResult {
@@ -63,10 +70,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
   for (const child of input.children) {
     if (input.conflictedNames.has(child.name)) continue;
     if (input.memberNames.has(child.name)) continue;
-    if (input.namespaces !== null) {
-      const ns = namespaceForChild(child);
-      if (ns === null || !input.namespaces.has(ns)) continue;
-    }
+    if (!withinNamespaces(child.tapRelativePath, input.namespaces)) continue;
 
     const lookup = {
       name: child.name,

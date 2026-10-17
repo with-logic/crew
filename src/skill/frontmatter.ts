@@ -6,6 +6,7 @@
  * skill body (markdown prose used by the agent).
  */
 
+import { closeSync, openSync, readSync } from "node:fs";
 import { CrewError } from "../core/errors.ts";
 import { parseYaml, type YamlValue } from "../yaml/parse.ts";
 
@@ -24,6 +25,46 @@ export interface Frontmatter {
  */
 export function opensFrontmatter(raw: string): boolean {
   return openingDelimiter(linesOf(raw)) >= 0;
+}
+
+/** Bytes read at a time while looking for a file's first non-blank line. */
+const HEAD_CHUNK = 4096;
+
+/**
+ * `opensFrontmatter` for the file at `path`, read only as far as decides
+ * it: through its first non-blank line, or less. Every top-level `.md`
+ * file of a gist is asked, and most aren't skills. Throws when the file
+ * can't be read.
+ */
+export function fileOpensFrontmatter(path: string): boolean {
+  const fd = openSync(path, "r");
+  try {
+    const decoder = new TextDecoder();
+    const chunk = new Uint8Array(HEAD_CHUNK);
+    let head = "";
+    for (;;) {
+      const read = readSync(fd, chunk);
+      head = (head + decoder.decode(chunk.subarray(0, read), { stream: read > 0 })).trimStart();
+      const opens = firstLineOpens(head, read === 0);
+      if (opens !== undefined) return opens;
+      // Undecided, `head` is at most `---` and spaces: they decide alike.
+      head = head.slice(0, 3);
+    }
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Whether `head` — a file's text from its first non-blank character —
+ * opens frontmatter (`openingDelimiter`), or `undefined` while that line
+ * could still read `---` and more of the file remains.
+ */
+function firstLineOpens(head: string, atEnd: boolean): boolean | undefined {
+  const lineEnd = head.search(/[\r\n]/);
+  if (lineEnd >= 0) return head.slice(0, lineEnd).trim() === "---";
+  if (atEnd) return head.trim() === "---";
+  return "---".startsWith(head) || /^---\s*$/.test(head) ? undefined : false;
 }
 
 /**

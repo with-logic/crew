@@ -3,14 +3,37 @@
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import type { FailureCode } from "../../util/errno.ts";
 
-/** One re-expansion outcome row. */
-export interface TapReexpandRow {
+/** What every re-expansion row names. */
+interface RowSubject {
+  /** The skill's name — or, for a candidate whose name crew can't read, its location in the tap. */
   readonly name: string;
   readonly scope: Scope;
-  readonly kind: "added" | "would_add" | "source_gone" | "tap_error";
   readonly tap: string;
-  /** A §13 name, or an agent folder's errno code (see `failureCodeOf`). */
-  readonly error?: { readonly code: FailureCode; readonly message: string };
+}
+
+/** Why a child failed: a §13 name, or an agent folder's errno code (see `failureCodeOf`). */
+export interface TapReexpandError {
+  readonly code: FailureCode;
+  readonly message: string;
+}
+
+/**
+ * One re-expansion outcome row. A `tap_error` always carries its error
+ * (C-UPD-18e: its code and message); no other kind has one.
+ */
+export type TapReexpandRow =
+  | (RowSubject & { readonly kind: "added" | "would_add" | "source_gone"; readonly error?: never })
+  | TapErrorRow;
+
+/** A re-expansion row reporting a failure. */
+export type TapErrorRow = RowSubject & {
+  readonly kind: "tap_error";
+  readonly error: TapReexpandError;
+};
+
+/** Narrows a row to a failure, for the renderers that list them. */
+export function isTapErrorRow(row: TapReexpandRow): row is TapErrorRow {
+  return row.kind === "tap_error";
 }
 
 /** Callback to install one newly-detected child skill. */

@@ -32,7 +32,7 @@ import { CrewError } from "../../core/errors.ts";
 import { crewHome } from "../../core/paths.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { withExportedTree } from "../../git/export.ts";
+import { exportTree } from "../../git/export.ts";
 import { ensureClone } from "../../git/repo/index.ts";
 import { classifyRef, resolveRef } from "../../git/repo/refs.ts";
 import { displayUrl } from "../../refs/display-url.ts";
@@ -121,8 +121,28 @@ export function withAcquiredTap<T>(
   home: string,
   fn: (acquired: AcquiredTap) => T,
 ): T {
+  const held = holdAcquiredTap(tap, ref, home);
+  try {
+    return fn(held.acquired);
+  } finally {
+    held.release();
+  }
+}
+
+/** An acquired tap kept for as long as its holder needs it. */
+export interface HeldTap {
+  readonly acquired: AcquiredTap;
+  /** Delete the scratch export behind it, if any. */
+  readonly release: () => void;
+}
+
+/**
+ * `withAcquiredTap` without the scope, for a caller that reads one commit
+ * for many skills: the holder calls `release` once it is done.
+ */
+export function holdAcquiredTap(tap: TapConfig, ref: string | null, home: string): HeldTap {
   if (ref === null || tap.kind === "path") {
-    return fn(acquireTap(tap, home));
+    return { acquired: acquireTap(tap, home), release: () => undefined };
   }
   migrateTapClone(tap, home);
   const clonePath = tapClonePath(tap, home);
@@ -130,9 +150,8 @@ export function withAcquiredTap<T>(
   const sha = resolveRefFetchingIfNeeded(clonePath, ref);
   const kind = classifyRef(clonePath, ref);
   const pinned = kind === "sha" || kind === "tag";
-  return withExportedTree(clonePath, sha, tap.subpath, home, (rootDir) =>
-    fn({ rootDir, resolvedSha: sha, pinned }),
-  );
+  const tree = exportTree(clonePath, sha, tap.subpath, home);
+  return { acquired: { rootDir: tree.location, resolvedSha: sha, pinned }, release: tree.remove };
 }
 
 /**

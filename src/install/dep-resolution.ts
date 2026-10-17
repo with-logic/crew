@@ -30,6 +30,7 @@ import { isGistSkillCandidate } from "../sources/gist.ts";
 import { leadsOutOfSource, outOfSourceError, sourceBoundary } from "../sources/source-boundary.ts";
 import { isGoneError, unreadablePathError } from "../util/errno.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
+import type { SiblingScan } from "./sibling-scan.ts";
 import { attributeRef } from "./tap-attribution.ts";
 
 /** Result of finding a dep as a sibling within the parent's tap. */
@@ -50,13 +51,15 @@ export interface SiblingHit {
  * export of a pinned commit. Siblings must be discovered there, not in
  * the live clone: staging HEAD's bytes while recording the parent's SHA
  * would make state describe a provenance the content doesn't have
- * (§9 step 3).
+ * (§9 step 3). What the walk learns of each sibling comes from
+ * `siblings`, read once per resolution.
  */
 export function findSiblingDep(
   parent: { tap: TapConfig; tapRelativePath: string; exportedPath?: string | undefined },
   depName: string,
   home: string,
   config: Config,
+  siblings: SiblingScan,
 ): SiblingHit | null {
   if (isWholeRepoRootSkill(parent.tap, parent.tapRelativePath)) return null;
   const tapClone = tapClonePath(parent.tap, home);
@@ -68,7 +71,7 @@ export function findSiblingDep(
   const matches: { entryName: string; siblingPath: string; loaded: LoadedSkill }[] = [];
   const isGist = isGistTap(parent.tap);
   const boundary = sourceBoundary(parent.tap, home, parentPath);
-  for (const entryName of listDir(siblingParent)) {
+  for (const entryName of siblings.once("entries", siblingParent, () => listDir(siblingParent))) {
     const siblingPath = join(siblingParent, entryName);
     // §9 step 6: a sibling named for the dependency that crew can't load —
     // can't look into, unreadable, or invalid — is the dependency failing,
@@ -77,14 +80,20 @@ export function findSiblingDep(
     if (namedForDep && !isGist) {
       withDependencyErrors(depName, siblingPath, () => assertCanLookForSkillMd(siblingPath));
     }
-    if (!isSiblingSkill(parent.tap, siblingPath)) continue;
+    if (!siblings.once("skill", siblingPath, () => isSiblingSkill(parent.tap, siblingPath)))
+      continue;
     // §9 step 6: a sibling folder leading out of the repository is never
     // read — the dependency failing, when it is named for it.
-    if (!isGist && leadsOutOfSource(boundary, siblingPath)) {
+    const out = () => leadsOutOfSource(boundary, siblingPath);
+    if (!isGist && siblings.once("leadsOut", siblingPath, out)) {
       if (namedForDep) throw dependencyError(depName, siblingPath, outOfSourceError(siblingPath));
       continue;
     }
-    if (!namedForDep && siblingName(siblingPath) !== depName) continue;
+    // One named for the dependency is loaded whatever it declares.
+    const declared = namedForDep
+      ? depName
+      : siblings.once("name", siblingPath, () => siblingName(siblingPath));
+    if (declared !== depName) continue;
     const loaded = withDependencyErrors(depName, siblingPath, () => loadSkill(siblingPath));
     if (loaded.frontmatter.name !== depName) continue;
     matches.push({ entryName, siblingPath, loaded });

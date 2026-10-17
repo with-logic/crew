@@ -19,9 +19,10 @@ import { CrewError } from "../core/errors.ts";
 import { isGistUrl } from "../core/gist-url.ts";
 import type { TapConfig } from "../core/types.ts";
 import { displayText, displayUrl } from "../refs/display-url.ts";
-import { opensFrontmatter } from "../skill/frontmatter.ts";
+import { fileOpensFrontmatter } from "../skill/frontmatter.ts";
 import { isSkillFile } from "../skill/skill-file.ts";
-import { listDir, readText } from "../util/fs.ts";
+import { unreadablePathError } from "../util/errno.ts";
+import { listDir } from "../util/fs.ts";
 import type { AcquiredTap } from "./acquire/index.ts";
 
 /**
@@ -55,15 +56,16 @@ export function gistSkillCandidates(root: string): string[] {
 
 /**
  * A skill file whose first non-blank line opens frontmatter: what
- * discovery treats as a skill. A file named by `//<file>` only has to be
- * a skill file — it is validated whether or not it opens frontmatter.
- * One crew can't read stays a candidate, so loading it reports the file
- * as unreadable (§9 step 4) instead of one file sinking the whole gist.
+ * discovery treats as a skill. Only that far is read, however large the
+ * file. A file named by `//<file>` only has to be a skill file — it is
+ * validated whether or not it opens frontmatter. A `.md` file crew can't
+ * look at or read stays a candidate, so loading it reports the file as
+ * unreadable (§9 step 4; C-INST-25) instead of one file sinking the whole
+ * gist.
  */
 export function isGistSkillCandidate(path: string): boolean {
-  if (!isSkillFile(path)) return false;
   try {
-    return opensFrontmatter(readText(path));
+    return isSkillFile(path) && fileOpensFrontmatter(path);
   } catch {
     return true;
   }
@@ -108,7 +110,7 @@ export function selectGistFile(
   const present = listDir(rootDir).includes(gistFile);
   // `gistFile` is one top-level name (`splitGistFile`), so the file itself
   // is the only place a link could be (§8.4).
-  if (present && lstatSync(target).isSymbolicLink()) {
+  if (present && isLink(target)) {
     throw new CrewError(
       "invalid_ref",
       `\`${shown}\` in the gist ${where} is a symlink — crew installs only regular files from a gist`,
@@ -130,6 +132,15 @@ export function selectGistFile(
     );
   }
   return target;
+}
+
+/** Whether the selected file is a link; one crew can't look at is `source_unreachable` (§13). */
+function isLink(target: string): boolean {
+  try {
+    return lstatSync(target).isSymbolicLink();
+  } catch (err) {
+    throw unreadablePathError(target, err);
+  }
 }
 
 /**

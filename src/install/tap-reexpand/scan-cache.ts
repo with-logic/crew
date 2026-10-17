@@ -17,7 +17,7 @@ import type { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
-import { type CurrentTapChild, currentTapChildren } from "../tap-children.ts";
+import { currentTapChildren, type TapChildren } from "../tap-children.ts";
 
 /** One tap's acquired clone location. */
 export interface AcquiredTapScan {
@@ -38,14 +38,14 @@ export interface TapScanCache {
    * say) is a local fault that must propagate, not be reported as the
    * tap being unreachable.
    */
-  children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[];
+  children(tap: TapConfig, home: string, rootDir: string): TapChildren;
   /** Full validation (§9 step 4) for one child — a directory, or a gist's skill file — memoised. */
   validate(skillPath: string): CrewError | null;
 }
 
 export function makeTapScanCache(): TapScanCache {
   const acquisitions = new Map<string, AcquiredTapScan>();
-  const childLists = new Map<string, readonly CurrentTapChild[]>();
+  const childLists = new Map<string, TapChildren>();
   const validations = new Map<string, CrewError | null>();
 
   return {
@@ -61,7 +61,7 @@ export function makeTapScanCache(): TapScanCache {
       return scan;
     },
 
-    children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[] {
+    children(tap: TapConfig, home: string, rootDir: string): TapChildren {
       const key = JSON.stringify([tap.name, rootDir]);
       const hit = childLists.get(key);
       if (hit) return hit;

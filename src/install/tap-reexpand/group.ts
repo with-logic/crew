@@ -9,6 +9,7 @@ import { collectAdditions } from "./additions.ts";
 import type { TapScanCache } from "./scan-cache.ts";
 import { surveyGroup } from "./survey.ts";
 import type { InstallNewChild, TapReexpandResult } from "./types.ts";
+import { reportUnloadable } from "./unloadable.ts";
 
 interface GroupInput {
   readonly members: readonly StateEntry[];
@@ -57,7 +58,7 @@ export function reexpandGroup(input: GroupInput): TapReexpandResult {
 function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult {
   const { members, tap, home, projectRoot, cache } = input;
   const first = members[0]!;
-  const children = cache.children(tap, home, acquired.rootDir);
+  const { children, unloadable } = cache.children(tap, home, acquired.rootDir);
   const childrenByName = groupChildrenByName(children);
   const survey = surveyGroup({ members, childrenByName, tap, rootDir: acquired.rootDir });
   const additions = collectAdditions({
@@ -77,11 +78,20 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
     ref: first.ref,
     pinned: acquired.pinned,
   });
+  // §10.1.1 step 2: a candidate the index couldn't name fails like one that
+  // fails validation, rather than vanishing from the run.
+  const unnamed = reportUnloadable({
+    unloadable,
+    members,
+    scope: first.scope,
+    tap,
+    namespaces: input.namespaces,
+  });
   return {
     added: additions.added,
     updated: survey.relocated,
     sourceGone: survey.sourceGone,
-    rows: [...survey.rows, ...additions.rows],
-    hardFailure: survey.hardFailure || additions.hardFailure,
+    rows: [...survey.rows, ...additions.rows, ...unnamed],
+    hardFailure: survey.hardFailure || additions.hardFailure || unnamed.length > 0,
   };
 }

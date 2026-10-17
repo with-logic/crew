@@ -6,6 +6,7 @@
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
+import { isTapErrorRow } from "../../install/tap-reexpand/types.ts";
 import { hasFailedTarget } from "../../install/update/public-row.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { columns, plural } from "../../util/format.ts";
@@ -108,13 +109,12 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   // staged (§9 step 8), or couldn't be written into an agent. Each names
   // the subject and the reason — "tap acme (invalid_skill)" alone would
   // tell the user nothing.
-  const errorRows = input.tapReexpandRows.filter((r) => r.kind === "tap_error");
+  const errorRows = input.tapReexpandRows.filter(isTapErrorRow);
   for (const r of errorRows) {
-    const code = r.error?.code ?? "unreachable";
     lines.push(
-      `${style.symbol("fail")} ${style.bold(r.name)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
+      `${style.symbol("fail")} ${style.bold(r.name)} ${style.dim(`(from ${r.tap})`)} ${style.red(r.error.code)}`,
     );
-    if (r.error?.message) lines.push(style.dim(`  ${r.error.message}`));
+    lines.push(style.dim(`  ${r.error.message}`));
   }
 
   const totals = tally(input.rows, addedRows.length, errorRows.length);

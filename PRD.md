@@ -1130,6 +1130,8 @@ A 2-segment reference `foo/bar` is resolved with tap-first precedence: if `foo` 
 
 A 3-segment reference `tap/namespace/skill` is always unambiguous.
 
+A 2- or 3-segment reference that finds no skill in the named tap, where the tap has a candidate at that location whose name crew can't read — a skill folder or gist file named `bar` (`bar.md`), or the `skills/` folder or namespace above it, that leads out of the repository (§9 step 5, "Folder links"), holds an invalid `name`, or can't be read — fails with that candidate's error (`invalid_skill`, or `source_unreachable`) rather than `invalid_ref`: the skill is there, and that is why crew won't install it.
+
 **Disambiguation flags.** The user may force an interpretation on `crew install`. These are presence flags; the name comes from the positional argument.
 - `--tap` — force every bare-name positional to be resolved as a tap name (install the whole tap). Errors if the positional is not a configured tap.
 - `--bundle` — force every bare-name positional to be resolved as a namespace name (install every skill in the namespace). Errors if the positional is not a namespace in exactly one configured tap.
@@ -1316,7 +1318,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - The skill's `source.path` is the file's name (e.g. `prd.md`).
    - A `//<file>` reference (§8.2) expands to exactly the named file, which is validated per step 4 whether or not it opens with frontmatter. The name is matched exactly, case included. A name that is not a regular file of the gist at the resolved commit is `no_skills_found`, with an error naming the file and listing the gist's skill files; a name reached through a symlink is `invalid_ref` (§8.4). A gist with a root `SKILL.md` is one skill, so no file of it can be selected: a `//<file>` on such a gist is `invalid_ref`.
 
-   **Folder links.** In a git source, a folder discovery reaches on the way to a skill — `skills/` itself, a namespace, or the skill's own folder — may be a symlink that stays inside the repository; it is followed. One that leads out of the repository, or to its root or into its `.git` (crew's clone metadata, not the source), is refused before any file in it is read, since staging (step 8) copies a folder through its link: it is an `invalid_skill` candidate, reported like an invalid skill while the source's other skills install. At the source root (case 3), such a folder is a candidate only if it holds a `SKILL.md` (whether it does is all crew looks at), since a root may link elsewhere for other reasons. Tap indexing — `crew search`, `<tap>/<skill>` resolution, and re-expansion on `crew update` (§10.1.1) — leaves such a folder out, unread. A path source is the user's own directory and isn't held to this, as on update (§10.1).
+   **Folder links.** In a git source, a folder discovery reaches on the way to a skill — `skills/` itself, a namespace, or the skill's own folder — may be a symlink that stays inside the repository; it is followed. One that leads out of the repository, or to its root or into its `.git` (crew's clone metadata, not the source), is refused before any file in it is read, since staging (step 8) copies a folder through its link: it is an `invalid_skill` candidate, reported like an invalid skill while the source's other skills install. At the source root (case 3), such a folder is a candidate only if it holds a `SKILL.md` (whether it does is all crew looks at), since a root may link elsewhere for other reasons. Tap indexing never reads such a folder either: `crew search` leaves it out, a `<tap>/<skill>` or `<tap>/<namespace>/<skill>` reference to it (or to a skill below it) fails with that `invalid_skill`, and re-expansion on `crew update` reports it as a new child that fails, by its location (§10.1.1 step 2). A path source is the user's own directory and isn't held to this, as on update (§10.1).
 
    A location that produces no skill candidates through the applicable case aborts with `no_skills_found`. Candidates that are found but all fail validation are not `no_skills_found`: each is reported as a failed skill, and the run ends `invalid_skill` (step 9).
    - Multi-skill expansions are how the user gets every skill in a tap installed at once. Each child becomes an independent state entry attributed to the same tap (`source.tap`); upstream additions to that tap are picked up automatically by `crew update` (§10.1.1).
@@ -1565,8 +1567,9 @@ On every `crew update` run, for each group of state entries sharing
 
 1. Expands the tap **at the group's `ref`** using the tap's configured
    discovery mode (§9 step 5) and builds the current child set — a
-   folder that leads out of the repository through a link is no child,
-   and is never read (§9 step 5, "Folder links"). The
+   folder that leads out of the repository through a link is never read
+   (§9 step 5, "Folder links"), so it is a candidate without a name
+   (step 2). The
    group's own `ref` is what gets materialized, exactly as in §9 step 3:
    a whole-tap install at `@<tag|branch|sha>` MUST be re-expanded
    against that revision, not the tap's default branch. Otherwise
@@ -1599,7 +1602,14 @@ On every `crew update` run, for each group of state entries sharing
    is mandatory: a child whose frontmatter is invalid (missing
    `description`, over-long fields, …) MUST be reported as a per-child
    failure carrying `invalid_skill` and MUST NOT be installed, in both
-   real and `--dry-run` runs. The run exits 1. A child crew can't
+   real and `--dry-run` runs. The run exits 1. So is a candidate whose
+   `name` discovery can't read — a folder with a `SKILL.md`, or a gist
+   file that opens frontmatter, whose `name` is missing or invalid, whose
+   `SKILL.md` is a link crew won't follow (§9 step 4), whose folder leads
+   out of the repository (§9 step 5, "Folder links"), or that crew can't
+   read (`source_unreachable`): having no name, it is reported by its
+   location in the tap, unless an entry of the group is installed from
+   that location, whose own update reports it (step 3). A child crew can't
    stage (§9 step 8), or can't install into an agent because it can't
    write that agent's skills folder, fails the same way: it is reported
    as a failed child, not recorded, and removed from any agent it was
@@ -2584,6 +2594,7 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-37 | §8.2 | `https://gist.github.com/<id>`, `https://gist.github.com/<id>.git`, and `https://gist.github.com/<owner>/<id>` all parse as a git source whose URL is `https://gist.github.com/<id>.git`, with no ref and no subpath. |
 | C-REF-38 | §8.2 | `https://gist.github.com/<owner>/<id>/<revision>` and `https://gist.github.com/<id>/<revision>` (40 hex characters) parse with ref `<revision>`; an explicit `@<ref>` tail wins over it. |
 | C-REF-39 | §8.2 | Any other `http(s)` path on `gist.github.com` (`/<owner>`, `/<owner>/<id>/raw/...`, `/<owner>/<id>/revisions`), a gist link with a `#file-…` fragment, and a gist `//<file>` that is not a top-level `.md` name (`//sub/a.md`, `//notes.txt`) are `invalid_ref`. |
+| C-REF-40 | §8.3, §9 step 5 | `<tap>/<skill>` or `<tap>/<namespace>/<skill>` naming a candidate the tap can't name — a skill folder, or `skills/` or the namespace above it, that leads out of the repository; a gist file whose `name` is invalid — fails with that candidate's `invalid_skill` (or `source_unreachable`) instead of `invalid_ref`. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -2605,7 +2616,7 @@ Implementations and test suites refer to criteria by ID.
 | C-SPEC-14 | §9 | A skill whose `name` begins with a digit passes validation if the rest of the name is otherwise valid. |
 | C-SPEC-15 | §9 step 4 | A `SKILL.md` that isn't a regular file (a directory, say), or that is reached through a link crew won't follow — absolute text, text that isn't UTF-8, or a `..` that climbs above the folder anywhere on the way (even to come back, past a folder link, after a part that doesn't exist, or out to a file crew can't read), a chain that loops or runs longer than 8 links, or one that reaches the folder's `.crew.json` under such a name (`.CREW.JSON`, `.crew.jſon`, or `.crew.json` with a U+200C inside) — fails validation with a message naming it, while the source's valid skills install; nothing is read through such a link, at a ref too. A `SKILL.md` linked to a file inside its folder through relative links that stay inside it — directly, through another link, through a folder link such as `current -> v1`, or with a `..` such as `docs/../real.md` — is valid, and installs readable. After a part that doesn't exist, nothing later on the way is looked up: each name is judged as written, and a link there is never read. |
 | C-SPEC-16 | §9 steps 4, 6, 8 | A `SKILL.md` crew can't read, or another file of the skill it can't read while staging, is reported as `source_unreachable` naming the file; that skill is skipped while the source's other skills install, and no partial copy is left in the store — one crew can't remove is named in that error rather than replacing it. A dependency beside its parent that crew can't load — it can't look into the folder, or the `SKILL.md` is unreadable or invalid — fails the install with that reason, naming the dependency, and is never taken from another tap; crew's own store failing is one error naming the store. |
-| C-SPEC-17 | §9 steps 5, 6; §10.1.1 | In a git source, a skill folder, a namespace, or `skills/` itself that is a symlink staying inside the repository is discovered through it. One that leads out of the repository, or to its root or `.git`, is never read: at install it is an `invalid_skill` candidate while the source's other skills install (at the root, only when it holds a `SKILL.md`); a dependency beside its parent whose folder leads out fails the install, naming the dependency, while any other such sibling is passed over; tap indexing and re-expansion on `crew update` leave it out. A path source isn't held to this. |
+| C-SPEC-17 | §9 steps 5, 6; §10.1.1 | In a git source, a skill folder, a namespace, or `skills/` itself that is a symlink staying inside the repository is discovered through it. One that leads out of the repository, or to its root or `.git`, is never read: at install it is an `invalid_skill` candidate while the source's other skills install (at the root, only when it holds a `SKILL.md`); a dependency beside its parent whose folder leads out fails the install, naming the dependency, while any other such sibling is passed over; `crew search` leaves it out, a `<tap>/<skill>` or `<tap>/<namespace>/<skill>` reference to it or to a skill below it fails with that `invalid_skill`, and re-expansion on `crew update` reports it as a failed new child named by its location (C-UPD-18c). A path source isn't held to this. |
 
 #### C-INST: Install (§9)
 
@@ -2752,7 +2763,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps — the one thing it does change — then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, store entries, and state are byte-identical before and after; `--json` carries `dry_run: true`. |
 | C-UPD-18a | §10.1.1, §14 | `crew update --dry-run` against a home with no `state.json` leaves it absent: the state lock is never acquired, so neither the state file nor its lock is created. |
 | C-UPD-18b | §10.1.1 | `--force --dry-run` previews a pinned skill whose upstream moved as `would_update` (rather than `skipped`) and still writes nothing. |
-| C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. |
+| C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. So is a candidate whose `name` crew can't read — missing or invalid, behind a `SKILL.md` link crew won't follow, in a folder that leads out of the repository (C-SPEC-17), or in a file crew can't read (`source_unreachable`) — in a folder tap and in a gist alike: it is named by its location in the tap, unless an entry of its group is installed from that location. |
 | C-UPD-18d | §10.1.1, §14 | `crew update` holds a per-repository clone lock spanning refresh through source read, in both real and `--dry-run` runs, so a concurrent run cannot change the clone's checked-out commit between SHA resolution and byte read. A run blocked past the timeout exits `state_locked`. |
 | C-UPD-18e | §10.1.1 | A newly-discovered child that fails validation, that crew can't stage (§9 step 8), or that crew can't install into an agent whose skills folder it can't write, is named in human output along with its error code and message, is counted as a failure in the run totals, and is installed nowhere — not recorded, and removed from any agent it was just installed into; the rest of the run proceeds. A copy whose marker or content changed after this run wrote it is left in place, as is one crew can't remove; the failure keeps its own code, and its message names each copy left. A safety check refusing an agent leaves the child out of it with no re-expansion row and without failing the run. |
 | C-UPD-18f | §10.1.1 | `crew outdated [<selector>...]` behaves as `crew update --dry-run`: identical `--json` payload (`dry_run: true`, `would_update` / `would_add` kinds), identical exit code, and the same write boundary — tap clones refresh, while installed skills, markers, store entries, and `state.json` are unchanged. Human output lists only rows that would change and prints a single "up to date" line when none would. |

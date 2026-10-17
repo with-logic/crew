@@ -1,10 +1,13 @@
 /**
  * A gist file crew can't look at — its path runs past the system's limit
- * — is `source_unreachable` naming the file (§13; C-SPEC-16, C-UPD-40),
- * never a raw filesystem error reported as crew's own: at install, on the
- * update whose fetch brings it, and in the walk for a dependency beside
- * its parent. The crew home sits deep enough that the clone works but a
- * long file name inside it can't be looked up.
+ * — fails alone, never sinking the gist and never as a raw filesystem
+ * error reported as crew's own (§9 step 4, §13; C-SPEC-16, C-INST-25,
+ * C-UPD-18c): selected by `//<file>` it is `source_unreachable`; at a
+ * whole-gist install it is a failed skill while its siblings install; on
+ * the update whose fetch brings it, a failed child named by its file; and
+ * beside a parent, it isn't the dependency the walk looks for. The crew
+ * home sits deep enough that the clone works but a long file name inside
+ * it can't be looked up.
  *
  * The gist is served from a local repo by `useGistFixture`; nothing here
  * touches the network.
@@ -56,41 +59,44 @@ function deepCrewHome(): string {
   return home;
 }
 
-/** A run's exit code, its error's name, and whether it names the gist's file as too long. */
-function failureOf(r: { code: number; stdout: string }) {
-  const { error } = json(r);
-  const namesTooLongFile =
-    /^couldn't look at `\S+` — ENAMETOOLONG/.test(error.message) &&
-    String(error.details["path"]).endsWith(`/${LONG}`);
-  return { code: r.code, name: error.name, namesTooLongFile };
-}
-
-/** `source_unreachable` naming the file — never a raw error reported as crew's own (exit 4). */
-const TOO_LONG = { code: 5, name: "source_unreachable", namesTooLongFile: true };
-
-test("C-SPEC-16 a gist file crew can't look at fails the install as source_unreachable", () => {
+test("C-SPEC-16 a gist file crew can't look at, selected by `//<file>`, is source_unreachable", () => {
   fx.gist({ "prd.md": skillFile("prd"), [LONG]: skillFile("long") });
-  const r = run(deepCrewHome(), ["install", GIST_PAGE_URL, "--json"]);
-  expect(failureOf(r)).toEqual(TOO_LONG);
+  const r = run(deepCrewHome(), ["install", `${GIST_PAGE_URL}//${LONG}`, "--json"]);
+  const { error } = json(r);
+  expect([r.code, error.name]).toEqual([5, "source_unreachable"]);
+  expect(error.message).toMatch(/^couldn't look at `\S+` — ENAMETOOLONG/);
+  expect(String(error.details["path"]).endsWith(`/${LONG}`)).toBe(true);
   expect(readdirSync(claude.userRoot)).toEqual([]);
 });
 
-test("C-UPD-40 a gist file crew can't look at, fetched by an update, fails it as source_unreachable", () => {
+test("C-INST-25 a gist file crew can't look at fails alone while its sibling installs", () => {
+  fx.gist({ "prd.md": skillFile("prd"), [LONG]: skillFile("long") });
+  const r = run(deepCrewHome(), ["install", GIST_PAGE_URL, "--json"]);
+  expect(r.code).toBe(1);
+  const skipped = json(r).skipped.map((s) => [s.path.endsWith(`/${LONG}`), s.code]);
+  expect(skipped).toEqual([[true, "source_unreachable"]]);
+  expect(readdirSync(claude.userRoot)).toEqual(["prd"]);
+});
+
+test("C-UPD-18c a gist file crew can't look at, fetched by an update, fails as a child named by its file", () => {
   const { dir } = fx.gist({ "prd.md": skillFile("prd") });
   const home = deepCrewHome();
   expect(run(home, ["install", GIST_PAGE_URL]).code).toBe(0);
   writeGistFiles(dir, { [LONG]: skillFile("long") });
-  expect(failureOf(run(home, ["update", "--json"]))).toEqual(TOO_LONG);
+  const r = run(home, ["update", "--json"]);
+  expect(r.code).toBe(1);
+  const rows = json(r).tap_reexpand_rows.map((row) => `${row.name}:${row.error?.code}`);
+  expect(rows).toEqual([`${LONG}:source_unreachable`]);
   expect(readdirSync(claude.userRoot)).toEqual(["prd"]);
 });
 
-test("C-SPEC-16 a gist file crew can't look at, beside a parent, fails its dependency's lookup", () => {
+test("C-SPEC-16 a gist file crew can't look at, beside a parent, isn't its dependency", () => {
   fx.gist({
     "prd.md": skillFile("prd"),
     "build.md": skillFile("build", "Build.\n", ["prd"]),
     [LONG]: skillFile("long"),
   });
-  const r = run(deepCrewHome(), ["install", `${GIST_PAGE_URL}//build.md`, "--json"]);
-  expect(failureOf(r)).toEqual(TOO_LONG);
-  expect(readdirSync(claude.userRoot)).toEqual([]);
+  const r = run(deepCrewHome(), ["install", `${GIST_PAGE_URL}//build.md`]);
+  expect(r.code).toBe(0);
+  expect(readdirSync(claude.userRoot).sort()).toEqual(["build", "prd"]);
 });
