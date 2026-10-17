@@ -8,7 +8,7 @@
  */
 
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
-import { installNewTapChild } from "../../install/install-new-tap-child.ts";
+import { installNewTapChild } from "../../install/new-tap-child/index.ts";
 import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import { updateOneEntry } from "../../install/update/entry.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
@@ -77,23 +77,26 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
     config,
     home,
     reexpandSelectionFor(subjects, initialSelected),
-    (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
+    (args) => installNewTapChild(args, { force: ctx.flags.force, home, fallbackCwd: ctx.cwd }),
     dryRun,
   );
   tapReexpandRows.push(...reexpanded.rows);
   if (reexpanded.hardFailure) hardFailure = true;
-  for (const entry of reexpanded.updated) {
-    current = upsertEntry(current, entry);
-  }
-  for (const entry of reexpanded.added) {
-    current = upsertEntry(current, entry);
-  }
   const sourceGone = reexpanded.sourceGone;
 
   // §10.1 steps 2/2b: new collection members are fresh installs, not
   // new dependency seeds. Recomputing closure by their names could
   // adopt an unrelated install's dependencies on a tap we never locked.
-  const targetEntries = entriesAfterReexpansion(current, subjects, initialSelected);
+  // The selection is read back with every relocation applied, so a
+  // relocated entry still matches itself and is walked at its new path
+  // (§10.1, C-UPD-37). State keeps the recorded path: only the entry's
+  // own successful update writes the new one, with its marker and SHA.
+  const targetEntries = entriesAfterReexpansion(
+    withEntries(current, [...reexpanded.updated, ...reexpanded.added]),
+    subjects,
+    initialSelected,
+  );
+  current = withEntries(current, reexpanded.added);
   for (const entry of targetEntries) {
     if (sourceGone.has(entryIdentity(entry))) {
       rows.push(
@@ -132,4 +135,11 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
     collections,
     selectors,
   };
+}
+
+/** `state` with each of `entries` written over the entry it identifies, or added. */
+function withEntries(state: StateFile, entries: readonly StateEntry[]): StateFile {
+  let next = state;
+  for (const entry of entries) next = upsertEntry(next, entry);
+  return next;
 }

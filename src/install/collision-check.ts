@@ -18,8 +18,9 @@
 
 import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, TapConfig } from "../core/types.ts";
-import { hasSkillMd, loadSkillName } from "../skill/load.ts";
+import { loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
+import { discoveryOf, isRootSkill } from "../sources/expand.ts";
 import { isDirectory } from "../util/fs.ts";
 import { indexTap } from "./tap-index.ts";
 
@@ -60,7 +61,7 @@ export function detectCollision(name: string, config: Config, home: string): Col
 export function countSkills(tap: TapConfig, home: string): number | null {
   const root = tapRootOnDisk(tap, home);
   if (root === null) return null;
-  if (hasSkillMd(root)) return rootSkillCount(root);
+  if (isRootSkill(root, discoveryOf(tap))) return rootSkillCount(root);
   let count = 0;
   for (const locs of indexTap(tap, home).skills.values()) count += locs.length;
   return count;

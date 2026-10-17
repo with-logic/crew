@@ -1,3 +1,8 @@
+/**
+ * Help entry for `crew tap`. Implements PRD §5.5 for §16.1–16.3 (what a
+ * tap is, how one is laid out, gists included, and managing taps).
+ */
+
 import type { CommandHelp } from "./types.ts";
 
 export const tapHelp: CommandHelp = {
@@ -23,7 +28,7 @@ export const tapHelp: CommandHelp = {
     {
       flag: "--recursive",
       description:
-        "With `tap add`, enable bounded recursive fallback when standard layouts find no skills.",
+        "With `tap add`, enable bounded recursive fallback when standard layouts find no skills (not for gists).",
     },
     {
       flag: "--dry-run",
@@ -114,6 +119,7 @@ export const tapHelp: CommandHelp = {
         },
         "Once the tap is in place you use its skills the same way either way — `crew install python-testing`, or `crew install backend-skills/python-testing` if you want to be specific.",
         "README, LICENSE, CI configs, whatever else you keep in the repo is fine — Homecrew only looks for subfolders with a `SKILL.md`.",
+        "A GitHub gist can be a tap too. Gists can't hold folders, so there each top-level `.md` file that starts with frontmatter is a skill (a gist with a root `SKILL.md` is one skill). Unless you give it a name, the tap is named `gist-` plus the first 8 characters of the gist's ID.",
       ],
     },
     {

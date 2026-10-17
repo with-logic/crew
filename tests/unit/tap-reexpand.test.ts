@@ -59,7 +59,7 @@ describe("reexpandTaps", () => {
     expect(result.rows[0]).toMatchObject({ name: "missing", kind: "source_gone" });
   });
 
-  test("tap expansion rethrows filesystem errors", () => {
+  test("C-SPEC-18 a tap crew can't list fails its group as tap_error rows, without throwing", () => {
     const home = makeCrewHome();
     const path = makeTempDir("crew-unreadable-reexpand-");
     const tap = pathTap(path);
@@ -72,10 +72,15 @@ describe("reexpandTaps", () => {
     const state: StateFile = { schema_version: 1, installations: [trackedEntry()] };
 
     chmodSync(path, 0);
+    let result: ReturnType<typeof reexpandTaps>;
     try {
-      expect(() => reexpandTaps(state, config, home, null, () => null)).toThrow();
+      result = reexpandTaps(state, config, home, null, () => null);
     } finally {
       chmodSync(path, 0o755);
     }
+    expect(result.hardFailure).toBe(true);
+    expect(result.rows.map((r) => [r.name, r.kind, r.error?.code])).toEqual([
+      [trackedEntry().name, "tap_error", "source_unreachable"],
+    ]);
   });
 });

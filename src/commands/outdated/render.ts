@@ -14,11 +14,12 @@
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
+import { isTapErrorRow } from "../../install/tap-reexpand/types.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
 import { columns, plural } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
-import { formatRowParts, groupByTap, nameCell } from "../update/rows.ts";
+import { formatRowParts, groupByTap, nameCell, tapErrorBlocks } from "../update/rows.ts";
 
 export interface RenderOutdatedInput {
   readonly rows: readonly UpdateRow[];
@@ -67,19 +68,16 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
       lines.push(style.dim("  showing what's known from the last-fetched copy"));
     }
   }
-  for (const r of input.tapReexpandRows) {
-    if (r.kind === "tap_error") {
-      couldNotCheck = true;
-      // Name the child and the reason, as `crew update` does: a child
-      // that failed validation is the user's to fix, and "tap acme
-      // (invalid_skill)" alone would not tell them which skill broke.
-      const code = r.error?.code ?? "unreachable";
-      lines.push(
-        `${style.symbol("warn")} ${style.bold(r.name)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
-      );
-      if (r.error?.message) lines.push(style.dim(`  ${r.error.message}`));
-    }
-  }
+  // Name each failed child and the reason, as `crew update` does: a child
+  // that failed validation is the user's to fix, and "tap acme
+  // (invalid_skill)" alone would not tell them which skill broke.
+  const errors = tapErrorBlocks(
+    input.tapReexpandRows.filter(isTapErrorRow),
+    style.symbol("warn"),
+    style,
+  );
+  if (errors.failures > 0) couldNotCheck = true;
+  lines.push(...errors.lines);
   if (lines.length > 0) lines.push("");
 
   const rows = input.rows.filter((r) => NOTEWORTHY[r.outcome.kind]);

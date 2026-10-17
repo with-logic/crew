@@ -103,7 +103,7 @@ skill can list as a dependency. Three shapes:
 | Kind | Example | What it is |
 |---|---|---|
 | **Tap source** | `crew install founding-engineer` | A skill, namespace, or tap known to a configured tap. Bare names search every tap, including the default `core` tap. Qualify with `tap/skill`, `tap/namespace/skill`, or `namespace/skill`. Pin with `@v1.0` or a SHA; `@main` follows a branch. If a miss exactly matches a known-but-untapped source, Homecrew suggests the `crew tap add` command. |
-| **Git source** | `crew install @acme/skills@v1.2.0//engineers/founding` | Any reachable git URL. `@owner/repo` is GitHub shorthand; full `https://` and `git@` URLs work too, as does a scheme-less `github.com/owner/repo`. Append `@<tag>` or `@<sha>` to pin, `@<branch>` to follow a branch, `//subpath` to scope. A slash-free ref can also follow the subpath: `@acme/skills//engineers/founding@v1.2.0`. Put the ref first for branch names containing `/` (`@acme/skills@feature/python//engineers/founding`) or a final folder containing a literal `@` (`@acme/skills@main//skills/foo@bar`). Links pasted from GitHub, GitLab, or Bitbucket (`.../tree/main/engineers/founding`, `.../blob/main/.../SKILL.md`) work as-is. |
+| **Git source** | `crew install @acme/skills@v1.2.0//engineers/founding` | Any reachable git URL. `@owner/repo` is GitHub shorthand; full `https://` and `git@` URLs work too, as does a scheme-less `github.com/owner/repo`. Append `@<tag>` or `@<sha>` to pin, `@<branch>` to follow a branch, `//subpath` to scope. A slash-free ref can also follow the subpath: `@acme/skills//engineers/founding@v1.2.0`. Put the ref first for branch names containing `/` (`@acme/skills@feature/python//engineers/founding`) or a final folder containing a literal `@` (`@acme/skills@main//skills/foo@bar`). Links pasted from GitHub, GitLab, or Bitbucket (`.../tree/main/engineers/founding`, `.../blob/main/.../SKILL.md`) work as-is. A GitHub gist URL (`https://gist.github.com/<owner>/<id>`) installs one skill per `.md` file that starts with frontmatter (or the whole gist as one skill if it has a root `SKILL.md`); append `//<file>.md` for just one. |
 | **Local path** | `crew install ./my-skill` | A directory on your machine. Detected by a leading `./`, `../`, `/`, or `~`. |
 
 Run `crew help install` for the full grammar.
@@ -179,7 +179,7 @@ When a command asks for an installed skill name, you can use the bare name
 | Command | What it does |
 |---|---|
 | `crew search [--tap <name>] [<query>]` | Case-insensitive substring match across every configured tap, or just one with `--tap`. With no query, lists every installable skill in those taps; exact installed matches are marked `✓`. With a query and without `--tap`, also suggests matching known taps to add; `--tap` scopes the search to a tap you already have, so it omits those suggestions. |
-| `crew tap add <url-or-path> [name]` | Add a registry from a git source or local path. Name defaults to the repo/path name. Add `--recursive` for trusted repos with non-standard nested layouts. |
+| `crew tap add <url-or-path> [name]` | Add a registry from a git source or local path. Name defaults to the repo/path name (`gist-<first 8 of the ID>` for a gist). Add `--recursive` for trusted repos with non-standard nested layouts. |
 | `crew tap remove <name>` | Drop a tap from config; delete its shared clone when no other tap uses that repository. Refuses while skills from the tap are installed: pass `--uninstall` to remove them too, or `--force` to keep them. |
 | `crew tap list` | Print each tap's name, kind/status, source target, recursive discovery marker when set, and last-fetched timestamp for git taps. |
 | `crew taps` | Alias for `crew tap list`. |
@@ -236,6 +236,9 @@ Prefer to keep skills under a `skills/` directory? That works too — if
 `skills/` exists at the root, Homecrew indexes its children instead of the root.
 For trusted repos that don't follow either layout, `crew tap add --recursive`
 keeps the standard layouts first and falls back to bounded recursive discovery.
+A GitHub gist works as a tap too: it can't hold folders, so each top-level
+`.md` file that opens with frontmatter is a skill (a gist with a root
+`SKILL.md` is one skill).
 
 ### Namespaces
 

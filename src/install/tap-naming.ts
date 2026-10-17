@@ -5,6 +5,8 @@
  * Root git tap: last URL segment (minus `.git`).
  * Subpath git tap: `<last-repo-segment>-<last-subpath-segment>` to
  *   reduce collisions when every monorepo's tap dir is `skills`.
+ * Gist: `gist-<first 8 chars of the ID>` (§16.3). A gist ID is up to 32
+ *   hex characters of noise, and gists are always added whole.
  *
  * Result is lowercased + non-`[a-z0-9-]` chars replaced with `-`,
  * with leading non-alphanumerics and trailing hyphens trimmed. If the
@@ -12,9 +14,12 @@
  * downstream validator can quote it in a useful error.
  */
 
-export function deriveAutoTapName(url: string, subpath: string): string {
+import { isGistUrl } from "../core/gist-url.ts";
+
+export function deriveDefaultTapName(url: string, subpath: string): string {
   const repoTail = lastSegment(url);
   const repoBase = repoTail.endsWith(".git") ? repoTail.slice(0, -4) : repoTail;
+  if (isGistUrl(url)) return sanitize(`gist-${repoBase.slice(0, 8)}`);
   const raw = !subpath || subpath.length === 0 ? repoBase : `${repoBase}-${lastSegment(subpath)}`;
   return sanitize(raw);
 }

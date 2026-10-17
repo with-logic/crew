@@ -13,10 +13,12 @@ import { detectCollision } from "../../install/collision-check.ts";
 import { runInstall } from "../../install/flow.ts";
 import type { KindHint } from "../../install/resolve-ref/index.ts";
 import { parseRef } from "../../refs/parse.ts";
+import { assertNoRecursiveGist } from "../../sources/gist.ts";
 import { withTapLocks } from "../../sources/tap-lock.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promptBareNameAmbiguity } from "./ambiguity-prompt.ts";
 import { promptForCollision } from "./collision-prompt.ts";
+import { installExitCode } from "./exit-code.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { renderInstall } from "./render/index.ts";
@@ -53,6 +55,8 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const refs = resolveCollisions(ctx, config);
   // §5.3: `--from-git` is never bare, so it skips collision resolution.
   if (typeof fromGit === "string") refs.push(normalizeFromGit(fromGit, ctx.cwd));
+  // Checked before any source is touched, with `--from-git` among the refs (§8.2).
+  if (ctx.flags.extras["recursive"]) rejectRecursiveGists(refs, ctx.cwd);
   const installOptions = {
     refs,
     scope: ctx.flags.scope,
@@ -72,34 +76,13 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     throw withKnownTapInstallSuggestions(err, refs, config, ctx.cwd, kindHint);
   }
 
-  // Exit-code rules (PRD §9 step 9). Per-skill outcome is
-  // "succeeded" iff the skill validated AND at least one agent
-  // install succeeded. Validation failures land in result.skipped;
-  // agent-level failures live in result.summary.records with
-  // `anySuccess === false`.
-  const succeeded = result.summary.records.filter((r) => r.anySuccess).length;
-  const operationalFailures = result.summary.records.filter((r) => !r.anySuccess).length;
-  const validationFailures = result.skipped.length;
-  const failed = operationalFailures + validationFailures;
-  const allAlreadyInstalled =
-    result.alreadyInstalled.length > 0 && result.summary.records.length === 0;
-  let exitCode = 0;
-  if (failed === 0) {
-    exitCode = 0; // Every attempted skill succeeded, or nothing to do.
-  } else if (succeeded > 0 || allAlreadyInstalled) {
-    exitCode = 1; // Partial success.
-  } else if (validationFailures > 0) {
-    exitCode = 4; // Zero succeeded; at least one invalid skill.
-  } else {
-    exitCode = 1; // Zero succeeded; purely operational failures.
-  }
-
   const human = renderInstall(
     {
       records: result.summary.records,
       alreadyInstalled: result.alreadyInstalled,
       resolved: result.resolved,
       skipped: result.skipped,
+      changes: result.changes,
       dryRun: ctx.flags.dryRun,
       cwd: ctx.cwd,
       width: ctx.width,
@@ -108,15 +91,26 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   );
 
   return {
-    exitCode,
+    exitCode: installExitCode(result),
     human,
+    stderr: result.warnings,
     json: {
       already_installed: result.alreadyInstalled,
       records: result.summary.records,
-      skipped: result.skipped,
+      skipped: result.skipped.map(({ remedy: _humanOnly, ...skip }) => skip),
+      attribution_changes: result.changes,
+      warnings: result.warnings,
       dry_run: ctx.flags.dryRun,
     },
   };
+}
+
+/** §8.2 "Gists": `--recursive` never applies to a gist, however it was named. */
+function rejectRecursiveGists(refs: readonly string[], cwd: string): void {
+  for (const raw of refs) {
+    const source = parseRef(raw, cwd);
+    if (source.type === "git") assertNoRecursiveGist(source.url);
+  }
 }
 
 function rejectRecursiveTapRefs(ctx: CommandContext): void {
@@ -126,7 +120,7 @@ function rejectRecursiveTapRefs(ctx: CommandContext): void {
     if (source.type !== "tap") continue;
     throw new CrewError(
       "usage_error",
-      "`--recursive` only applies to direct git or path sources — for tap-name installs, run `crew tap add --recursive <url-or-path> <name>` first",
+      "`--recursive` only applies to direct git or path sources (not gists) — for tap-name installs, run `crew tap add --recursive <url-or-path> <name>` first",
     );
   }
 }

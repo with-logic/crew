@@ -1,4 +1,6 @@
-/** Canonical repository URL identity, preserving credentials and path case (§5.4, §6). */
+/** Canonical repository URL identity, preserving credentials and path case — gists aside (§5.4, §6). */
+
+import { gistIdentityPath, isGistUrl } from "./gist-url.ts";
 
 /**
  * Normalize a git URL so the spellings crew produces for one repository
@@ -15,6 +17,11 @@
  *
  * Anything crew can't parse as a URL (`git@host:owner/repo`) goes
  * through the same rule via `canonicalScpUrl`.
+ *
+ * An `http(s)` gist URL is the one exception: its path reduces to its
+ * lowercased hex ID, because GitHub serves the same gist with or without
+ * the owner segment (§8.2). Gist SSH remotes are kept as typed, like any
+ * other.
  */
 export function canonicalRepoUrl(url: string): string {
   const trimmed = trimTrailingSlashes(url.trim());
@@ -27,7 +34,10 @@ export function canonicalRepoUrl(url: string): string {
   const slash = rest.search(/[/?#]/);
   const authority = slash < 0 ? rest : rest.slice(0, slash);
   const path = slash < 0 ? "" : rest.slice(slash);
-  return `${scheme}://${lowercaseHostOnly(authority)}${path}`;
+  const origin = `${scheme}://${lowercaseHostOnly(authority)}`;
+  // §8.2 "Gists": a gist is one repository whether or not its URL names the owner.
+  const isGist = scheme.startsWith("http") && isGistUrl(stripped);
+  return isGist ? `${origin}${gistIdentityPath(path)}` : `${origin}${path}`;
 }
 
 /**

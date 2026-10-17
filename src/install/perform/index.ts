@@ -22,11 +22,12 @@
  * skills. The summary decides the exit code.
  */
 
-import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
+import type { AgentAdapter } from "../../agents/adapter.ts";
 import { type InstallOutcome, installSkillIntoAgents } from "../../agents/install.ts";
-import type { CrewError } from "../../core/errors.ts";
 import type { ResolvedSkill, Scope, StateFile } from "../../core/types.ts";
 import { upsertEntry } from "../../state/load.ts";
+import { type FailureCode, failureCodeOf } from "../../util/errno.ts";
+import { groupAgentsByDest } from "../dest-groups.ts";
 import type { KeptSource } from "../duplicate-rules/index.ts";
 import type { RequiredByMap } from "../resolve/index.ts";
 import { buildStateEntry, rebuildRequiredBy } from "./state-entry.ts";
@@ -35,7 +36,7 @@ import { buildStateEntry, rebuildRequiredBy } from "./state-entry.ts";
 export type PerAgentResult =
   | { kind: "installed"; agent: string }
   | { kind: "up_to_date"; agent: string }
-  | { kind: "failed"; agent: string; error: { code: string; message: string } };
+  | { kind: "failed"; agent: string; error: { code: FailureCode; message: string } };
 
 /** Per-skill install record. */
 export interface InstallRecord {
@@ -121,19 +122,17 @@ export function performInstall(
           successfulAgents.push(a.name);
         }
       } catch (err) {
-        const ce = err as CrewError;
+        const code = failureCodeOf(err);
+        const message = (err as Error).message;
         for (const a of group.agents) {
-          perAgent.push({
-            kind: "failed",
-            agent: a.name,
-            error: { code: ce.code ?? "usage_error", message: ce.message },
-          });
+          perAgent.push({ kind: "failed", agent: a.name, error: { code, message } });
         }
       }
     }
     const anySuccess = successfulAgents.length > 0;
     records.push({ name: skill.name, scope, agents: perAgent, anySuccess });
-    if (!options.dryRun && anySuccess) {
+    // A dry run records state too, unwritten: what the run would change (C-INST-13o).
+    if (anySuccess) {
       state = upsertEntry(
         state,
         buildStateEntry(skill, scope, successfulAgents, state, options, cwd),
@@ -150,32 +149,4 @@ export function performInstall(
   }
 
   return { records, newState: state };
-}
-
-/**
- * Group agents by the filesystem path they'd install into for this
- * skill+scope. Agents that don't support the scope (empty base path)
- * are skipped — they're a silent per-agent no-op.
- */
-interface AgentGroup {
-  readonly dest: string;
-  readonly agents: readonly AgentAdapter[];
-}
-
-function groupAgentsByDest(
-  agents: readonly AgentAdapter[],
-  skillName: string,
-  scope: Scope,
-  cwd: string,
-): AgentGroup[] {
-  const groups = new Map<string, AgentAdapter[]>();
-  for (const a of agents) {
-    const base = baseFor(a, scope, cwd);
-    if (base === "") continue;
-    const dest = `${base}/${skillName}`;
-    const existing = groups.get(dest);
-    if (existing) existing.push(a);
-    else groups.set(dest, [a]);
-  }
-  return [...groups.entries()].map(([dest, as]) => ({ dest, agents: as }));
 }

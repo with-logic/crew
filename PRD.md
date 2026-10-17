@@ -224,7 +224,7 @@ Only flags documented as repeatable (`--agent`) may appear more than once. Passi
 ### 5.3 Install-time flags
 
 - `--from-git <url>[@<ref>][//<subpath>]` — explicit git source. The value is always parsed as a git source (§8.2), never as a tap reference or path. Any git URL or shorthand form from §8.2 is accepted, and a bare `<owner>/<repo>` value — which as a positional would be read as a tap reference — is treated as GitHub, exactly as if the user had written `@<owner>/<repo>`. The resulting source is installed alongside any positional references on the same command. The bare form accepts the same `@<ref>` and `//<subpath>` tails as every other git reference (`acme/skills@v1.2.0//tools/demo`). A value that cannot be parsed as a git source is `invalid_ref`. The flag is only accepted by `crew install`; on any other command it is an unknown flag (`usage_error`). Like every flag that takes a single value, passing it more than once is a `usage_error` (§5.2).
-- `--recursive` — for direct git/path installs only, fall back to bounded recursive discovery when standard layouts find no skill candidates. Tap-name installs use the tap's configured discovery mode; combining `--recursive` with a tap-name ref is a `usage_error`. Dependencies declared by a skill installed with `--recursive` do not inherit the flag; each dependency resolves with its own standard discovery unless its source is already a recursive tap.
+- `--recursive` — for direct git/path installs only, fall back to bounded recursive discovery when standard layouts find no skill candidates. Tap-name installs use the tap's configured discovery mode; combining `--recursive` with a tap-name ref is a `usage_error`. A gist's skills are always its top-level files, so combining `--recursive` with a gist URL (positional or `--from-git`) is a `usage_error` too (§8.2 "Gists"). Dependencies declared by a skill installed with `--recursive` do not inherit the flag; each dependency resolves with its own standard discovery unless its source is already a recursive tap.
 
 ### 5.3.1 Uninstall-time flags
 
@@ -271,6 +271,11 @@ different accounts, and `acme/Skills` a different repository from
 `acme/skills`. Folding them would let one install silently overwrite a
 genuinely different source instead of raising `name_conflict`.
 
+The one exception is an `http(s)` gist URL (§8.2 "Gists"): its path
+reduces to the gist's lowercased ID, because GitHub serves the same gist
+with or without its owner segment and its hex ID carries no case. A gist
+SSH remote is kept as written.
+
 Path taps follow the same rule with the directory in place of the repo:
 `crew install /src/skills/docx` and `crew install /src` reach the same
 directory, so the second is a duplicate rather than a conflict, exactly
@@ -289,9 +294,38 @@ but the existing entry is attributed to an **auto** tap (§16.5) while the
 incoming install comes through a tap that also covers that location, the
 entry is re-attributed: `state.source` and the install-site markers are
 rewritten to the incoming tap, and the installed bytes are left alone.
-Implementations SHOULD say so in human output. An entry attributed to a
+Implementations SHOULD say so in human output, and likewise for an entry
+an install starts or stops tracking its tap (§11.1); output stays as it
+was for an entry whose tap and tracking didn't change. `--json` carries
+each such change in `attribution_changes`: `{ name, scope, tap }` with the
+entry's tap after the install, plus `moved_from` (the tap it left) when it
+moved and `tracks_tap` (the new value) when that changed. A `--dry-run`
+reports the changes the install would make. An entry attributed to a
 **registered** tap is never re-attributed — the user named that tap
-deliberately — and is simply reported as already installed.
+deliberately — and is simply reported as already installed. An entry
+that tracks its tap (§11.1) moves only together with its subscription,
+and only onto a tap the incoming install subscribes to at the ref the
+entry ends at: its own when the install finds it already installed (a
+move keeps it), the install's when the install reinstalls it. Moved
+without the subscription, the entry would stop following its own tap;
+moved with it anywhere else, it would follow siblings the user never
+subscribed to. A moved entry takes `tracks_tap` on those same terms. An
+entry the install finds already installed moves before the install
+runs; one it reinstalls moves with its reinstall, only if that succeeds,
+so a failed reinstall leaves the entry, its subscription, and its tap as
+they were. The reinstall rewrites the entry's copy in every agent it
+targets — one otherwise up to date included, since its marker names the
+old tap — and reports a copy it can't write, or whose marker it can't
+parse, for that agent alone. Once it succeeds, the entry's markers in
+agents it doesn't target follow the move, and so does a failed copy's
+marker where crew can rewrite it (a copy with local edits keeps its
+bytes); one crew can't parse names nothing, and one it can't read or
+rewrite keeps naming the old tap, which therefore stays (§16.5). A
+marker that must follow and can't — one crew can't parse, or one in a
+folder crew can't write, in an agent the install doesn't target or in
+any agent of an entry it finds already installed — refuses the move
+before the install writes anything: config, markers, or state (a dry run
+refuses it too).
 
 ### 5.5 Help output
 
@@ -491,7 +525,7 @@ slashes, and lowercasing the scheme and host. The directory name carries
 a readable `<host>-<owner>-<repo>` prefix for humans, truncated to 160
 ASCII characters, plus the full 64-character lowercase hexadecimal SHA-256
 digest of the canonical URL. The full digest distinguishes repository
-identities; a shortened digest MUST NOT be used. Userinfo and path case are preserved; the readable prefix MUST exclude userinfo, query strings, and fragments.
+identities; a shortened digest MUST NOT be used. Userinfo and path case are preserved — except an `http(s)` gist URL's path, which is its lowercased ID (§5.4); the readable prefix MUST exclude userinfo, query strings, and fragments.
 
 Consequences an implementation MUST honor:
 
@@ -508,7 +542,10 @@ name (Homecrew before 0.11 used `taps/<tap-name>/`) MUST relocate them
 on first use rather than re-cloning: move the old directory to the
 repository's shared location when that location is free, and discard the
 old directory when the shared clone already exists. Migration holds the same shared-clone lock as acquisition and refresh, and only relocates or deletes paths contained in crew-owned clone roots. The step is
-idempotent and leaves no `taps/` entries for configured git taps.
+idempotent and leaves no `taps/` entries for configured git taps. A gist
+tap recorded with its owner (`https://gist.github.com/<owner>/<id>`)
+moves like any other, to the shared location for the gist's identity
+(§5.4).
 
 ### 6.1 `config.yaml` schema
 
@@ -532,6 +569,7 @@ taps:
     url: https://github.com/with-logic/backend.git
     subpath: skills
   # `discovery` may be omitted or set to `standard` for standard layouts.
+  # It is ignored for a gist tap (§8.2 "Gists"), and never written for one.
   # `discovery: recursive` keeps standard discovery first, but if the
   # standard tap layouts find no skill candidates, Homecrew searches
   # recursively with bounded depth and skip rules.
@@ -844,8 +882,8 @@ Written into every Homecrew-installed skill directory. JSON, UTF-8, trailing new
 - `tap_url` — for `tap_kind: git`, the clone URL. Empty string for `tap_kind: path`.
 - `tap_subpath` — for `tap_kind: git`, an optional directory inside the repo (empty string when none). Empty string for `tap_kind: path`.
 - `tap_path` — for `tap_kind: path`, the absolute filesystem path to the tap. Empty string for `tap_kind: git`.
-- `tap_discovery` — optional. When `"recursive"`, `doctor --repair` reconstructs the tap with recursive fallback discovery. Absent means standard discovery.
-- `path` — the skill's source location relative to the tap's root (after subpath is applied for git taps). Empty string when the tap itself is one skill (root SKILL.md). This path need not end in the skill's declared `name`.
+- `tap_discovery` — optional. When `"recursive"`, `doctor --repair` reconstructs the tap with recursive fallback discovery. Absent means standard discovery. Ignored for a gist tap, which never uses recursive discovery (§8.2 "Gists").
+- `path` — the skill's source location relative to the tap's root (after subpath is applied for git taps). Empty string when the tap itself is one skill (root SKILL.md). For a gist skill it is the skill's file name (`prd.md`, §9 step 5). This path need not end in the skill's declared `name`.
 - `ref` — the ref the user asked for (`main`, `v1.2.0`, a SHA, or `null` if the default branch was used and no ref was specified).
 - `resolved_sha` — the full 40-char commit SHA the install came from, or `null` for path-kind taps.
 - `content_hash` — the hash per §12.1, prefixed `sha256:`.
@@ -1011,7 +1049,54 @@ Rules:
 - An `http(s)` URL too malformed to parse is `invalid_ref` (§13), not
   an unexpected internal error.
 
-The resolved location inside the repo is either the repo root or the subpath. Behavior at the resolved location matches §9 step 5 (single skill if `SKILL.md` present, walk one level otherwise).
+**Gists.** A GitHub gist is a git repository whose files all sit at its
+root — gists cannot contain directories. A gist URL is a git source like
+any other, but its skills are files rather than folders (§9 step 5,
+"Gists"). Homecrew recognises a gist by its host, `gist.github.com`, and
+rewrites the page URLs a browser shows to the gist's clone URL before
+anything else looks at them:
+
+```
+https://gist.github.com/<id>[.git]                  → https://gist.github.com/<id>.git
+https://gist.github.com/<owner>/<id>[.git]          → https://gist.github.com/<id>.git
+https://gist.github.com/<id>/<revision>             → https://gist.github.com/<id>.git@<revision>
+https://gist.github.com/<owner>/<id>/<revision>     → https://gist.github.com/<id>.git@<revision>
+git@gist.github.com:<id>.git                        (kept as typed, like any SSH remote)
+```
+
+- `<id>` is the gist's hexadecimal ID, recorded in lowercase. The owner
+  segment is dropped because the ID alone names the gist, so every
+  `https` spelling of one gist records the same URL and shares one tap.
+  (An SSH remote is a different URL, and so a tap of its own.) An `https`
+  gist URL's repository identity (§5.4) is its host and ID, so a gist tap
+  recorded with its owner (`https://gist.github.com/<owner>/<id>`) is
+  still the tap for that gist.
+- `<revision>` is a 40-character commit SHA from the gist's revision
+  history — longer than any gist ID, which is how an owner-less revision
+  page is told apart from `/<owner>/<id>`. A revision page's URL
+  therefore installs that revision. An explicit `@<ref>` tail wins over
+  it, as for other browser URLs.
+- Any other `http(s)` path on `gist.github.com` — a user's gist list,
+  `/raw/...` links, `/revisions` — is `invalid_ref`. A single path
+  segment is always read as an ID, so the gist list of a user whose login
+  is all hexadecimal fails at clone time instead. A link to one file of a
+  gist (`…#file-<slug>`) is also `invalid_ref`: dropping its fragment, as
+  for other browser URLs, would silently widen one file to the whole gist.
+- A `//<file>` tail names one file of the gist instead of a subfolder:
+  `https://gist.github.com/<id>//prd.md` installs only the skill in
+  `prd.md`. The file must be a top-level `.md` file — a name with no `/`
+  ending in `.md` (case-insensitive) — or the reference is `invalid_ref`.
+  The install is attributed to the tap for the whole gist, with
+  `source.path` `prd.md`, and — like `<tap>/<skill>` — does not track the
+  tap (§10.1.1). A gist tap is always the whole gist: `crew tap add`
+  rejects a `//<file>` tail on a gist with `usage_error`.
+- `--recursive` (§16.3) does not apply to a gist, whose skills are always
+  its top-level files: `crew install --recursive` and `crew tap add
+  --recursive` with a gist URL are `usage_error`.
+- Only `gist.github.com` is recognised. A gist on a GitHub Enterprise
+  host (`https://<host>/gist/<id>`) is an ordinary git source.
+
+The resolved location inside the repo is either the repo root or the subpath. Behavior at the resolved location matches §9 step 5 (single skill if `SKILL.md` present, walk one level otherwise; for a gist, step 5 "Gists").
 
 When a ref is given, the skill's **content is read at that commit** — not
 at the repo's default branch. The bytes installed, the content hash, and
@@ -1044,6 +1129,13 @@ If more than one interpretation is possible, crew prompts the user interactively
 A 2-segment reference `foo/bar` is resolved with tap-first precedence: if `foo` is a configured tap, it means the skill `bar` inside tap `foo` (searching at the tap root and across namespaces). If `foo` is not a tap name but is a namespace in exactly one configured tap, it means the skill `bar` inside that namespace. If neither holds, `invalid_ref`. If both hold, `ambiguous_reference` with suggestions.
 
 A 3-segment reference `tap/namespace/skill` is always unambiguous.
+
+A 2- or 3-segment reference that finds no skill in the named tap fails with the error of a candidate there that crew can't name, rather than `invalid_ref`: the skill is there, and that is why crew won't install it. The candidate is the skill folder or gist file named for the reference (`bar`, or `bar.md` with the extension in any case), or the `skills/` folder or namespace above it, and crew can't name it because it:
+- leads out of the repository through a link (§9 step 5, "Folder links") — `invalid_skill`;
+- is a skill whose `name` is missing or invalid — `invalid_skill`;
+- can't be read or listed — `source_unreachable`.
+
+The error keeps the candidate's own next step. A 2-segment reference whose first segment is a configured tap crew can't read at all (a `skills/` folder it can't list, say) fails with that tap's error, unless a namespace in another tap answers it.
 
 **Disambiguation flags.** The user may force an interpretation on `crew install`. These are presence flags; the name comes from the positional argument.
 - `--tap` — force every bare-name positional to be resolved as a tap name (install the whole tap). Errors if the positional is not a configured tap.
@@ -1098,6 +1190,7 @@ trailing-ref := any non-empty string not containing "/", ":" or whitespace
                subpath, and refusing it would reject a directory a user may have.
 tap-ref     := any non-empty string not containing "/" or whitespace
 subpath     := any POSIX relative path not starting with "/"
+               (for a gist, a file name rather than a folder — §8.2 "Gists")
 ```
 
 A subpath resolves inside the repository it accompanies. Implementations
@@ -1203,11 +1296,13 @@ Given one or more skill references on the command line, `crew install` proceeds 
 
    **Failing to materialize is not the same as finding nothing.** When the commit resolves and its tree is readable but the reference's subpath is absent at that commit, the result is `no_skills_found` — a reference the user can correct. When the source cannot be materialized at all (an unreadable object, an unreadable repository, a scratch location that cannot be written), the result is `source_unreachable`: nothing was read, so nothing can be concluded about what the source contains.
 
+   **A scratch copy is crew's own.** A copy of a commit crew made to read it is deleted once the command is done with it. One crew can't delete is left under `cache/` (§6), which `crew cache clean` empties; it never changes the command's outcome, and when the command fails, its error stays the one reported. A copy that failed as it was made names the folder left in that error; any other is noted under `--verbose`.
+
    **Dependencies inherit their parent's commit.** A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records the same ref and pinning. Recording the parent's SHA over content read from another revision would make state describe a provenance the bytes do not have.
 
    **The materialized tree is a boundary.** The resolved location MUST be reached without traversing a symlink. A repository can commit a symlink at the very path a reference names; following it would read content from outside the requested commit — potentially from anywhere on the host filesystem.
 4. **Validate each candidate skill** against the Agent Skills specification:
-   - `SKILL.md` exists at the expected location.
+   - `SKILL.md` exists at the expected location, as a file. A symlink to a file inside the skill's own folder counts as one, if every link on the way to that file — `SKILL.md` itself, any link it points at, and any folder link its path passes through — has relative text that never climbs above the skill's folder (a `..` that stays inside it is fine), and the chain neither ends at nor passes through the folder's `.crew.json`: such a chain resolves the same inside the skill here and in every copy. crew never reads through a link that could lead out of a skill, and copies a skill's files as they are — a symlink as a symlink, which then resolves from wherever the copy lives (the store entry, each install) — so this is judged from each link's text, resolved by hand, never by following it. Any other — a link with absolute text, text that isn't UTF-8 (which the system could follow to a name other than the one checked), a `..` that climbs above the folder (even one that comes back in), a chain that loops or runs longer than 8 links (crew's limit, well under the system's own, which also counts any link in the path to where the skill is installed), or one that reaches the folder's `.crew.json` — is `invalid_skill`, refused before anything is read through it; a chain of allowed links to nothing is no `SKILL.md`, also `invalid_skill`. A name in the skill's folder reaches its `.crew.json` when, NFKC-normalized, stripped of default-ignorable code points (U+200C, say), and lowercased, it equals `.crew.json`: the names a case-, form-, or ignorable-insensitive disk would treat as that one, the file a copy drops and replaces with crew's marker (§7.5). Past a part of the chain that doesn't exist, where the system would stop, nothing more is looked up: each later name is judged as written, and a link there is never read. A `SKILL.md` that exists but can't be read (its permissions, say) is not the skill's fault: it is reported as `source_unreachable` naming the file and skipped like an invalid candidate, but it counts as an operational failure, not a validation failure (step 9).
    - Frontmatter parses as YAML.
    - `name` matches `[a-z0-9][a-z0-9-]*`, length 1–64, no leading/trailing hyphen, and no consecutive hyphens. It MAY begin with a digit and need not match the parent directory name.
    - `description` is present, non-empty, length ≤ 1024 characters.
@@ -1215,24 +1310,32 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Every other spec rule from the Agent Skills specification.
 
    A skill that fails validation is recorded as a failed skill with its message and path; the run continues. No validation failure aborts the whole command. See the exit-code rules in step 9.
-5. **Expand directories.** Three cases, checked in order:
+5. **Expand skills.** Four cases, checked in order:
    1. If the resolved source location has a `SKILL.md` at its root, it is one skill.
    2. Else, if the resolved source location has a `skills/` subdirectory, crew walks under `skills/` and collects skills:
       - Every immediate child of `skills/` that contains a `SKILL.md` is a skill (as before).
       - Every immediate child of `skills/` that contains no `SKILL.md` but contains child directories that do is a **namespace**. Each namespace child containing a `SKILL.md` is a skill; that skill's `source.path` includes the namespace directory (e.g. `skills/marketing/email-outreach`).
       - Exactly one level of namespace nesting is recognized. Deeper nesting is ignored.
+      - A folder under `skills/` or under a namespace that crew can't list might hold a skill, so it is a candidate too, reported per step 4 as `source_unreachable` while the source's other skills install. A `skills/` folder crew can't list fails the whole source as `source_unreachable` — on `crew update`, that tap's group (§10.1.1 step 1).
       - The source root itself is NOT walked in this case — `skills/` is the authoritative index.
-   3. Else, crew walks **exactly one directory level deep** under the resolved location and adds every subdirectory containing a `SKILL.md` to the install set. Deeper nesting is ignored.
-   4. If, and only if, the standard cases above find zero skill candidates and the owning tap has `discovery: recursive` (or the user supplied `--recursive` for a direct git/path install), crew performs bounded recursive fallback discovery. It searches descendant directories up to depth 5 for `SKILL.md`, skips hidden directories and common non-source/vendor directories (`.git`, `.hg`, `.svn`, `.crew`, `node_modules`, `vendor`, `dist`, `build`, `coverage`, `.next`), never descends inside a directory once it has found that directory's `SKILL.md`, and records each discovered skill with its POSIX path relative to the tap root. Recursive fallback never runs when a standard layout produced any valid or invalid skill candidate; invalid standard candidates are surfaced as validation failures instead of being bypassed by deeper search.
+   3. Else, crew walks **exactly one directory level deep** under the resolved location and adds every subdirectory containing a `SKILL.md` to the install set. Deeper nesting is ignored. A subdirectory crew can't list holds no `SKILL.md` it can see, so it is not a candidate; a location crew can't list is `source_unreachable`.
+   4. If, and only if, the standard cases above find zero skill candidates and the owning tap has `discovery: recursive` (or the user supplied `--recursive` for a direct git/path install), crew performs bounded recursive fallback discovery. It searches descendant directories up to depth 5 for `SKILL.md`, skips hidden directories and common non-source/vendor directories (`.git`, `.hg`, `.svn`, `.crew`, `node_modules`, `vendor`, `dist`, `build`, `coverage`, `.next`), never descends inside a directory once it has found that directory's `SKILL.md`, nor into one it can't list, and records each discovered skill with its POSIX path relative to the tap root. Recursive fallback never runs when a standard layout produced any valid or invalid skill candidate; invalid standard candidates are surfaced as validation failures instead of being bypassed by deeper search.
 
-   A location that produces zero valid skills through the applicable case aborts with `no_skills_found`.
+   **Gists.** A gist (§8.2) has no directories, so cases 2–4 never apply to it. Case 1 still does: a gist with a root `SKILL.md` — that exact name, on any filesystem — is one skill, and its other files are that skill's resources. Otherwise:
+   - Every top-level regular file of the gist whose name ends in `.md` (case-insensitive) and whose first non-blank line is `---` is a skill candidate — as is one crew can't read, which is then reported per step 4. The file is that skill's `SKILL.md`: it is validated per step 4, and a candidate that fails validation is reported like any invalid skill, with an error that names the file (`bad.md`) rather than `SKILL.md`. Every other file is ignored, and a symlink is never a candidate.
+   - The skill's `source.path` is the file's name (e.g. `prd.md`).
+   - A `//<file>` reference (§8.2) expands to exactly the named file, which is validated per step 4 whether or not it opens with frontmatter. The name is matched exactly, case included. A name that is not a regular file of the gist at the resolved commit is `no_skills_found`, with an error naming the file and listing the gist's skill files; a name reached through a symlink is `invalid_ref` (§8.4). A gist with a root `SKILL.md` is one skill, so no file of it can be selected: a `//<file>` on such a gist is `invalid_ref`.
+
+   **Folder links.** In a git source, a folder discovery reaches on the way to a skill — `skills/` itself, a namespace, or the skill's own folder — may be a symlink that stays inside the repository; it is followed. Where a link leads is judged as the OS follows it: a `..` in its text climbs from where the parts before it really lead, through any link among them, never from the text. One that leads out of the repository, or to its root or into its `.git` (crew's clone metadata, not the source), is refused before any file in it is read, since staging (step 8) copies a folder through its link: it is an `invalid_skill` candidate, reported like an invalid skill while the source's other skills install. At the source root (case 3), such a folder is a candidate only if it holds a `SKILL.md` (whether it does is all crew looks at), since a root may link elsewhere for other reasons. Tap indexing never reads such a folder either: `crew search` leaves it out, a `<tap>/<skill>` or `<tap>/<namespace>/<skill>` reference to it (or to a skill below it) fails with that `invalid_skill`, and re-expansion on `crew update` reports it as a new child that fails, by its location (§10.1.1 step 2). A path source is the user's own directory and isn't held to this, as on update (§10.1).
+
+   A location that produces no skill candidates through the applicable case aborts with `no_skills_found`. Candidates that are found but all fail validation are not `no_skills_found`: each is reported as a failed skill, and the run ends `invalid_skill` (step 9).
    - Multi-skill expansions are how the user gets every skill in a tap installed at once. Each child becomes an independent state entry attributed to the same tap (`source.tap`); upstream additions to that tap are picked up automatically by `crew update` (§10.1.1).
 6. **Resolve dependencies.** For each skill in the install set, read `metadata.crew.dependencies` and add each to the install set. Continue recursively until no new dependencies appear. Cycles are allowed and terminate naturally (a skill already in the set is not re-added).
    - **Install order:** the install set is ordered topologically — every dependency is installed before the skills that depend on it. Ordering uses the *resolved* name of each dependency (the `name` its `SKILL.md` declares), not the tail of the reference that selected it: a dependency referenced as `./dep-directory` but declaring `name: dep` is still ordered before its dependent. When a cycle makes a strict ordering impossible, any order that respects the acyclic part is valid; the resulting installs are identical either way.
-   - **Bare-name resolution precedence:** (1) a sibling directory at the same source and ref (for sources where "sibling" is meaningful — git sources with a parent directory and path sources in a parent directory); (2) the tap the parent skill was installed from, if any; (3) search across all configured taps. An unqualified name matching multiple taps aborts with `ambiguous_dependency` naming the candidates.
+   - **Bare-name resolution precedence:** (1) a sibling directory — or, in a gist, a sibling skill file (step 5, "Gists") — at the same source and ref (for sources where "sibling" is meaningful — git sources with a parent directory and path sources in a parent directory); a sibling named for the dependency (its directory, or in a gist its file without `.md`) that crew can't load — it can't look into it, its `SKILL.md` can't be read or is invalid (step 4), or its folder leads out of the repository (step 5, "Folder links") — fails the install with that reason, naming the dependency, rather than being passed over for (2) or (3); any other sibling folder that leads out of the repository is passed over unread; (2) the tap the parent skill was installed from, if any; (3) search across all configured taps. An unqualified name matching multiple taps aborts with `ambiguous_dependency` naming the candidates.
    - **Conflict detection:** if two skills in the install set have the same `name` but come from different tap-relative source paths, or resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
 7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
-8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. If the store entry already exists and its content hash matches, reuse it.
+8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. A gist skill file (step 5, "Gists") is copied in as `SKILL.md`, so its store entry — and every directory installed from it — holds that one file. If the store entry already exists and its content hash matches, reuse it. A skill with a file crew can't read while staging it is reported as `source_unreachable` naming the file and skipped as in step 4 — an operational failure (step 9); the rest of the install set proceeds, and no partial copy is left in the store (one crew can't remove is named in that error, which stays the error reported). A dependency resolved beside its parent (step 6) that can't be staged fails the install with that reason; one resolved through a tap is staged, and skipped, like any other skill. crew's own store failing (not writable, say) is one `source_unreachable` error naming the store, not a fault of any skill.
 9. **Install into each agent.** For each skill × each agent in the agent set × the scope, run the install algorithm from §7.3. Record per-agent results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, agent) pair does not stop others.
 
    **Skill outcome.** After per-agent installs complete, each attempted skill has one of two outcomes:
@@ -1283,8 +1386,13 @@ beside the label for auto taps. `--json` adds the rendered label as
 `source_label` alongside the unchanged `installed` entry.
 
 If the argument does not match installed state, `crew info` resolves it as an
-install reference and previews the valid skills available at that source. An
-`@ref` tail is not part of the installed-skill selector grammar; arguments such
+install reference and previews the valid skills available at that source.
+When the source holds skill candidates but none of them is valid, the
+preview fails naming the reason rather than reporting no skills: with
+`invalid_skill` (exit 4) if any candidate is invalid — the same verdict an
+install of the reference reaches (§9 step 9) — otherwise with
+`source_unreachable` (exit 5), when every candidate's `SKILL.md` was
+unreadable (§9 step 4). An `@ref` tail is not part of the installed-skill selector grammar; arguments such
 as `<tap>/<skill>@<ref>` therefore follow the reference-preview path rather than
 matching installed state.
 
@@ -1322,7 +1430,7 @@ individually. `--json` output carries `selectors: [{ raw, kind, name }]` where
 `kind` is `skill`, `tap`, or `namespace`.
 
 **A namespace selector bounds which additions are installed.** Re-expansion
-groups are keyed by `(tap, scope, project_root)`, so the group behind
+groups are keyed by `(tap, scope, project_root, ref)`, so the group behind
 `<tap>/<namespace>` spans the whole tap — but the user asked about one part of
 it. When every selector in a run is a namespace, step 2b MUST install only
 newly-added children that live under one of the named namespaces
@@ -1350,7 +1458,7 @@ between resolution and targeting:
   name alone. Re-expansion installs new entries mid-run, so a run that re-reads
   its selection by name can adopt a same-named skill from a different tap, or
   the same skill at a different scope, that the user never selected. The same
-  rule governs which `(tap, scope, project_root)` groups step 2b re-expands: a
+  rule governs which `(tap, scope, project_root, ref)` groups step 2b re-expands: a
   group is re-expanded only when the selection contains one of *its* entries,
   or the user named its tap as a tap.
 
@@ -1359,7 +1467,16 @@ between resolution and targeting:
   out of `skills/` — is still the same install, and step 2b rewrites its
   recorded path in the same run that reads the selection back. Including the
   path would make a relocated entry fail to match itself, silently dropping it
-  from the selection and leaving stale bytes installed.
+  from the selection and leaving stale bytes installed. The new path is
+  recorded only by the entry's own successful update, with its marker and
+  commit: a relocated entry is reinstalled even when its content didn't
+  change, so its marker's `path` follows. One whose update fails (an agent
+  folder crew can't write, say) keeps its recorded path and commit, as
+  does a relocated entry outside the selection (re-expanded only because
+  a sibling was selected), until its own update. An agent that did take
+  a failed update's new copy is ahead of state until then — `crew doctor`
+  reports it as `marker_attribution_drift` — and the retry brings state
+  and every marker together.
 
 1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<selector>...`, it is the subset of taps that host the selected entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run: other taps and every per-skill update still process. A tap the user named *as a tap selector* is the exception — the run did not do what was asked, so its refresh failure is a hard failure (exit 1) in addition to the warning, even when nothing is installed from that tap. A tap that merely happens to be configured, or that backs a selected entry without having been named, stays a warning.
 2. Build the list of skills to consider:
@@ -1382,7 +1499,7 @@ between resolution and targeting:
 4. Garbage-collect the store: any `store/<name>@<short-sha>/` entry no longer referenced by any `state.json` entry or marker is deleted.
 5. Print summary (human or JSON).
 
-**Error isolation.** Every skill is processed independently. A failure — network error, fetch error, spec validation error on a newly pulled version, customized install detected, dependency resolution failure, target install failure — is recorded against that skill and does not stop processing of the rest. Exit code is 0 if all skills were either up-to-date, updated successfully, or cleanly skipped as customized. Exit code is 1 if any skill encountered a hard failure (network, fetch, validation).
+**Error isolation.** Every skill is processed independently. A failure — network error, fetch error, spec validation error on a newly pulled version, customized install detected, dependency resolution failure, target install failure — is recorded against that skill and does not stop processing of the rest. A target crew couldn't write (its agent's skills folder isn't writable, say) is a failure of that skill's update: the entry keeps its previous state, so the agent still holding the previous install stays recorded, and the next update that finds the source changed from that state tries again. Agents that did take the new version keep it until then. Exit code is 0 if all skills were either up-to-date, updated successfully, or cleanly skipped as customized. Exit code is 1 if any skill encountered a hard failure (network, fetch, validation, a target crew couldn't write).
 
 **Upstream deletion does not remove local installs.** If an installed
 skill's source still resolves (the repo or tap is reachable) but the
@@ -1393,6 +1510,44 @@ untouched. The skill keeps working at its last-resolved SHA. This is a
 soft outcome: exit code stays 0 for an update run whose only
 abnormalities are `source_gone`. Removal of an unwanted local skill is
 always explicit (`crew uninstall <selector>`).
+
+The same holds when the skill is still there but can't be read as part
+of the source. Symlinks are judged against a boundary, and crew never reads
+through one that leads out of it (§8.4). At the default branch the
+recorded path's boundary is the repository; a path tap is the user's own
+directory and has none. At an explicit `@<ref>` the recorded path is
+held to the export rule of §9 step 3 instead — a symlink anywhere on it
+makes the skill gone. The skill's `SKILL.md` is held to §9 step 4
+wherever it is read: one reached through a link crew won't follow fails
+the update as `invalid_skill` (below).
+
+- **`source_gone`:**
+  - the recorded path leads outside its boundary through a symlink —
+    including one crew can't resolve, judged by where the link points;
+  - the recorded path of a skill below the repository root now leads,
+    through a symlink, to the repository root itself or into its `.git`
+    directory: crew's clone metadata (its remote URL, say) is not part of
+    the source;
+  - the recorded path is a link that dangles or loops, or the `SKILL.md`
+    is a chain of allowed links (§9 step 4) to nothing;
+  - the skill is now the wrong kind of thing: a gist skill file, or a
+    one-skill gist's root `SKILL.md`, that is no longer a regular file of
+    that exact name, case included (a symlink is never a gist skill, §9
+    step 5 "Gists"), a skill directory
+    replaced by a file, or one left without a `SKILL.md`;
+  - a gist entry whose recorded path is not one top-level file name (a
+    hand-edited `../x.md`, say): it is never read.
+- **Followed:** a symlink to a skill directory that stays inside the
+  repository, as discovery follows such folder links at install (§9 step
+  5, "Folder links"), and a `SKILL.md` linked to a file inside its folder
+  through allowed links.
+- **`invalid_skill`** (a hard failure, as at install): a `SKILL.md`
+  reached through a link crew won't follow (§9 step 4). Nothing is read
+  through it.
+- **`source_unreachable`** (a hard failure): any other failure to look —
+  a permission error, say, including on a link crew can't resolve that
+  points inside the boundary, or on a folder above a path tap — and a
+  file of the skill crew can't read while staging it.
 
 This rule also applies when a whole source becomes unresolvable: a
 tap's clone URL 404s, or a git repo is gone. Those produce
@@ -1428,7 +1583,15 @@ On every `crew update` run, for each group of state entries sharing
 `tracks_tap: true`, crew:
 
 1. Expands the tap **at the group's `ref`** using the tap's configured
-   discovery mode (§9 step 5) and builds the current child set. The
+   discovery mode (§9 step 5) and builds the current child set — a
+   folder that leads out of the repository through a link is never read
+   (§9 step 5, "Folder links"), so it is a candidate without a name
+   (step 2). A tap whose `skills/` folder crew can't list (§9 step 5,
+   C-SPEC-18) fails this group alone: each member is reported as a
+   `tap_error` with `source_unreachable`, marked `whole_group` — human
+   output shows each distinct failure of a tap's groups once, counted as
+   one failure, with the error's next step — and the run goes on with
+   its other groups and entries, then exits 1. The
    group's own `ref` is what gets materialized, exactly as in §9 step 3:
    a whole-tap install at `@<tag|branch|sha>` MUST be re-expanded
    against that revision, not the tap's default branch. Otherwise
@@ -1461,14 +1624,49 @@ On every `crew update` run, for each group of state entries sharing
    is mandatory: a child whose frontmatter is invalid (missing
    `description`, over-long fields, …) MUST be reported as a per-child
    failure carrying `invalid_skill` and MUST NOT be installed, in both
-   real and `--dry-run` runs. The run exits 1.
-3. For each skill in state attributed to this tap whose directory is
-   **no longer present** under the resolved root: reports `source_gone`
-   and leaves the local install untouched (per the upstream-deletion
-   rule in §10.1). Removal is always explicit.
-4. For each skill in state attributed to this tap whose directory is
-   still present: proceeds with the normal per-skill update logic
-   (step 3 of §10.1) — stage, re-resolve, reinstall if SHA moved.
+   real and `--dry-run` runs. The run exits 1. So is a candidate whose
+   `name` discovery can't read — a folder with a `SKILL.md`, or a gist
+   file that opens frontmatter, whose `name` is missing or invalid, whose
+   `SKILL.md` is a link crew won't follow (§9 step 4), whose folder leads
+   out of the repository (§9 step 5, "Folder links"), or that crew can't
+   read (`source_unreachable`): having no name, it is reported by its
+   location in the tap — in `--json`, a `tap_path` in place of the row's
+   `name` — unless an entry of the group is installed from
+   that location, whose own update reports it (step 3). A child crew can't
+   stage (§9 step 8), or can't install into an agent because it can't
+   write that agent's skills folder, fails the same way: it is reported
+   as a failed child, not recorded, and removed from any agent it was
+   just installed into, so it is installed nowhere and the next run
+   tries again. Crew first moves each copy aside, to a name no skill
+   can have, so no edit can land between checking it and removing it.
+   A copy that changed after crew installed it — its marker, byte for
+   byte, or its content (§12.1) no longer what this run wrote — is
+   someone's edit: it is moved back and left in place, as is one crew
+   can't remove. One whose path something was written to while it was
+   aside is left where crew set it, and named there. Two agents whose
+   skills folders are one folder through a link (§7.2) write one copy,
+   so the second write is this run's too, not an edit. The child's
+   failure keeps its own code and message, and names each copy left
+   behind. A safety check refusing an agent (§7.3) leaves the child
+   out of that agent, with no re-expansion row and without failing the
+   run.
+3. For each skill in state attributed to this tap that is **no longer
+   present** under the resolved root: reports `source_gone` and leaves
+   the local install untouched (per the upstream-deletion rule in
+   §10.1). Removal is always explicit. A folder skill is no longer
+   present when its folder or its `SKILL.md` is gone. A gist skill file
+   of an entry that tracks the gist (`tracks_tap`, §11.1) is no longer
+   present when it is gone or no longer opens frontmatter (§9 step 5).
+   Any other gist entry — installed by `//<file>`, by name, or as a
+   dependency — is left to its own update, which judges its recorded
+   file exactly (§10.1, C-UPD-39): never matched to another file by
+   name, as when nothing beside it tracks the gist. A skill still
+   present that discovery can't index — a `SKILL.md` crew won't follow,
+   a folder crew can't search, a gist file crew can't read — is not
+   gone: its own update in step 4 reports why.
+4. For each skill in state attributed to this tap that is still
+   present: proceeds with the normal per-skill update logic (step 3 of
+   §10.1) — stage, re-resolve, reinstall if SHA moved.
 
 Groups whose members are all individual-skill installs (no
 `tracks_tap`) skip re-expansion entirely. Their per-skill updates
@@ -1860,7 +2058,7 @@ UTF-8 JSON with a trailing newline. Single top-level object.
 }
 ```
 
-Every entry's `source` is `{ tap, path }`: the name of a configured tap (registered or auto, see §16) and the skill's directory path inside that tap. The URL or filesystem location is held in `config.yaml` on the tap row, not duplicated here, so renaming a tap or changing its URL doesn't require rewriting state.
+Every entry's `source` is `{ tap, path }`: the name of a configured tap (registered or auto, see §16) and the skill's directory path inside that tap (for a gist skill, its file name — §9 step 5). The URL or filesystem location is held in `config.yaml` on the tap row, not duplicated here, so renaming a tap or changing its URL doesn't require rewriting state.
 
 One entry per (skill, scope, project_root) triple: the same skill can be installed at user scope, at project scope under `~/work/product-x`, and at project scope under `~/work/product-y` — that's three independent entries. `agents` is the list of agent names this skill is currently installed into.
 
@@ -1909,14 +2107,28 @@ an uninstall in one project never rewrites the other's. A skill with
 this entry came from a whole-tap install (`crew install <tap-url>` or
 `crew install <tap-name>`). Drives tap re-expansion (§10.1.1): on
 `crew update`, the group of entries sharing `(source.tap, scope,
-project_root)` is re-walked and new siblings are installed iff any
+project_root, ref)` is re-walked and new siblings are installed iff any
 member has `tracks_tap: true`. A user who installed just one skill
 from a tap (`crew install <tap>/<skill>` or a bare skill name)
 doesn't opt into this; `tracks_tap` is absent on those entries, and
 the tap's later additions don't pull into their setup. Like
-`explicit`, `tracks_tap` never demotes: once a user installed the
-whole tap, a later `crew install <tap>/<one-skill>` doesn't flip it
-off.
+`explicit`, `tracks_tap` never demotes at the same ref: once a user
+installed the whole tap, a later `crew install <tap>/<one-skill>`
+doesn't flip it off. It promotes instead: a whole-tap install that
+reaches an entry already installed on its own sets `tracks_tap` on it,
+even when the entry is otherwise up to date — but only when the entry
+is attributed to that tap at the same `ref`. An entry that keeps
+another tap (a registered one, §5.4) or sits at another ref never takes
+it from that install: it would start following siblings the user never
+asked for.
+
+An install that reinstalls the entry alone at another ref (a new
+commit, `--force`, or a new agent; `<tap>/<one-skill>@v2`, say) records
+it at that ref without `tracks_tap`: carried along, the subscription
+would follow that revision's siblings. The old ref's group goes on being
+re-expanded only if another of its members still tracks the tap. One
+that finds the entry already installed, on the same commit, changes
+nothing.
 
 **Invariants:**
 
@@ -1937,7 +2149,16 @@ off.
 5. No `store/` entry is orphaned (not referenced by any state entry).
 6. `config.yaml` parses.
 7. If autoupdate is enabled in config, the platform scheduler is actually loaded.
-8. For every project-scope entry, `project_root` exists on disk and a `.crew.json` marker lives under `<project_root>/<adapter-base>/<name>/`. A `project_root` that no longer exists produces a `missing_project_root` finding (warn, not error — the user may have simply moved the project, and the right fix is a `crew uninstall` from their new location).
+8. For every project-scope entry, `project_root` exists on disk and a `.crew.json` marker lives under `<project_root>/<adapter-base>/<name>/`. A `project_root` that no longer exists produces a `missing_project_root` finding (warn, not error — the user may have simply moved the project, and the right fix is a `crew uninstall` from their new location). One crew can't look at — a folder above it can't be searched — isn't missing: check 9 reports it.
+9. Every marker, and every agent skills folder and project root doctor walks, can be read, and every marker can be used. These produce an `unreadable_marker` finding (error) naming the path, rather than failing the run:
+   - a marker crew can't read or parse, or one that isn't a JSON object (`null` included);
+   - a marker missing a field crew records in every marker (§7.5), or holding one of the wrong type;
+   - a marker whose tap wouldn't load as a `config.yaml` tap row (§6.1): an empty or unsafe `tap_name`, a git tap without a `tap_url`, or a path tap without a `tap_path`;
+   - a marker that isn't its folder's: its `name` isn't the install folder's name, or its `scope` is neither the scope crew found it at nor one whose skills folder that folder also is. One folder can serve both scopes — a project root doctor walks (its cwd, or one state records) at the user's home puts its project folder where the user folder is — and there a marker recording the other scope is that scope's to check, not a finding. Agents share skills folders too (§7.2), so a marker is judged only on the walks of the agents it lists;
+   - a skills folder or project root crew can't list, or can't look into because a folder above it can't be searched.
+
+   A marker crew read but can't use is the user's to reinstall (`--force`). Check 1 doesn't also report the state entries such a path hides. Under `--verify`, an install folder crew can't read all of to recompute its hash (check 3) is such a finding too, naming the path it couldn't read, and the other checks still run; one removed while crew hashes it (a concurrent update replacing it) is passed over.
+10. Each marker names the tap and path its state entry is attributed to (`tap_name` and `path` against `source.tap` and `source.path`). A marker that disagrees — a copy a move couldn't relabel (§5.4), say — produces a `marker_attribution_drift` finding (warn). Its next step is reinstalling that copy with `--force` when the tap differs; when only the `path` does, it is `crew update <name>` — a copy that took a relocated skill (§10.1) whose update failed in another agent is brought in line by the retry — and, if that reports the skill up to date (a copy left behind, say, one the update skipped as customized), reinstalling that copy with `--force`.
 
 `--verify` includes check 3 (hash recomputation); without it, check 3 is skipped for speed.
 
@@ -1951,6 +2172,8 @@ off.
 `--repair` never overwrites user-customized skills. Its filesystem changes are confined to `~/.crew/`, the agent skill directories it already manages, and Crew’s own platform scheduler files (§10.2), including the macOS attribution bundle.
 
 Findings outside that list are **not repairable** and MUST NOT be counted as addressed by any `--repair` run or preview. `customized`, `agent_missing`, and `config_invalid` need a human decision; `missing_project_root` is a heads-up whose remedy (per check 8) is the user's own `crew uninstall`, not a repair. Autoupdate drift (check 7) IS repairable — see the reconciliation bullet above — but only counts as addressed when its repair result reports success; a failed reconciliation leaves the finding standing.
+
+`unreadable_marker` and `marker_attribution_drift` aren't repairable either. A `--repair` run MUST NOT delete a state entry whose marker it couldn't read or use (check 9): that marker is unread, not absent; and it writes nothing from such a marker into `config.yaml` or `state.json`. Nor does it re-point state at a marker's tap (check 10): markers are authoritative (§11.1), but the entry's other copies name the tap state records, so the one copy is the user's to reinstall (`crew install <ref> --agent <agent> --force`).
 
 A `--repair` run MUST NOT delete a state entry solely because its `project_root` is missing. Check 8 defines a vanished project root as the user's to resolve, so the entry is preserved for them to act on; deleting it would discard the only record of the install.
 
@@ -1967,7 +2190,7 @@ Deterministic SHA-256 over file contents and relative paths. Used for detecting 
 Algorithm:
 
 1. Walk the directory. Exclude `.crew.json` at the root of the walk. Do not follow symlinks out of the directory.
-2. Collect every regular file as a tuple `(relative_path, sha256(file_bytes))`. Relative paths use POSIX separators (`/`) regardless of platform.
+2. Collect every regular file as a tuple `(relative_path, sha256(file_bytes))`. Relative paths use POSIX separators (`/`) regardless of platform, and a backslash in a name is hashed as `/` too, as every release has; crew never reads one as a separator when it locates a file.
 3. Sort the tuples by `relative_path` using byte-wise comparison.
 4. Initialize a SHA-256 accumulator. For each tuple in sorted order, feed it: `relative_path` as UTF-8 bytes, then `0x00`, then the lowercase hex of the file SHA, then `0x0A`.
 5. The final digest in lowercase hex, prefixed with `sha256:`, is the content hash.
@@ -1990,10 +2213,10 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 
 | Name | Exit | When |
 |---|---|---|
-| `invalid_ref` | 4 | The skill reference failed to parse (§8.4). |
-| `invalid_skill` | 4 | A skill directory failed spec validation. Message names the failing field. |
-| `no_skills_found` | 4 | A directory source expanded to zero valid skills. |
-| `source_unreachable` | 5 | Network or git failure acquiring a source. |
+| `invalid_ref` | 4 | The skill reference failed to parse (§8.4), or names something its source can't serve as asked: a `//<file>` on a one-skill gist, or reached through a symlink (§9 step 5). |
+| `invalid_skill` | 4 | A skill (directory, or gist skill file) failed spec validation. Message names the failing field. |
+| `no_skills_found` | 4 | A directory source expanded to no skill candidates, or a gist has no skill files (or no file a `//<file>` named). Candidates that all fail validation are `invalid_skill`. |
+| `source_unreachable` | 5 | Network or git failure acquiring a source, a local file in it crew can't read (§9 steps 4, 8, §10.1), or crew's own store it can't use (§9 step 8). |
 | `ref_not_found` | 5 | Ref doesn't exist in the repo. |
 | `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
 | `tap_missing` | 0 | On update, the installed skill's tap is no longer in `config.yaml` (e.g. after `crew tap remove --force`). Soft outcome; local install is preserved. Never causes a non-zero exit. |
@@ -2085,12 +2308,12 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
 
 ### 16.1 What a tap is
 
-A **tap** is any directory that exposes skills through the standard layouts in §9 step 5. It can be a git-managed directory (a clone of a git repo, optionally rooted at a subdirectory via `subpath`) or a local filesystem directory. Every tap has a unique short name in `config.yaml`. Every installed skill belongs to exactly one tap, recorded as `state.installations[i].source.tap`.
+A **tap** is any directory that exposes skills through the standard layouts in §9 step 5, or a gist, whose skills are files (§9 step 5, "Gists"). It can be a git-managed directory (a clone of a git repo, optionally rooted at a subdirectory via `subpath`) or a local filesystem directory. Every tap has a unique short name in `config.yaml`. Every installed skill belongs to exactly one tap, recorded as `state.installations[i].source.tap`.
 
 Taps come in two flavors that differ only in lifecycle, not in structure or behavior:
 
 - **Registered taps** are added by the user (`crew tap add`) and persist until explicitly removed. They appear in `crew tap list` with `kind: registered`. The default `core` tap is registered.
-- **Auto taps** are created implicitly when `crew install` resolves a source crew hasn't seen before (e.g. `crew install @with-logic/skills`). They behave identically to registered taps for `crew update`, `crew search`, and `crew install` — but they are garbage-collected when their last skill is uninstalled. They appear in `crew tap list` with `kind: auto`.
+- **Auto taps** are created implicitly when `crew install` resolves a source crew hasn't seen before (e.g. `crew install @with-logic/skills`). They behave identically to registered taps for `crew update`, `crew search`, and `crew install` — but they are garbage-collected once nothing names them (§16.5). They appear in `crew tap list` with `kind: auto`.
 
 A user can promote an auto tap to registered by running `crew tap add` against the same URL: it idempotently re-points the existing entry, flips `registered: true`, and applies any `<name>` the user supplies.
 
@@ -2198,12 +2421,13 @@ since the registry was built, the normal tap-add or install error applies.
 - `crew tap add <url-or-path> [<name>]` registers a tap.
   - `<url-or-path>` is either a git URL (with optional `//<subpath>` tail using the same syntax as §8.2 git refs — e.g. `crew tap add @with-logic/backend//skills`) or a filesystem path. Browser URLs (§8.2) are accepted; `crew tap add https://github.com/acme/skills/tree/main/skills` registers a tap at subpath `skills`.
   - Taps track the default branch and cannot be pinned. A `@<ref>` tail — explicit, or derived from a browser URL — is a `usage_error`, with one exception: a ref of `main` or `master` is taken to name the default branch and is silently dropped, so a pasted `/tree/main/...` link works without editing.
-  - If `<name>` is omitted, it is derived: for root git taps, the final URL path component (minus `.git`); for subpath git taps, `<last-repo-segment>-<last-subpath-segment>` (so `@with-logic/backend//skills` → `backend-skills`); for path taps, the basename of the directory.
+  - If `<name>` is omitted, it is derived: for root git taps, the final URL path component (minus `.git`); for subpath git taps, `<last-repo-segment>-<last-subpath-segment>` (so `@with-logic/backend//skills` → `backend-skills`); for gists (§8.2), `gist-` followed by the first 8 characters of the gist ID (so `https://gist.github.com/acme/7489027d2d93c185f48a628547c043d8` → `gist-7489027d`); for path taps, the basename of the directory.
+  - A gist is always added whole. A `//<file>` tail on a gist URL is a `usage_error`; install one of its skills with `crew install <gist-url>//<file>`, or `crew install <tap>/<skill>` once the tap exists.
   - For git taps, the initial clone runs **before** the tap is written to config. If the clone fails (bad URL, typo, network failure, no access), the tap is not added — neither `crew tap list` nor `config.yaml` shows it, and any partially-materialized clone directory is removed.
   - If the named tap already exists with a matching URL/path/subpath, the call is an idempotent no-op (exit 0). If an existing tap of the same name has a different URL/path/subpath, the call is a `usage_error` — the user must pick a different name.
   - If the URL/path matches an existing **auto** tap, `crew tap add` promotes it: `registered` flips to `true`, and the `<name>` argument (if supplied) renames the tap. No re-clone.
   - `--dry-run` runs the same parsing, name validation, and same-name/same-target checks (producing the same `usage_error`s), then reports which outcome would apply — add, no-op, promote, or recursive-discovery upgrade — without cloning, writing `config.yaml`, or rewriting any marker. `--json` output carries `dry_run: true`.
-- `crew tap add --recursive <url-or-path> [<name>]` registers or promotes the tap with `discovery: recursive`. Re-running it against an existing registered tap with the same target upgrades that tap to recursive discovery. Promoting an existing auto tap preserves any recursive discovery mode already recorded for that tap; adding `--recursive` during promotion upgrades it at the same time. This is an explicit trust signal for non-standard repository layouts: standard discovery still runs first, and recursive discovery is only the fallback described in §9 step 5.4. There is no command-level downgrade flag. Editing `config.yaml` to remove `discovery` makes live tap resolution use standard discovery, but existing installed markers retain the discovery mode used at install time; `doctor --repair` can therefore reconstruct recursive discovery from those markers until the affected skills are reinstalled or markers are rewritten by a future command.
+- `crew tap add --recursive <url-or-path> [<name>]` registers or promotes the tap with `discovery: recursive`. Re-running it against an existing registered tap with the same target upgrades that tap to recursive discovery. Promoting an existing auto tap preserves any recursive discovery mode already recorded for that tap; adding `--recursive` during promotion upgrades it at the same time. This is an explicit trust signal for non-standard repository layouts: standard discovery still runs first, and recursive discovery is only the fallback described in §9 step 5.4. A gist has no layouts to fall back from, so `crew tap add --recursive` with a gist URL is a `usage_error` (§8.2 "Gists"). There is no command-level downgrade flag. Editing `config.yaml` to remove `discovery` makes live tap resolution use standard discovery, but existing installed markers retain the discovery mode used at install time; `doctor --repair` can therefore reconstruct recursive discovery from those markers until the affected skills are reinstalled or markers are rewritten by a future command.
 - `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Bare `crew tap` (no positional at all) prints the command's help page (same as `crew help tap`) with exit 0. Any other input — an unknown subcommand, or a word that doesn't parse as a source — is a `usage_error` whose message names the offending input and points at `crew help tap`. When the rejected argument to `crew tap add` is a two-segment tap reference (`acme/skills`), the error's remedy suggests `crew tap add @acme/skills`, since that is almost always what was meant. Other commands that take subcommands (`crew cache`, `crew autoupdate`) behave the same way; `crew agents` lists agents when bare and errors on an unknown subcommand.
 - Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`). The subpath, URL, or path is entirely internal — it never appears in skill references.
 - `crew tap remove <name>` removes the tap from config and deletes the local clone, unless another configured tap still points at the same repository (§6) — clones are shared per repository, so the bytes go only with the last tap referencing them. Auto taps are also removed automatically when their last associated state entry is uninstalled (see §16.5). With `--dry-run`, the same lookup and default-tap guard run, but nothing is written or deleted; the command reports what would be removed and `--json` carries `dry_run: true`.
@@ -2256,7 +2480,7 @@ When `crew install` is given a reference that resolves to a source not currently
 Auto taps are functionally indistinguishable from registered taps for `crew update`, `crew tap update`, `crew search`, and `crew install <tap-name>` purposes. The only differences are:
 
 - They appear with `kind: auto` in `crew tap list`.
-- They are garbage-collected when their last associated state entry goes away, through uninstall or re-attribution to a broader tap (§5.4): the tap row is dropped from `config.yaml` and the local clone is deleted, unless another configured tap still points at the same repository (§6). (Registered taps are not garbage-collected.)
+- They are garbage-collected once nothing names them: their last associated state entry goes away, through uninstall or re-attribution to a broader tap (§5.4), and no crew marker in a state entry's install folders, in any agent, names them either (a copy a move couldn't relabel, or one crew wrote but never recorded). A path there that can't hold a marker (nothing there, or a link that dangles or loops, §10.1; a file where the folder goes; a folder where the marker goes) or a marker crew can't parse names nothing. A marker crew can't read (permission denied, say) might name any tap, so while one is found nothing is collected: a leftover tap row is harmless, a marker naming a deleted tap is not. The command that would have collected says so: a warning on stderr naming the marker it couldn't read and the auto taps it kept, also listed in its `--json` `warnings`. Kept taps go at a later collection (the next `crew uninstall`, say) once nothing names them. A folder crew can't search counts as such a marker where one of a state entry's agents installs into it; in any other folder only a `.crew.json` crew can see there counts, and a folder it can't search names nothing. The tap row is dropped from `config.yaml` and the local clone is deleted, unless another configured tap still points at the same repository (§6). (Registered taps are not garbage-collected.)
 - A user can convert an auto tap to registered by running `crew tap add <url-or-path>` against the same source — this idempotent promotion preserves the existing clone and installed skills.
 
 Because auto-tap names are crew's bookkeeping rather than something the
@@ -2403,6 +2627,10 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-34 | §8.2 | For a slash-free ref, `<git-url>//<subpath>@<ref>` parses identically to `<git-url>@<ref>//<subpath>` for every git-shaped form (https, ssh, `gh:`/`gl:`/`bb:`, `@owner/repo`, `file://`); the ref is the text after the last `@` in the subpath's final segment, and an `@` in an earlier segment is part of the path. |
 | C-REF-35 | §8.2 | A ref spelled before the subpath suppresses the trailing scan, so a final path segment containing a literal `@` is preserved: `gh:o/r@main//skills/foo@bar` resolves to ref `main` and subpath `skills/foo@bar`. |
 | C-REF-36 | §8.2, §8.4 | The ref-last form takes `trailing-ref`, which excludes `/`, so the two positions are not interchangeable for a slash-containing ref: `gh:o/r//skills@feature/foo` is subpath `skills@feature/foo` with NO ref (a legal subpath, not an error), while the ref-first `gh:o/r@feature/foo//skills` is ref `feature/foo` + subpath `skills`. Ref-first is the documented spelling for a slash-containing ref. |
+| C-REF-37 | §8.2 | `https://gist.github.com/<id>`, `https://gist.github.com/<id>.git`, and `https://gist.github.com/<owner>/<id>` all parse as a git source whose URL is `https://gist.github.com/<id>.git`, with no ref and no subpath. |
+| C-REF-38 | §8.2 | `https://gist.github.com/<owner>/<id>/<revision>` and `https://gist.github.com/<id>/<revision>` (40 hex characters) parse with ref `<revision>`; an explicit `@<ref>` tail wins over it. |
+| C-REF-39 | §8.2 | Any other `http(s)` path on `gist.github.com` (`/<owner>`, `/<owner>/<id>/raw/...`, `/<owner>/<id>/revisions`), a gist link with a `#file-…` fragment, and a gist `//<file>` that is not a top-level `.md` name (`//sub/a.md`, `//notes.txt`) are `invalid_ref`. |
+| C-REF-40 | §8.3, §9 step 5 | `<tap>/<skill>` or `<tap>/<namespace>/<skill>` naming a candidate the tap can't name — a skill folder or gist file (`.md` in any case), or `skills/` or the namespace above it, that leads out of the repository, is a skill with an invalid `name`, or can't be read — fails with that candidate's error (`invalid_skill` or `source_unreachable`, with its own next step) instead of `invalid_ref`, for folder taps and gists alike. A candidate in another namespace doesn't answer a 3-segment reference. A `<tap>/<skill>` whose tap crew can't read at all fails with that tap's error. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 
@@ -2422,6 +2650,10 @@ Implementations and test suites refer to criteria by ID.
 | C-SPEC-12 | §9 | Validation errors name the offending field in the human-readable message. |
 | C-SPEC-13 | §9 | No file is written to any agent when validation fails. |
 | C-SPEC-14 | §9 | A skill whose `name` begins with a digit passes validation if the rest of the name is otherwise valid. |
+| C-SPEC-15 | §9 step 4 | A `SKILL.md` that isn't a regular file (a directory, say), or that is reached through a link crew won't follow — absolute text, text that isn't UTF-8, or a `..` that climbs above the folder anywhere on the way (even to come back, past a folder link, after a part that doesn't exist, or out to a file crew can't read), a chain that loops or runs longer than 8 links, or one that reaches the folder's `.crew.json` under such a name (`.CREW.JSON`, `.crew.jſon`, or `.crew.json` with a U+200C inside) — fails validation with a message naming it, while the source's valid skills install; nothing is read through such a link, at a ref too. A `SKILL.md` linked to a file inside its folder through relative links that stay inside it — directly, through another link, through a folder link such as `current -> v1`, or with a `..` such as `docs/../real.md` — is valid, and installs readable. After a part that doesn't exist, nothing later on the way is looked up: each name is judged as written, and a link there is never read. |
+| C-SPEC-16 | §9 steps 4, 6, 8 | A `SKILL.md` crew can't read, or another file of the skill it can't read while staging, is reported as `source_unreachable` naming the file; that skill is skipped while the source's other skills install, and no partial copy is left in the store — one crew can't remove is named in that error rather than replacing it. A dependency beside its parent that crew can't load — it can't look into the folder, or the `SKILL.md` is unreadable or invalid — fails the install with that reason, naming the dependency, and is never taken from another tap; crew's own store failing is one error naming the store. |
+| C-SPEC-17 | §9 steps 5, 6; §10.1.1 | In a git source, a skill folder, a namespace, or `skills/` itself that is a symlink staying inside the repository is discovered through it. One that leads out of the repository, or to its root or `.git`, is never read: at install it is an `invalid_skill` candidate while the source's other skills install (at the root, only when it holds a `SKILL.md`); a dependency beside its parent whose folder leads out fails the install, naming the dependency, while any other such sibling is passed over; `crew search` leaves it out, a `<tap>/<skill>` or `<tap>/<namespace>/<skill>` reference to it or to a skill below it fails with that `invalid_skill`, and re-expansion on `crew update` reports it as a failed new child named by its location (C-UPD-18c). A path source isn't held to this. A link whose text runs through another link is judged where the OS resolves it: `skills/evil -> link/..`, with `link` leading out, leads out. |
+| C-SPEC-18 | §9 step 5 | A folder under `skills/`, or under a namespace there, that crew can't list is reported as a failed skill with `source_unreachable` while the source's other skills install. A `skills/` folder or source location crew can't list — or can't look at, its folder being one crew can't search, or a `skills/` it can list but not look into, whose every child would read as no folder — is `source_unreachable` for the whole source, never an unexpected error nor taken for no `skills/` (or no skills) at all; on `crew update`, a tracked tap's `skills/` crew can't list or look into fails that tap's group as a `whole_group` `tap_error` for each member — one line per distinct failure in human output, each counted once, with the error's next step (groups of one tap that fail differently each get their own line) — while the rest of the run proceeds — another tap's new child is installed and recorded — and the run exits 1. At the root (case 3) and in recursive discovery, a folder crew can't list is passed over. |
 
 #### C-INST: Install (§9)
 
@@ -2439,28 +2671,33 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-05e | §9 step 3 | Reference resolution reads the requested commit: `crew install <tap>/<skill>@<ref>` and `crew info <tap>/<skill>@<ref>` succeed for a skill present at that commit even when it has been deleted at the default branch. |
 | C-INST-05f | §9 step 3, §9 step 6 | A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records that ref. |
 | C-INST-05g | §9 step 3 | A reference whose resolved location is reached through a symlink is rejected; content outside the requested commit is never read or installed. |
+| C-INST-05i | §9 step 3 | A scratch copy of a commit that crew can't delete afterwards is left under `cache/` and changes neither the install's exit code nor its result; an install that fails keeps its own error. When making the copy is what failed, that error names the folder left. |
 | C-INST-05h | §9 step 3, §13 | A subpath absent at an otherwise-readable commit is `no_skills_found`; a commit that cannot be materialized at all (unreadable object or repository, unwritable scratch location) is `source_unreachable`. |
 | C-INST-06 | §9 | `crew install gh:owner/repo` pointed at a repo with a root `SKILL.md` installs one skill. |
 | C-INST-07 | §9 step 5 | `crew install gh:owner/repo` pointed at a repo with no root `SKILL.md` but skill subdirectories installs every valid child one level deep. |
 | C-INST-08 | §9 step 5 | Nested skills more than one level deep are NOT installed by directory expansion. |
 | C-INST-08b | §9 step 5 | `crew install gh:owner/repo` pointed at a repo with no root `SKILL.md` but a `skills/` directory containing skill subdirectories installs every valid child of `skills/`. The source root itself is not walked. |
 | C-INST-08c | §9 step 5 | `crew install --recursive gh:owner/repo` pointed at a trusted repo whose standard layouts expose no skill candidates finds valid nested skills up to the bounded recursive depth and records their tap-relative paths. Without `--recursive`, the same source produces `no_skills_found`. |
-| C-INST-09 | §9 | A directory source that expands to zero valid skills produces error `no_skills_found`, exit 4. |
+| C-INST-09 | §9 | A directory source that expands to no skill candidates produces error `no_skills_found`, exit 4. One whose candidates all fail validation is `invalid_skill` instead (C-INST-21). |
 | C-INST-10 | §9 | `resolved_sha` in state and in the marker is always a 40-character hex commit SHA for git and tap sources. |
 | C-INST-11 | §9 | Installing an already-installed skill at the same SHA prints "already installed" and exits 0. |
 | C-INST-12 | §5.4 | Installing an already-installed skill from the same source at a different ref performs an update. |
 | C-INST-13 | §5.4 | Installing a skill with the same `name` from a different source produces `name_conflict`, exit 4, without `--force`. |
 | C-INST-13a | §5.4 | Installing a repo subpath (`<url>//skills/foo`) and then the whole repo (`<url>`) does NOT produce `name_conflict`: both reach the same canonical location, so `foo` is reported as already installed. |
 | C-INST-13b | §5.4, §16.5 | In that case the entry is re-attributed to the broader tap — `state.source` and the markers name it — and the emptied auto tap is garbage-collected; its clone is deleted only when no remaining configured tap references that repository. |
-| C-INST-13c | §5.4 | An entry attributed to a **registered** tap is not re-attributed; the install reports it as already installed and leaves `state.source` alone. |
+| C-INST-13c | §5.4 | An entry attributed to a **registered** tap is not re-attributed; the install reports it as already installed and leaves `state.source` alone. Nor does it take `tracks_tap` from that install (§11.1), with or without `--force`. |
 | C-INST-13d | §5.4 | Canonical URL comparison ignores a trailing `.git`, a trailing `/`, and host casing, so those spellings of one repo are the same source. |
 | C-INST-13e | §10.1.1, §5.4 | Tap re-expansion does not "add" a child that is already installed at the same scope from the same canonical location through another tap. |
 | C-INST-13f | §5.4, §16.5 | A re-attribution in one project rewrites only that project's marker; a sibling project's install of the same skill is left alone. |
 | C-INST-13g | §5.4, §11.1 | Re-attribution writes the destination tap's discovery mode into the marker rather than inheriting the old tap's, so a marker-only rebuild lands on the destination. |
-| C-INST-13h | §5.4, §10.1.1 | An entry subscribed to a whole tap is NOT re-attributed onto a tap rooted strictly deeper in the same source, which would lose the sibling subscription. |
+| C-INST-13h | §5.4, §10.1.1 | An entry subscribed to a whole tap is NOT re-attributed onto a tap rooted strictly deeper in the same source, which would lose the sibling subscription — nor onto any tap the incoming install doesn't subscribe to at the entry's ref (`crew install <tap>/<skill>` through a broader tap, say), which would widen it. |
 | C-INST-13i | §5.4 | Canonical URL comparison folds host case only. Userinfo and the path are compared as written, so `ssh://Alice@host/a/B` and `ssh://alice@host/a/b` are different sources. |
 | C-INST-13j | §5.4 | Path taps use the same rule with the directory in place of the repo: installing `/src/skills/foo` and then `/src` reaches one canonical location, so the second install is a duplicate, not a `name_conflict`. |
 | C-INST-13k | §10.1.1, §5.4 | When two tap rows cover one source, a child installed while re-expanding the first is not installed again by the second in the same run. |
+| C-INST-13l | §5.4, §11.1 | A re-attributed entry takes the incoming install's `tracks_tap` when that install is of the whole tap at the ref the entry ends at; a narrower install never clears it. |
+| C-INST-13o | §5.4, §11.1 | An install that moves an entry to another tap, or starts or stops it tracking its tap, says so in human output and lists the change in `--json` `attribution_changes` (`moved_from` and `tracks_tap` only where they changed); a `--dry-run` reports the same changes, and an install that changes neither reports none. |
+| C-INST-13m | §5.4 | A move whose markers can't follow — a marker crew can't parse, or one in a folder crew can't write, in an agent the install doesn't target or in any agent of an entry the install finds already installed — is refused before the install writes config, markers, or state, in a `--dry-run` too; a marker naming another tap isn't the move's and doesn't stop it. |
+| C-INST-13n | §5.4 | A reinstall that moves an entry rewrites its copy in every agent the install targets, one otherwise up to date included, and reports a copy it can't write or parse for that agent alone (exit 1 when no agent took the skill, 0 otherwise). Once it succeeds, the entry's markers in agents it doesn't target follow; a failed copy's marker follows where crew can rewrite it (keeping its local edits, hash, and SHA); one crew can't parse names nothing; one it can't read or rewrite keeps naming the old tap, which this and any later collection keep. |
 | C-INST-14 | §5.4 | `--force` on a `name_conflict` is NOT honored (the spec forbids `--force` overriding name conflicts). |
 | C-INST-15 | §9 | `--dry-run` on install produces a summary of what would happen and writes no files. |
 | C-INST-16 | §9 | `--agent <skill>` restricts the operation to the named agent(s). |
@@ -2468,9 +2705,15 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-18 | §11.1 | A project-scope install records `project_root` in the state entry equal to the user's working directory at install time. User-scope installs do NOT have a `project_root`. |
 | C-INST-19 | §9 | `state.json` may contain multiple project-scope entries for the same skill name, each with a different `project_root` — they're independent installs, not duplicates. |
 | C-INST-20 | §9 step 9 | A validation failure on any skill is recorded as a failed skill; the run continues through the remaining skills. It does not abort the command. |
-| C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation). |
+| C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation — including a `SKILL.md` crew can't read, §9 step 4, or another file of the skill it can't read while staging, step 8). |
 | C-INST-21a | §9 step 9 | Two directly-named roots where one succeeds in ≥1 agent and the other fails in every selected agent: the run exits 1 and both roots appear in the output. |
 | C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
+| C-INST-23 | §8.2, §9 step 5 | `crew install <gist-url>` installs one skill per top-level `.md` file that opens with YAML frontmatter. Each installed directory contains that file's bytes as `SKILL.md`, the entry's `source.path` is the file name, and files that are not candidates are ignored. |
+| C-INST-24 | §9 step 5 | A gist with a root `SKILL.md` installs as a single skill containing every file of the gist. |
+| C-INST-25 | §9 step 5, step 9 | A gist candidate that fails validation, or that crew can't read, is reported as a failed skill, named by its file, while its valid siblings install; a gist with no candidates is `no_skills_found`. A symlink in a gist is never a candidate. |
+| C-INST-26 | §8.2, §9 step 5 | `crew install <gist-url>//<file>` installs only that file's skill, attributed to the tap for the whole gist with `source.path` `<file>` and `tracks_tap` absent. A file the gist doesn't have is `no_skills_found` naming the file; a named file is validated whether or not it opens with frontmatter; a file reached through a symlink, or any file of a gist with a root `SKILL.md`, is `invalid_ref`. A gist dependency spelled `<gist-url>//<file>` installs only that file's skill. A later install of the whole gist sets `tracks_tap` on the entry (§11.1), with or without `--force`. |
+| C-INST-27 | §9 step 6 | A bare-name dependency of a gist skill resolves to the sibling skill file in the same gist, read at the same commit. |
+| C-INST-28 | §5.3, §6.1, §7.5, §8.2, §16.3 | `crew install --recursive` (with the gist as a positional or `--from-git`) and `crew tap add --recursive` with a gist URL are `usage_error` and write nothing. A gist tap row or marker recorded with recursive discovery by an older crew reads as standard discovery, and `discovery: recursive` is never written back for it (config writes, `doctor --repair`). |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
 
@@ -2549,17 +2792,18 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-12b | §10.1 | When an installed skill's tap is no longer in `config.yaml`, `crew update` reports `tap_missing` for that skill, leaves the local install, marker, and state entry untouched, and exits 0 when that is the run's only abnormality. Other skills in the same run still update. |
 | C-UPD-13 | §10.1 | `crew update` never deletes a agent's installed skill directory, its marker, or its state entry as a consequence of upstream changes. Removal is only ever performed by `crew uninstall`. |
 | C-UPD-14 | §16.5 | `crew install <git-url>` against a source with no matching configured tap creates an auto tap (`registered: false`) in `config.yaml`. Every resulting state entry's `source.tap` names that tap. |
-| C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). |
-| C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. |
-| C-UPD-16b | §10.1.1 | A whole-tap install at an explicit `@<ref>` is re-expanded against that ref: a child added to the tap's default branch but absent at the ref is NOT installed, and a child present at the ref is installed carrying that ref and the group's `pinned` value. |
-| C-UPD-16c | §10.1, §13 | A `crew update` run in which any skill failed for a reason outside the soft set (`source_gone` / `no_skills_found` / `invalid_ref`) exits 1. A failure crew cannot classify MUST NOT be reported as a `failed` row on a run that exits 0. |
-| C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`; its clone is deleted only when no remaining configured tap references that repository. Registered taps are NOT garbage-collected by uninstall. |
+| C-UPD-15 | §10.1.1 | `crew update` re-walks every tap group where any member has `tracks_tap: true` and installs any child skill added to the tap upstream since the last update. Groups with no whole-tap members are NOT re-expanded (`crew install <tap>/<skill>` or `crew install <bare-name>` doesn't subscribe the user to the tap's siblings). A later `crew install <tap>` subscribes such an entry, already installed and up to date, at that install's scope and project root only (§11.1). |
+| C-UPD-16 | §10.1.1 | A child skill removed from a tap upstream produces `source_gone` for that skill and leaves the local install, marker, and state entry untouched. One whose folder and `SKILL.md` (or gist skill file) are still there but that discovery can't index is not gone: its own update reports why — `invalid_skill` for a `SKILL.md` reached through a link crew won't follow. For an entry that tracks the gist, a file that no longer opens frontmatter is no longer a skill, and is gone. A gist entry that doesn't track it (`//<file>`, by name, a dependency) is judged by its own update at its recorded file, whatever else is installed from the gist: a file that lost its frontmatter fails as `invalid_skill`, and one deleted or renamed — even only in case — is `source_gone`. |
+| C-UPD-16b | §10.1.1 | A whole-tap install at an explicit `@<ref>` is re-expanded against that ref: a child added to the tap's default branch but absent at the ref is NOT installed, and a child present at the ref is installed carrying that ref and the group's `pinned` value. An entry at the default branch that a whole-tap install at a ref finds already installed on the same commit stays there, and doesn't start tracking the tap — moved onto that tap or not (§5.4, §11.1); one the install reinstalls (a new commit, `--force`, a new agent) moves to the ref and tracks it there, even off an auto tap of its own; one whose reinstall fails is left as it was, still tracking its own tap. An install that reinstalls a tracking entry alone at another ref records it there without `tracks_tap`. |
+| C-UPD-16c | §10.1, §13 | A `crew update` run in which any skill failed for a reason outside the soft set (`source_gone` / `no_skills_found` / `invalid_ref`) exits 1. A failure crew cannot classify MUST NOT be reported as a `failed` row on a run that exits 0. An agent whose skills folder crew can't write is such a failure: the skill's row reads as failed in human output, its entry keeps its previous state, and the next run tries again. |
+| C-UPD-17 | §16.5 | An auto tap whose last associated state entry is uninstalled is garbage-collected: removed from `config.yaml`; its clone is deleted only when no remaining configured tap references that repository. Registered taps are NOT garbage-collected by uninstall, and neither is an auto tap a crew marker in a state entry's install folder, in any agent, still names. While such a marker can't be read, or a folder one of a state entry's agents installs into can't be searched, no auto tap is collected; one left this way goes at a later collection once nothing names it. Any other folder crew can't search names nothing. A missing, relative, or non-string project root locates no folder. |
+| C-UPD-17a | §16.5 | A collection held back by a marker crew can't read warns on stderr, naming that marker and the auto taps kept, and lists the warning in `--json` `warnings`, at uninstall and at install. The warning points at a later `crew uninstall` to collect them, and reads in the plural when several taps are kept. |
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps — the one thing it does change — then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, store entries, and state are byte-identical before and after; `--json` carries `dry_run: true`. |
 | C-UPD-18a | §10.1.1, §14 | `crew update --dry-run` against a home with no `state.json` leaves it absent: the state lock is never acquired, so neither the state file nor its lock is created. |
 | C-UPD-18b | §10.1.1 | `--force --dry-run` previews a pinned skill whose upstream moved as `would_update` (rather than `skipped`) and still writes nothing. |
-| C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. |
+| C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. So is a candidate whose `name` crew can't read — missing or invalid, behind a `SKILL.md` link crew won't follow, in a folder that leads out of the repository (C-SPEC-17), or in a file crew can't read (`source_unreachable`) — in a folder tap and in a gist alike: it is named by its location in the tap — in `--json`, its row carries `tap_path` and no `name` — unless an entry of its group is installed from that location. |
 | C-UPD-18d | §10.1.1, §14 | `crew update` holds a per-repository clone lock spanning refresh through source read, in both real and `--dry-run` runs, so a concurrent run cannot change the clone's checked-out commit between SHA resolution and byte read. A run blocked past the timeout exits `state_locked`. |
-| C-UPD-18e | §10.1.1 | A newly-discovered child that fails validation is named in human output along with its error code and message, and is counted as a failure in the run totals. |
+| C-UPD-18e | §10.1.1 | A newly-discovered child that fails validation, that crew can't stage (§9 step 8), or that crew can't install into an agent whose skills folder it can't write, is named in human output along with its error code and message (and the error's next step, when it has one), is counted as a failure in the run totals, and is installed nowhere — not recorded, and removed from any agent it was just installed into; the rest of the run proceeds. A copy whose marker (byte for byte) or content changed after this run wrote it is left in place — crew moves each copy aside before checking it, and moves a changed one back (one whose path was written to meanwhile stays aside, named there) — as is one crew can't remove; two agents whose skills folders are one folder through a link write one copy, removed like any other; the failure keeps its own code, and its message names each copy left. A safety check refusing an agent leaves the child out of it with no re-expansion row and without failing the run. |
 | C-UPD-18f | §10.1.1 | `crew outdated [<selector>...]` behaves as `crew update --dry-run`: identical `--json` payload (`dry_run: true`, `would_update` / `would_add` kinds), identical exit code, and the same write boundary — tap clones refresh, while installed skills, markers, store entries, and `state.json` are unchanged. Human output lists only rows that would change and prints a single "up to date" line when none would. |
 | C-UPD-18g | §10.1.1, §14 | `crew outdated` against a home with no `state.json` leaves it absent, and never acquires the state lock. |
 | C-UPD-18h | §10.1.1 | When a tap refresh or re-expansion fails, `crew outdated` reports the results as possibly stale rather than printing an unqualified "up to date", even if every locally-known row is up to date. |
@@ -2578,10 +2822,13 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-34 | §10.1.1 | One tap installed as a whole at both user and project scope re-expands both groups: a newly added sibling is installed into each. |
 | C-UPD-35 | §10.1 | A tap named as a selector whose refresh fails is a hard failure (exit 1), even with nothing installed from it; an unnamed configured tap whose refresh fails remains a warning and the run exits 0. |
 | C-UPD-36 | §10.1, §10.1.1 | A namespace selector bounds re-expansion additions to that namespace: a child added upstream under a different namespace of the same tap is not installed. Naming the tap installs both. |
-| C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. |
+| C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. Only the entry's own successful update records the new path, reinstalling it even when its content is unchanged so its marker's `path` follows; one whose update fails keeps its recorded path and commit — an agent that did take the new copy is ahead of state until the retry, which brings state and every marker to the new path. A relocated entry outside the selection keeps its recorded path, matching its marker, until an update selects it. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
+| C-UPD-38 | §9 step 5, §10.1.1 | For a gist installed whole: an edited skill file is updated by `crew update`; a new skill file added upstream is installed by tap re-expansion; a deleted skill file reports `source_gone` and its local install is left in place. For one skill installed with `//<file>`, a deleted file is likewise `source_gone`. |
+| C-UPD-39 | §8.4, §10.1 | When the recorded path of an installed skill that doesn't track its git tap (`<tap>/<skill>`, a gist `//<file>`) is replaced upstream by a symlink leading outside the repository, `crew update` reports `source_gone` and leaves the installed bytes unchanged; nothing is read through the link. So does a gist `//<file>` replaced by a symlink to another file of the gist, a one-skill gist (installed as `<tap>/<skill>`) whose root `SKILL.md` becomes a symlink, and a gist entry whose recorded path is not one top-level file name. The same holds at an `@<ref>`, where any symlink on the recorded path is gone. At the default branch, a symlink to a skill directory that stays inside the repository updates normally. |
+| C-UPD-40 | §8.4, §10.1, §10.1.1 | On `crew update` of a skill that doesn't track its git tap: a recorded path that dangles or loops (in a path tap too), a `SKILL.md` that is a chain of allowed links to nothing, a gist `//<file>` whose name now differs only in case, a skill directory left without a `SKILL.md`, a recorded path that is a symlink out of its boundary (§10.1; even one crew can't resolve, through any folder of the path), and a skill folder relinked to the repository root or into `.git` report `source_gone`. A `SKILL.md` reached through a link crew won't follow (§9 step 4) fails the update as `invalid_skill`, unread, at a ref too. A path crew can't look at for any other reason (permissions, the skill's own folder or a folder above a path tap included) fails the update with `source_unreachable`, as does a file it can't read while staging; a tracked tap's new child crew can't stage is reported as a failed child (as in C-UPD-18e, with `source_unreachable`) while the rest of the run proceeds. |
 
 #### C-INFO: Info (§9.1)
 
@@ -2589,6 +2836,7 @@ Implementations and test suites refer to criteria by ID.
 |---|---|---|
 | C-INFO-01 | §9.1 | `crew info <tap>/<skill>` resolves the argument against installed state first; if matching state entries exist, it renders the installed view rather than walking the tap source. |
 | C-INFO-02 | §9.1 | `crew info <installed-skill>` renders the source with the §5.1 label rule, and for an auto tap also shows that tap's name so the user can act on it. `--json` carries the rendered label as `source_label`. |
+| C-INFO-03 | §9.1 | `crew info <ref>` for a source whose skill candidates are all invalid — a gist `//<file>` naming an invalid file, or a folder holding one invalid skill — exits 4 with `invalid_skill` and the reason, rather than previewing no skills; when every candidate is merely unreadable it exits 5 with `source_unreachable`. |
 
 #### C-UNINST: Uninstall (§7.4)
 
@@ -2682,6 +2930,9 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-24g | §16.2.1 | When an argument matches both a skill inside a known tap and the GitHub repository that tap lives at, both suggestions are offered; neither interpretation suppresses the other. |
 | C-TAP-24d | §8.5 / §9 | `crew install <owner>/<repo>@<ref>` and `crew info <owner>/<repo>@<ref>` preserve `@<ref>` in every suggested command and in the echoed reference. |
 | C-TAP-25 | §6.1 / §16.5 | A tap name in `config.yaml` that is not a single directory component (contains `/` or `\`, or is `.`/`..`) is rejected with `config_invalid`, and no clone-directory deletion ever targets a path resolving outside crew-owned `repos/` or legacy `taps/` roots. |
+| C-TAP-27 | §8.2, §16.3 | `crew tap add` with a `//<file>` tail on a gist URL is a `usage_error` and writes nothing. |
+| C-TAP-30 | §16.3, §16.5 | The tap derived for a gist is named `gist-` plus the first 8 characters of the gist ID, whether it is created by `crew install` or `crew tap add`. |
+| C-TAP-31 | §5.4, §6, §8.2 | A gist tap recorded with its owner segment (`https://gist.github.com/<owner>/<id>`) is the tap for every `https` spelling of that gist: installing the gist again, or `crew tap add` of it, reuses that tap rather than creating a second one, and its pre-0.11 `taps/<tap-name>/` clone is moved to the gist's shared clone rather than cloned again. |
 
 #### C-STATE: State and markers (§11)
 
@@ -2693,6 +2944,8 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-04 | §11.1 | `pinned: true` in state iff the ref was a SHA or a tag at install time. |
 | C-STATE-04b | §9 step 3, §11.1 | `resolved_sha` equals the commit the requested ref resolves to, and the entry's `content_hash` is the hash of that commit's bytes. |
 | C-STATE-05 | §11.2 | `crew doctor` detects state-vs-marker drift and reports every inconsistency. |
+| C-STATE-05a | §11.2 | A marker crew can't read or parse, one that isn't a JSON object (`null` included), one missing a recorded field or holding one of the wrong type, one whose tap wouldn't load as a `config.yaml` row (an empty or unsafe `tap_name`, a git tap without `tap_url`, a path tap without `tap_path`), or one whose `name` isn't its folder's or whose `scope` is neither the walk's nor one that folder also serves (a project root doctor walks at the user's home — its cwd, or one state records: a user install there is no finding, nor a project install there; and a marker is judged only on the walks of the agents it lists, so another agent's project walk through a user folder reports nothing), and an agent skills folder or project root crew can't list or that sits below a folder it can't search, is reported as `unreadable_marker` (error) naming the path, without failing the run or reporting the state entries it hides as `state_entry_without_marker` (nor a hidden project root as `missing_project_root`); `--repair` keeps those entries, leaves `config.yaml` byte for byte as it was, and repeated runs leave state unchanged. Under `--verify`, an install folder crew can't read all of is an `unreadable_marker` too, naming the path it couldn't read, and the run's other checks still report. |
+| C-STATE-05b | §11.2 | A marker whose `tap_name` or `path` disagrees with its state entry's `source` is reported as `marker_attribution_drift` (warn); `--repair` changes neither. Its next step is a `--force` reinstall when the tap differs, and `crew update <name>` — then a `--force` reinstall if that reports it up to date — when only the path does. |
 | C-STATE-06 | §11.2 | `crew doctor --repair` reconstructs `state.json` from markers if `state.json` is deleted. |
 | C-STATE-07 | §11.2 | `crew doctor --verify` recomputes content hashes and reports mismatches. |
 | C-STATE-08 | §11.2 | `crew doctor --repair` confines filesystem changes to `~/.crew/`, the managed skill directories, and Crew’s own platform scheduler files (§10.2), including the macOS attribution bundle. |

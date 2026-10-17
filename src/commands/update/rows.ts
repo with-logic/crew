@@ -10,8 +10,12 @@
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
+import { rowLabel, type TapErrorRow } from "../../install/tap-reexpand/types.ts";
+import { hasFailedTarget } from "../../install/update/public-row.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
-import { shortenHome } from "../../util/format.ts";
+import { displayText } from "../../refs/display-url.ts";
+import { plural, shortenHome } from "../../util/format.ts";
+import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 
 export interface RowParts {
@@ -31,6 +35,10 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
     return { status: style.dim("up to date"), detail: "", required };
   }
   if (o.kind === "updated") {
+    if (hasFailedTarget(o)) {
+      const labels = failedTargetLabels(o).join(", ");
+      return { status: style.red("failed"), detail: style.red(labels), required };
+    }
     return { status: style.green("updated"), detail: style.cyan(shortSha(o.new_sha)), required };
   }
   if (o.kind === "would_update") {
@@ -78,6 +86,7 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
 
 export function symbolFor(row: UpdateRow, style: Styler): string {
   const o = row.outcome;
+  if (hasFailedTarget(o)) return style.symbol("fail");
   if (o.kind === "updated" || o.kind === "would_update") return style.symbol("ok");
   if (o.kind === "up_to_date") return style.symbol("muted");
   if (o.kind === "skipped" || o.kind === "missing_project_root") return style.symbol("muted");
@@ -87,6 +96,16 @@ export function symbolFor(row: UpdateRow, style: Styler): string {
   // symbol, and costs no unreachable runtime line.
   o satisfies Extract<Outcome, { kind: "failed" }>;
   return style.symbol("fail");
+}
+
+/**
+ * The agents an `updated` row couldn't write, as `agent: CODE` — the run
+ * exits 1 for them (§10.1), so the row reads as a failure.
+ */
+function failedTargetLabels(o: Extract<Outcome, { kind: "updated" }>): string[] {
+  const out: string[] = [];
+  for (const t of o.per_target) if (t.kind === "failed") out.push(`${t.agent}: ${t.error.code}`);
+  return out;
 }
 
 function shortSha(sha: string | null): string {
@@ -105,13 +124,70 @@ export function nameCell(row: UpdateRow, style: Styler): string {
   return `${base} ${style.dim(`(in ${shortenHome(row.project_root)})`)}`;
 }
 
+/**
+ * The human lines for re-expansion failures, and how many failures they
+ * count as: each failed child on its own, and each distinct failure of a
+ * group as a whole (`whole_group`) once — one fault, not one per skill
+ * (§10.1.1 step 1). Groups of one tap that failed the same way are one
+ * fault; ones that failed differently are each shown and counted.
+ */
+export function tapErrorBlocks(
+  rows: readonly TapErrorRow[],
+  symbol: string,
+  style: Styler,
+): { lines: string[]; failures: number } {
+  const lines: string[] = [];
+  const faults = new Map<string, { row: TapErrorRow; skills: Set<string> }>();
+  let children = 0;
+  for (const row of rows) {
+    if (!row.whole_group) {
+      children++;
+      lines.push(...tapErrorLines(row, symbol, style));
+      continue;
+    }
+    const key = JSON.stringify([row.tap, row.error.code, row.error.message]);
+    const fault = faults.get(key) ?? { row, skills: new Set<string>() };
+    fault.skills.add(rowLabel(row));
+    faults.set(key, fault);
+  }
+  for (const { row, skills } of faults.values()) {
+    const tap = style.bold(sanitizeLine(row.tap));
+    const count = style.dim(`(${plural(skills.size, "skill")})`);
+    lines.push(`${symbol} couldn't re-expand tap ${tap} ${count} ${style.red(row.error.code)}`);
+    lines.push(...detailLines(row, style));
+  }
+  return { lines, failures: children + faults.size };
+}
+
+/**
+ * A failed new child's lines: its name, tap, and code; then why, and the
+ * next step when there is one. All are escaped (§5.2): an unnamed
+ * candidate's row is named by a folder a repository's author chose, and
+ * its message may carry a raw filesystem error, so none may move the
+ * cursor or forge a line.
+ */
+function tapErrorLines(row: TapErrorRow, symbol: string, style: Styler): string[] {
+  const name = style.bold(sanitizeLine(rowLabel(row)));
+  return [
+    `${symbol} ${name} ${style.dim(`(from ${sanitizeLine(row.tap)})`)} ${style.red(row.error.code)}`,
+    ...detailLines(row, style),
+  ];
+}
+
+/** Why `row` failed, and what to do, each on its own escaped line. */
+function detailLines(row: TapErrorRow, style: Styler): string[] {
+  const lines = [style.dim(`  ${sanitizeLine(displayText(row.error.message))}`)];
+  if (row.error.remedy) lines.push(style.dim(`  ${sanitizeLine(row.error.remedy)}`));
+  return lines;
+}
+
 /** Group re-expansion rows by tap name, preserving encounter order. */
 export function groupByTap(rows: readonly TapReexpandRow[]): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const r of rows) {
     const names = out.get(r.tap);
-    if (names) names.push(r.name);
-    else out.set(r.tap, [r.name]);
+    if (names) names.push(rowLabel(r));
+    else out.set(r.tap, [rowLabel(r)]);
   }
   return out;
 }
