@@ -13,8 +13,8 @@
  * user's own directory and isn't held to this, as at update.
  */
 
-import { lstatSync, readlinkSync, realpathSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { lstatSync, readlinkSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
 import { tapClonePath } from "../core/repo-path.ts";
@@ -67,16 +67,17 @@ export function leadsOutOfSource(boundary: SourceBoundary, folder: string): bool
 }
 
 /**
- * Where `folder` really is, found as the OS finds it: from its real
- * parent, each part of the way in turn, a link's text read from the
- * folder the link sits in. A `..` climbs from where the parts before it
- * really lead — never from the text, which would let `link/..` stand for
- * the folder holding `link` when `link` leads elsewhere. The folder itself
- * is never resolved whole, so one crew can't search is found the same way
- * on every platform (Bun's `realpathSync` refuses one on some).
+ * Where `folder` really is, found as the OS finds it: from the root, each
+ * part of the way in turn, a link's text read from the folder the link
+ * sits in. A `..` climbs from where the parts before it really lead —
+ * never from the text, which would let `link/..` stand for the folder
+ * holding `link` when `link` leads elsewhere. Every step only looks a name
+ * up (`lstat`), so a folder crew can search but not list — the source's
+ * root, say — is found the same way on every platform (Bun's
+ * `realpathSync` refuses one on some).
  */
 function realFolder(folder: string): string {
-  return follow(realpathSync(dirname(folder)), basename(folder), { left: MAX_FOLDER_LINKS });
+  return follow(sep, resolve(folder), { left: MAX_FOLDER_LINKS, texts: new Map() });
 }
 
 /**
@@ -85,8 +86,14 @@ function realFolder(folder: string): string {
  */
 const MAX_FOLDER_LINKS = 40;
 
+/** The links one `realFolder` call may still follow, and each path's link text (null: no link). */
+interface Links {
+  left: number;
+  readonly texts: Map<string, string | null>;
+}
+
 /** `text`, relative to real folder `dir` unless absolute, resolved part by part. */
-function follow(dir: string, text: string, links: { left: number }): string {
+function follow(dir: string, text: string, links: Links): string {
   let at = isAbsolute(text) ? sep : dir;
   for (const part of text.split(sep)) {
     if (part === "" || part === ".") continue;
@@ -96,30 +103,36 @@ function follow(dir: string, text: string, links: { left: number }): string {
       continue;
     }
     const next = join(at, part);
-    if (!lstatSync(next).isSymbolicLink()) {
+    const linked = linkText(next, links);
+    if (linked === null) {
       at = next;
       continue;
     }
     if (--links.left < 0) throw new Error(`too many links resolving \`${next}\``);
-    at = follow(at, readlinkSync(next), links);
+    at = follow(at, linked, links);
   }
   return at;
 }
 
-/** `outOfSourceError` naming `folder` by its location in `boundary`'s repository. */
-export function outOfSourceAt(boundary: NonNullable<SourceBoundary>, folder: string): CrewError {
-  return outOfSourceError(folder, toPosix(relative(boundary.root, folder)));
+/** `path`'s link text, or null when it is no link; each path looked at once per call. */
+function linkText(path: string, links: Links): string | null {
+  let text = links.texts.get(path);
+  if (text === undefined) {
+    text = lstatSync(path).isSymbolicLink() ? readlinkSync(path) : null;
+    links.texts.set(path, text);
+  }
+  return text;
 }
 
 /**
- * `invalid_skill` for a folder discovery won't read: it leads out of the
- * repository. The message names it as `shown` — its location in the
- * repository, where the caller knows it — and `details.path` as it is.
+ * `invalid_skill` for a folder discovery won't read: it leads out of
+ * `boundary`'s repository. The message names it by its place in the
+ * repository; `details.path` holds it as crew found it.
  */
-export function outOfSourceError(folder: string, shown = folder): CrewError {
+export function outOfSourceError(boundary: NonNullable<SourceBoundary>, folder: string): CrewError {
   return new CrewError(
     "invalid_skill",
-    `\`${shown}\` leads out of the repository through a link — or to its root or \`.git\` — so crew won't read it`,
+    `\`${toPosix(relative(boundary.root, folder))}\` leads out of the repository through a link — or to its root or \`.git\` — so crew won't read it`,
     { path: folder },
     "Make it a folder in the repository, or a link to a folder inside it.",
   );

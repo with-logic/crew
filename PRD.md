@@ -1296,7 +1296,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
 
    **Failing to materialize is not the same as finding nothing.** When the commit resolves and its tree is readable but the reference's subpath is absent at that commit, the result is `no_skills_found` — a reference the user can correct. When the source cannot be materialized at all (an unreadable object, an unreadable repository, a scratch location that cannot be written), the result is `source_unreachable`: nothing was read, so nothing can be concluded about what the source contains.
 
-   **A scratch copy is crew's own.** A copy of a commit crew made to read it is deleted once the command is done with it. One crew can't delete is left under `cache/` (§6), which `crew cache clean` empties; it never changes the command's outcome, and when the command fails, its error stays the one reported, naming the folder left.
+   **A scratch copy is crew's own.** A copy of a commit crew made to read it is deleted once the command is done with it. One crew can't delete is left under `cache/` (§6), which `crew cache clean` empties; it never changes the command's outcome, and when the command fails, its error stays the one reported. A copy that failed as it was made names the folder left in that error; any other is noted under `--verbose`.
 
    **Dependencies inherit their parent's commit.** A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records the same ref and pinning. Recording the parent's SHA over content read from another revision would make state describe a provenance the bytes do not have.
 
@@ -2661,7 +2661,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-05e | §9 step 3 | Reference resolution reads the requested commit: `crew install <tap>/<skill>@<ref>` and `crew info <tap>/<skill>@<ref>` succeed for a skill present at that commit even when it has been deleted at the default branch. |
 | C-INST-05f | §9 step 3, §9 step 6 | A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records that ref. |
 | C-INST-05g | §9 step 3 | A reference whose resolved location is reached through a symlink is rejected; content outside the requested commit is never read or installed. |
-| C-INST-05i | §9 step 3 | A scratch copy of a commit that crew can't delete afterwards is left under `cache/` and changes neither the install's exit code nor its result; an install that fails keeps its own error, which names the folder left. |
+| C-INST-05i | §9 step 3 | A scratch copy of a commit that crew can't delete afterwards is left under `cache/` and changes neither the install's exit code nor its result; an install that fails keeps its own error. When making the copy is what failed, that error names the folder left. |
 | C-INST-05h | §9 step 3, §13 | A subpath absent at an otherwise-readable commit is `no_skills_found`; a commit that cannot be materialized at all (unreadable object or repository, unwritable scratch location) is `source_unreachable`. |
 | C-INST-06 | §9 | `crew install gh:owner/repo` pointed at a repo with a root `SKILL.md` installs one skill. |
 | C-INST-07 | §9 step 5 | `crew install gh:owner/repo` pointed at a repo with no root `SKILL.md` but skill subdirectories installs every valid child one level deep. |

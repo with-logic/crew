@@ -36,6 +36,7 @@ import "./temp-root.ts";
 import { afterEach } from "bun:test";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { resetGitRunner } from "../../src/git/exec.ts";
 import { neutralizeAdaptersExcept } from "./env.ts";
 import { installNetworkTripwire, takeRemoteGitFailure } from "./no-network.ts";
 
@@ -44,7 +45,10 @@ installNetworkTripwire();
 
 // Turns a violation the code under test swallowed into a failed test.
 // See `takeRemoteGitFailure` for why the tripwire's own throw isn't enough.
+// And puts the tripwire back as the git runner, so a stub a test forgot to
+// remove can't leak into the files bun runs after it in the same process.
 afterEach(() => {
+  resetGitRunner();
   const failure = takeRemoteGitFailure();
   if (failure !== null) throw new Error(failure);
 });

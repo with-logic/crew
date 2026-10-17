@@ -9,7 +9,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { setGitRunner } from "../../../src/git/exec.ts";
+import { resetGitRunner, setGitRunner } from "../../../src/git/exec.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import {
   commitAll,
@@ -26,7 +26,10 @@ let claude: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
   claude = redirectClaudeCode();
 });
-afterEach(() => restoreClaudeCode(claude.originals));
+afterEach(() => {
+  restoreClaudeCode(claude.originals);
+  resetGitRunner();
+});
 
 test("C-INST-05i an export refused for a linked subpath, that crew can't remove, keeps its error and names it", () => {
   const repo = makeTempDir("crew-repo-");

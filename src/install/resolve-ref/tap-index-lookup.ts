@@ -12,7 +12,7 @@ import { CrewError } from "../../core/errors.ts";
 import { gistSkillStem, isGistTap } from "../../core/gist-url.ts";
 import { namespaceOf } from "../../core/namespace.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { unreadablePathError } from "../../util/errno.ts";
+import { isFsError, unreadablePathError } from "../../util/errno.ts";
 import { indexTap, type TapIndex } from "../tap-index.ts";
 import type { NonTapNameCandidate, TapRoots } from "./types.ts";
 
@@ -32,7 +32,9 @@ export function tryIndexTap(tap: TapConfig, home: string, roots: TapRoots): Inde
     return { kind: "indexed", index: indexTapAt(tap, home, roots) };
   } catch (err) {
     // Indexing names its own failures; a raw filesystem error left over is
-    // a tap crew can't read all the same (§13), never a miss.
+    // a tap crew can't read all the same (§13), never a miss. Anything else
+    // is crew's own bug, and surfaces as one.
+    if (!(err instanceof CrewError || isFsError(err))) throw err;
     const at = (err as NodeJS.ErrnoException).path ?? roots[tap.name] ?? tap.name;
     const failure = err instanceof CrewError ? err : unreadablePathError(at, err);
     return { kind: "failed", failure };

@@ -18,7 +18,7 @@ export function errnoReason(err: unknown): string {
  * True for an OS-level error from `node:fs` and the like: only those
  * carry `syscall`, while a library's error may carry a `code` too.
  */
-function isFsError(err: unknown): boolean {
+export function isFsError(err: unknown): boolean {
   return typeof (err as NodeJS.ErrnoException).syscall === "string";
 }
 

@@ -25,7 +25,7 @@ import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../core/types.ts";
 import { loadSkill } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
-import { outOfSourceAt, sourceBoundary } from "../sources/source-boundary.ts";
+import { outOfSourceError, sourceBoundary } from "../sources/source-boundary.ts";
 import { listSourceDir } from "../sources/source-dir.ts";
 import { assertCanLookForSkillMd, readSiblingEntry } from "./siblings/disk.ts";
 import type { SiblingScan } from "./siblings/index.ts";
@@ -92,7 +92,7 @@ export function findSiblingDep(
       const sibling = dir.entry(entryName);
       if (!sibling.skill) continue;
       if (dir.boundary !== null && sibling.leadsOut) {
-        throw dependencyError(depName, siblingPath, outOfSourceAt(dir.boundary, siblingPath));
+        throw dependencyError(depName, siblingPath, outOfSourceError(dir.boundary, siblingPath));
       }
     }
     const load = () => siblings.loaded(siblingPath, () => loadSkill(siblingPath));

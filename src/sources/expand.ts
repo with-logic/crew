@@ -40,7 +40,7 @@ import { isSkillFile } from "../skill/skill-file.ts";
 import { gistLabel, gistSkillCandidates, isOneSkillGist } from "./gist.ts";
 import { findRecursiveSkillDirs } from "./recursive.ts";
 import { standardSkillFolders } from "./skill-folders.ts";
-import { leadsOutOfSource, outOfSourceAt, type SourceBoundary } from "./source-boundary.ts";
+import { leadsOutOfSource, outOfSourceError, type SourceBoundary } from "./source-boundary.ts";
 
 /** A skill candidate that couldn't be loaded, or staged (§9 steps 4, 8). */
 export interface SkippedSkill {
@@ -175,7 +175,7 @@ function pushSoft(
 ): void {
   // §9 step 5 "Folder links": refused before anything in it is read.
   if (boundary !== null && leadsOutOfSource(boundary, candidate)) {
-    skipped.push(skippedFrom(candidate, outOfSourceAt(boundary, candidate), "invalid_skill"));
+    skipped.push(skippedFrom(candidate, outOfSourceError(boundary, candidate), "invalid_skill"));
     return;
   }
   try {
