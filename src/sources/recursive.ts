@@ -8,7 +8,6 @@
 
 import { basename } from "node:path";
 import { hasSkillMd } from "../skill/load.ts";
-import { unreadablePathError } from "../util/errno.ts";
 import { canList } from "../util/fs.ts";
 import { type WalkedEntry, walk } from "../util/walk.ts";
 
@@ -29,7 +28,10 @@ const SKIPPED_DIRS = new Set([
 /** Return skill directories discovered recursively, in deterministic order. */
 export function findRecursiveSkillDirs(rootDir: string): string[] {
   const dirs: string[] = [];
-  for (const entry of walkSource(rootDir)) {
+  // A root crew can't look into was reported by the standard walk that
+  // runs first (`isSourceDir`, C-SPEC-18); a folder it can't list isn't
+  // descended into.
+  for (const entry of walk(rootDir, { shouldDescend: shouldDescendInto })) {
     if (!entry.isDirectory) continue;
     if (shouldSkipDirectory(entry.relPath)) continue;
     if (!hasSkillMd(entry.absPath)) continue;
@@ -37,20 +39,6 @@ export function findRecursiveSkillDirs(rootDir: string): string[] {
   }
   dirs.sort();
   return dirs;
-}
-
-/**
- * The source tree under `rootDir`. A folder crew can list but whose
- * entries it can't look at — no search permission — is
- * `source_unreachable` naming what it couldn't see (§13), never a raw
- * filesystem error; one it can't list isn't descended into.
- */
-function walkSource(rootDir: string): WalkedEntry[] {
-  try {
-    return walk(rootDir, { shouldDescend: shouldDescendInto });
-  } catch (err) {
-    throw unreadablePathError((err as NodeJS.ErrnoException).path ?? rootDir, err);
-  }
 }
 
 function shouldDescendInto(entry: WalkedEntry): boolean {

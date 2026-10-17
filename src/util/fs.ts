@@ -15,7 +15,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { climbsOut } from "./relative-path.ts";
 
 /** Ensure a directory exists (like `mkdir -p`). */
@@ -162,9 +162,13 @@ export function atomicReplace(src: string, dest: string): void {
   renameSync(src, dest);
 }
 
-/** Convert any relative path to POSIX (/) form. */
+/**
+ * A relative path in POSIX (`/`) form (§12.1). Only the platform's own
+ * separator is one: on POSIX a backslash is part of a name, and reading
+ * it as a separator would turn a name like `a\..\b` into a climb.
+ */
 export function toPosix(p: string): string {
-  return p.split(/[\\/]+/).join("/");
+  return p.split(sep).join("/");
 }
 
 /** `touch` — creates an empty file if missing. */

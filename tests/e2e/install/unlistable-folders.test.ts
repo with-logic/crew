@@ -95,6 +95,21 @@ test("C-SPEC-18 a source crew can't list is source_unreachable", () => {
   }
 });
 
+test("C-SPEC-18 a source crew can list but not look into is source_unreachable, not empty", () => {
+  // Its `skills/` is there, but crew can't look at it: never taken for no
+  // `skills/` and a root walk that finds nothing (`no_skills_found`).
+  const src = join(makeTempDir(), "src");
+  makeSkill(join(src, "skills"), "good", skillFrontmatter({ name: "good" }));
+  chmodSync(src, 0o600);
+  try {
+    const r = crew(makeCrewHome(), ["install", src]);
+    expect([r.code, r.json.error?.name]).toEqual([5, "source_unreachable"]);
+    expect(r.json.error?.message).toContain(join(src, "skills"));
+  } finally {
+    chmodSync(src, 0o755);
+  }
+});
+
 test("C-SPEC-18 a folder at the root crew can't list is passed over", () => {
   const src = makeTempDir();
   makeSkill(src, "good", skillFrontmatter({ name: "good" }));

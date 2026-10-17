@@ -90,10 +90,12 @@ export function findSiblingDep(
       }
       // What the entry is was read when the directory was indexed.
       const sibling = dir.entry(entryName);
-      if (!sibling.skill) continue;
+      // Leading out, it fails the dependency whether or not crew can see a
+      // `SKILL.md` through it — never a miss to look past (C-SPEC-17).
       if (dir.boundary !== null && sibling.leadsOut) {
         throw dependencyError(depName, siblingPath, outOfSourceError(dir.boundary, siblingPath));
       }
+      if (!sibling.skill) continue;
     }
     const load = () => siblings.loaded(siblingPath, () => loadSkill(siblingPath));
     const loaded = withDependencyErrors(depName, siblingPath, load);

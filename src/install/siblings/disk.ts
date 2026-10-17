@@ -19,16 +19,20 @@ import type { SiblingEntry } from "./index.ts";
 
 /**
  * What the sibling at `path` is: a skill directory — or, in a gist, a
- * skill file (§9 step 5) — whether it leads out of `boundary`, and the
- * name it declares when it is a skill inside it whose name can be read.
+ * skill file (§9 step 5) — whether it is a folder leading out of
+ * `boundary`, skill or not (one named for a dependency fails it, C-SPEC-17),
+ * and the name it declares when it is a skill inside it whose name can be
+ * read.
  */
 export function readSiblingEntry(
   tap: TapConfig,
   path: string,
   boundary: SourceBoundary,
 ): SiblingEntry {
-  const skill = isGistTap(tap) ? isGistSkillCandidate(path) : isDirectory(path) && hasSkillMd(path);
-  const leadsOut = skill && leadsOutOfSource(boundary, path);
+  const gist = isGistTap(tap);
+  const folder = !gist && isDirectory(path);
+  const skill = gist ? isGistSkillCandidate(path) : folder && hasSkillMd(path);
+  const leadsOut = folder && leadsOutOfSource(boundary, path);
   return { skill, leadsOut, declared: skill && !leadsOut ? nameOrNull(path) : null };
 }
 

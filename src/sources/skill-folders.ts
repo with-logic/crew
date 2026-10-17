@@ -21,12 +21,13 @@ import { join } from "node:path";
 import { hasSkillMd } from "../skill/load.ts";
 import { canList, isDirectory } from "../util/fs.ts";
 import { leadsOutOfSource, type SourceBoundary } from "./source-boundary.ts";
-import { listSourceDir } from "./source-dir.ts";
+import { isSourceDir, listSourceDir } from "./source-dir.ts";
 
 /** The candidate skill folders under `root`, in walk order. */
 export function standardSkillFolders(root: string, boundary: SourceBoundary): string[] {
   const skillsDir = join(root, "skills");
-  if (!isDirectory(skillsDir)) return skillChildren(root);
+  // A `skills/` crew can't look at is no reason to walk the root instead.
+  if (!isSourceDir(skillsDir)) return skillChildren(root);
   if (leadsOutOfSource(boundary, skillsDir)) return [skillsDir];
   const found: string[] = [];
   for (const name of listSourceDir(skillsDir)) {

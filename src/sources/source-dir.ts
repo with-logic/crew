@@ -6,7 +6,8 @@
  * so its failure reports the errno code (`listDir`).
  */
 
-import { unreadablePathError } from "../util/errno.ts";
+import { statSync } from "node:fs";
+import { isGoneError, unreadablePathError } from "../util/errno.ts";
 import { listDir } from "../util/fs.ts";
 
 /**
@@ -18,5 +19,19 @@ export function listSourceDir(dir: string): string[] {
     return listDir(dir);
   } catch (err) {
     throw unreadablePathError(dir, err, "read");
+  }
+}
+
+/**
+ * Whether `path` in a source is a folder: false when nothing usable is
+ * there (gone, §10.1) or it is something else; `source_unreachable`
+ * naming it when crew can't look — never taken for no folder at all.
+ */
+export function isSourceDir(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch (err) {
+    if (isGoneError(err)) return false;
+    throw unreadablePathError(path, err);
   }
 }
