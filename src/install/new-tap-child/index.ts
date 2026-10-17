@@ -6,7 +6,7 @@
  * fresh state entry (`./entry.ts`) on success — or null when no agent
  * target applies, or a safety check (§7.3) refused every one. An agent
  * folder crew can't write throws, so the child is reported and retried,
- * not recorded without that agent — and is taken back from the agents it
+ * not recorded without that agent — and is removed from the agents it
  * was just installed into (`./rollback.ts`), so it is installed nowhere.
  */
 
@@ -17,7 +17,7 @@ import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import { type StoredSkill, stageIntoStore } from "../../sources/store.ts";
 import { withLeftBehind } from "../../util/cleanup.ts";
 import { newChildEntry } from "./entry.ts";
-import { type ChildCopy, takeBackCopies } from "./rollback.ts";
+import { type ChildCopy, removeChildCopies } from "./rollback.ts";
 
 /** A newly-detected child of a tracked tap, and where its group is installed. */
 export interface NewTapChild {
@@ -45,7 +45,7 @@ export function installNewTapChild(
   const run = installIntoGroups(args, groupsByDest(args, cwd), { cwd, staged, force });
   // Not recorded means installed nowhere: the copies this child just
   // made in other agents go, so nothing is left that state doesn't know.
-  if (run.failure !== null) throw withLeftBehind(run.failure, takeBackCopies(run.copies));
+  if (run.failure !== null) throw withLeftBehind(run.failure, removeChildCopies(run.copies));
   if (run.installedInto.length === 0) return null;
   return newChildEntry(args, staged.contentHash, run.installedInto);
 }

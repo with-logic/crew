@@ -23,7 +23,8 @@ import { climbsOut } from "../util/relative-path.ts";
 
 /**
  * A git source's repository: where crew found it, and where it really
- * is. Null for a path source, which isn't held to it.
+ * is. Null where there is no folder to check: a path source, which isn't
+ * held to it, or a gist's files, which hold no folders.
  */
 export type SourceBoundary = { readonly root: string; readonly real: string } | null;
 
@@ -56,21 +57,20 @@ export function sourceBoundary(
 export function leadsOutOfSource(boundary: SourceBoundary, folder: string): boolean {
   if (boundary === null || resolve(folder) === boundary.root) return false;
   const rel = relative(boundary.real, realFolder(folder));
-  return climbsOut(rel) || rel === "" || rel.split(sep)[0] === ".git";
+  // `.git` in any case: on a case-insensitive disk `.GIT` is the same folder.
+  return climbsOut(rel) || rel === "" || rel.split(sep)[0]?.toLowerCase() === ".git";
 }
 
 /**
- * Where `folder` really is. Discovery has just seen that it is a folder,
- * so its parent resolves; Bun can't resolve a folder crew can't search,
- * so that one is found from its parent and, when it is a link, its text.
+ * Where `folder` really is: its real parent, then — while it is a link —
+ * where its text leads. Discovery has just seen that it is a folder, so
+ * every folder above it can be searched and resolves; the folder itself
+ * is never resolved whole, so one crew can't search is found the same way
+ * on every platform (Bun's `realpathSync` refuses one on some).
  */
 function realFolder(folder: string): string {
-  try {
-    return realpathSync(folder);
-  } catch {
-    const at = join(realpathSync(dirname(folder)), basename(folder));
-    return lstatSync(at).isSymbolicLink() ? realFolder(resolve(dirname(at), readlinkSync(at))) : at;
-  }
+  const at = join(realpathSync(dirname(folder)), basename(folder));
+  return lstatSync(at).isSymbolicLink() ? realFolder(resolve(dirname(at), readlinkSync(at))) : at;
 }
 
 /** `invalid_skill` for a folder discovery won't read: it leads out of the repository. */

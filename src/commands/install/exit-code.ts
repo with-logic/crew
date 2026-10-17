@@ -8,7 +8,10 @@
 
 import type { InstallFlowResult } from "../../install/flow.ts";
 
-/** 0 when nothing failed; 1 for a partial or operational failure; 4 when only invalid skills failed. */
+/**
+ * 0 when nothing failed; 4 when nothing succeeded and at least one skill
+ * was invalid; 1 for any other failure (partial, or only operational).
+ */
 export function installExitCode(result: InstallFlowResult): number {
   const succeeded = result.summary.records.filter((r) => r.anySuccess).length;
   const validationFailures = result.skipped.filter((s) => s.code === "invalid_skill").length;

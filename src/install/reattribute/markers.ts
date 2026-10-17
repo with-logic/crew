@@ -16,7 +16,7 @@ import {
 } from "../../agents/marker-read.ts";
 import { ALL_AGENTS } from "../../agents/registry.ts";
 import { markerTapFields } from "../../core/marker.ts";
-import type { TapConfig } from "../../core/types.ts";
+import type { Scope, TapConfig } from "../../core/types.ts";
 import { tryReadJson, writeJson } from "../../util/json.ts";
 import type { Reattribution } from "../duplicate-rules/index.ts";
 import type { InstallRecord } from "../perform/index.ts";
@@ -54,14 +54,15 @@ export function followMoves(
   cwd: string,
 ): void {
   // Indexed once: a lookup per moved skill and agent, not a scan of every record.
-  const tookIt = new Set<string>();
+  const currentOutcomes = new Set<string>();
   for (const rec of records) {
     for (const a of rec.agents) {
-      if (a.kind !== "failed") tookIt.add(outcomeKey(rec.name, rec.scope, a.agent));
+      const leftCurrent = a.kind === "installed" || a.kind === "up_to_date";
+      if (leftCurrent) currentOutcomes.add(outcomeKey(rec.name, rec.scope, a.agent));
     }
   }
   const current = targetedFolders(made, agents, cwd, (move, agent) =>
-    tookIt.has(outcomeKey(move.name, move.scope, agent.name)),
+    currentOutcomes.has(outcomeKey(move.name, move.scope, agent.name)),
   );
   const failed = new Set<string>();
   for (const folder of targetedFolders(made, agents, cwd)) {
@@ -96,7 +97,7 @@ export function targetedFolders(
 }
 
 /** One skill's outcome in one agent, as a comparable string. */
-function outcomeKey(name: string, scope: string, agent: string): string {
+function outcomeKey(name: string, scope: Scope, agent: string): string {
   return JSON.stringify([name, scope, agent]);
 }
 

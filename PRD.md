@@ -1460,7 +1460,11 @@ between resolution and targeting:
   out of `skills/` — is still the same install, and step 2b rewrites its
   recorded path in the same run that reads the selection back. Including the
   path would make a relocated entry fail to match itself, silently dropping it
-  from the selection and leaving stale bytes installed.
+  from the selection and leaving stale bytes installed. The new path is
+  recorded only for an entry the run updates, so its marker and commit move
+  with it: a relocated entry outside the selection (re-expanded only because
+  a sibling was selected) keeps the path it was installed from until its own
+  update.
 
 1. Fetch upstream for the git-kind taps this run will actually touch. With no args, that is every configured git-kind tap. With `<selector>...`, it is the subset of taps that host the selected entries — plus any taps hosting entries pulled in by step 2's dependency closure. Path-kind taps are skipped silently. Per-tap failures produce a warning but do not abort the run: other taps and every per-skill update still process. A tap the user named *as a tap selector* is the exception — the run did not do what was asked, so its refresh failure is a hard failure (exit 1) in addition to the warning, even when nothing is installed from that tap. A tap that merely happens to be configured, or that backs a selected entry without having been named, stays a warning.
 2. Build the list of skills to consider:
@@ -2789,7 +2793,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-34 | §10.1.1 | One tap installed as a whole at both user and project scope re-expands both groups: a newly added sibling is installed into each. |
 | C-UPD-35 | §10.1 | A tap named as a selector whose refresh fails is a hard failure (exit 1), even with nothing installed from it; an unnamed configured tap whose refresh fails remains a warning and the run exits 0. |
 | C-UPD-36 | §10.1, §10.1.1 | A namespace selector bounds re-expansion additions to that namespace: a child added upstream under a different namespace of the same tap is not installed. Naming the tap installs both. |
-| C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. |
+| C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. A relocated entry outside the selection keeps its recorded path, matching its marker, until an update selects it. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |

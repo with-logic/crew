@@ -21,15 +21,14 @@ import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { computeAgentSet } from "./agent-set.ts";
-import { type AttributionChange, attributionChanges } from "./attribution-changes.ts";
+import type { AttributionChange } from "./attribution-changes.ts";
 import { assertTapsPresent, mergeAutoTaps } from "./config-merge.ts";
-import { type AlreadyInstalled, applyDuplicateRules } from "./duplicate-rules/index.ts";
-import { type InstallSummary, performInstall } from "./perform/index.ts";
+import type { AlreadyInstalled } from "./duplicate-rules/index.ts";
+import type { InstallSummary } from "./perform/index.ts";
+import { planInstall } from "./plan.ts";
 import { previewInstall } from "./preview.ts";
-import { promoteFlags } from "./promote-flags.ts";
-import { applyReattributions, movesMade } from "./reattribute/index.ts";
+import { movesMade } from "./reattribute/index.ts";
 import { followMoves, rewriteReattributedMarkers } from "./reattribute/markers.ts";
-import { preflightMoves } from "./reattribute/preflight.ts";
 import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
 import type { KindHint } from "./resolve-ref/index.ts";
 import { rewriteDiscoveryUpgradeMarkers } from "./rewrite-tap-markers.ts";
@@ -93,21 +92,20 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
   // adapter that didn't previously own the entry still has real work
   // to do (attach ownership), so the duplicate short-circuit must
   // consider the active target set.
-  const duplicateOptions = {
-    activeAgents: agents.map((a) => a.name),
+  const installRun = {
+    scope: options.scope,
+    cwd,
     force: options.force,
-    taps: configWithAutoTaps.taps,
+    requiredBy,
+    duplicates: {
+      activeAgents: agents.map((a) => a.name),
+      force: options.force,
+      taps: configWithAutoTaps.taps,
+    },
   };
-  const currentState = readState(home);
 
   if (options.dryRun) {
-    const preview = previewInstall(resolvedAll, currentState, agents, {
-      scope: options.scope,
-      cwd,
-      force: options.force,
-      requiredBy,
-      duplicates: duplicateOptions,
-    });
+    const preview = previewInstall(resolvedAll, readState(home), agents, installRun);
     return { ...preview, resolved: resolvedAll, skipped, warnings: [] };
   }
 
@@ -128,39 +126,24 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
         : mergeAutoTaps(freshConfig, config, configWithAutoTaps);
     assertTapsPresent(mergedConfig, resolvedAll);
     const freshState = readState(home);
-    const analysis = applyDuplicateRules(
+    // §5.4: a move whose markers can't follow is refused before anything
+    // — config, a marker, state — is written; then config and the up-front
+    // moves' markers are, before the install (`./plan.ts`).
+    const plan = planInstall(
       resolvedAll,
       freshState,
-      options.scope,
-      cwd,
-      duplicateOptions,
+      agents,
+      { ...installRun, dryRun: false },
+      ({ reattributions: upFront }) => {
+        if (mergedConfig !== freshConfig) writeConfig(mergedConfig, home);
+        rewriteDiscoveryUpgradeMarkers(config, configWithAutoTaps, freshState.installations, cwd);
+        rewriteReattributedMarkers(upFront, configWithAutoTaps.taps, cwd);
+      },
     );
-    const { toInstall, reattributions, keepSource } = analysis;
+    const { analysis, summary: result, after: promoted } = plan;
+    const { reattributions } = analysis;
     alreadyInstalled = analysis.alreadyInstalled;
-    // §5.4: a move whose markers can't follow is refused before anything
-    // — config, a marker, state — is written.
-    preflightMoves(analysis, agents, cwd);
-    if (mergedConfig !== freshConfig) writeConfig(mergedConfig, home);
-
-    rewriteDiscoveryUpgradeMarkers(config, configWithAutoTaps, freshState.installations, cwd);
-    // §5.4: entries the install finds already installed skip
-    // `performInstall`, so their moves (state and markers) apply here;
-    // moves of reinstalled entries wait for the reinstall to succeed.
-    rewriteReattributedMarkers(reattributions, configWithAutoTaps.taps, cwd);
-    const reattributed = applyReattributions(freshState, reattributions);
-    const result = performInstall(toInstall, agents, options.scope, cwd, reattributed, {
-      force: options.force,
-      dryRun: false,
-      requiredBy,
-      allResolved: resolvedAll,
-      keepSource,
-    });
-    const promoted = promoteFlags(
-      result.newState,
-      analysis.promotions,
-      options.scope,
-      options.scope === "project" ? cwd : null,
-    );
+    changes = plan.changes;
     // A reinstall that moved its entry wrote the markers it reinstalled;
     // the entry's others — a failed copy's too, where crew can — follow
     // now that it succeeded (§5.4), before state, so an untargeted marker
@@ -168,7 +151,6 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     const madeMoves = movesMade(analysis.movesOnSuccess, promoted);
     followMoves(madeMoves, result.records, agents, configWithAutoTaps.taps, cwd);
     writeState(promoted, home);
-    changes = attributionChanges(freshState, promoted);
     // An auto tap nothing names any more — no entry, no marker — after
     // re-attribution is crew's own bookkeeping, and goes with its clone;
     // one an unreadable marker might name stays, with a warning (§16.5).

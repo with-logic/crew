@@ -10,17 +10,23 @@
 import type { Scope, StateFile } from "../core/types.ts";
 import { entryKey } from "../state/identity.ts";
 
-/** One entry's change; `moved_from` and `tracks_tap` appear only where they changed. */
-export interface AttributionChange {
+/** The entry a change is about, and its tap after the install. */
+interface ChangedEntry {
   readonly name: string;
   readonly scope: Scope;
-  /** The entry's tap after the install. */
   readonly tap: string;
-  /** The tap the entry left, when it moved. */
-  readonly moved_from?: string;
-  /** Whether the entry now tracks its tap, when that changed. */
-  readonly tracks_tap?: boolean;
 }
+
+/**
+ * One entry's change: `moved_from` (the tap it left) when it moved, and
+ * `tracks_tap` (whether it now tracks its tap) when that changed — at
+ * least one of the two, only where it changed.
+ */
+export type AttributionChange = ChangedEntry &
+  (
+    | { readonly moved_from: string; readonly tracks_tap?: boolean }
+    | { readonly moved_from?: never; readonly tracks_tap: boolean }
+  );
 
 /** The changes between `before` and `after` to entries present in both; a new entry is none. */
 export function attributionChanges(before: StateFile, after: StateFile): AttributionChange[] {
@@ -29,17 +35,17 @@ export function attributionChanges(before: StateFile, after: StateFile): Attribu
   for (const entry of after.installations) {
     const was = prior.get(entryKey(entry));
     if (was === undefined) continue;
-    const moved = was.source.tap !== entry.source.tap;
-    const tracks = entry.tracks_tap === true;
-    const tracking = (was.tracks_tap === true) !== tracks;
-    if (!(moved || tracking)) continue;
-    changes.push({
-      name: entry.name,
-      scope: entry.scope,
-      tap: entry.source.tap,
-      ...(moved ? { moved_from: was.source.tap } : {}),
-      ...(tracking ? { tracks_tap: tracks } : {}),
-    });
+    const tapChanged = was.source.tap !== entry.source.tap;
+    const tracksNow = entry.tracks_tap === true;
+    const trackingChanged = (was.tracks_tap === true) !== tracksNow;
+    if (!(tapChanged || trackingChanged)) continue;
+    const subject = { name: entry.name, scope: entry.scope, tap: entry.source.tap };
+    const tracking = trackingChanged ? { tracks_tap: tracksNow } : {};
+    changes.push(
+      tapChanged
+        ? { ...subject, moved_from: was.source.tap, ...tracking }
+        : { ...subject, tracks_tap: tracksNow },
+    );
   }
   return changes;
 }

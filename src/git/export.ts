@@ -26,6 +26,7 @@ import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
+import { removeEach, withLeftBehind } from "../util/cleanup.ts";
 import { ensureDir, rmrf } from "../util/fs.ts";
 import { type GitProcessError, runGit } from "./exec.ts";
 import { assertNoSymlinkEscape } from "./tree-safety.ts";
@@ -112,7 +113,8 @@ export interface ExportedTree {
  * subpath itself, and following it would read content from outside that
  * commit entirely. Each export sits directly under the git cache, which is
  * how discovery finds the repository a location below it must stay in
- * (`sourceBoundary`). A failed export leaves nothing behind.
+ * (`sourceBoundary`). A failed export leaves nothing behind, or names
+ * what crew couldn't remove in its error, which stays the export's own.
  */
 export function exportTree(
   clonePath: string,
@@ -127,8 +129,8 @@ export function exportTree(
     assertNoSymlinkEscape(dest, location, subpath);
     return { location, remove: () => rmrf(dest) };
   } catch (err) {
-    rmrf(dest);
-    throw err;
+    // The export's own failure stays the error; a folder left behind is named in it.
+    throw withLeftBehind(err as Error, removeEach([dest]));
   }
 }
 

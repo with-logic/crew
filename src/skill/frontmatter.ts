@@ -64,7 +64,9 @@ function firstLineOpens(head: string, atEnd: boolean): boolean | undefined {
   const lineEnd = head.search(/[\r\n]/);
   if (lineEnd >= 0) return head.slice(0, lineEnd).trim() === "---";
   if (atEnd) return head.trim() === "---";
-  return "---".startsWith(head) || /^---\s*$/.test(head) ? undefined : false;
+  // A partial delimiter (`-`, `--`), or the delimiter and spaces so far.
+  const couldStillOpen = "---".startsWith(head) || /^---\s*$/.test(head);
+  return couldStillOpen ? undefined : false;
 }
 
 /**

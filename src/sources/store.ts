@@ -131,9 +131,9 @@ export function stagingError(
   const storeSide = err.syscall === "symlink" || (dest !== undefined && !existsSync(dirname(dest)));
   const outsideSkill = climbsOut(relative(skillPath, file));
   // A copy names its source file even when writing failed: only a copy
-  // whose source is gone, or crew can't read, failed on the skill's file.
-  const failedOnSkillFile = err.syscall !== "copyfile" || isGoneError(err) || !isReadable(file);
-  if (!(storeSide || outsideSkill) && failedOnSkillFile) {
+  // whose source is gone, or crew can't read, failed on the skill's side.
+  const skillSide = err.syscall !== "copyfile" || isGoneError(err) || !isReadable(file);
+  if (!(storeSide || outsideSkill) && skillSide) {
     return unreadablePathError(file, err, "read");
   }
   const store = paths(home).storeDir;

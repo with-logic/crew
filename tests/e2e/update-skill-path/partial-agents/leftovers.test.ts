@@ -1,9 +1,10 @@
 /**
- * What taking back a failed tap child leaves (§10.1.1 step 2; C-UPD-18e):
+ * What removing a failed tap child leaves (§10.1.1 step 2; C-UPD-18e):
  * a copy the child was just installed into that no longer holds what crew
- * wrote — edited, or unreadable, before a later agent's folder failed —
- * is someone's, and stays; so does one crew can't remove. Each is named
- * in the child's failure, which keeps the failing agent's own code.
+ * wrote — edited, its marker changed, or unreadable, before a later
+ * agent's folder failed — is someone's, and stays; so does one crew can't
+ * remove. Each is named in the child's failure, which keeps the failing
+ * agent's own code.
  *
  * The change is made while the update runs: `--verbose` reports each
  * agent's install as it starts, and the test acts on the copy already
@@ -11,9 +12,17 @@
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { appendFileSync, chmodSync, existsSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  chmodSync,
+  existsSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../../src/cli/main.ts";
+import { isTapErrorRow, type TapReexpandRow } from "../../../../src/install/tap-reexpand/types.ts";
 import { readState } from "../../../../src/state/load.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { makeSkill, skillFrontmatter } from "../../../helpers/fixtures.ts";
@@ -45,11 +54,9 @@ function updateFailingChild(home: string, act: (copy: string) => void) {
   const code = whileReadOnly(agents.roots["gemini-cli"], () =>
     runCli(["update", "--json", "--verbose"], { home, streams }),
   );
-  const rows = JSON.parse(stdout).tap_reexpand_rows as {
-    error: { code: string; message: string };
-  }[];
+  const rows = JSON.parse(stdout).tap_reexpand_rows as readonly TapReexpandRow[];
   const recorded = readState(home).installations.some((e) => e.name === "gamma");
-  return { code, error: rows[0]!.error, recorded, copy };
+  return { code, error: rows.filter(isTapErrorRow)[0]!.error, recorded, copy };
 }
 
 /** A tracked tap `mine` installed in both agents, with a new child `gamma` upstream. */
@@ -69,6 +76,31 @@ test("C-UPD-18e a copy edited before the child failed is left, and named", () =>
   );
   expect(readFileSync(join(r.copy, "SKILL.md"), "utf8")).toEndWith("Mine.\n");
 });
+
+/** Changes to a copy's marker alone; its content, which the hash covers, stays as written (§12.1). */
+const MARKER_ONLY: readonly (readonly [string, (copy: string) => void])[] = [
+  ["deleted", (copy) => rmSync(join(copy, ".crew.json"))],
+  [
+    "rewritten",
+    (copy) => {
+      const marker = JSON.parse(readFileSync(join(copy, ".crew.json"), "utf8"));
+      writeFileSync(
+        join(copy, ".crew.json"),
+        JSON.stringify({ ...marker, content_hash: "sha256:0" }),
+      );
+    },
+  ],
+];
+
+for (const [what, act] of MARKER_ONLY) {
+  test(`C-UPD-18e a copy whose marker was ${what} before the child failed is left, and named`, () => {
+    const home = trackedTapWithNewChild();
+    const r = updateFailingChild(home, act);
+    expect([r.code, r.error.code, r.recorded]).toEqual([1, "EACCES", false]);
+    expect(r.error.message).toContain(`left in place: \`${r.copy}\` (crew can't confirm`);
+    expect(existsSync(join(r.copy, "SKILL.md"))).toBe(true);
+  });
+}
 
 test("C-UPD-18e a copy crew can no longer read is left, and named", () => {
   const home = trackedTapWithNewChild();

@@ -82,18 +82,26 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
   );
   tapReexpandRows.push(...reexpanded.rows);
   if (reexpanded.hardFailure) hardFailure = true;
-  for (const entry of reexpanded.updated) {
-    current = upsertEntry(current, entry);
-  }
-  for (const entry of reexpanded.added) {
-    current = upsertEntry(current, entry);
-  }
   const sourceGone = reexpanded.sourceGone;
 
   // §10.1 steps 2/2b: new collection members are fresh installs, not
   // new dependency seeds. Recomputing closure by their names could
   // adopt an unrelated install's dependencies on a tap we never locked.
-  const targetEntries = entriesAfterReexpansion(current, subjects, initialSelected);
+  // The selection is read back with every relocation applied, so a
+  // relocated entry still matches itself (§10.1).
+  const targetEntries = entriesAfterReexpansion(
+    withEntries(current, [...reexpanded.updated, ...reexpanded.added]),
+    subjects,
+    initialSelected,
+  );
+  // A relocated path is recorded only for an entry this run updates, so
+  // its marker and SHA move with it; one outside the selection keeps the
+  // path it was installed from until its own update (§10.1.1 step 1).
+  const targeted = new Set(targetEntries.map(entryIdentity));
+  for (const entry of reexpanded.updated) {
+    if (targeted.has(entryIdentity(entry))) current = upsertEntry(current, entry);
+  }
+  current = withEntries(current, reexpanded.added);
   for (const entry of targetEntries) {
     if (sourceGone.has(entryIdentity(entry))) {
       rows.push(
@@ -132,4 +140,11 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
     collections,
     selectors,
   };
+}
+
+/** `state` with each of `entries` written over the entry it identifies, or added. */
+function withEntries(state: StateFile, entries: readonly StateEntry[]): StateFile {
+  let next = state;
+  for (const entry of entries) next = upsertEntry(next, entry);
+  return next;
 }

@@ -27,7 +27,9 @@ const CASES: readonly (readonly [string, string, boolean])[] = [
   ["blank lines past one read", `${"\n".repeat(10_000)}---\nname: x\n---\n`, true],
   ["delimiter spaces past one read", `---${" ".repeat(10_000)}\nname: x\n---\n`, true],
   ["delimiter then text past one read", `---${" ".repeat(10_000)}x\n`, false],
-  ["a character split across reads", `${" ".repeat(4095)}é\n`, false],
+  // U+2003 is three bytes; the first read ends inside it, and only
+  // decoding across reads sees it as the blank it is.
+  ["a blank split across reads", `${" ".repeat(4094)} ---\nname: x\n---\n`, true],
 ];
 
 describe("fileOpensFrontmatter", () => {
