@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.11.0] — 2026-10-17
+
+### Added
+- Install skills from GitHub gists: `crew install https://gist.github.com/<id>`. Each top-level `.md` file with YAML frontmatter is a skill. A root `SKILL.md` makes the whole gist one skill. `//<file>.md` picks one file. Gists also work as taps, and updates follow edits and deletions.
+- `crew outdated`, a preview of what `crew update` would change (same as `update --dry-run`).
+- `crew install --from-git <source>`; a bare `owner/repo` is read as GitHub.
+- GitHub, GitLab and Bitbucket browser URLs, and scheme-less hosts such as `github.com/acme/skills`, are accepted as references.
+- `<url>//<subpath>@<ref>` is accepted in addition to `<url>@<ref>//<subpath>`.
+- `@owner/repo` hint when an `owner/repo` reference doesn't resolve.
+- Aliases: `remove`/`rm`, `ls`, `upgrade`.
+- `--help`/`-h` and `--version`/`-v`/`-V`.
+- `crew list --agent` and `--tap` filters; `crew search --tap`.
+- `crew update` and `crew uninstall` accept tap and namespace selectors; `crew uninstall --all`.
+- `crew tap remove --uninstall`, and a guard requiring `--force` or `--uninstall` when skills are installed from the tap.
+- `--verbose` now prints progress details to stderr.
+- `crew list` and `crew info` show a recognizable source; `info --json` adds `source_label`.
+- Install reports tap/tracking changes (`moved from … to …`) and `--json` adds `attribution_changes`.
+- `crew doctor` reports `unreadable_marker` and `marker_attribution_drift`.
+
+### Changed
+- Taps backed by the same repository share one clone under `~/.crew/repos/`.
+- An explicit `@ref` now installs the content at that ref rather than the default branch's HEAD.
+- The same repo location installed via a subpath and via the whole repo is one source, not a name conflict.
+- A repeated non-repeatable flag is a usage error (exit 4).
+- `crew tap add` drops `main`/`master` refs; other refs are rejected.
+- A `SKILL.md` may link only to a file inside its own skill folder, and folder links out of a git source are never followed.
+- Unreadable source files are reported as `source_unreachable`.
+
+### Fixed
+- `--dry-run` no longer changes installed skills, markers, state or config on `uninstall`, `update`, `tap add/remove/update`, `agents`, `autoupdate`, `cache clean` and `doctor --repair`. (`update --dry-run` still refreshes tap clones under `~/.crew/repos/`, as `crew outdated` does.)
+- `crew uninstall --scope` and `--prune` now honor the scope, and no longer drop same-named installs in other projects.
+- `doctor --repair` reconciles autoupdate scheduler drift.
+- A failed agent target on `update` keeps its previous state and is retried next run.
+- Dangling or looping paths report `source_gone` instead of crashing.
+- Backslashes in file or folder names can no longer escape the exported commit.
+- `doctor` no longer crashes on unreadable markers or flags healthy installs when run from `$HOME`.
+
 ## [0.10.1] — 2026-07-03
 
 ### Changed
