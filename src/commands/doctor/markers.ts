@@ -5,44 +5,49 @@
  * `project_root` in state (plus the current cwd) for project-scope
  * markers. A `project_root` that doesn't exist on disk is silently
  * skipped — `checkProjectRoots` already reports it, so reporting
- * again here would be noise.
+ * again here would be noise — while one crew can't look at is noted
+ * (check 9), so the entries under it are hidden rather than missing.
  *
  * When multiple adapters share an install path (§7.2), the same
  * physical marker would be read once per adapter. We dedupe by
  * `(scope, installDir)` so each marker appears exactly once in the index.
  *
- * A marker crew can't read or parse, one missing a field it records
- * (`isCompleteMarker`), or a skills folder it can't list or look at,
- * doesn't stop the walk: it is recorded as unreadable (check 9), so the
- * checks report it and repair keeps the state entries it hides — and
- * writes nothing from such a marker. `agents/list.ts` lists installs too,
+ * A marker crew can't read or parse, one it can't use (`usableMarker`),
+ * or a skills folder or project root it can't list or look at, doesn't
+ * stop the walk: it is noted (check 9), so the checks report it and
+ * repair keeps the state entries it hides — and writes nothing from such
+ * a marker. `agents/list.ts` lists installs too,
  * but for callers that stop at the first marker they can't read.
  */
 
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { type AgentAdapter, baseFor, type InstalledSkillRecord } from "../../agents/adapter.ts";
-import { isCompleteMarker, markerFieldProblem } from "../../agents/marker-fields.ts";
 import { inspectMarkerAt } from "../../agents/marker-read.ts";
 import { ALL_AGENTS } from "../../agents/registry.ts";
 import type { Marker, Scope, StateEntry } from "../../core/types.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { errnoReason, isGoneError } from "../../util/errno.ts";
-import { isDirectory } from "../../util/fs.ts";
+import { lookAtRoot } from "./project-root.ts";
+import { usableMarker } from "./usable-marker.ts";
 
 export interface MarkerEntry {
-  record: InstalledSkillRecord;
-  currentHash?: string;
+  readonly record: InstalledSkillRecord;
   /** For project-scope markers, the cwd we walked from — used as `project_root` during --repair. */
-  projectRoot?: string;
+  readonly projectRoot?: string;
 }
 
-/** A path doctor couldn't read (check 9): a marker, or a folder it couldn't list or look into. */
+/**
+ * A path doctor couldn't use (check 9): a marker, or a folder it couldn't
+ * list or look into. `unreadable` when crew can't read it; `unusable`
+ * when what it read is no marker it can use, which the user reinstalls.
+ */
 export interface UnreadablePath {
   readonly path: string;
   readonly reason: string;
   /** The install folder whose marker it hides, or the skills folder whose installs it hides. */
   readonly hides: string;
+  readonly kind: "unreadable" | "unusable";
 }
 
 /** Every marker doctor could read, and every path it couldn't. */
@@ -69,24 +74,33 @@ export function ownsInstall(
   return sameInstall(entry, m) && agents.some((a) => m.record.marker.agents.includes(a));
 }
 
+type Note = (path: string, reason: string, hides: string, kind?: UnreadablePath["kind"]) => void;
+
 export function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: string): MarkerIndex {
   const markers: MarkerEntry[] = [];
   const unreadable = new Map<string, UnreadablePath>();
+  const note: Note = (path, reason, hides, kind = "unreadable") =>
+    unreadable.set(path, { path, reason, hides, kind });
   const seen = new Set<string>();
   const projectRoots = new Set<string>([cwd]);
   for (const e of stateEntries) {
     if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
+  const roots: string[] = [];
+  for (const root of projectRoots) {
+    const look = lookAtRoot(root);
+    if (look.kind === "hidden") note(root, look.reason, root);
+    if (look.kind === "usable") roots.push(root);
+  }
   for (const adapter of ALL_AGENTS) {
-    for (const rec of readInstalls(adapter, "user", cwd, unreadable)) {
+    for (const rec of readInstalls(adapter, "user", cwd, note)) {
       const key = `user\0${rec.installDir}`;
       if (seen.has(key)) continue;
       seen.add(key);
       markers.push({ record: rec });
     }
-    for (const root of projectRoots) {
-      if (!isDirectory(root)) continue;
-      for (const rec of readInstalls(adapter, "project", root, unreadable)) {
+    for (const root of roots) {
+      for (const rec of readInstalls(adapter, "project", root, note)) {
         const key = `project\0${rec.installDir}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -99,30 +113,31 @@ export function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: strin
 
 /**
  * The crew installs `adapter` owns in its skills folder at `scope`, noting
- * in `unreadable` (keyed by path) whatever crew can't read on the way.
+ * whatever crew can't read or use on the way.
  */
 function readInstalls(
   adapter: AgentAdapter,
   scope: Scope,
   root: string,
-  unreadable: Map<string, UnreadablePath>,
+  note: Note,
 ): InstalledSkillRecord[] {
   const base = baseFor(adapter, scope, root);
   if (base === "") return [];
-  const note = (path: string, reason: string, hides: string) =>
-    unreadable.set(path, { path, reason, hides });
   const records: InstalledSkillRecord[] = [];
   for (const name of listOrNote(base, note)) {
+    // A skill's name never starts with a dot (§9 step 4), so such a folder
+    // is no install — crew's own staging leftover (§7.3), say.
+    if (name.startsWith(".")) continue;
     const installDir = join(base, name);
-    const marker = readOrNote(installDir, (path, reason) => note(path, reason, installDir));
+    const marker = readOrNote(installDir, scope, (path, reason, kind) =>
+      note(path, reason, installDir, kind),
+    );
     // A marker this adapter doesn't own is another adapter's to list.
     if (!marker?.agents.includes(adapter.name)) continue;
     records.push({ adapter: adapter.name, scope, installDir, marker });
   }
   return records;
 }
-
-type Note = (path: string, reason: string, hides: string) => void;
 
 /**
  * `base`'s entries; none when it is gone or no folder. Noted, and none,
@@ -140,14 +155,15 @@ function listOrNote(base: string, note: Note): string[] {
 }
 
 /**
- * The marker in `installDir`, or null where there is none to use: no
- * install folder, no marker, or a path that can't hold one. One crew
- * can't read or parse, one that is no complete marker (§7.5), or a folder
- * it can't look into, is noted.
+ * The marker in `installDir`, found at `scope`, or null where there is
+ * none to use: no install folder, no marker, or a path that can't hold
+ * one. One crew can't read, or a folder it can't look into, is noted as
+ * unreadable; one it read but can't use (`usableMarker`) as unusable.
  */
 function readOrNote(
   installDir: string,
-  note: (path: string, reason: string) => void,
+  scope: Scope,
+  note: (path: string, reason: string, kind?: UnreadablePath["kind"]) => void,
 ): Marker | null {
   try {
     if (!statSync(installDir).isDirectory()) return null;
@@ -159,10 +175,11 @@ function readOrNote(
   const read = inspectMarkerAt(installDir);
   if (read.kind === "none") return null;
   if (read.kind !== "marker") {
-    note(path, read.reason);
+    note(path, read.reason, read.kind === "unreadable" ? "unreadable" : "unusable");
     return null;
   }
-  if (isCompleteMarker(read.marker)) return read.marker;
-  note(path, `not a crew marker: missing or invalid \`${markerFieldProblem(read.marker)}\``);
+  const usable = usableMarker(read.marker, installDir, scope);
+  if (typeof usable !== "string") return usable;
+  note(path, usable, "unusable");
   return null;
 }

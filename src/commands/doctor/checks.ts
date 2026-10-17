@@ -12,11 +12,10 @@ import { isAutoupdateLoaded } from "../../autoupdate/scheduler.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import { hashDirectory } from "../../hash/content.ts";
 import { orphanStoreEntries } from "../../maintenance/gc.ts";
-import { hasUsableProjectRoot } from "../../state/validation.ts";
-import { errnoReason } from "../../util/errno.ts";
-import { isDirectory } from "../../util/fs.ts";
+import { errnoReason, isGoneError } from "../../util/errno.ts";
 import type { DoctorCode } from "./codes.ts";
 import { type MarkerEntry, ownsInstall } from "./markers.ts";
+import { lookAtEntryRoot } from "./project-root.ts";
 import type { IsHiddenInstall } from "./unreadable.ts";
 
 export interface Finding {
@@ -62,26 +61,29 @@ export function checkStateMarkerDrift(
 }
 
 /**
- * Check 3: content hash drift. Mutates `markers[i].currentHash` so that
- * `doctor-repair.ts` can reuse the value without re-hashing. An install
- * folder crew can't read all of is check 9's (§11.2), and the others are
- * still checked.
+ * Check 3: content hash drift. An install folder crew can't read all of
+ * is check 9's (§11.2), named by the path it couldn't read, and the
+ * others are still checked. One that changes while it is hashed — a
+ * concurrent update replacing it — is passed over: it isn't unreadable,
+ * and the next run checks what replaced it.
  */
 export function checkContentHashDrift(markers: readonly MarkerEntry[]): Finding[] {
   const findings: Finding[] = [];
   for (const m of markers) {
+    const installDir = m.record.installDir;
     let actual: string;
     try {
-      actual = hashDirectory(m.record.installDir);
+      actual = hashDirectory(installDir);
     } catch (err) {
+      if (isGoneError(err)) continue;
+      const at = (err as NodeJS.ErrnoException).path ?? installDir;
       findings.push({
         level: "error",
         code: "unreadable_marker",
-        message: `crew can't read all of \`${m.record.installDir}\` (${errnoReason(err)}), so it can't check it for local edits`,
+        message: `crew can't read \`${at}\` (${errnoReason(err)}), so it can't check \`${installDir}\` for local edits`,
       });
       continue;
     }
-    m.currentHash = actual;
     if (actual !== m.record.marker.content_hash) {
       findings.push({
         level: "warn",
@@ -148,8 +150,9 @@ export function checkProjectRoots(stateEntries: readonly StateEntry[]): Finding[
     if (entry.scope !== "project") continue;
     // A path replaced by a regular file is as unusable as a missing
     // one — nothing can be read beneath it — and repair applies the
-    // same test, so the two must not disagree.
-    if (!(hasUsableProjectRoot(entry) && isDirectory(entry.project_root))) {
+    // same test, so the two must not disagree. One crew can't look at
+    // isn't missing: check 9 reports it.
+    if (lookAtEntryRoot(entry).kind === "missing") {
       findings.push({
         level: "warn",
         code: "missing_project_root",

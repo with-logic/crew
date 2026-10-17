@@ -13,15 +13,14 @@
  */
 
 import { readConfig, writeConfig } from "../../config/load.ts";
-import { recordedDiscovery } from "../../config/taps.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { garbageCollectStore } from "../../maintenance/gc.ts";
 import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
-import { hasUsableProjectRoot } from "../../state/validation.ts";
-import { isDirectory } from "../../util/fs.ts";
 import { type MarkerEntry, ownsInstall, sameInstall } from "./markers.ts";
+import { lookAtEntryRoot } from "./project-root.ts";
 import type { IsHiddenInstall } from "./unreadable.ts";
+import { rebuiltTap } from "./usable-marker.ts";
 
 /**
  * True when the entry is project-scope and its recorded root is gone,
@@ -32,9 +31,7 @@ import type { IsHiddenInstall } from "./unreadable.ts";
  * state on the assumption a marker exists there.
  */
 function isUnreadableProjectEntry(entry: StateEntry): boolean {
-  return (
-    entry.scope === "project" && !(hasUsableProjectRoot(entry) && isDirectory(entry.project_root))
-  );
+  return entry.scope === "project" && lookAtEntryRoot(entry).kind !== "usable";
 }
 
 /**
@@ -55,19 +52,11 @@ export function repairStateUnderLock(
     // Reconstruct missing taps from markers FIRST so state entries can
     // reference them.
     const taps = new Map<string, TapConfig>(config.taps.map((t) => [t.name, t]));
+    // Every marker here loads as a tap row (`usableMarker`), so the
+    // rebuilt config does too.
     for (const m of markers) {
       const marker = m.record.marker;
-      if (taps.has(marker.tap_name)) continue;
-      const reconstructed: TapConfig = {
-        name: marker.tap_name,
-        kind: marker.tap_kind,
-        registered: false, // reconstructed taps default to auto
-        url: marker.tap_url,
-        subpath: marker.tap_subpath,
-        path: marker.tap_path,
-        ...recordedDiscovery({ kind: marker.tap_kind, url: marker.tap_url }, marker.tap_discovery),
-      };
-      taps.set(reconstructed.name, reconstructed);
+      if (!taps.has(marker.tap_name)) taps.set(marker.tap_name, rebuiltTap(marker));
     }
     config = { ...config, taps: [...taps.values()] };
     writeConfig(config, home);

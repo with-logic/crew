@@ -1,7 +1,7 @@
 /**
  * Doctor's check 3 against an install folder crew can't read all of
  * (§11.2 checks 3 and 9; C-STATE-05a): `--verify` reports it as an
- * `unreadable_marker` finding naming the folder, and the run's other
+ * `unreadable_marker` finding naming the folder it couldn't read, and the run's other
  * checks still report — another copy's local edits included.
  */
 
@@ -32,7 +32,9 @@ test("C-STATE-05a --verify reports a copy it can't read all of, and still checks
     expect(verified.code).toBe(1);
     expect(codes(verified.findings)).toEqual(["customized:warn", "unreadable_marker:error"]);
     const unreadable = verified.findings.find((f) => f.code === "unreadable_marker")!;
-    expect(unreadable.message).toContain(`crew can't read all of \`${join(root, "a")}\``);
+    // Named by the folder at fault, not just the copy it sits in.
+    expect(unreadable.message).toContain(`crew can't read \`${sealed}\` (EACCES`);
+    expect(unreadable.message).toContain(`check \`${join(root, "a")}\` for local edits`);
   } finally {
     chmodSync(sealed, 0o755);
   }

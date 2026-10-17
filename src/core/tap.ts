@@ -2,7 +2,9 @@
  * Tap and config domain types (§6, §16).
  */
 
-export type TapKind = "git" | "path";
+/** Every tap kind, for checks of a value read from disk. */
+export const TAP_KINDS = ["git", "path"] as const;
+export type TapKind = (typeof TAP_KINDS)[number];
 export type TapDiscovery = "recursive";
 
 /** A tap configured in config.yaml. */

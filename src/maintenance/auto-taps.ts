@@ -83,9 +83,11 @@ export function collectionWarnings(collection: AutoTapCollection): string[] {
   const { kept, markerPath } = collection;
   const one = kept.length === 1;
   const taps = kept.map((name) => `\`${name}\``).join(", ");
-  const [noun, them, which] = one ? ["auto tap", "it", "a tap"] : ["auto taps", "them", "the taps"];
+  const [tapNoun, pronoun, removedPhrase] = one
+    ? ["auto tap", "it", "a tap"]
+    : ["auto taps", "them", "the taps"];
   return [
-    `warning: kept ${noun} ${taps}: crew can't read \`${markerPath}\`, which might still name ${them}. Check its permissions (and its folder's); once crew can read it, a later \`crew uninstall\` removes ${which} nothing names.`,
+    `warning: kept ${tapNoun} ${taps}: crew can't read \`${markerPath}\`, which might still name ${pronoun}. Check its permissions (and its folder's); once crew can read it, a later \`crew uninstall\` removes ${removedPhrase} nothing names.`,
   ];
 }
 

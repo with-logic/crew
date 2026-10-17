@@ -129,13 +129,16 @@ for (const [what, reason, make] of UNREADABLE) {
       expect(codes(plain.findings)).toEqual(["unreadable_marker:error"]);
       expect(plain.findings[0]!.message).toContain(`\`${path}\` (${reason}`);
 
+      const configPath = join(home, "config.yaml");
+      const config = readFileSync(configPath, "utf8");
       const repaired = doctor(home, ["--repair"]);
       // Repair can't fix permissions, so the error stands.
       expect(repaired.code).toBe(1);
       const a = readState(home).installations.find((e) => e.name === "a");
       expect(a?.agents).toEqual(["codex"]);
       // Nothing from a marker crew couldn't use was written as a tap.
-      expect(readConfig(home).taps.every((t) => typeof t.name === "string")).toBe(true);
+      expect(readFileSync(configPath, "utf8")).toBe(config);
+      expect(readConfig(home).taps.length).toBeGreaterThan(0);
     } finally {
       undo();
     }

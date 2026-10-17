@@ -31,8 +31,9 @@ import type { DoctorCode } from "./codes.ts";
  *
  * Deliberately absent:
  *   - `customized`, `agent_missing`, `config_invalid` — need a human.
- *   - `unreadable_marker` — permissions are the user's to fix; repair
- *     keeps the state entries such a marker hides.
+ *   - `unreadable_marker` — a path crew can't read is the user's
+ *     permissions to fix, and a marker it can't use the install's to
+ *     reinstall; repair keeps the state entries either hides.
  *   - `marker_attribution_drift` — re-pointing state at one copy's
  *     marker would move the entry's other copies; the user reinstalls
  *     that copy.

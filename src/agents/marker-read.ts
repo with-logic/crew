@@ -5,10 +5,14 @@
  * marker might name any tap, so a caller deciding whether a tap is still
  * named — auto-tap collection, say — must treat it as naming one.
  * `inspectMarkerAt` is the same reading with the reasons kept, for a
- * caller that reports them (`crew doctor`, §11.2 check 9).
+ * caller that reports them (`crew doctor`, §11.2 check 9), and
+ * `isCompleteMarker` tells a parsed marker that holds every field crew
+ * records from one it can't use.
  */
 
 import { join } from "node:path";
+import { SCOPES, type Scope } from "../core/scope.ts";
+import { TAP_KINDS, type TapKind } from "../core/tap.ts";
 import type { Marker } from "../core/types.ts";
 import { errnoReason, isGoneError } from "../util/errno.ts";
 import { readText } from "../util/fs.ts";
@@ -74,4 +78,45 @@ export function inspectMarkerAt(installDir: string): MarkerInspection {
   return marker === null
     ? { kind: "invalid", reason: "not a JSON object" }
     : { kind: "marker", marker };
+}
+
+const isString = (value: unknown): boolean => typeof value === "string";
+const isStringOrNull = (value: unknown): boolean => value === null || typeof value === "string";
+
+/**
+ * One test per marker field (§7.5); `tap_discovery` alone may be absent
+ * (standard discovery). `crew doctor` reads every field and `--repair`
+ * writes them into `config.yaml` and `state.json` (§11.2), so a marker
+ * missing one is no marker it can use.
+ */
+const FIELD_CHECKS: { readonly [K in keyof Marker]-?: (value: unknown) => boolean } = {
+  schema_version: (value) => value === 1,
+  name: isString,
+  agents: (value) => Array.isArray(value) && value.every(isString),
+  tap_name: isString,
+  tap_kind: (value) => TAP_KINDS.includes(value as TapKind),
+  tap_url: isString,
+  tap_subpath: isString,
+  tap_path: isString,
+  tap_discovery: (value) => value === undefined || value === "recursive",
+  path: isString,
+  ref: isStringOrNull,
+  resolved_sha: isStringOrNull,
+  content_hash: isString,
+  scope: (value) => SCOPES.includes(value as Scope),
+  installed_at: isString,
+  installed_by: isString,
+};
+
+/** The first field `marker` lacks or holds with the wrong type; null when it has them all. */
+export function markerFieldProblem(marker: UncheckedMarker): keyof Marker | null {
+  for (const field of Object.keys(FIELD_CHECKS) as (keyof Marker)[]) {
+    if (!FIELD_CHECKS[field](marker[field])) return field;
+  }
+  return null;
+}
+
+/** True when `marker` holds every field crew records, each of the right type. */
+export function isCompleteMarker(marker: UncheckedMarker): marker is Marker {
+  return markerFieldProblem(marker) === null;
 }

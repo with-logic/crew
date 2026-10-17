@@ -4,7 +4,8 @@
 
 import { CrewError } from "../core/errors.ts";
 import { isGistTap } from "../core/gist-url.ts";
-import type { TapConfig, TapDiscovery, TapKind } from "../core/types.ts";
+import { TAP_KINDS, type TapKind } from "../core/tap.ts";
+import type { TapConfig, TapDiscovery } from "../core/types.ts";
 import type { YamlMap, YamlValue } from "../yaml/parse.ts";
 
 /** Parse one entry under the top-level `taps:` list. */
@@ -122,7 +123,7 @@ function parsePathTap(
 
 function parseKind(raw: YamlValue | undefined): TapKind {
   if (raw === undefined || raw === null) return "git";
-  if (raw === "git" || raw === "path") return raw;
+  if (TAP_KINDS.includes(raw as TapKind)) return raw as TapKind;
   throw new CrewError(
     "config_invalid",
     "config.yaml: tap `kind`, when present, must be `git` or `path`",
