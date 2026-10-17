@@ -73,11 +73,15 @@ function realFolder(folder: string): string {
   return lstatSync(at).isSymbolicLink() ? realFolder(resolve(dirname(at), readlinkSync(at))) : at;
 }
 
-/** `invalid_skill` for a folder discovery won't read: it leads out of the repository. */
-export function outOfSourceError(folder: string): CrewError {
+/**
+ * `invalid_skill` for a folder discovery won't read: it leads out of the
+ * repository. The message names it as `shown` — its location in the
+ * repository, where the caller knows it — and `details.path` as it is.
+ */
+export function outOfSourceError(folder: string, shown = folder): CrewError {
   return new CrewError(
     "invalid_skill",
-    `\`${folder}\` leads out of the repository through a link — or to its root or \`.git\` — so crew won't read it`,
+    `\`${shown}\` leads out of the repository through a link — or to its root or \`.git\` — so crew won't read it`,
     { path: folder },
     "Make it a folder in the repository, or a link to a folder inside it.",
   );

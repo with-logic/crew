@@ -27,7 +27,7 @@ describe("currentTapChildren", () => {
 
     expect(found).toEqual({
       children: [{ name: "declared-root", path: root, tapRelativePath: "" }],
-      unloadable: [],
+      unnamed: [],
     });
   });
 });

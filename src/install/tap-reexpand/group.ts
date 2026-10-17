@@ -14,7 +14,7 @@ import { collectAdditions } from "./additions.ts";
 import type { TapScanCache } from "./scan-cache.ts";
 import { surveyGroup } from "./survey.ts";
 import type { InstallNewChild, TapReexpandResult } from "./types.ts";
-import { reportUnloadable } from "./unloadable.ts";
+import { reportUnnamed } from "./unnamed.ts";
 
 interface GroupInput {
   readonly members: readonly StateEntry[];
@@ -75,7 +75,7 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
     // Nothing of this group is installed yet: it fails alone (C-SPEC-18).
     return groupFailure(input, err);
   }
-  const { children, unloadable } = scan;
+  const { children, unnamed: unnamedCandidates } = scan;
   const childrenByName = groupChildrenByName(children);
   const survey = surveyGroup({ members, childrenByName, tap, rootDir: acquired.rootDir });
   const additions = collectAdditions({
@@ -97,8 +97,8 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
   });
   // §10.1.1 step 2: a candidate the index couldn't name fails like one that
   // fails validation, rather than vanishing from the run.
-  const unnamed = reportUnloadable({
-    unloadable,
+  const unnamed = reportUnnamed({
+    unnamed: unnamedCandidates,
     members,
     scope: first.scope,
     tap,

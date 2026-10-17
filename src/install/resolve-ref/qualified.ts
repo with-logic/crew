@@ -16,7 +16,13 @@
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapSource } from "../../core/types.ts";
 import { ambiguityError, twoSegmentMissError } from "./errors.ts";
-import { indexTapAt, lookupInTap, refusalFor, safeIndex } from "./tap-index-lookup.ts";
+import {
+  indexTapAt,
+  lookupInIndex,
+  safeIndex,
+  tryIndexTap,
+  unnamedCandidateError,
+} from "./tap-index-lookup.ts";
 import type { NonTapNameCandidate, TapRoots } from "./types.ts";
 
 /** `<tap>/<namespace>/<skill>` — unambiguous, so it matches or throws. */
@@ -39,9 +45,9 @@ export function resolveThreeSegment(
   const locs = index.skills.get(source.name) ?? [];
   const match = locs.find((l) => l.namespace === source.namespace);
   if (!match) {
-    // A candidate crew refused there says why it isn't found (C-SPEC-17).
-    const refused = refusalFor(index, source.name, source.namespace);
-    if (refused) throw refused;
+    // A candidate there crew couldn't name says why it isn't found (C-REF-40).
+    const unnamed = unnamedCandidateError(tap, index, source.name, source.namespace);
+    if (unnamed) throw unnamed;
     throw new CrewError(
       "invalid_ref",
       `\`${source.tap}/${source.namespace}/${source.name}\` doesn't exist — no skill \`${source.name}\` found in namespace \`${source.namespace}\` of tap \`${source.tap}\``,
@@ -61,7 +67,11 @@ export function resolveTwoSegment(
   const first = source.tap!;
   const second = source.name;
   const tap = config.taps.find((t) => t.name === first);
-  const asTapSkill = tap ? lookupInTap(tap, home, second, roots) : null;
+  // The named tap is indexed once: its skills answer the tap reading, and
+  // what it couldn't name — or why it couldn't be read — explains a miss.
+  const named = tap ? tryIndexTap(tap, home, roots) : null;
+  const namedIndex = named !== null && "index" in named ? named.index : null;
+  const asTapSkill = tap && namedIndex ? lookupInIndex(tap, namedIndex, second) : null;
 
   // Collect namespace candidates: `<first>` is a namespace in some tap
   // that holds a skill named `<second>`.
@@ -90,7 +100,12 @@ export function resolveTwoSegment(
       `\`${first}/${second}\` is a namespaced skill in multiple taps`,
     );
   }
-  const refused = tap ? refusalFor(safeIndex(tap, home, roots), second, null) : null;
-  if (refused) throw refused;
+  // A candidate the named tap couldn't name says why it isn't found
+  // (C-REF-40); a tap crew couldn't read at all says that instead (§13).
+  const unnamed = tap && namedIndex ? unnamedCandidateError(tap, namedIndex, second, null) : null;
+  if (unnamed) throw unnamed;
+  if (named !== null && "failure" in named && named.failure instanceof CrewError) {
+    throw named.failure;
+  }
   throw twoSegmentMissError(first, second, source.ref);
 }

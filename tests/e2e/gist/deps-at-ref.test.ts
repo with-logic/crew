@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, readdirSync } from "node:fs";
+import { chmodSync, existsSync, readdirSync } from "node:fs";
 import { paths } from "../../../src/core/paths.ts";
 import { setGitRunner } from "../../../src/git/exec.ts";
 import { readState } from "../../../src/state/load.ts";
@@ -48,4 +48,40 @@ test("C-INST-27 a gist at a commit is exported once for every parent's dependenc
   expect(exports).toBe(2);
   const scratch = paths(home).gitCacheDir;
   expect(existsSync(scratch) ? readdirSync(scratch) : []).toEqual([]);
+});
+
+test("C-INST-27 a siblings' export crew can't remove is left, and the install still succeeds", () => {
+  const { sha } = fx.gist({
+    "a.md": skillFile("a", "A.\n", ["shared"]),
+    "shared.md": skillFile("shared"),
+  });
+  const home = makeCrewHome();
+  const scratch = paths(home).gitCacheDir;
+  let exports = 0;
+  let siblingsExport = "";
+  const served = setGitRunner((args, options) => {
+    const result = served(args, options);
+    // Once the siblings' export is checked out, crew can still read it
+    // but can't remove what's in it.
+    const workTree = args.find((a) => a.startsWith("--work-tree="));
+    if (workTree && ++exports === 2) {
+      siblingsExport = workTree.slice("--work-tree=".length);
+      chmodSync(siblingsExport, 0o555);
+    }
+    return result;
+  });
+  let r: ReturnType<typeof run>;
+  try {
+    r = run(home, ["install", `${GIST_PAGE_URL}@${sha}`, "--verbose"]);
+  } finally {
+    if (siblingsExport) chmodSync(siblingsExport, 0o755);
+  }
+  expect(r.code).toBe(0);
+  expect(
+    readState(home)
+      .installations.map((e) => e.name)
+      .sort(),
+  ).toEqual(["a", "shared"]);
+  expect(readdirSync(scratch)).toHaveLength(1);
+  expect(r.stderr).toContain("left a scratch export crew couldn't remove");
 });

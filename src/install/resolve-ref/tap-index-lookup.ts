@@ -7,14 +7,28 @@
  * than the shared clone's checked-out revision (§9 step 3).
  */
 
+import { posix } from "node:path";
 import { CrewError } from "../../core/errors.ts";
+import { gistSkillStem, isGistTap } from "../../core/gist-url.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { indexTap, type TapIndex } from "../tap-index.ts";
+import { indexTap, namespaceOf, type TapIndex } from "../tap-index.ts";
 import type { NonTapNameCandidate, TapRoots } from "./types.ts";
 
 /** Index `tap`, reading from its exported root when one was supplied. */
 export function indexTapAt(tap: TapConfig, home: string, roots: TapRoots): TapIndex {
   return indexTap(tap, home, roots[tap.name]);
+}
+
+/** `tap`'s index, or what kept crew from building it. */
+export type IndexAttempt = { readonly index: TapIndex } | { readonly failure: unknown };
+
+/** Index `tap`, keeping the failure rather than throwing it. */
+export function tryIndexTap(tap: TapConfig, home: string, roots: TapRoots): IndexAttempt {
+  try {
+    return { index: indexTapAt(tap, home, roots) };
+  } catch (failure) {
+    return { failure };
+  }
 }
 
 /**
@@ -24,48 +38,45 @@ export function indexTapAt(tap: TapConfig, home: string, roots: TapRoots): TapIn
  * contribute a candidate.
  */
 export function safeIndex(tap: TapConfig, home: string, roots: TapRoots): TapIndex | null {
-  try {
-    return indexTapAt(tap, home, roots);
-  } catch {
-    return null;
-  }
+  const attempt = tryIndexTap(tap, home, roots);
+  return "index" in attempt ? attempt.index : null;
 }
 
 /**
  * Why a reference to `name` (under `namespace`, when given) finds nothing
- * indexed: a candidate at its location that crew couldn't name — a folder
- * that leads out of the repository (C-SPEC-17), say — or one above it,
- * `skills/` or the namespace. Null when there is none: the name is
- * simply missing. A gist's candidate is its file, named without `.md`.
+ * indexed in `tap` (C-REF-40): a candidate there that crew couldn't name
+ * — one leading out of the repository, with an invalid `name`, or that
+ * crew can't read — or one above it, `skills/` or the namespace. Null
+ * when there is none: the name is simply missing. A gist's candidate is
+ * its file, named without `.md` in any case.
  */
-export function refusalFor(
-  index: TapIndex | null,
+export function unnamedCandidateError(
+  tap: TapConfig,
+  index: TapIndex,
   name: string,
   namespace: string | null,
 ): CrewError | null {
   const above = new Set(["skills", ...(namespace === null ? [] : [`skills/${namespace}`])]);
-  for (const candidate of index?.unloadable ?? []) {
-    const parts = candidate.tapRelativePath.split("/");
-    const leaf = parts[parts.length - 1]!.replace(/\.md$/, "");
-    const inNamespace = namespace === null || parts[1] === namespace;
+  const gist = isGistTap(tap);
+  for (const candidate of index.unnamed) {
+    const last = posix.basename(candidate.tapRelativePath);
+    const leaf = gist ? gistSkillStem(last) : last;
+    const inNamespace = namespace === null || namespaceOf(candidate.tapRelativePath) === namespace;
     if ((leaf === name && inNamespace) || above.has(candidate.tapRelativePath)) {
-      const { code, message } = candidate.error;
-      return new CrewError(code, message, { path: candidate.path });
+      const { code, message, details, remedy } = candidate.error;
+      return new CrewError(code, message, { ...details, path: candidate.path }, remedy);
     }
   }
   return null;
 }
 
-/** The skill named `name` inside `tap`, preferring an unnamespaced match. */
-export function lookupInTap(
+/** The skill named `name` in `tap`'s `index`, preferring an unnamespaced match. */
+export function lookupInIndex(
   tap: TapConfig,
-  home: string,
+  index: TapIndex,
   name: string,
-  roots: TapRoots,
 ): NonTapNameCandidate | null {
-  const idx = safeIndex(tap, home, roots);
-  if (!idx) return null;
-  const locs = idx.skills.get(name);
+  const locs = index.skills.get(name);
   if (!locs || locs.length === 0) return null;
   // Prefer unnamespaced. If the same name lives in multiple
   // namespaces, a 2-segment ref is ambiguous within the tap; we pick

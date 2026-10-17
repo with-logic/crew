@@ -18,19 +18,18 @@
  * so state paths remain relative to the tap that owns them.
  */
 
-import { lstatSync } from "node:fs";
-import { join, posix } from "node:path";
+import { join, posix, relative } from "node:path";
 import { CrewError } from "../core/errors.ts";
-import { isGistTap } from "../core/gist-url.ts";
+import { gistSkillStem, isGistTap } from "../core/gist-url.ts";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../core/types.ts";
-import { hasSkillMd, loadSkill, loadSkillName } from "../skill/load.ts";
+import { loadSkill } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
-import { isGistSkillCandidate } from "../sources/gist.ts";
 import { leadsOutOfSource, outOfSourceError, sourceBoundary } from "../sources/source-boundary.ts";
-import { isGoneError, unreadablePathError } from "../util/errno.ts";
-import { isDirectory, listDir } from "../util/fs.ts";
-import type { SiblingScan } from "./sibling-scan.ts";
+import { listSourceDir } from "../sources/source-dir.ts";
+import { toPosix } from "../util/fs.ts";
+import { assertCanLookForSkillMd, declaredName, isSiblingSkill } from "./siblings/disk.ts";
+import type { SiblingScan } from "./siblings/index.ts";
 import { attributeRef } from "./tap-attribution.ts";
 
 /** Result of finding a dep as a sibling within the parent's tap. */
@@ -70,31 +69,33 @@ export function findSiblingDep(
   const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
   const matches: { entryName: string; siblingPath: string; loaded: LoadedSkill }[] = [];
   const isGist = isGistTap(parent.tap);
-  const boundary = sourceBoundary(parent.tap, home, parentPath);
-  for (const entryName of siblings.once("entries", siblingParent, () => listDir(siblingParent))) {
+  const stem = (entry: string): string => (isGist ? gistSkillStem(entry) : entry);
+  const dir = siblings.dir(siblingParent, {
+    list: () => withDependencyErrors(depName, siblingParent, () => listSourceDir(siblingParent)),
+    stem,
+    // A gist's files are never folders, so it has no boundary to check.
+    boundary: () => (isGist ? null : sourceBoundary(parent.tap, home, parentPath)),
+    declares: (entry, boundary) => declaredName(parent.tap, join(siblingParent, entry), boundary),
+  });
+  for (const entryName of dir.candidatesFor(depName)) {
     const siblingPath = join(siblingParent, entryName);
     // §9 step 6: a sibling named for the dependency that crew can't load —
-    // can't look into, unreadable, or invalid — is the dependency failing,
-    // never a miss to look past to other taps.
-    const namedForDep = (isGist ? entryName.replace(/\.md$/i, "") : entryName) === depName;
-    if (namedForDep && !isGist) {
-      withDependencyErrors(depName, siblingPath, () => assertCanLookForSkillMd(siblingPath));
+    // can't look into, unreadable, invalid, or a folder leading out of the
+    // repository — is the dependency failing, never a miss to look past to
+    // other taps; it is loaded whatever it declares. Any other candidate
+    // is a skill inside the source declaring the dependency's name.
+    if (stem(entryName) === depName) {
+      if (!isGist) {
+        withDependencyErrors(depName, siblingPath, () => assertCanLookForSkillMd(siblingPath));
+      }
+      if (!isSiblingSkill(parent.tap, siblingPath)) continue;
+      if (dir.boundary !== null && leadsOutOfSource(dir.boundary, siblingPath)) {
+        const shown = toPosix(relative(dir.boundary.root, siblingPath));
+        throw dependencyError(depName, siblingPath, outOfSourceError(siblingPath, shown));
+      }
     }
-    if (!siblings.once("skill", siblingPath, () => isSiblingSkill(parent.tap, siblingPath)))
-      continue;
-    // §9 step 6: a sibling folder leading out of the repository is never
-    // read — the dependency failing, when it is named for it.
-    const out = () => leadsOutOfSource(boundary, siblingPath);
-    if (!isGist && siblings.once("leadsOut", siblingPath, out)) {
-      if (namedForDep) throw dependencyError(depName, siblingPath, outOfSourceError(siblingPath));
-      continue;
-    }
-    // One named for the dependency is loaded whatever it declares.
-    const declared = namedForDep
-      ? depName
-      : siblings.once("name", siblingPath, () => siblingName(siblingPath));
-    if (declared !== depName) continue;
-    const loaded = withDependencyErrors(depName, siblingPath, () => loadSkill(siblingPath));
+    const load = () => siblings.loaded(siblingPath, () => loadSkill(siblingPath));
+    const loaded = withDependencyErrors(depName, siblingPath, load);
     if (loaded.frontmatter.name !== depName) continue;
     matches.push({ entryName, siblingPath, loaded });
   }
@@ -126,37 +127,13 @@ export function isWholeRepoRootSkill(tap: TapConfig, tapRelativePath: string): b
   return tap.kind === "git" && tap.subpath === "" && tapRelativePath === "";
 }
 
-/** A sibling is a skill directory — or, in a gist, a skill file (§9 step 5). */
-function isSiblingSkill(tap: TapConfig, path: string): boolean {
-  if (isGistTap(tap)) return isGistSkillCandidate(path);
-  return isDirectory(path) && hasSkillMd(path);
-}
-
-/** The declared name of a sibling, or null when it can't be read. */
-function siblingName(path: string): string | null {
-  try {
-    return loadSkillName(path);
-  } catch {
-    return null;
-  }
-}
-
-/** Throw when crew can't look into `folder` for its `SKILL.md`. */
-function assertCanLookForSkillMd(folder: string): void {
-  const skillMd = join(folder, "SKILL.md");
-  try {
-    lstatSync(skillMd);
-  } catch (err) {
-    if (!isGoneError(err)) throw unreadablePathError(skillMd, err);
-  }
-}
-
 /** Run `step` on the dependency at `path`, naming the dependency in the `CrewError` it throws. */
 function withDependencyErrors<T>(depName: string, path: string, step: () => T): T {
   try {
     return step();
   } catch (err) {
-    // Both steps throw only `CrewError`: the look-in check, and `loadSkill`.
+    // Every step throws only `CrewError`: the sibling listing, the look-in
+    // check, and `loadSkill`.
     throw dependencyError(depName, path, err as CrewError);
   }
 }

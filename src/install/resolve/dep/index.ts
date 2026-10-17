@@ -10,7 +10,7 @@ import type { Config, TapConfig, TapSource } from "../../../core/types.ts";
 import { parseRef } from "../../../refs/parse.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { findSiblingDep } from "../../dep-resolution.ts";
-import { makeSiblingScan, type SiblingScan } from "../../sibling-scan.ts";
+import { makeSiblingScan, type SiblingScan } from "../../siblings/index.ts";
 import { enqueueDirectRef } from "../direct-ref.ts";
 import { enqueueTapRef, type PendingItem } from "../enqueue.ts";
 import { makeParentTrees, type ParentTrees, siblingItems } from "./parent-tree.ts";
@@ -87,7 +87,7 @@ export function enqueueDeps(
       // does not need the parent's tree.
       if (sibling) {
         requireTap(sibling.tap);
-        const produced = siblingItems(sibling, parent, home);
+        const produced = siblingItems(sibling, parent, home, reads.siblings);
         items.push(...produced.items);
         current = produced.config;
       } else unresolved.push(dep.raw);

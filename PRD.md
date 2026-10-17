@@ -1130,7 +1130,12 @@ A 2-segment reference `foo/bar` is resolved with tap-first precedence: if `foo` 
 
 A 3-segment reference `tap/namespace/skill` is always unambiguous.
 
-A 2- or 3-segment reference that finds no skill in the named tap, where the tap has a candidate at that location whose name crew can't read — a skill folder or gist file named `bar` (`bar.md`), or the `skills/` folder or namespace above it, that leads out of the repository (§9 step 5, "Folder links"), holds an invalid `name`, or can't be read — fails with that candidate's error (`invalid_skill`, or `source_unreachable`) rather than `invalid_ref`: the skill is there, and that is why crew won't install it.
+A 2- or 3-segment reference that finds no skill in the named tap fails with the error of a candidate there that crew can't name, rather than `invalid_ref`: the skill is there, and that is why crew won't install it. The candidate is the skill folder or gist file named for the reference (`bar`, or `bar.md` with the extension in any case), or the `skills/` folder or namespace above it, and crew can't name it because it:
+- leads out of the repository through a link (§9 step 5, "Folder links") — `invalid_skill`;
+- is a skill whose `name` is missing or invalid — `invalid_skill`;
+- can't be read or listed — `source_unreachable`.
+
+The error keeps the candidate's own next step. A 2-segment reference whose first segment is a configured tap crew can't read at all (a `skills/` folder it can't list, say) fails with that tap's error, unless a namespace in another tap answers it.
 
 **Disambiguation flags.** The user may force an interpretation on `crew install`. These are presence flags; the name comes from the positional argument.
 - `--tap` — force every bare-name positional to be resolved as a tap name (install the whole tap). Errors if the positional is not a configured tap.
@@ -2602,7 +2607,7 @@ Implementations and test suites refer to criteria by ID.
 | C-REF-37 | §8.2 | `https://gist.github.com/<id>`, `https://gist.github.com/<id>.git`, and `https://gist.github.com/<owner>/<id>` all parse as a git source whose URL is `https://gist.github.com/<id>.git`, with no ref and no subpath. |
 | C-REF-38 | §8.2 | `https://gist.github.com/<owner>/<id>/<revision>` and `https://gist.github.com/<id>/<revision>` (40 hex characters) parse with ref `<revision>`; an explicit `@<ref>` tail wins over it. |
 | C-REF-39 | §8.2 | Any other `http(s)` path on `gist.github.com` (`/<owner>`, `/<owner>/<id>/raw/...`, `/<owner>/<id>/revisions`), a gist link with a `#file-…` fragment, and a gist `//<file>` that is not a top-level `.md` name (`//sub/a.md`, `//notes.txt`) are `invalid_ref`. |
-| C-REF-40 | §8.3, §9 step 5 | `<tap>/<skill>` or `<tap>/<namespace>/<skill>` naming a candidate the tap can't name — a skill folder, or `skills/` or the namespace above it, that leads out of the repository; a gist file whose `name` is invalid — fails with that candidate's `invalid_skill` (or `source_unreachable`) instead of `invalid_ref`. |
+| C-REF-40 | §8.3, §9 step 5 | `<tap>/<skill>` or `<tap>/<namespace>/<skill>` naming a candidate the tap can't name — a skill folder or gist file (`.md` in any case), or `skills/` or the namespace above it, that leads out of the repository, is a skill with an invalid `name`, or can't be read — fails with that candidate's error (`invalid_skill` or `source_unreachable`, with its own next step) instead of `invalid_ref`, for folder taps and gists alike. A candidate in another namespace doesn't answer a 3-segment reference. A `<tap>/<skill>` whose tap crew can't read at all fails with that tap's error. |
 
 #### C-SPEC: Skill spec validation (§9 step 4)
 

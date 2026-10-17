@@ -6,7 +6,9 @@ import { describe, expect, test } from "bun:test";
 import { CrewError } from "../../src/core/errors.ts";
 import type { Config, TapConfig } from "../../src/core/types.ts";
 import { findSiblingDep } from "../../src/install/dep-resolution.ts";
-import { makeSiblingScan } from "../../src/install/sibling-scan.ts";
+import { siblingItems } from "../../src/install/resolve/dep/parent-tree.ts";
+import type { PendingItem } from "../../src/install/resolve/enqueue.ts";
+import { makeSiblingScan } from "../../src/install/siblings/index.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
 function pathTap(path: string): TapConfig {
@@ -120,5 +122,27 @@ describe("findSiblingDep", () => {
     expect(findSiblingDep(parent, "renamed", "/unused", config, siblings)).toBeNull();
     const fresh = findSiblingDep(parent, "renamed", "/unused", config, makeSiblingScan());
     expect(fresh?.tapRelativePath).toBe("dep-source");
+  });
+
+  test("one scan loads, and stages, a sibling once for every parent that depends on it", () => {
+    const root = makeTempDir("dep-resolution-");
+    makeSkill(root, "parent-source", skillFrontmatter({ name: "parent" }));
+    makeSkill(root, "dep-source", skillFrontmatter({ name: "dep", description: "First." }));
+    const parent = { tap: pathTap(root), tapRelativePath: "parent-source" };
+    const config = configWith(pathTap(root));
+    const siblings = makeSiblingScan();
+    const first = findSiblingDep(parent, "dep", "/unused", config, siblings)!;
+
+    // Edited on disk: the shared scan still has the skill it loaded.
+    makeSkill(root, "dep-source", skillFrontmatter({ name: "dep", description: "Second." }));
+    const again = findSiblingDep(parent, "dep", "/unused", config, siblings)!;
+    expect(again.loaded).toBe(first.loaded);
+    const fresh = findSiblingDep(parent, "dep", "/unused", config, makeSiblingScan())!;
+    expect(fresh.loaded.frontmatter.description).toBe("Second.");
+
+    const home = makeTempDir("dep-resolution-home-");
+    const item = { resolvedSha: null, requestedRef: null, pinned: false } as PendingItem;
+    const staged = siblingItems(first, item, home, siblings).items[0]!.staged;
+    expect(siblingItems(again, item, home, siblings).items[0]!.staged).toBe(staged);
   });
 });

@@ -31,10 +31,12 @@ for (const at of ["", "@v1"]) {
   test(`C-SPEC-17 a dependency whose sibling folder leads out fails the install${at && " (at a ref)"}`, () => {
     const repo = repoWithLinkedDep(outsideSkill("b"));
     tagRepo(repo, "v1");
-    const r = crew(makeCrewHome(), ["install", `file://${repo}${at}//skills/a`]);
-    expect(r.code).not.toBe(0);
-    expect(r.out).toContain("dependency `b`");
-    expect(r.out).toMatch(/\/skills\/b` leads out of the repository through a link/);
+    const r = crew(makeCrewHome(), ["install", `file://${repo}${at}//skills/a`, "--json"]);
+    const { error } = JSON.parse(r.out) as { error: { name: string; message: string } };
+    expect([r.code, error.name]).toEqual([4, "invalid_skill"]);
+    expect(error.message).toContain("dependency `b`");
+    // Named by its place in the repository; the full path is in details.
+    expect(error.message).toContain("`skills/b` leads out of the repository through a link");
     expect(readdirSync(claude.userRoot)).toEqual([]);
   });
 }

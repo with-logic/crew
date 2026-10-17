@@ -15,6 +15,7 @@ import {
   noteInstalled,
 } from "../installed-lookup.ts";
 import type { CurrentTapChild } from "../tap-children.ts";
+import { namespaceOf } from "../tap-index.ts";
 import type { InstallNewChild, TapReexpandRow } from "./index.ts";
 import type { TapScanCache } from "./scan-cache.ts";
 
@@ -52,8 +53,8 @@ export function withinNamespaces(
   namespaces: ReadonlySet<string> | null,
 ): boolean {
   if (namespaces === null) return true;
-  const parts = tapRelativePath.split("/");
-  return parts.length === 3 && parts[0] === "skills" && namespaces.has(parts[1]!);
+  const namespace = namespaceOf(tapRelativePath);
+  return namespace !== null && namespaces.has(namespace);
 }
 
 export interface AdditionsResult {

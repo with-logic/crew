@@ -15,7 +15,10 @@ import type { Config, TapConfig } from "../../../core/types.ts";
 import { type HeldTap, holdAcquiredTap } from "../../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { stageIntoStore } from "../../../sources/store.ts";
+import { errnoReason } from "../../../util/errno.ts";
+import { progress } from "../../../util/progress.ts";
 import { isWholeRepoRootSkill, type SiblingHit } from "../../dep-resolution.ts";
+import type { SiblingScan } from "../../siblings/index.ts";
 import type { PendingItem } from "../enqueue.ts";
 
 /** The commits parents' siblings are read at, each exported once per resolution. */
@@ -27,7 +30,10 @@ export interface ParentTrees {
    * skill, which has no siblings to read.
    */
   locate(parent: PendingItem): string | undefined;
-  /** Delete every export `locate` made: the resolution's last step, so none outlives it. */
+  /**
+   * Delete every export `locate` made: the resolution's last step, so none
+   * outlives it. Never throws: one crew can't remove is left, and noted.
+   */
   release(): void;
 }
 
@@ -69,8 +75,18 @@ export function makeParentTrees(home: string): ParentTrees {
       return rel.length > 0 ? join(tree.acquired.rootDir, rel) : tree.acquired.rootDir;
     },
     release() {
-      for (const tree of held.values()) tree.release();
+      const trees = [...held.values()];
       held.clear();
+      for (const tree of trees) {
+        try {
+          tree.release();
+        } catch (err) {
+          // One export crew can't remove must neither keep the rest nor
+          // replace the resolution's own result or error: it is crew's
+          // scratch, and `crew cache clean` takes it.
+          progress(`left a scratch export crew couldn't remove — ${errnoReason(err)}`);
+        }
+      }
     },
   };
 }
@@ -85,22 +101,23 @@ function enclosingSubpath(subpath: string): string {
   return parent === "." || parent === "/" ? "" : parent;
 }
 
-/** Turn a sibling hit into a pending item attributed to the parent's commit. */
+/**
+ * Turn a sibling hit into a pending item attributed to the parent's
+ * commit. A sibling many parents depend on is staged once (`siblings`).
+ */
 export function siblingItems(
   sibling: SiblingHit,
   parent: PendingItem,
   home: string,
+  siblings: SiblingScan,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
+  const { path, frontmatter } = sibling.loaded;
+  const stage = () => stageIntoStore(path, frontmatter.name, parent.resolvedSha, home);
   return {
     items: [
       {
         loaded: sibling.loaded,
-        staged: stageIntoStore(
-          sibling.loaded.path,
-          sibling.loaded.frontmatter.name,
-          parent.resolvedSha,
-          home,
-        ),
+        staged: siblings.staged(`${path}\0${parent.resolvedSha ?? ""}`, stage),
         tap: sibling.tap,
         tapRelativePath: sibling.tapRelativePath,
         resolvedSha: parent.resolvedSha,

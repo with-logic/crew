@@ -18,7 +18,7 @@ import type { UpdateRow } from "../../install/update/types.ts";
 import { columns, plural } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
-import { formatRowParts, groupByTap, nameCell } from "../update/rows.ts";
+import { formatRowParts, groupByTap, nameCell, tapErrorLines } from "../update/rows.ts";
 
 export interface RenderOutdatedInput {
   readonly rows: readonly UpdateRow[];
@@ -73,10 +73,7 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
       // Name the child and the reason, as `crew update` does: a child
       // that failed validation is the user's to fix, and "tap acme
       // (invalid_skill)" alone would not tell them which skill broke.
-      lines.push(
-        `${style.symbol("warn")} ${style.bold(r.name)} ${style.dim(`(from ${r.tap})`)} ${style.red(r.error.code)}`,
-      );
-      lines.push(style.dim(`  ${r.error.message}`));
+      lines.push(...tapErrorLines(r, style.symbol("warn"), style));
     }
   }
   if (lines.length > 0) lines.push("");

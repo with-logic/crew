@@ -58,13 +58,23 @@ test("C-UPD-18c a new gist file whose `name` is invalid fails, named by its file
 });
 
 test("C-REF-40 `<gist tap>/<name>` naming a file whose `name` is invalid fails with that reason", () => {
-  fx.gist({ "prd.md": skillFile("prd"), "broken.md": skillFile("Bad_Name") });
+  fx.gist({
+    "prd.md": skillFile("prd"),
+    "broken.md": skillFile("Bad_Name"),
+    "loud.MD": skillFile("Bad_Name"),
+  });
   const home = makeCrewHome();
   expect(run(home, ["tap", "add", GIST_PAGE_URL]).code).toBe(0);
-  const r = run(home, ["install", `${GIST_TAP}/broken`, "--json"]);
-  const { error } = json(r);
-  expect([r.code, error.name]).toEqual([4, "invalid_skill"]);
-  expect(error.message).toContain("broken.md");
+  // The file's `.md` may be in any case: `loud.MD` is `loud`.
+  for (const [ref, file] of [
+    ["broken", "broken.md"],
+    ["loud", "loud.MD"],
+  ]) {
+    const r = run(home, ["install", `${GIST_TAP}/${ref}`, "--json"]);
+    const { error } = json(r);
+    expect([r.code, error.name]).toEqual([4, "invalid_skill"]);
+    expect(error.message).toContain(file!);
+  }
   // A name with no file at all is still simply not there.
   expect(json(run(home, ["install", `${GIST_TAP}/missing`, "--json"])).error.name).toBe(
     "invalid_ref",

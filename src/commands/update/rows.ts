@@ -10,9 +10,12 @@
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
+import type { TapErrorRow } from "../../install/tap-reexpand/types.ts";
 import { hasFailedTarget } from "../../install/update/public-row.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
+import { displayText } from "../../refs/display-url.ts";
 import { shortenHome } from "../../util/format.ts";
+import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 
 export interface RowParts {
@@ -119,6 +122,20 @@ export function nameCell(row: UpdateRow, style: Styler): string {
   if (row.scope !== "project" || typeof row.project_root !== "string" || !row.project_root)
     return base;
   return `${base} ${style.dim(`(in ${shortenHome(row.project_root)})`)}`;
+}
+
+/**
+ * A failed new child's two lines: its name, tap, and code; then why.
+ * Both are escaped (§5.2): an unnamed candidate's row is named by a
+ * folder a repository's author chose, and its message may carry a raw
+ * filesystem error, so neither may move the cursor or forge a line.
+ */
+export function tapErrorLines(row: TapErrorRow, symbol: string, style: Styler): string[] {
+  const name = style.bold(sanitizeLine(row.name));
+  return [
+    `${symbol} ${name} ${style.dim(`(from ${sanitizeLine(row.tap)})`)} ${style.red(row.error.code)}`,
+    style.dim(`  ${sanitizeLine(displayText(row.error.message))}`),
+  ];
 }
 
 /** Group re-expansion rows by tap name, preserving encounter order. */

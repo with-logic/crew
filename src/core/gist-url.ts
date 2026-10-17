@@ -71,6 +71,15 @@ export function hasMarkdownExtension(name: string): boolean {
   return /\.md$/i.test(name);
 }
 
+/**
+ * The skill name a gist file's own name stands for: the name without its
+ * `.md`, in any case (`broken.MD` is `broken`). A bare-name dependency, or
+ * a `<tap>/<name>` reference, finds a gist's file by it (§8.3, §9 step 6).
+ */
+export function gistSkillStem(name: string): string {
+  return name.replace(/\.md$/i, "");
+}
+
 /** True when `name` can be a gist `//<file>`: one top-level `.md` file name. */
 export function isGistSkillFileName(name: string): boolean {
   return !name.includes("/") && hasMarkdownExtension(name);

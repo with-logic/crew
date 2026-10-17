@@ -73,6 +73,7 @@ export function resolveInstallSet(
     try {
       return resolveLockedInstallSet(refs, startingConfig, options, requireTap, reads);
     } finally {
+      // Never throws, so it can't replace the resolution's result or error.
       reads.trees.release();
     }
   });

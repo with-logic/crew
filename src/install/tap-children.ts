@@ -11,7 +11,7 @@ import { loadSkillName } from "../skill/load.ts";
 import { discoveryOf, isRootSkill } from "../sources/expand.ts";
 import { isDirectory } from "../util/fs.ts";
 import { indexTap } from "./tap-index.ts";
-import type { UnloadableCandidate } from "./unloadable-candidates.ts";
+import type { UnnamedCandidate } from "./unnamed-candidates.ts";
 
 export interface CurrentTapChild {
   readonly name: string;
@@ -23,15 +23,15 @@ export interface CurrentTapChild {
 export interface TapChildren {
   readonly children: readonly CurrentTapChild[];
   /** For re-expansion to report (§10.1.1 step 2); a root skill's own is its update's to report. */
-  readonly unloadable: readonly UnloadableCandidate[];
+  readonly unnamed: readonly UnnamedCandidate[];
 }
 
 export function currentTapChildren(tap: TapConfig, home: string, rootDir: string): TapChildren {
   const children: CurrentTapChild[] = [];
-  if (!isDirectory(rootDir)) return { children, unloadable: [] };
+  if (!isDirectory(rootDir)) return { children, unnamed: [] };
   if (isRootSkill(rootDir, discoveryOf(tap))) {
     pushLoaded(children, rootDir, "");
-    return { children, unloadable: [] };
+    return { children, unnamed: [] };
   }
   // `rootDir` is the caller's already-materialized root — the scratch
   // export of the group's ref, when it tracks one. Indexing the live
@@ -43,7 +43,7 @@ export function currentTapChildren(tap: TapConfig, home: string, rootDir: string
       children.push({ name: loc.name, path: loc.path, tapRelativePath: loc.tapRelativePath });
     }
   }
-  return { children, unloadable: index.unloadable };
+  return { children, unnamed: index.unnamed };
 }
 
 export function groupChildrenByName(
