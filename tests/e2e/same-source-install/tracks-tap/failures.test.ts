@@ -1,14 +1,15 @@
 /**
  * The edges of a whole install's reinstall that moves a tracking entry
- * (§5.4, §11.1; C-UPD-16b). The entry's markers in agents the run doesn't
+ * (§5.4, §11.1; C-UPD-16b, C-INST-13n). The entry's markers in agents the run doesn't
  * target follow the move, at user and project scope. A targeted agent's
- * own folder is the install's to report, agent by agent; a reinstall that
+ * own copy is the install's to report, agent by agent; a reinstall that
  * fails on every agent leaves the entry, its subscription, markers, and
- * tap as they were. (A copy that can't follow: `./refusals.test.ts`.)
+ * tap as they were. (A copy that can't follow: `./refusals.test.ts`; one
+ * that fails beside one that succeeds: `./partial.test.ts`.)
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../../src/agents/codex.ts";
@@ -35,7 +36,7 @@ const CLAUDE = ["--agent", "claude-code"];
 const BOTH = [...CLAUDE, "--agent", "codex"];
 
 for (const scope of ["user", "project"] as const) {
-  test(`C-UPD-16b a reinstall that moves an entry moves its markers in agents it didn't touch (${scope})`, () => {
+  test(`C-INST-13n a reinstall that moves an entry moves its markers in agents it didn't touch (${scope})`, () => {
     const home = makeCrewHome();
     const repo = buildRepo(["a", "b"]);
     const cwd = scope === "project" ? makeTempDir("crew-project-") : undefined;
@@ -55,70 +56,40 @@ for (const scope of ["user", "project"] as const) {
   });
 }
 
-/**
- * A targeted agent's own copy the reinstall can't write: how it was
- * installed, which agent's copy is spoiled and how, the reinstall's
- * agents, and its exit — 1 when the skill failed on every agent, 0 when
- * another agent took it (§15). Each is the install's to report for that
- * agent, never a refusal of the run: the sibling still installs.
- */
-const TARGETED_FAULTS = [
-  {
-    how: "reinstalled alone",
-    first: CLAUDE,
-    bad: "claude",
-    corrupt: false,
-    run: [...CLAUDE, "--force"],
-    exit: 1,
-  },
-  {
-    how: "with an unparseable marker",
-    first: CLAUDE,
-    bad: "claude",
-    corrupt: true,
-    run: [...CLAUDE, "--force"],
-    exit: 1,
-  },
-  {
-    how: "found up to date beside a new agent",
-    first: CLAUDE,
-    bad: "claude",
-    corrupt: false,
-    run: BOTH,
-    exit: 0,
-  },
-  {
-    how: "one of two targeted agents",
-    first: BOTH,
-    bad: "codex",
-    corrupt: false,
-    run: [...BOTH, "--force"],
-    exit: 0,
-  },
+/** A targeted agent's own copy, spoiled so the reinstall can't replace it. */
+const OWN_COPY_FAULTS = [
+  { label: "can't be written", corruptMarker: false },
+  { label: "has a marker crew can't parse", corruptMarker: true },
 ] as const;
 
-for (const { how, first, bad, corrupt, run, exit } of TARGETED_FAULTS) {
-  test(`C-UPD-16b a targeted agent's own copy that can't be written fails that agent, not the run (${how})`, () => {
+for (const { label, corruptMarker } of OWN_COPY_FAULTS) {
+  test(`C-INST-13n a reinstall whose only copy ${label} fails that agent, not the run`, () => {
     const home = makeCrewHome();
     const repo = buildRepo(["a", "b"]);
-    expect(crew(home, ["install", `file://${repo}//skills/a`, ...first])).toBe(0);
+    expect(install(home, `file://${repo}//skills/a`).code).toBe(0);
     const ownTap = tapOf(home, "a");
     tagRepo(repo, "v1");
-    const badRoot = bad === "claude" ? claudeCodeAdapter.userPath() : codexAdapter.userPath();
-    const badCopy = join(badRoot, "a");
-    const marker = readFileSync(join(badCopy, ".crew.json"), "utf8");
-    if (corrupt) writeFileSync(join(badCopy, ".crew.json"), "{not json");
-    else chmodSync(badCopy, 0o555);
+    const ownCopy = join(claudeCodeAdapter.userPath(), "a");
+    const markerPath = join(ownCopy, ".crew.json");
+    const marker = readFileSync(markerPath, "utf8");
+    if (corruptMarker) writeFileSync(markerPath, "{not json");
+    else chmodSync(ownCopy, 0o555);
+    let after: string;
     try {
-      expect(crew(home, ["install", `file://${repo}@v1`, ...run])).toBe(exit);
+      // The install's to report, so a dry run doesn't refuse it either.
+      expect(crew(home, ["install", `file://${repo}@v1`, ...CLAUDE, "--force", "--dry-run"])).toBe(
+        0,
+      );
+      expect(crew(home, ["install", `file://${repo}@v1`, ...CLAUDE, "--force"])).toBe(1);
+      after = readFileSync(markerPath, "utf8");
     } finally {
-      chmodSync(badCopy, 0o755);
-      writeFileSync(join(badCopy, ".crew.json"), marker);
+      chmodSync(ownCopy, 0o755);
+      writeFileSync(markerPath, marker);
     }
-    expect(existsSync(join(claudeCodeAdapter.userPath(), "b", "SKILL.md"))).toBe(true);
-    expect(tapOf(home, "b")).toBeString();
-    // The failed copy keeps the marker it had: its bytes didn't move.
-    expect(markerTap(badRoot, "a")).toBe(ownTap);
+    // The copy, its marker, and the entry are as they were; the sibling installs.
+    expect(after).toBe(corruptMarker ? "{not json" : marker);
+    expect(tapOf(home, "a")).toBe(ownTap);
+    expect(tapOf(home, "b")).not.toBe(ownTap);
   });
 }
 

@@ -52,7 +52,7 @@ export function applyReattributions(
       const move = moves.get(entryKey(entry));
       if (!move) return entry;
       // An already-installed entry skips `performInstall`, so it takes a
-      // subscription with the move (§10.1.1). `./duplicate-rules/classify.ts`
+      // subscription with the move (§10.1.1). `../duplicate-rules/classify.ts`
       // moves a tracking entry only when the move carries its subscription,
       // so keeping the entry's own `tracks_tap` never subscribes it anywhere new.
       return {

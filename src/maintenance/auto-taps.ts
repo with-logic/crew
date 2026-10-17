@@ -20,12 +20,17 @@ import { rmrfInside } from "../util/fs.ts";
 import { assertNoSymlinkEscape } from "../util/symlink-containment.ts";
 
 /**
- * Drop every auto tap that no longer backs a state entry. Returns the
- * names collected, so callers can report or assert on them.
+ * Drop every auto tap that no longer backs a state entry, or one of the
+ * `stillNamed` taps a marker still names. Returns the names collected, so
+ * callers can report or assert on them.
  */
-export function garbageCollectAutoTaps(state: StateFile, home: string): string[] {
+export function garbageCollectAutoTaps(
+  state: StateFile,
+  home: string,
+  stillNamed: ReadonlySet<string> = new Set(),
+): string[] {
   const config = readConfig(home);
-  const inUse = new Set(state.installations.map((e) => e.source.tap));
+  const inUse = new Set([...state.installations.map((e) => e.source.tap), ...stillNamed]);
   const survivors = config.taps.filter((t) => t.registered || inUse.has(t.name));
   if (survivors.length === config.taps.length) return [];
   const removed = config.taps.filter((t) => !survivors.includes(t));

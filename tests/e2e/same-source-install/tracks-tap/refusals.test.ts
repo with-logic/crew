@@ -1,5 +1,5 @@
 /**
- * A move whose markers can't follow (§5.4, §11.1; C-UPD-16b): a copy whose
+ * A move whose markers can't follow (§5.4, §11.1; C-INST-13m): a copy whose
  * folder crew can't write, or whose marker it can't parse — in an agent
  * the run doesn't target, or in any agent for an entry the install finds
  * already installed — refuses the run before any config, marker, or state
@@ -55,7 +55,7 @@ const UNFOLLOWABLE: readonly (readonly [string, (copy: string) => () => void, bo
 ];
 
 for (const [what, spoil, namesCopy] of UNFOLLOWABLE) {
-  test(`C-UPD-16b an untouched copy whose ${what} refuses the run before anything is written; a retry completes it`, () => {
+  test(`C-INST-13m an untouched copy whose ${what} refuses the run before anything is written; a retry completes it`, () => {
     const home = makeCrewHome();
     const repo = buildRepo(["a", "b"]);
     expect(crew(home, ["install", `file://${repo}//skills/a`, ...BOTH])).toBe(0);
@@ -86,7 +86,7 @@ for (const [what, spoil, namesCopy] of UNFOLLOWABLE) {
   });
 }
 
-test("C-UPD-16b a copy whose marker names another tap isn't the move's, and doesn't stop it", () => {
+test("C-INST-13m a copy whose marker names another tap isn't the move's, and doesn't stop it", () => {
   const home = makeCrewHome();
   const repo = buildRepo(["a", "b"]);
   expect(crew(home, ["install", `file://${repo}//skills/a`, ...BOTH])).toBe(0);
@@ -107,7 +107,7 @@ test("C-UPD-16b a copy whose marker names another tap isn't the move's, and does
   expect(markerTap(claudeCodeAdapter.userPath(), "a")).toBe(tapOf(home, "a"));
 });
 
-test("C-UPD-16b a refused run leaves an already-installed entry's markers where they were too", () => {
+test("C-INST-13m a refused run leaves an already-installed entry's markers where they were too", () => {
   const home = makeCrewHome();
   const repo = buildRepo(["a", "b"]);
   // `a` gains codex as a new agent, so it is reinstalled; `b` is already
@@ -130,7 +130,7 @@ test("C-UPD-16b a refused run leaves an already-installed entry's markers where 
     expect(markerTap(root, "b")).toBe(bTap);
 });
 
-test("C-UPD-16b an already-installed entry whose copy can't follow its move refuses the run before any marker moves", () => {
+test("C-INST-13m an already-installed entry whose copy can't follow its move refuses the run before any marker moves", () => {
   const home = makeCrewHome();
   const repo = buildRepo(["a", "b"]);
   expect(crew(home, ["install", `file://${repo}//skills/b`, ...BOTH])).toBe(0);

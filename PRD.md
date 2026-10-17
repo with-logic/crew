@@ -309,11 +309,16 @@ runs; one it reinstalls moves with its reinstall, only if that succeeds,
 so a failed reinstall leaves the entry, its subscription, and its tap as
 they were. The reinstall rewrites the entry's copy in every agent it
 targets — one otherwise up to date included, since its marker names the
-old tap — and reports a copy it can't write for that agent alone; the
-entry's markers in agents it doesn't target follow the move once it
-succeeds. A move whose markers can't follow — a marker crew can't parse,
-or one in a folder crew can't write — is refused before the install
-writes anything: config, markers, or state.
+old tap — and reports a copy it can't write, or whose marker it can't
+parse, for that agent alone. Once it succeeds, the entry's markers in
+agents it doesn't target follow the move, and so does a failed copy's
+marker where crew can write it (a copy with local edits keeps its
+bytes); one it can't write keeps naming the old tap, which is then not
+collected. A marker that must follow and can't — one crew can't parse,
+or one in a folder crew can't write, in an agent the install doesn't
+target or in any agent of an entry it finds already installed — refuses
+the move before the install writes anything: config, markers, or state
+(a dry run refuses it too).
 
 ### 5.5 Help output
 
@@ -2619,6 +2624,9 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-13i | §5.4 | Canonical URL comparison folds host case only. Userinfo and the path are compared as written, so `ssh://Alice@host/a/B` and `ssh://alice@host/a/b` are different sources. |
 | C-INST-13j | §5.4 | Path taps use the same rule with the directory in place of the repo: installing `/src/skills/foo` and then `/src` reaches one canonical location, so the second install is a duplicate, not a `name_conflict`. |
 | C-INST-13k | §10.1.1, §5.4 | When two tap rows cover one source, a child installed while re-expanding the first is not installed again by the second in the same run. |
+| C-INST-13l | §5.4, §11.1 | A re-attributed entry takes the incoming install's `tracks_tap` when that install is of the whole tap at the ref the entry ends at; a narrower install never clears it. |
+| C-INST-13m | §5.4 | A move whose markers can't follow — a marker crew can't parse, or one in a folder crew can't write, in an agent the install doesn't target or in any agent of an entry the install finds already installed — is refused (exit 4) before the install writes config, markers, or state, in a `--dry-run` too; a marker naming another tap isn't the move's and doesn't stop it. |
+| C-INST-13n | §5.4 | A reinstall that moves an entry rewrites its copy in every agent the install targets, one otherwise up to date included, and reports a copy it can't write or parse for that agent alone (exit 1 when no agent took the skill, 0 otherwise). Once it succeeds, the entry's markers in agents it doesn't target follow; a failed copy's marker follows where crew can write it (keeping its local edits), and otherwise keeps naming the old tap, which is not collected. |
 | C-INST-14 | §5.4 | `--force` on a `name_conflict` is NOT honored (the spec forbids `--force` overriding name conflicts). |
 | C-INST-15 | §9 | `--dry-run` on install produces a summary of what would happen and writes no files. |
 | C-INST-16 | §9 | `--agent <skill>` restricts the operation to the named agent(s). |

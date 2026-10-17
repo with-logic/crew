@@ -88,9 +88,10 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
             );
         }
         // Same hash, same name, same resolved SHA, same owners, recorded
-        // under the same tap and path → up-to-date, no-op. A copy whose
-        // marker names another tap is rewritten, so a move reaches every
-        // agent the install targets (§5.4).
+        // under the same tap → up-to-date, no-op. A copy whose marker names
+        // another tap is rewritten, so a move reaches every agent the
+        // install targets (§5.4). (The same tap at another path would be
+        // another source: a name conflict, refused before this.)
         const mergedAdapters = mergeAdapters(priorAdapters, incomingAdapters);
         const sameAdapters =
           mergedAdapters.length === priorAdapters.length &&
@@ -99,7 +100,6 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
           existingMarker.resolved_sha === input.resolvedSha &&
           existingMarker.content_hash === input.contentHash &&
           existingMarker.tap_name === input.tap.name &&
-          existingMarker.path === input.tapRelativePath &&
           sameAdapters &&
           !input.force
         )
