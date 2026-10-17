@@ -8,6 +8,7 @@ import { cloneRepo } from "../../git/repo/index.ts";
 import { checkoutSha } from "../../git/repo/refs.ts";
 import { hasSkillMd } from "../../skill/load.ts";
 import { expandSkills } from "../../sources/expand.ts";
+import { repositoryBoundary } from "../../sources/source-boundary.ts";
 import { toPosix } from "../../util/fs.ts";
 import type { KnownTap, KnownTapSkill } from "../types.ts";
 import type { KnownTapSource } from "./types.ts";
@@ -17,7 +18,7 @@ export function indexKnownTapSource(source: KnownTapSource, clonePath: string): 
   checkoutSha(clonePath, source.commit);
   assertDisplaySafeSource(source, clonePath);
   const root = source.subpath.length > 0 ? join(clonePath, source.subpath) : clonePath;
-  const expanded = expandSkills(root, "standard");
+  const expanded = expandSkills(root, "standard", repositoryBoundary(clonePath));
   if (expanded.skipped.length > 0) {
     const first = expanded.skipped[0]!;
     throw new Error(`known tap \`${source.name}\` has an invalid skill: ${first.message}`);

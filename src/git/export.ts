@@ -98,25 +98,27 @@ function exportFailure(
  *
  * `fn` receives the location matching the source root: the export root
  * when `subpath` is empty, otherwise the subpath inside it — a directory,
- * or the file itself when the subpath names a gist skill file. That root is
- * checked for symlink escapes first, because §9 step 3 requires every
- * byte crew reads to come from the requested commit: a repository can
- * commit a symlink at the subpath itself, and following it would read
- * content from outside that commit entirely.
+ * or the file itself when the subpath names a gist skill file. That
+ * location is checked for symlink escapes first, because §9 step 3
+ * requires every byte crew reads to come from the requested commit: a
+ * repository can commit a symlink at the subpath itself, and following it
+ * would read content from outside that commit entirely. Each export sits
+ * directly under the git cache, which is how discovery finds the
+ * repository a location below it must stay in (`sourceBoundary`).
  */
 export function withExportedTree<T>(
   clonePath: string,
   sha: string,
   subpath: string,
   home: string,
-  fn: (root: string) => T,
+  fn: (location: string) => T,
 ): T {
   const dest = makeScratchDir(paths(home).gitCacheDir, sha);
   try {
     exportTreeAt(clonePath, sha, subpath, dest);
-    const rootDir = subpath.length > 0 ? join(dest, subpath) : dest;
-    assertNoSymlinkEscape(dest, rootDir, subpath);
-    return fn(rootDir);
+    const location = subpath.length > 0 ? join(dest, subpath) : dest;
+    assertNoSymlinkEscape(dest, location, subpath);
+    return fn(location);
   } finally {
     // Cleanup can throw on an IO/permission failure and replace the callback
     // result. Any leftover scratch export can be removed by `crew cache clean`.

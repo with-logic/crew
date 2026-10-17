@@ -18,7 +18,9 @@
  * but contains child directories with a `SKILL.md`.
  *
  * A gist (§9 step 5, "Gists") has no directories: its index is the
- * skill files at its root, each located by its file name.
+ * skill files at its root, each located by its file name. In any other
+ * git tap, a folder that leads out of the repository through a link is
+ * left out, unread (§9 step 5, "Folder links").
  */
 
 import { basename, join, relative } from "node:path";
@@ -27,10 +29,16 @@ import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
-import { type DiscoveryMode, discoveryOf, isRootSkill } from "../sources/expand.ts";
+import {
+  type DiscoveryMode,
+  discoveryOf,
+  fallsBackToRecursive,
+  isRootSkill,
+} from "../sources/expand.ts";
 import { gistSkillCandidates } from "../sources/gist.ts";
 import { migrateTapClone } from "../sources/migrate-clones.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
+import { leadsOutOfSource, sourceBoundary } from "../sources/source-boundary.ts";
 import { isDirectory, listDir, toPosix } from "../util/fs.ts";
 
 /** Location of one skill inside a tap. */
@@ -110,12 +118,16 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
     return { skills, namespaces };
   }
 
+  // §9 step 5 "Folder links": a folder leading out of the repository is
+  // never listed or read, so it is left out of the index.
+  const boundary = sourceBoundary(tap, home, root);
+  const inside = (folder: string): boolean => !leadsOutOfSource(boundary, folder);
   const skillsDir = join(root, "skills");
   if (isDirectory(skillsDir)) {
     // Case 2: walk under skills/
-    for (const name of listDir(skillsDir)) {
+    for (const name of inside(skillsDir) ? listDir(skillsDir) : []) {
       const child = join(skillsDir, name);
-      if (!isDirectory(child)) continue;
+      if (!(isDirectory(child) && inside(child))) continue;
       if (hasSkillMd(child)) {
         const skillName = skillNameForIndex(child);
         if (skillName === null) continue;
@@ -131,7 +143,7 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
       for (const childName of listDir(child)) {
         const grandchild = join(child, childName);
         if (!isDirectory(grandchild)) continue;
-        if (!hasSkillMd(grandchild)) continue;
+        if (!(hasSkillMd(grandchild) && inside(grandchild))) continue;
         const skillName = skillNameForIndex(grandchild);
         if (skillName === null) continue;
         addSkill({
@@ -149,7 +161,7 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
   for (const name of listDir(root)) {
     const child = join(root, name);
     if (!isDirectory(child)) continue;
-    if (!hasSkillMd(child)) continue;
+    if (!(hasSkillMd(child) && inside(child))) continue;
     const skillName = skillNameForIndex(child);
     if (skillName === null) continue;
     addSkill({ name: skillName, namespace: null, path: child, tapRelativePath: name });
@@ -164,7 +176,8 @@ function maybeRecursiveIndex(
   namespaces: Map<string, SkillLocation[]>,
   addSkill: (loc: SkillLocation) => void,
 ): TapIndex {
-  if (skills.size > 0 || mode !== "recursive") return { skills, namespaces };
+  // The walk follows no link, so every folder it finds is inside `root`.
+  if (skills.size > 0 || !fallsBackToRecursive(mode)) return { skills, namespaces };
   for (const dir of findRecursiveSkillDirs(root)) {
     const tapRelativePath = toPosix(relative(root, dir));
     const skillName = skillNameForIndex(dir);

@@ -6,6 +6,7 @@ import type { CrewError } from "../../core/errors.ts";
 import type { Source, TapConfig } from "../../core/types.ts";
 import type { AcquiredTap } from "../../sources/acquire/index.ts";
 import { expandTapSkills, type SkippedSkill, skippedFrom } from "../../sources/expand.ts";
+import { sourceBoundary } from "../../sources/source-boundary.ts";
 import { isStoreFault, type StoredSkill, stageIntoStore } from "../../sources/store.ts";
 import type { PendingItem } from "./enqueue.ts";
 
@@ -39,7 +40,8 @@ export function expandSkillsAsItems(
   home: string,
 ): ExpansionItems {
   const { resolvedSha, pinned } = acquired;
-  const expanded = expandTapSkills(root, tap, resolvedSha);
+  // §9 step 5: no folder that leads out of the repository is read.
+  const expanded = expandTapSkills(root, tap, resolvedSha, sourceBoundary(tap, home, root));
   const skipped = [...expanded.skipped];
   const { baseTapPath, requestedRef, explicit, tracksTap } = options;
   const items: PendingItem[] = [];

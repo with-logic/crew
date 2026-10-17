@@ -21,6 +21,7 @@ import { isSkillFile } from "../../skill/skill-file.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import { expandTapSkills } from "../../sources/expand.ts";
 import { selectGistFile } from "../../sources/gist.ts";
+import { type SourceBoundary, sourceBoundary } from "../../sources/source-boundary.ts";
 import { toPosix } from "../../util/fs.ts";
 import type { SkillInfo } from "./render.ts";
 
@@ -56,9 +57,10 @@ export function skillsAtRef(
   home: string,
   gistFile = "",
 ): SkillInfo[] {
-  return withAcquiredTap(tap, ref, home, (acq) =>
-    previewSkills(selectGistFile(acq, tap, gistFile, ref), tap, acq.resolvedSha),
-  );
+  return withAcquiredTap(tap, ref, home, (acq) => {
+    const root = selectGistFile(acq, tap, gistFile, ref);
+    return previewSkills(root, tap, acq.resolvedSha, sourceBoundary(tap, home, root));
+  });
 }
 
 /**
@@ -90,8 +92,13 @@ function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
  * would hide why: `invalid_skill` if any candidate is invalid (install's
  * verdict too), else `source_unreachable`.
  */
-function previewSkills(root: string, tap: TapConfig, sha: string | null): SkillInfo[] {
-  const { valid, skipped } = expandTapSkills(root, tap, sha);
+function previewSkills(
+  root: string,
+  tap: TapConfig,
+  sha: string | null,
+  boundary: SourceBoundary,
+): SkillInfo[] {
+  const { valid, skipped } = expandTapSkills(root, tap, sha, boundary);
   // An invalid skill is reported ahead of an unreadable one, whatever the
   // directory order; the reason, code, and next step all come from it.
   const reported = skipped.find((s) => s.code === "invalid_skill") ?? skipped[0];

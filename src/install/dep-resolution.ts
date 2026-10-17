@@ -27,6 +27,7 @@ import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../c
 import { hasSkillMd, loadSkill, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
 import { isGistSkillCandidate } from "../sources/gist.ts";
+import { leadsOutOfSource, outOfSourceError, sourceBoundary } from "../sources/source-boundary.ts";
 import { isGoneError, unreadablePathError } from "../util/errno.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 import { attributeRef } from "./tap-attribution.ts";
@@ -66,6 +67,7 @@ export function findSiblingDep(
   const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
   const matches: { entryName: string; siblingPath: string; loaded: LoadedSkill }[] = [];
   const isGist = isGistTap(parent.tap);
+  const boundary = sourceBoundary(parent.tap, home, parentPath);
   for (const entryName of listDir(siblingParent)) {
     const siblingPath = join(siblingParent, entryName);
     // §9 step 6: a sibling named for the dependency that crew can't load —
@@ -76,6 +78,12 @@ export function findSiblingDep(
       withDependencyErrors(depName, siblingPath, () => assertCanLookForSkillMd(siblingPath));
     }
     if (!isSiblingSkill(parent.tap, siblingPath)) continue;
+    // §9 step 6: a sibling folder leading out of the repository is never
+    // read — the dependency failing, when it is named for it.
+    if (!isGist && leadsOutOfSource(boundary, siblingPath)) {
+      if (namedForDep) throw dependencyError(depName, siblingPath, outOfSourceError(siblingPath));
+      continue;
+    }
     if (!namedForDep && siblingName(siblingPath) !== depName) continue;
     const loaded = withDependencyErrors(depName, siblingPath, () => loadSkill(siblingPath));
     if (loaded.frontmatter.name !== depName) continue;
@@ -134,20 +142,21 @@ function assertCanLookForSkillMd(folder: string): void {
   }
 }
 
-/**
- * Run `step` on the dependency at `path`, naming the dependency in the
- * `CrewError` it throws; the path is added only where the message lacks it.
- */
+/** Run `step` on the dependency at `path`, naming the dependency in the `CrewError` it throws. */
 function withDependencyErrors<T>(depName: string, path: string, step: () => T): T {
   try {
     return step();
   } catch (err) {
     // Both steps throw only `CrewError`: the look-in check, and `loadSkill`.
-    const ce = err as CrewError;
-    const where = ce.message.includes(path) ? "" : ` (\`${path}\`)`;
-    const message = `dependency \`${depName}\`${where}: ${ce.message}`;
-    throw new CrewError(ce.code, message, { path, ...ce.details, dependency: depName }, ce.remedy);
+    throw dependencyError(depName, path, err as CrewError);
   }
+}
+
+/** `ce`, naming the dependency at `path`; the path is added only where the message lacks it. */
+function dependencyError(depName: string, path: string, ce: CrewError): CrewError {
+  const where = ce.message.includes(path) ? "" : ` (\`${path}\`)`;
+  const message = `dependency \`${depName}\`${where}: ${ce.message}`;
+  return new CrewError(ce.code, message, { path, ...ce.details, dependency: depName }, ce.remedy);
 }
 
 function siblingRootSource(
