@@ -27,13 +27,11 @@ import { validateFrontmatterName } from "../src/skill/validate.ts";
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const DEFAULT_GIST = "https://gist.github.com/stevekrenzel/7489027d2d93c185f48a628547c043d8";
 
-/** Scratch folders this run made, removed on exit; a signal exits too, which Bun skips otherwise. */
+/** Scratch folders this run made, removed when it ends or `fail()`s (Ctrl-C fails the step it stops). */
 const scratchDirs: string[] = [];
 process.on("exit", () => {
   for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true });
 });
-process.on("SIGINT", () => process.exit(130));
-process.on("SIGTERM", () => process.exit(143));
 
 /** A fresh scratch folder under the system temp folder, removed on exit. */
 function scratchDir(prefix: string): string {
