@@ -10,12 +10,12 @@
  * was just installed into (`./removal.ts`), so it is installed nowhere.
  */
 
-import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
 import { installSkillIntoAgents, isSafetyRefusal } from "../../agents/install.ts";
-import { agentByName } from "../../agents/registry.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import { type StoredSkill, stageIntoStore } from "../../sources/store.ts";
 import { withLeftBehind } from "../../util/cleanup.ts";
+import { jsonText } from "../../util/json.ts";
+import { adaptersNamed, type DestGroup, groupAgentsByDest } from "../dest-groups.ts";
 import { newChildEntry } from "./entry.ts";
 import { type ChildCopy, removeChildCopies } from "./removal.ts";
 
@@ -34,39 +34,26 @@ export interface NewTapChild {
   readonly pinned: boolean;
 }
 
-export function installNewTapChild(
-  args: NewTapChild,
-  force: boolean,
-  home: string,
-  fallbackCwd: string,
-): StateEntry | null {
+/** How `installNewTapChild` runs. */
+export interface NewTapChildRun {
+  readonly force: boolean;
+  /** Crew's home, whose store the child is staged into. */
+  readonly home: string;
+  /** The cwd: a user-scope child's, or a project one's with no recorded root. */
+  readonly fallbackCwd: string;
+}
+
+export function installNewTapChild(args: NewTapChild, opts: NewTapChildRun): StateEntry | null {
+  const { force, home, fallbackCwd } = opts;
   const cwd = args.scope === "project" ? (args.projectRoot ?? fallbackCwd) : fallbackCwd;
   const staged = stageIntoStore(args.skillPath, args.skillName, args.resolvedSha, home);
-  const run = installIntoGroups(args, groupsByDest(args, cwd), { cwd, staged, force });
+  const groups = groupAgentsByDest(adaptersNamed(args.agents), args.skillName, args.scope, cwd);
+  const run = installIntoGroups(args, groups, { cwd, staged, force });
   // Not recorded means installed nowhere: the copies this child just
   // made in other agents go, so nothing is left that state doesn't know.
   if (run.failure !== null) throw withLeftBehind(run.failure, removeChildCopies(run.copies));
   if (run.installedInto.length === 0) return null;
   return newChildEntry(args, staged.contentHash, run.installedInto);
-}
-
-/**
- * `args.agents` by the folder each installs into (path sharing, §7.2),
- * so agents sharing a folder install once but all count as installed.
- */
-function groupsByDest(args: NewTapChild, cwd: string): Map<string, AgentAdapter[]> {
-  const groups = new Map<string, AgentAdapter[]>();
-  for (const targetName of args.agents) {
-    const adapter = agentByName(targetName);
-    if (!adapter) continue;
-    const base = baseFor(adapter, args.scope, cwd);
-    if (base === "") continue;
-    const dest = `${base}/${args.skillName}`;
-    const existing = groups.get(dest);
-    if (existing) existing.push(adapter);
-    else groups.set(dest, [adapter]);
-  }
-  return groups;
 }
 
 /** What installing into the groups did, up to the failure that stopped it, if one did. */
@@ -83,7 +70,7 @@ interface GroupsRun {
  */
 function installIntoGroups(
   args: NewTapChild,
-  groups: ReadonlyMap<string, readonly AgentAdapter[]>,
+  groups: readonly DestGroup[],
   opts: { readonly cwd: string; readonly staged: StoredSkill; readonly force: boolean },
 ): GroupsRun {
   const installedInto: string[] = [];
@@ -92,7 +79,7 @@ function installIntoGroups(
   // new, or replaced by `--force` — is removed if the child fails.
   const copies: ChildCopy[] = [];
   const { contentHash, storePath } = opts.staged;
-  for (const [dest, group] of groups) {
+  for (const { dest, agents: group } of groups) {
     try {
       const res = installSkillIntoAgents({
         agents: group,
@@ -109,7 +96,7 @@ function installIntoGroups(
       });
       for (const a of group) installedInto.push(a.name);
       if (res.kind === "installed" && !res.replacedSameName) {
-        copies.push({ dest, name: args.skillName, contentHash });
+        copies.push({ dest, contentHash, markerText: jsonText(res.marker) });
       }
     } catch (err) {
       // A safety check refusing one agent (§7.3) leaves the child out of

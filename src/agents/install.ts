@@ -45,10 +45,10 @@ export interface InstallInput {
  * Outcome of one physical install (one `dest`). `replacedSameName`: `dest`
  * already held a crew marker naming this skill, from any source, which
  * this call replaced; false when `dest` was new, or `--force` replaced a
- * folder without such a marker.
+ * folder without such a marker. `marker`: the one this call wrote.
  */
 export type InstallOutcome =
-  | { kind: "installed"; replacedSameName: boolean }
+  | { kind: "installed"; replacedSameName: boolean; marker: Marker }
   | { kind: "up_to_date" };
 
 /**
@@ -148,7 +148,7 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
   writeJson(join(staging, ".crew.json"), marker);
 
   atomicReplace(staging, dest);
-  return { kind: "installed", replacedSameName };
+  return { kind: "installed", replacedSameName, marker };
 }
 
 /** The codes of §7.3's safety checks: each refuses one agent, and is no failure. */

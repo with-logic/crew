@@ -7,11 +7,11 @@
  * `./entry.ts` so that file stays under the 200-line cap.
  */
 
-import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
+import type { AgentAdapter } from "../../agents/adapter.ts";
 import { installSkillIntoAgents, isSafetyRefusal } from "../../agents/install.ts";
-import { agentByName } from "../../agents/registry.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { failureCodeOf } from "../../util/errno.ts";
+import { adaptersNamed, groupAgentsByDest } from "../dest-groups.ts";
 import type { PerAgentUpdate } from "./types.ts";
 
 export interface ReinstallInput {
@@ -28,27 +28,16 @@ export interface ReinstallInput {
 export function reinstallIntoAgents(input: ReinstallInput): PerAgentUpdate[] {
   const { entry, entryCwd } = input;
   const perTarget: PerAgentUpdate[] = [];
-  // Group by resolved install path (§7.2 path sharing) so shared-path
-  // targets install once but every adapter reports its own outcome.
-  const groups = new Map<string, AgentAdapter[]>();
-  for (const targetName of entry.agents) {
-    const adapter = agentByName(targetName);
-    if (!adapter) continue;
-    const base = baseFor(adapter, entry.scope, entryCwd);
-    if (base === "") continue;
-    const dest = `${base}/${entry.name}`;
-    const existing = groups.get(dest);
-    if (existing) existing.push(adapter);
-    else groups.set(dest, [adapter]);
-  }
-  for (const group of groups.values()) {
-    installGroup(group, input, perTarget);
+  // Shared-path targets install once, but every adapter reports its own outcome.
+  const adapters = adaptersNamed(entry.agents);
+  for (const group of groupAgentsByDest(adapters, entry.name, entry.scope, entryCwd)) {
+    installGroup(group.agents, input, perTarget);
   }
   return perTarget;
 }
 
 function installGroup(
-  group: AgentAdapter[],
+  group: readonly AgentAdapter[],
   input: ReinstallInput,
   perTarget: PerAgentUpdate[],
 ): void {

@@ -77,7 +77,7 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
     config,
     home,
     reexpandSelectionFor(subjects, initialSelected),
-    (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
+    (args) => installNewTapChild(args, { force: ctx.flags.force, home, fallbackCwd: ctx.cwd }),
     dryRun,
   );
   tapReexpandRows.push(...reexpanded.rows);

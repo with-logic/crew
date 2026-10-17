@@ -16,6 +16,7 @@ import {
   appendFileSync,
   chmodSync,
   existsSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -67,14 +68,30 @@ function trackedTapWithNewChild(): string {
   return home;
 }
 
-test("C-UPD-18e a copy edited before the child failed is left, and named", () => {
+/** What crew moved aside to remove and left in claude-code's folder; none, once it's done. */
+function setAside(): string[] {
+  return readdirSync(agents.roots["claude-code"]).filter((n) => n.startsWith(".crew-removing-"));
+}
+
+test("C-UPD-18e a copy edited before the child failed is left at its own path, and named", () => {
   const home = trackedTapWithNewChild();
   const r = updateFailingChild(home, (copy) => appendFileSync(join(copy, "SKILL.md"), "Mine.\n"));
   expect([r.code, r.error.code, r.recorded]).toEqual([1, "EACCES", false]);
   expect(r.error.message).toContain(
     `left in place: \`${r.copy}\` (crew can't confirm it still holds what this run installed)`,
   );
+  // Moved aside to be checked, and back where it was.
   expect(readFileSync(join(r.copy, "SKILL.md"), "utf8")).toEndWith("Mine.\n");
+  expect(setAside()).toEqual([]);
+});
+
+test("C-UPD-18e a copy still as this run wrote it is removed, leaving nothing aside", () => {
+  const home = trackedTapWithNewChild();
+  const r = updateFailingChild(home, () => {});
+  expect([r.code, r.error.code, r.recorded]).toEqual([1, "EACCES", false]);
+  expect(r.error.message).not.toContain("left in place");
+  expect(existsSync(r.copy)).toBe(false);
+  expect(setAside()).toEqual([]);
 });
 
 /** Rewrite one field of the marker in `copy`. */
@@ -88,6 +105,11 @@ const MARKER_ONLY: readonly (readonly [string, (copy: string) => void])[] = [
   ["deleted", (copy) => rmSync(join(copy, ".crew.json"))],
   ["rewritten to another hash", (copy) => rewriteMarker(copy, "content_hash", "sha256:0")],
   ["rewritten to another skill's name", (copy) => rewriteMarker(copy, "name", "other")],
+  // Name and content hash as written: only the marker's own bytes tell.
+  [
+    "rewritten in a field neither its name nor its hash covers",
+    (copy) => rewriteMarker(copy, "installed_at", "2000-01-01T00:00:00.000Z"),
+  ],
 ];
 
 for (const [what, act] of MARKER_ONLY) {
