@@ -140,6 +140,16 @@ export function canList(dir: string): boolean {
   }
 }
 
+/**
+ * `path`'s link text, or null when it isn't UTF-8: decoded lossily, it
+ * would name another file than the one the kernel follows.
+ */
+export function utf8LinkText(path: string): string | null {
+  const raw = readlinkSync(path, { encoding: "buffer" });
+  const text = raw.toString("utf8");
+  return Buffer.from(text).equals(raw) ? text : null;
+}
+
 /** Read a symlink's target as raw bytes (utf-8). */
 export function readSymlinkTarget(path: string): string {
   return readlinkSync(path);

@@ -4,9 +4,11 @@
  * crew found it in — its `name` that folder's, its `scope` the one crew
  * walked — and its tap loads as a `config.yaml` row (§6.1), since
  * `--repair` may write it there. Anything else is the user's to reinstall,
- * and repair writes nothing from it — except a marker of the other scope
- * in a folder that scope's walk reads too (`./scope-folders.ts`), which is
- * that walk's.
+ * and repair writes nothing from it. A complete marker is judged only by
+ * the walks of the agents it lists — agents share skills folders (§7.2),
+ * so another's walk may pass through — and one of the other scope in a
+ * folder that scope's walk reads too (`./scope-folders.ts`) is that
+ * walk's.
  */
 
 import { basename } from "node:path";
@@ -19,25 +21,30 @@ import { parseTapEntry, recordedDiscovery, serializeTap } from "../../config/tap
 import type { CrewError } from "../../core/errors.ts";
 import type { Marker, Scope, TapConfig } from "../../core/types.ts";
 
-/** What doctor makes of a marker it read: one it uses, the other scope's walk's, or why not. */
+/** What doctor makes of a marker it read: one it uses, another walk's to judge, or why not. */
 export type MarkerUse =
   | { readonly kind: "usable"; readonly marker: Marker }
   | { readonly kind: "elsewhere" }
   | { readonly kind: "unusable"; readonly reason: string };
 
 /**
- * What doctor makes of `marker`, found in `installDir` on `scope`'s walk,
- * in a folder the walks of `scopesHere` read.
+ * What doctor makes of `marker`, found in `installDir` on `adapter`'s walk
+ * at `scope`, in a folder the walks of `scopesHere` read.
  */
 export function usableMarker(
   marker: UncheckedMarker,
   installDir: string,
-  scope: Scope,
-  scopesHere: ReadonlySet<Scope>,
+  walk: {
+    readonly adapter: string;
+    readonly scope: Scope;
+    readonly scopesHere: ReadonlySet<Scope>;
+  },
 ): MarkerUse {
   if (!isCompleteMarker(marker)) {
     return unusable(`not a crew marker: missing or invalid \`${markerFieldProblem(marker)}\``);
   }
+  const { adapter, scope, scopesHere } = walk;
+  if (!marker.agents.includes(adapter)) return { kind: "elsewhere" };
   if (marker.name !== basename(installDir)) {
     return unusable(`not this folder's marker: it names the skill \`${marker.name}\``);
   }

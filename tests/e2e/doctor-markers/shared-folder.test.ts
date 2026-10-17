@@ -3,14 +3,18 @@
  * a project root at the user's home, the project folder is where the user
  * folder is, so each scope's walk finds the other's installs there. Those
  * are the other walk's to check — no finding, from that home or anywhere
- * else — and `--repair` leaves state as it was. (One in a folder its own
+ * else — and `--repair` leaves state as it was. Agents share folders too
+ * (§7.2): another agent's project walk passing through a user folder
+ * leaves its installs to the agents they list. (One in a folder its own
  * scope's walk never reads is a finding: `./unusable.test.ts`.)
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
+import { ampAdapter } from "../../../src/agents/amp.ts";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../../src/agents/codex.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
@@ -74,4 +78,24 @@ test("C-STATE-05a a project install at the user's home is no finding, from there
   }
   expect(doctorIn(home, elsewhere, ["--repair"]).code).toBe(0);
   expect(readState(home)).toEqual(before);
+});
+
+test("C-STATE-05a another agent's project walk through a user folder leaves its installs to the agents they list", () => {
+  // codex's user folder is `<home>/.agents/skills`, which is amp's project
+  // folder at a root at that home; amp's own user folder is elsewhere.
+  codexAdapter.userPath = () => join(userHome, ".agents", "skills");
+  const ampProject = ampAdapter.projectPath;
+  ampAdapter.projectPath = (cwd: string) => join(cwd, ".agents", "skills");
+  try {
+    const home = makeCrewHome();
+    const repo = buildRepo(["a"]);
+    const install = ["install", `file://${repo}`, "--agent", "codex"];
+    expect(run(home, makeTempDir("crew-cwd-"), install).code).toBe(0);
+    const before = readState(home);
+    expect(doctorIn(home, userHome)).toEqual({ code: 0, findings: [] });
+    expect(doctorIn(home, userHome, ["--repair"]).code).toBe(0);
+    expect(readState(home)).toEqual(before);
+  } finally {
+    ampAdapter.projectPath = ampProject;
+  }
 });

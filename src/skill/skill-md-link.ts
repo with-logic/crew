@@ -14,10 +14,11 @@
  * so it reads the same in a live clone and in an export of the folder.
  */
 
-import { lstatSync, readlinkSync, type Stats } from "node:fs";
+import { lstatSync, type Stats } from "node:fs";
 import { dirname, isAbsolute, join, sep } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { isGoneError, unreadablePathError } from "../util/errno.ts";
+import { utf8LinkText } from "../util/fs.ts";
 
 /** The next step for a folder skill's `SKILL.md` that isn't a regular file in its folder. */
 export const SKILL_MD_NOT_A_FILE_REMEDY =
@@ -96,13 +97,11 @@ function isRefusedSkillMdLink(folder: string): boolean {
     // The link is replaced by its text, which starts from `dir`.
     depth--;
     hops++;
-    const raw = readlinkSync(at, { encoding: "buffer" });
-    const text = raw.toString("utf8");
-    // Read as bytes: text that isn't UTF-8 decodes lossily, and the
-    // kernel would follow a different name than the one checked.
-    const notUtf8 = !Buffer.from(text).equals(raw);
+    // Text that isn't UTF-8 (null) would be checked as another name than
+    // the one the kernel follows.
+    const text = utf8LinkText(at);
     const pastHopLimit = hops > MAX_HOPS;
-    if (isAbsolute(text) || notUtf8 || pastHopLimit) return true;
+    if (text === null || isAbsolute(text) || pastHopLimit) return true;
     const parts = text.split(sep).filter((p) => p !== "" && p !== ".");
     for (let i = parts.length - 1; i >= 0; i--) pending.push(parts[i]!);
   }

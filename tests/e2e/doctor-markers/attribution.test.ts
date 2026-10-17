@@ -67,13 +67,14 @@ test("C-STATE-05b a marker's own text is printed escaped, so it can't forge outp
 });
 
 // A copy on another tap is reinstalled; one on the entry's tap at another
-// path took a relocation whose update failed elsewhere, so it is retried.
+// path is retried (a relocation whose update failed elsewhere), then
+// reinstalled if the retry finds it up to date (a copy left behind).
 for (const [what, change, named, next] of [
   [
     "another path in its entry's tap",
     { path: "skills/elsewhere" },
     "tap `T` at `skills/elsewhere`",
-    "run `crew update a` to bring it in line",
+    "run `crew update a` (if it reports the skill up to date, reinstall that copy with `--force`) to bring it in line",
   ],
   [
     "another tap at its entry's path",

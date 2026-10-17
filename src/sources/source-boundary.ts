@@ -13,13 +13,13 @@
  * user's own directory and isn't held to this, as at update.
  */
 
-import { lstatSync, readlinkSync } from "node:fs";
+import { lstatSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
-import { toPosix } from "../util/fs.ts";
+import { toPosix, utf8LinkText } from "../util/fs.ts";
 import { climbsOut } from "../util/relative-path.ts";
 
 /**
@@ -61,7 +61,16 @@ export function sourceBoundary(
  */
 export function leadsOutOfSource(boundary: SourceBoundary, folder: string): boolean {
   if (boundary === null || resolve(folder) === boundary.root) return false;
-  const rel = relative(boundary.real, realFolder(folder));
+  let real: string;
+  try {
+    real = realFolder(folder);
+  } catch {
+    // A folder crew can't place as the OS does — link text that isn't
+    // UTF-8, more links than any OS follows, a name too long to look up —
+    // isn't known to stay inside, so it is refused as leading out.
+    return true;
+  }
+  const rel = relative(boundary.real, real);
   // `.git` in any case: on a case-insensitive disk `.GIT` is the same folder.
   return climbsOut(rel) || rel === "" || rel.split(sep)[0]?.toLowerCase() === ".git";
 }
@@ -118,9 +127,16 @@ function follow(dir: string, text: string, links: Links): string {
 function linkText(path: string, links: Links): string | null {
   let text = links.texts.get(path);
   if (text === undefined) {
-    text = lstatSync(path).isSymbolicLink() ? readlinkSync(path) : null;
+    text = lstatSync(path).isSymbolicLink() ? followableText(path) : null;
     links.texts.set(path, text);
   }
+  return text;
+}
+
+/** `path`'s link text; throws when it isn't UTF-8, as crew can't follow it as the OS does. */
+function followableText(path: string): string {
+  const text = utf8LinkText(path);
+  if (text === null) throw new Error(`the link text of \`${path}\` isn't UTF-8`);
   return text;
 }
 

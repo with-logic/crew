@@ -134,8 +134,10 @@ function readInstalls(
     // is no install — crew's own staging leftover (§7.3), say.
     if (name.startsWith(".")) continue;
     const installDir = join(base, name);
-    const marker = readOrNote(installDir, { scope, scopesHere }, (path, reason, kind) =>
-      note(path, reason, installDir, kind),
+    const marker = readOrNote(
+      installDir,
+      { adapter: adapter.name, scope, scopesHere },
+      (path, reason, kind) => note(path, reason, installDir, kind),
     );
     // A marker this adapter doesn't own is another adapter's to list.
     if (!marker?.agents.includes(adapter.name)) continue;
@@ -168,7 +170,11 @@ function listOrNote(base: string, note: Note): string[] {
  */
 function readOrNote(
   installDir: string,
-  at: { readonly scope: Scope; readonly scopesHere: ReadonlySet<Scope> },
+  at: {
+    readonly adapter: string;
+    readonly scope: Scope;
+    readonly scopesHere: ReadonlySet<Scope>;
+  },
   note: (path: string, reason: string, kind?: UncheckedPath["kind"]) => void,
 ): Marker | null {
   try {
@@ -184,7 +190,7 @@ function readOrNote(
     note(path, read.reason, read.kind === "unreadable" ? "unreadable" : "unusable");
     return null;
   }
-  const use = usableMarker(read.marker, installDir, at.scope, at.scopesHere);
+  const use = usableMarker(read.marker, installDir, at);
   if (use.kind === "usable") return use.marker;
   if (use.kind === "unusable") note(path, use.reason, "unusable");
   return null;
