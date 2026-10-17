@@ -8,10 +8,14 @@
 
 import { join } from "node:path";
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
-import { type MarkerRead, readMarkerAt } from "../../agents/marker-read.ts";
+import {
+  asMarkerObject,
+  isNotAMarkerError,
+  readMarkerAt,
+  type UncheckedMarker,
+} from "../../agents/marker-read.ts";
 import { ALL_AGENTS } from "../../agents/registry.ts";
-import type { Marker, TapConfig } from "../../core/types.ts";
-import { isGoneError } from "../../util/errno.ts";
+import type { TapConfig } from "../../core/types.ts";
 import { tryReadJson, writeJson } from "../../util/json.ts";
 import type { Reattribution } from "../duplicate-rules/index.ts";
 import type { InstallRecord } from "../perform/index.ts";
@@ -93,7 +97,7 @@ export function targetedFolders(
 /** A marker a move claims: one still naming the move's old tap. */
 interface MarkerToMove {
   readonly installDir: string;
-  readonly marker: Marker;
+  readonly marker: UncheckedMarker;
   readonly move: Reattribution;
 }
 
@@ -105,9 +109,10 @@ function rootOf(move: Reattribution, cwd: string): string {
 /**
  * The markers `moves` claim, once per folder — agents sharing a skills
  * folder (§7.2) share its one marker — never reading a folder in `skip`.
- * A folder in `tolerate` whose marker crew can't read or parse is passed
- * over (`readMarkerAt`); elsewhere a failed read throws. A marker whose
- * `agents` isn't a list belongs to no agent, so no move claims it.
+ * A path that can't hold a marker is passed over. In a folder in
+ * `tolerate`, so is a marker crew can't read or parse (`readMarkerAt`);
+ * elsewhere such a read throws. A marker whose `agents` isn't a list
+ * belongs to no agent, so no move claims it.
  */
 export function markersToMove(
   moves: readonly Reattribution[],
@@ -124,12 +129,13 @@ export function markersToMove(
       const installDir = join(base, move.name);
       if (base === "" || seen.has(installDir)) continue;
       const marker = folders.tolerate?.has(installDir)
-        ? markerOf(readMarkerAt(installDir))
+        ? tolerantMarker(installDir)
         : strictMarker(installDir);
       // No marker, one this adapter doesn't own, or one for another
       // skill or tap: not this move's. The old tap may still own other
       // skills, so only markers naming it move.
-      if (!(Array.isArray(marker?.agents) && marker.agents.includes(adapter.name))) continue;
+      const owners = marker?.agents;
+      if (!(marker && Array.isArray(owners) && owners.includes(adapter.name))) continue;
       seen.add(installDir);
       if (marker.name === move.name && marker.tap_name === move.fromTap) {
         found.push({ installDir, marker, move });
@@ -139,17 +145,18 @@ export function markersToMove(
   return found;
 }
 
-/** A tolerant read's marker, as one: callers check its `agents` before trusting it. */
-function markerOf(read: MarkerRead): Marker | null {
-  return read.kind === "marker" ? (read.marker as unknown as Marker) : null;
+/** The marker in `installDir`, or null where there is none or crew can't read it. */
+function tolerantMarker(installDir: string): UncheckedMarker | null {
+  const read = readMarkerAt(installDir);
+  return read.kind === "marker" ? read.marker : null;
 }
 
-/** The marker in `installDir`, or null where none can be (§10.1 gone); any other failure throws. */
-function strictMarker(installDir: string): Marker | null {
+/** The marker in `installDir`, or null where none can be; any other failure throws. */
+function strictMarker(installDir: string): UncheckedMarker | null {
   try {
-    return tryReadJson<Marker>(join(installDir, ".crew.json"));
+    return asMarkerObject(tryReadJson<unknown>(join(installDir, ".crew.json")));
   } catch (err) {
-    if (isGoneError(err)) return null;
+    if (isNotAMarkerError(err)) return null;
     throw err;
   }
 }

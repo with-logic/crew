@@ -9,8 +9,9 @@
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../../../src/agents/gemini-cli.ts";
 import { readState, writeState } from "../../../../src/state/load.ts";
@@ -63,7 +64,12 @@ function malformedRoot(kind: "missing" | "relative" | "non-string", aTap: string
   const decoy = makeTempDir("crew-decoy-");
   const folder = join(decoy, ".claude", "skills", "z");
   mkdirSync(folder, { recursive: true });
-  writeFileSync(join(folder, ".crew.json"), JSON.stringify({ tap_name: aTap }));
+  // A real marker's shape, so a collector checking more of it still sees one.
+  const real = readFileSync(join(claudeCodeAdapter.userPath(), "z", ".crew.json"), "utf8");
+  writeFileSync(
+    join(folder, ".crew.json"),
+    JSON.stringify({ ...JSON.parse(real), tap_name: aTap }),
+  );
   return relative(process.cwd(), decoy);
 }
 
@@ -136,7 +142,35 @@ test("C-UPD-17 an agent folder no entry is installed in isn't read, even unreada
   expect(tapKept(home, aTap)).toBe(false);
 });
 
-test("C-UPD-17 while a marker can't be read nothing is collected; once it can, the tap goes", () => {
+test("C-UPD-17 a copy in an agent its entry doesn't list still names its tap", () => {
+  const home = makeCrewHome();
+  const repo = buildRepo(["a", "w", "z"]);
+  for (const name of ["a", "w", "z"])
+    expect(crew(home, ["install", `file://${repo}//skills/${name}`, ...CLAUDE])).toBe(0);
+  const aTap = tapOf(home, "a");
+  // A copy of z crew wrote but state never recorded, naming a's tap.
+  const stray = join(codexAdapter.userPath(), "z");
+  mkdirSync(stray, { recursive: true });
+  const real = readFileSync(join(claudeCodeAdapter.userPath(), "z", ".crew.json"), "utf8");
+  writeFileSync(
+    join(stray, ".crew.json"),
+    JSON.stringify({ ...JSON.parse(real), agents: ["codex"], tap_name: aTap }),
+  );
+  expect(crew(home, ["uninstall", "a", "--yes"])).toBe(0);
+  expect(tapKept(home, aTap)).toBe(true);
+
+  // And one there crew can't read might name any: nothing is collected.
+  const wTap = tapOf(home, "w");
+  chmodSync(join(stray, ".crew.json"), 0o000);
+  try {
+    expect(crew(home, ["uninstall", "w", "--yes"])).toBe(0);
+    expect(tapKept(home, wTap)).toBe(true);
+  } finally {
+    chmodSync(join(stray, ".crew.json"), 0o644);
+  }
+});
+
+test("C-UPD-17 while a marker can't be read nothing is collected; once nothing blocks it, the tap goes", () => {
   const home = makeCrewHome();
   const [repoX, repoY] = [buildRepo(["x"]), buildRepo(["y"])];
   expect(crew(home, ["install", `file://${repoX}//skills/x`, ...CLAUDE])).toBe(0);

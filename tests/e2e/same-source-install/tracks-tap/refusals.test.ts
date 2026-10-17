@@ -4,11 +4,11 @@
  * the run doesn't target, or in any agent for an entry the install finds
  * already installed — refuses the run before any config, marker, or state
  * is written, and a retry completes it. A copy whose marker names another
- * tap isn't the move's.
+ * tap isn't the move's, nor is a path that can't hold a marker.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../../src/agents/codex.ts";
@@ -18,7 +18,16 @@ import { readConfig } from "../../../../src/config/load.ts";
 import { captureStreams, makeCrewHome } from "../../../helpers/env.ts";
 import { tagRepo } from "../../../helpers/fixtures.ts";
 import { buildRepo } from "../helpers.ts";
-import { BOTH, CLAUDE, crew, markerTap, redirectAgents, tapOf, tracking } from "./helpers.ts";
+import {
+  BOTH,
+  CLAUDE,
+  crew,
+  markerTap,
+  redirectAgents,
+  tapKept,
+  tapOf,
+  tracking,
+} from "./helpers.ts";
 
 let agents: ReturnType<typeof redirectAgents>;
 beforeEach(() => {
@@ -105,15 +114,40 @@ test("C-INST-13m a copy whose marker names another tap isn't the move's, and doe
   expect(markerTap(claudeCodeAdapter.userPath(), "a")).toBe(tapOf(home, "a"));
 });
 
-test("C-INST-13m a file where an untouched agent's folder goes holds no marker, and doesn't stop the move", () => {
-  const home = makeCrewHome();
-  const repo = buildRepo(["a", "b"]);
-  expect(crew(home, ["install", `file://${repo}//skills/a`, ...CLAUDE])).toBe(0);
-  tagRepo(repo, "v1");
-  writeFileSync(join(geminiCliAdapter.userPath(), "a"), "a file\n");
-  expect(crew(home, ["install", `file://${repo}@v1`, ...CLAUDE, "--force"])).toBe(0);
-  expect(markerTap(claudeCodeAdapter.userPath(), "a")).toBe(tapOf(home, "a"));
-});
+/** Paths at an untouched agent's folder that can't hold a marker: how to plant each, and its check. */
+const NOT_MARKERS: readonly (readonly [string, (folder: string) => () => boolean])[] = [
+  [
+    "a file where the folder goes",
+    (folder) => {
+      writeFileSync(folder, "a file\n");
+      return () => readFileSync(folder, "utf8") === "a file\n";
+    },
+  ],
+  [
+    "a folder where the marker goes",
+    (folder) => {
+      mkdirSync(join(folder, ".crew.json"), { recursive: true });
+      return () => statSync(join(folder, ".crew.json")).isDirectory();
+    },
+  ],
+];
+
+for (const [what, plant] of NOT_MARKERS) {
+  test(`C-INST-13m ${what} at an untouched agent holds no marker, and doesn't stop the move`, () => {
+    const home = makeCrewHome();
+    const repo = buildRepo(["a", "b"]);
+    expect(crew(home, ["install", `file://${repo}//skills/a`, ...CLAUDE])).toBe(0);
+    const ownTap = tapOf(home, "a");
+    tagRepo(repo, "v1");
+    const intact = plant(join(geminiCliAdapter.userPath(), "a"));
+    const reinstall = ["install", `file://${repo}@v1`, ...CLAUDE, "--force"];
+    expect(crew(home, [...reinstall, "--dry-run"])).toBe(0);
+    expect(crew(home, reinstall)).toBe(0);
+    expect(tracking(home)).toEqual(["a:auto:v1:true", "b:auto:v1:true"]);
+    expect(tapKept(home, ownTap)).toBe(false);
+    expect(intact()).toBe(true);
+  });
+}
 
 test("C-INST-13m a refused run leaves an already-installed entry's markers where they were too", () => {
   const home = makeCrewHome();
