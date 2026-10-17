@@ -4,6 +4,15 @@
  * sibling upstream before an update.
  */
 
+import {
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../../src/agents/codex.ts";
@@ -85,9 +94,48 @@ export function markerTap(root: string, name: string): string {
   return readJson<Marker>(join(root, name, ".crew.json")).tap_name;
 }
 
+/** Write a crew marker into `folder`: the one in `from`, with `changes` over it. */
+export function plantMarker(folder: string, from: string, changes: Partial<Marker>): void {
+  mkdirSync(folder, { recursive: true });
+  const marker = readJson<Marker>(join(from, ".crew.json"));
+  writeFileSync(join(folder, ".crew.json"), JSON.stringify({ ...marker, ...changes }));
+}
+
 /** Commit a new skill `c` to `repo`'s default branch, then `crew update`; its exit code. */
 export function addSiblingAndUpdate(home: string, repo: string): number {
   makeSkill(join(repo, "skills"), "c", skillFrontmatter({ name: "c" }));
   commitAll(repo, "add c");
   return crew(home, ["update"]);
 }
+
+/**
+ * Paths at an install folder that can't hold a marker, and so name
+ * nothing (§10.1, §16.5). Each plants over whatever is at `folder` and
+ * returns a check that it is still as planted.
+ */
+export const NOT_MARKERS: readonly (readonly [string, (folder: string) => () => boolean])[] = [
+  [
+    "a file where the folder goes",
+    (folder) => {
+      rmSync(folder, { recursive: true, force: true });
+      writeFileSync(folder, "a file\n");
+      return () => readFileSync(folder, "utf8") === "a file\n";
+    },
+  ],
+  [
+    "a folder where the marker goes",
+    (folder) => {
+      rmSync(folder, { recursive: true, force: true });
+      mkdirSync(join(folder, ".crew.json"), { recursive: true });
+      return () => lstatSync(join(folder, ".crew.json")).isDirectory();
+    },
+  ],
+  [
+    "a link that loops where the folder goes",
+    (folder) => {
+      rmSync(folder, { recursive: true, force: true });
+      symlinkSync(folder, folder);
+      return () => readlinkSync(folder) === folder;
+    },
+  ],
+];

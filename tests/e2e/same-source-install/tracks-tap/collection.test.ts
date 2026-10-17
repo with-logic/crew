@@ -4,12 +4,14 @@
  * still names survives a later uninstall, at user and project scope, and
  * while a marker in an entry's folders can't be read nothing is
  * collected; once it can, the tap goes. A path that can't hold a marker
- * names nothing. A project entry whose root is missing, relative, or not
+ * names nothing, nor does a folder crew can't search in an agent no entry
+ * is installed in. A project entry whose root is missing, relative, or not
  * a string locates no folder, so it neither stops collection nor breaks it.
+ * Folders an entry's own agents install into: `./collection-owned.test.ts`.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync } from "node:fs";
 import { join, relative } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../../src/agents/codex.ts";
@@ -18,7 +20,17 @@ import { readState, writeState } from "../../../../src/state/load.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { makeTempDir, tagRepo } from "../../../helpers/fixtures.ts";
 import { buildRepo } from "../helpers.ts";
-import { BOTH, CLAUDE, crew, markerTap, redirectAgents, tapKept, tapOf } from "./helpers.ts";
+import {
+  BOTH,
+  CLAUDE,
+  crew,
+  markerTap,
+  NOT_MARKERS,
+  plantMarker,
+  redirectAgents,
+  tapKept,
+  tapOf,
+} from "./helpers.ts";
 
 let agents: ReturnType<typeof redirectAgents>;
 beforeEach(() => {
@@ -62,14 +74,10 @@ function malformedRoot(kind: "missing" | "relative" | "non-string", aTap: string
   if (kind === "missing") return undefined;
   if (kind === "non-string") return 42;
   const decoy = makeTempDir("crew-decoy-");
-  const folder = join(decoy, ".claude", "skills", "z");
-  mkdirSync(folder, { recursive: true });
   // A real marker's shape, so a collector checking more of it still sees one.
-  const real = readFileSync(join(claudeCodeAdapter.userPath(), "z", ".crew.json"), "utf8");
-  writeFileSync(
-    join(folder, ".crew.json"),
-    JSON.stringify({ ...JSON.parse(real), tap_name: aTap }),
-  );
+  plantMarker(join(decoy, ".claude", "skills", "z"), join(claudeCodeAdapter.userPath(), "z"), {
+    tap_name: aTap,
+  });
   return relative(process.cwd(), decoy);
 }
 
@@ -95,24 +103,6 @@ for (const kind of ["missing", "relative", "non-string"] as const) {
   });
 }
 
-/** Paths at an entry's agent folder that can't hold a marker, and so name nothing. */
-const NOT_MARKERS: readonly (readonly [string, (folder: string) => void])[] = [
-  [
-    "a file where the folder goes",
-    (folder) => {
-      rmSync(folder, { recursive: true });
-      writeFileSync(folder, "a file\n");
-    },
-  ],
-  [
-    "a folder where the marker goes",
-    (folder) => {
-      rmSync(join(folder, ".crew.json"));
-      mkdirSync(join(folder, ".crew.json"));
-    },
-  ],
-];
-
 for (const [what, plant] of NOT_MARKERS) {
   test(`C-UPD-17 ${what} names no tap, and doesn't stop collection`, () => {
     const home = makeCrewHome();
@@ -120,13 +110,14 @@ for (const [what, plant] of NOT_MARKERS) {
     expect(crew(home, ["install", `file://${repo}//skills/a`, ...CLAUDE])).toBe(0);
     expect(crew(home, ["install", `file://${repo}//skills/z`, ...BOTH])).toBe(0);
     const aTap = tapOf(home, "a");
-    plant(join(codexAdapter.userPath(), "z"));
+    const intact = plant(join(codexAdapter.userPath(), "z"));
     expect(crew(home, ["uninstall", "a", "--yes"])).toBe(0);
     expect(tapKept(home, aTap)).toBe(false);
+    expect(intact()).toBe(true);
   });
 }
 
-test("C-UPD-17 an agent folder no entry is installed in isn't read, even unreadable", () => {
+test("C-UPD-17 a folder crew can't search, in an agent no entry is installed in, names nothing", () => {
   const home = makeCrewHome();
   const repo = buildRepo(["a", "z"]);
   expect(crew(home, ["install", `file://${repo}//skills/a`, ...CLAUDE])).toBe(0);
@@ -150,12 +141,10 @@ test("C-UPD-17 a copy in an agent its entry doesn't list still names its tap", (
   const aTap = tapOf(home, "a");
   // A copy of z crew wrote but state never recorded, naming a's tap.
   const stray = join(codexAdapter.userPath(), "z");
-  mkdirSync(stray, { recursive: true });
-  const real = readFileSync(join(claudeCodeAdapter.userPath(), "z", ".crew.json"), "utf8");
-  writeFileSync(
-    join(stray, ".crew.json"),
-    JSON.stringify({ ...JSON.parse(real), agents: ["codex"], tap_name: aTap }),
-  );
+  plantMarker(stray, join(claudeCodeAdapter.userPath(), "z"), {
+    agents: ["codex"],
+    tap_name: aTap,
+  });
   expect(crew(home, ["uninstall", "a", "--yes"])).toBe(0);
   expect(tapKept(home, aTap)).toBe(true);
 

@@ -186,5 +186,5 @@ function rewriteMarker(m: MarkerToMove, tapsByName: ReadonlyMap<string, TapConfi
     tap_path: tap.path,
     ...(tap.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
     path: m.move.toPath,
-  });
+  } satisfies UncheckedMarker);
 }

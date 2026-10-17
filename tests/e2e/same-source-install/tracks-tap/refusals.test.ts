@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../../src/agents/codex.ts";
@@ -23,6 +23,7 @@ import {
   CLAUDE,
   crew,
   markerTap,
+  NOT_MARKERS,
   redirectAgents,
   tapKept,
   tapOf,
@@ -113,24 +114,6 @@ test("C-INST-13m a copy whose marker names another tap isn't the move's, and doe
   expect(markerTap(codexAdapter.userPath(), "a")).toBe("elsewhere");
   expect(markerTap(claudeCodeAdapter.userPath(), "a")).toBe(tapOf(home, "a"));
 });
-
-/** Paths at an untouched agent's folder that can't hold a marker: how to plant each, and its check. */
-const NOT_MARKERS: readonly (readonly [string, (folder: string) => () => boolean])[] = [
-  [
-    "a file where the folder goes",
-    (folder) => {
-      writeFileSync(folder, "a file\n");
-      return () => readFileSync(folder, "utf8") === "a file\n";
-    },
-  ],
-  [
-    "a folder where the marker goes",
-    (folder) => {
-      mkdirSync(join(folder, ".crew.json"), { recursive: true });
-      return () => statSync(join(folder, ".crew.json")).isDirectory();
-    },
-  ],
-];
 
 for (const [what, plant] of NOT_MARKERS) {
   test(`C-INST-13m ${what} at an untouched agent holds no marker, and doesn't stop the move`, () => {

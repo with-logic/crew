@@ -14,13 +14,13 @@
 
 import { lstatSync } from "node:fs";
 import { join } from "node:path";
-import { baseFor, cwdForEntry } from "../agents/adapter.ts";
+import { type AgentAdapter, baseFor, cwdForEntry } from "../agents/adapter.ts";
 import { readMarkerAt } from "../agents/marker-read.ts";
 import { ALL_AGENTS } from "../agents/registry.ts";
 import { readConfig, writeConfig } from "../config/load.ts";
 import { paths } from "../core/paths.ts";
 import { cloneStillReferenced, tapClonePath } from "../core/repo-path.ts";
-import type { StateFile } from "../core/types.ts";
+import type { StateEntry, StateFile } from "../core/types.ts";
 import { withTapLocks } from "../sources/tap-lock.ts";
 import { hasUsableProjectRoot } from "../state/validation.ts";
 import { rmrfInside } from "../util/fs.ts";
@@ -64,32 +64,35 @@ export function garbageCollectAutoTaps(state: StateFile, home: string): string[]
  * The taps the crew markers in `state`'s entries' install folders name —
  * in every agent, so a copy state doesn't list counts too; each folder read
  * once (agents share some, §7.2) — or "unreadable" as soon as one that
- * might name a tap can't be read: any in a folder of the entry's own
- * agents, and elsewhere one whose file is there. A folder crew can't
- * search, of an agent the entry isn't installed in, names nothing.
+ * might name a tap can't be read: any in a folder one of an entry's agents
+ * installs into, and elsewhere one whose file crew can see. Elsewhere, a
+ * folder crew can't search names nothing.
  */
 function scanMarkerTaps(state: StateFile): ReadonlySet<string> | "unreadable" {
+  const located = state.installations.filter(
+    // §11.1: a missing, relative, or non-string project root locates nothing.
+    (entry) => entry.scope === "user" || hasUsableProjectRoot(entry),
+  );
+  // The folders entries' agents install into, settled over all of state
+  // first: a folder two entries share (a project root at the user's home,
+  // say) counts as installed into whichever entry reaches it first.
+  const own = new Set<string>();
+  for (const entry of located) {
+    for (const adapter of ALL_AGENTS) {
+      if (entry.agents.includes(adapter.name)) own.add(folderOf(entry, adapter));
+    }
+  }
   const named = new Set<string>();
   const seen = new Set<string>();
-  for (const entry of state.installations) {
-    // §11.1: a missing, relative, or non-string project root locates nothing.
-    if (entry.scope === "project" && !hasUsableProjectRoot(entry)) continue;
-    const root = cwdForEntry(entry, "");
-    const own = new Set(entry.agents);
-    // The entry's own agents first, so a folder they share is read as theirs.
-    const adapters = [...ALL_AGENTS].sort(
-      (a, b) => Number(own.has(b.name)) - Number(own.has(a.name)),
-    );
-    for (const adapter of adapters) {
-      const base = baseFor(adapter, entry.scope, root);
-      if (base === "") continue;
-      const installDir = join(base, entry.name);
-      if (seen.has(installDir)) continue;
+  for (const entry of located) {
+    for (const adapter of ALL_AGENTS) {
+      const installDir = folderOf(entry, adapter);
+      if (installDir === "" || seen.has(installDir)) continue;
       seen.add(installDir);
       const read = readMarkerAt(installDir);
       if (read.kind === "none") continue;
       if (read.kind === "unreadable") {
-        if (own.has(adapter.name) || markerFileExists(installDir)) return "unreadable";
+        if (own.has(installDir) || markerFileExists(installDir)) return "unreadable";
         continue;
       }
       const tap = read.marker.tap_name;
@@ -99,7 +102,17 @@ function scanMarkerTaps(state: StateFile): ReadonlySet<string> | "unreadable" {
   return named;
 }
 
-/** True when a `.crew.json` is there, whether or not crew can read it. */
+/** `entry`'s install folder in `adapter`; "" where the adapter has none at its scope. */
+function folderOf(entry: StateEntry, adapter: AgentAdapter): string {
+  const base = baseFor(adapter, entry.scope, cwdForEntry(entry, ""));
+  return base === "" ? "" : join(base, entry.name);
+}
+
+/**
+ * True when crew can see a `.crew.json` there, whether or not it can read
+ * it. Outside the folders entries' agents install into, one crew can't
+ * see — gone, or in a folder it can't search — names nothing (§16.5).
+ */
 function markerFileExists(installDir: string): boolean {
   try {
     lstatSync(join(installDir, ".crew.json"));
