@@ -16,8 +16,8 @@ import {
   readSymlinkTarget,
   toPosix,
   touch,
-  walk,
 } from "../../../src/util/fs.ts";
+import { walk } from "../../../src/util/walk.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
 
 describe("fs utilities", () => {

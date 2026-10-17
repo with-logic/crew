@@ -15,7 +15,7 @@ import { readConfig } from "../../../src/config/load.ts";
 import { paths } from "../../../src/core/paths.ts";
 import { tapClonePath } from "../../../src/core/repo-path.ts";
 import { runGit } from "../../../src/git/exec.ts";
-import { walk } from "../../../src/util/fs.ts";
+import { walk } from "../../../src/util/walk.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import {
   commitAll,

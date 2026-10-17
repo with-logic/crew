@@ -25,7 +25,7 @@
 
 import { createHash } from "node:crypto";
 import { readFileSync, readlinkSync } from "node:fs";
-import { walk } from "../util/fs.ts";
+import { walk } from "../util/walk.ts";
 
 /**
  * Compute the content hash of a directory.

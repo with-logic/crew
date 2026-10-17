@@ -13,7 +13,7 @@ import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { paths } from "../../../src/core/paths.ts";
 import type { TapReexpandRow } from "../../../src/install/tap-reexpand/index.ts";
 import type { UpdateRow } from "../../../src/install/update/types.ts";
-import { walk } from "../../../src/util/fs.ts";
+import { walk } from "../../../src/util/walk.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
 
 /** Mirrors the command's `--json` payload; discriminants keep their real types. */

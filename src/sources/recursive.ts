@@ -8,7 +8,8 @@
 
 import { basename } from "node:path";
 import { hasSkillMd } from "../skill/load.ts";
-import { type WalkedEntry, walk } from "../util/fs.ts";
+import { canList } from "../util/fs.ts";
+import { type WalkedEntry, walk } from "../util/walk.ts";
 
 const MAX_RECURSIVE_DEPTH = 5;
 const SKIPPED_DIRS = new Set([
@@ -41,7 +42,8 @@ function shouldDescendInto(entry: WalkedEntry): boolean {
   if (shouldSkipDirectory(entry.relPath)) return false;
   // Refuse to descend into depth-5 dirs so emitted entries are bounded at depth 5 (§9 step 5.4).
   if (depthOf(entry.relPath) >= MAX_RECURSIVE_DEPTH) return false;
-  return !hasSkillMd(entry.absPath);
+  // A folder crew can't list holds nothing it can find (§9 step 5.4).
+  return !hasSkillMd(entry.absPath) && canList(entry.absPath);
 }
 
 function shouldSkipDirectory(relPath: string): boolean {
