@@ -10,6 +10,7 @@
  * was just installed into (`./removal.ts`), so it is installed nowhere.
  */
 
+import { realpathSync } from "node:fs";
 import { installSkillIntoAgents, isSafetyRefusal } from "../../agents/install.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import { type StoredSkill, stageIntoStore } from "../../sources/store.ts";
@@ -78,6 +79,10 @@ function installIntoGroups(
   // recorded install, and is kept; any other this call installed into —
   // new, or replaced by `--force` — is removed if the child fails.
   const copies: ChildCopy[] = [];
+  // Each copy by the folder it really is: agents whose skills folders are
+  // one folder through a link (§7.2) write it again, and what that later
+  // write leaves is this run's too.
+  const byFolder = new Map<string, number>();
   const { contentHash, storePath } = opts.staged;
   for (const { dest, agents: group } of groups) {
     try {
@@ -95,8 +100,15 @@ function installIntoGroups(
         force: opts.force,
       });
       for (const a of group) installedInto.push(a.name);
-      if (res.kind === "installed" && !res.replacedSameName) {
-        copies.push({ dest, contentHash, markerText: jsonText(res.marker) });
+      if (res.kind === "installed") {
+        const folder = realpathSync(dest);
+        const markerText = jsonText(res.marker);
+        const earlier = byFolder.get(folder);
+        if (earlier !== undefined) copies[earlier] = { ...copies[earlier]!, markerText };
+        else if (!res.replacedSameName) {
+          byFolder.set(folder, copies.length);
+          copies.push({ dest, contentHash, markerText });
+        }
       }
     } catch (err) {
       // A safety check refusing one agent (§7.3) leaves the child out of

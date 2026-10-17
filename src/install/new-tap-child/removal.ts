@@ -9,7 +9,8 @@
  * A copy is claimed before it is checked: moved aside to a name no skill
  * can have (a leading dot, §9 step 4), so an edit made through its path
  * can't land between the check and the removal. A changed one is moved
- * back.
+ * back. Should something be written to its path while it is aside, that
+ * is someone's, and the copy stays where crew set it, named there.
  */
 
 import { randomUUID } from "node:crypto";
@@ -18,6 +19,8 @@ import { basename, dirname, join } from "node:path";
 import { hashDirectory } from "../../hash/content.ts";
 import { removeEach } from "../../util/cleanup.ts";
 import { errnoReason } from "../../util/errno.ts";
+import { progress } from "../../util/progress.ts";
+import { safePath } from "../../util/redact.ts";
 
 /** A folder this run installed the child into, and what it wrote there. */
 export interface ChildCopy {
@@ -39,9 +42,14 @@ function removeChildCopy(copy: ChildCopy): string[] {
   const claimed = join(dirname(copy.dest), `.crew-removing-${basename(copy.dest)}-${randomUUID()}`);
   const unclaimed = moveOrWhy(copy.dest, claimed);
   if (unclaimed !== null) return [`\`${copy.dest}\` (crew couldn't remove it — ${unclaimed})`];
-  if (stillAsWritten(copy, claimed)) return removeEach([claimed]);
-  // Someone's edit: back where it was, unless something else is there now.
-  const restored = !existsSync(copy.dest) && moveOrWhy(claimed, copy.dest) === null;
+  progress(`checking ${safePath(copy.dest)} before removing it`);
+  const unchanged = stillAsWritten(copy, claimed);
+  if (existsSync(copy.dest)) {
+    return [`\`${claimed}\` (set aside to be removed, while something was written to its path)`];
+  }
+  if (unchanged) return removeEach([claimed]);
+  // Someone's edit: back where it was.
+  const restored = moveOrWhy(claimed, copy.dest) === null;
   return [
     `\`${restored ? copy.dest : claimed}\` (crew can't confirm it still holds what this run installed)`,
   ];
