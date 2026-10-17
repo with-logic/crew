@@ -18,16 +18,15 @@
  * so state paths remain relative to the tap that owns them.
  */
 
-import { join, posix, relative } from "node:path";
+import { join, posix } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { gistSkillStem, isGistTap } from "../core/gist-url.ts";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../core/types.ts";
 import { loadSkill } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
-import { outOfSourceError, sourceBoundary } from "../sources/source-boundary.ts";
+import { outOfSourceAt, sourceBoundary } from "../sources/source-boundary.ts";
 import { listSourceDir } from "../sources/source-dir.ts";
-import { toPosix } from "../util/fs.ts";
 import { assertCanLookForSkillMd, readSiblingEntry } from "./siblings/disk.ts";
 import type { SiblingScan } from "./siblings/index.ts";
 import { attributeRef } from "./tap-attribution.ts";
@@ -93,8 +92,7 @@ export function findSiblingDep(
       const sibling = dir.entry(entryName);
       if (!sibling.skill) continue;
       if (dir.boundary !== null && sibling.leadsOut) {
-        const shown = toPosix(relative(dir.boundary.root, siblingPath));
-        throw dependencyError(depName, siblingPath, outOfSourceError(siblingPath, shown));
+        throw dependencyError(depName, siblingPath, outOfSourceAt(dir.boundary, siblingPath));
       }
     }
     const load = () => siblings.loaded(siblingPath, () => loadSkill(siblingPath));
@@ -143,7 +141,9 @@ function withDependencyErrors<T>(depName: string, path: string, step: () => T): 
 
 /** `ce`, naming the dependency at `path`; the path is added only where the message lacks it. */
 function dependencyError(depName: string, path: string, ce: CrewError): CrewError {
-  const where = ce.message.includes(path) ? "" : ` (\`${path}\`)`;
+  // A refusal naming the folder by its place in the repository needs no path besides.
+  const named = ce.message.includes(path) || ce.details["path"] === path;
+  const where = named ? "" : ` (\`${path}\`)`;
   const message = `dependency \`${depName}\`${where}: ${ce.message}`;
   return new CrewError(ce.code, message, { path, ...ce.details, dependency: depName }, ce.remedy);
 }

@@ -32,11 +32,15 @@ for (const at of ["", "@v1"]) {
     const repo = repoWithLinkedDep(outsideSkill("b"));
     tagRepo(repo, "v1");
     const r = crew(makeCrewHome(), ["install", `file://${repo}${at}//skills/a`, "--json"]);
-    const { error } = JSON.parse(r.out) as { error: { name: string; message: string } };
+    const { error } = JSON.parse(r.out) as {
+      error: { name: string; message: string; details: { path: string } };
+    };
     expect([r.code, error.name]).toEqual([4, "invalid_skill"]);
-    expect(error.message).toContain("dependency `b`");
-    // Named by its place in the repository; the full path is in details.
-    expect(error.message).toContain("`skills/b` leads out of the repository through a link");
+    // Named by its place in the repository alone; the full path is in details.
+    expect(error.message).toStartWith(
+      "dependency `b`: `skills/b` leads out of the repository through a link",
+    );
+    expect(error.details.path).toEndWith("/skills/b");
     expect(readdirSync(claude.userRoot)).toEqual([]);
   });
 }

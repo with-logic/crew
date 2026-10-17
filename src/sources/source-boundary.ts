@@ -29,9 +29,13 @@ import { climbsOut } from "../util/relative-path.ts";
  */
 export type SourceBoundary = { readonly root: string; readonly real: string } | null;
 
-/** The boundary of the repository checked out at `root`. */
+/**
+ * The boundary of the repository checked out at `root`, found as any
+ * folder is (`realFolder`), so a root crew can't search fails where its
+ * listing does — `source_unreachable` (C-SPEC-18) — not here.
+ */
 export function repositoryBoundary(root: string): SourceBoundary {
-  return { root: resolve(root), real: realpathSync(root) };
+  return { root: resolve(root), real: realFolder(root) };
 }
 
 /**
