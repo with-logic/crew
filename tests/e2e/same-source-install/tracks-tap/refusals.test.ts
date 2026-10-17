@@ -67,6 +67,7 @@ for (const [what, spoil, namesCopy] of UNFOLLOWABLE) {
     const reinstall = ["install", `file://${repo}@v1`, ...CLAUDE, "--force"];
     const cap = captureStreams();
     try {
+      expect(crew(home, [...reinstall, "--dry-run"])).toBe(4);
       expect(runCli(reinstall, { home, streams: cap.streams })).toBe(4);
     } finally {
       restore();

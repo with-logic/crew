@@ -167,8 +167,9 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
       options.scope === "project" ? cwd : null,
     );
     // A reinstall that moved its entry wrote the markers it reinstalled;
-    // the entry's others follow now that it succeeded (§5.4) — before
-    // state, so a marker that can't follow leaves the move to a retry.
+    // the entry's others — a failed copy's too, where crew can — follow
+    // now that it succeeded (§5.4), before state, so an untargeted marker
+    // that can't follow (a race past the preflight) leaves it to a retry.
     const madeMoves = movesMade(analysis.movesOnSuccess, promoted);
     const stillNamed = followMoves(madeMoves, result.records, agents, configWithAutoTaps.taps, cwd);
     writeState(promoted, home);

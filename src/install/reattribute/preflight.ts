@@ -24,7 +24,7 @@ export function preflightMoves(
   const targeted = targetedFolders(analysis.movesOnSuccess, agents, cwd);
   const markers = [
     ...markersToMove(analysis.reattributions, cwd),
-    ...markersToMove(analysis.movesOnSuccess, cwd, targeted),
+    ...markersToMove(analysis.movesOnSuccess, cwd, { skip: targeted }),
   ];
   for (const m of markers) accessSync(m.installDir, constants.W_OK);
 }
