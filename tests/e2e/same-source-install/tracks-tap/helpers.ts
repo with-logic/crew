@@ -9,6 +9,7 @@ import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../../../src/agents/gemini-cli.ts";
 import { runCli } from "../../../../src/cli/main.ts";
+import { readConfig } from "../../../../src/config/load.ts";
 import type { Marker } from "../../../../src/core/types.ts";
 import { readState } from "../../../../src/state/load.ts";
 import { readJson } from "../../../../src/util/json.ts";
@@ -41,6 +42,15 @@ export function redirectAgents(): { restore: () => void } {
       for (const [adapter, original] of originals) Object.assign(adapter, original);
     },
   };
+}
+
+/** The agent flags these suites install with. */
+export const CLAUDE = ["--agent", "claude-code"];
+export const BOTH = [...CLAUDE, "--agent", "codex"];
+
+/** Whether a config tap of that name remains. */
+export function tapKept(home: string, name: string): boolean {
+  return readConfig(home).taps.some((t) => t.name === name);
 }
 
 /** Run the CLI against `home` (in `cwd`, for a project-scope install); its exit code. */

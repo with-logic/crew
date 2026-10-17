@@ -11,6 +11,7 @@ import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
 import { type MarkerRead, readMarkerAt } from "../../agents/marker-read.ts";
 import { ALL_AGENTS } from "../../agents/registry.ts";
 import type { Marker, TapConfig } from "../../core/types.ts";
+import { isGoneError } from "../../util/errno.ts";
 import { tryReadJson, writeJson } from "../../util/json.ts";
 import type { Reattribution } from "../duplicate-rules/index.ts";
 import type { InstallRecord } from "../perform/index.ts";
@@ -63,7 +64,6 @@ export function followMoves(
   }
   const tapsByName = new Map(taps.map((t) => [t.name, t]));
   for (const m of markersToMove(made, cwd, { skip: current, tolerate: failed })) {
-    // A failed copy was reported already: one crew can't rewrite is left.
     if (failed.has(m.installDir)) tryRewriteMarker(m, tapsByName);
     else rewriteMarker(m, tapsByName);
   }
@@ -124,8 +124,8 @@ export function markersToMove(
       const installDir = join(base, move.name);
       if (base === "" || seen.has(installDir)) continue;
       const marker = folders.tolerate?.has(installDir)
-        ? markerIn(readMarkerAt(installDir))
-        : tryReadJson<Marker>(join(installDir, ".crew.json"));
+        ? markerOf(readMarkerAt(installDir))
+        : strictMarker(installDir);
       // No marker, one this adapter doesn't own, or one for another
       // skill or tap: not this move's. The old tap may still own other
       // skills, so only markers naming it move.
@@ -139,11 +139,22 @@ export function markersToMove(
   return found;
 }
 
-function markerIn(read: MarkerRead): Marker | null {
-  return read.kind === "marker" ? read.marker : null;
+/** A tolerant read's marker, as one: callers check its `agents` before trusting it. */
+function markerOf(read: MarkerRead): Marker | null {
+  return read.kind === "marker" ? (read.marker as unknown as Marker) : null;
 }
 
-/** Rewrite a failed copy's marker if crew can; one it can't replace (a locked file, say) is left. */
+/** The marker in `installDir`, or null where none can be (§10.1 gone); any other failure throws. */
+function strictMarker(installDir: string): Marker | null {
+  try {
+    return tryReadJson<Marker>(join(installDir, ".crew.json"));
+  } catch (err) {
+    if (isGoneError(err)) return null;
+    throw err;
+  }
+}
+
+/** Rewrite a failed copy's marker; leave it when crew can't replace it (a locked file, say). */
 function tryRewriteMarker(m: MarkerToMove, tapsByName: ReadonlyMap<string, TapConfig>): void {
   try {
     rewriteMarker(m, tapsByName);

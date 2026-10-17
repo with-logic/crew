@@ -22,7 +22,7 @@ import {
   tagRepo,
 } from "../../../helpers/fixtures.ts";
 import { buildRepo, install } from "../helpers.ts";
-import { addSiblingAndUpdate, crew, markerTap, tapOf, tracking } from "./helpers.ts";
+import { addSiblingAndUpdate, CLAUDE, crew, markerTap, tapOf, tracking } from "./helpers.ts";
 
 type Redirect = { userPath: () => string; detect: () => boolean };
 let originals: (readonly [Redirect, Redirect])[] = [];
@@ -41,7 +41,6 @@ afterEach(() => {
   for (const [adapter, original] of originals) Object.assign(adapter, original);
 });
 
-const CLAUDE = ["--agent", "claude-code"];
 const REINSTALLS: readonly { how: string; at: string; flags: string[]; edit: boolean }[] = [
   { how: "--force, at a tag", at: "@v1", flags: [...CLAUDE, "--force"], edit: false },
   { how: "a new commit, at a tag", at: "@v1", flags: CLAUDE, edit: true },

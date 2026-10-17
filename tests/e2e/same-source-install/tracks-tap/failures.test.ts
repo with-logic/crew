@@ -19,6 +19,8 @@ import { makeTempDir, tagRepo } from "../../../helpers/fixtures.ts";
 import { buildRepo, install } from "../helpers.ts";
 import {
   addSiblingAndUpdate,
+  BOTH,
+  CLAUDE,
   crew,
   markerTap,
   redirectAgents,
@@ -31,9 +33,6 @@ beforeEach(() => {
   agents = redirectAgents();
 });
 afterEach(() => agents.restore());
-
-const CLAUDE = ["--agent", "claude-code"];
-const BOTH = [...CLAUDE, "--agent", "codex"];
 
 for (const scope of ["user", "project"] as const) {
   test(`C-INST-13n a reinstall that moves an entry moves its markers in agents it didn't touch (${scope})`, () => {

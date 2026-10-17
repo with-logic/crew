@@ -18,16 +18,13 @@ import { readConfig } from "../../../../src/config/load.ts";
 import { captureStreams, makeCrewHome } from "../../../helpers/env.ts";
 import { tagRepo } from "../../../helpers/fixtures.ts";
 import { buildRepo } from "../helpers.ts";
-import { crew, markerTap, redirectAgents, tapOf, tracking } from "./helpers.ts";
+import { BOTH, CLAUDE, crew, markerTap, redirectAgents, tapOf, tracking } from "./helpers.ts";
 
 let agents: ReturnType<typeof redirectAgents>;
 beforeEach(() => {
   agents = redirectAgents();
 });
 afterEach(() => agents.restore());
-
-const CLAUDE = ["--agent", "claude-code"];
-const BOTH = [...CLAUDE, "--agent", "codex"];
 
 /**
  * Ways an untouched agent's copy can't follow a move: how to cause each,
@@ -105,6 +102,16 @@ test("C-INST-13m a copy whose marker names another tap isn't the move's, and doe
     chmodSync(codexCopy, 0o755);
   }
   expect(markerTap(codexAdapter.userPath(), "a")).toBe("elsewhere");
+  expect(markerTap(claudeCodeAdapter.userPath(), "a")).toBe(tapOf(home, "a"));
+});
+
+test("C-INST-13m a file where an untouched agent's folder goes holds no marker, and doesn't stop the move", () => {
+  const home = makeCrewHome();
+  const repo = buildRepo(["a", "b"]);
+  expect(crew(home, ["install", `file://${repo}//skills/a`, ...CLAUDE])).toBe(0);
+  tagRepo(repo, "v1");
+  writeFileSync(join(geminiCliAdapter.userPath(), "a"), "a file\n");
+  expect(crew(home, ["install", `file://${repo}@v1`, ...CLAUDE, "--force"])).toBe(0);
   expect(markerTap(claudeCodeAdapter.userPath(), "a")).toBe(tapOf(home, "a"));
 });
 

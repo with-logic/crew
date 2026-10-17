@@ -16,22 +16,18 @@ import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../../src/agents/codex.ts";
-import { readConfig } from "../../../../src/config/load.ts";
 import type { Marker } from "../../../../src/core/types.ts";
 import { readJson } from "../../../../src/util/json.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { commitAll, makeSkill, skillFrontmatter, tagRepo } from "../../../helpers/fixtures.ts";
 import { buildRepo } from "../helpers.ts";
-import { crew, markerTap, redirectAgents, tapOf } from "./helpers.ts";
+import { BOTH, crew, markerTap, redirectAgents, tapKept, tapOf } from "./helpers.ts";
 
 let agents: ReturnType<typeof redirectAgents>;
 beforeEach(() => {
   agents = redirectAgents();
 });
 afterEach(() => agents.restore());
-
-const CLAUDE = ["--agent", "claude-code"];
-const BOTH = [...CLAUDE, "--agent", "codex"];
 
 /** `a` installed into `first`, then the repo tagged `v1`; the home, repo, and `a`'s own tap. */
 function setUp(first: readonly string[]): { home: string; repo: string; ownTap: string } {
@@ -41,11 +37,6 @@ function setUp(first: readonly string[]): { home: string; repo: string; ownTap: 
   if (installed !== 0) throw new Error(`setup install exited ${installed}`);
   tagRepo(repo, "v1");
   return { home, repo, ownTap: tapOf(home, "a") };
-}
-
-/** Whether a config tap of that name remains. */
-function tapKept(home: string, name: string): boolean {
-  return readConfig(home).taps.some((t) => t.name === name);
 }
 
 for (const [label, first, run] of [
