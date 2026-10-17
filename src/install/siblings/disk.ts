@@ -12,7 +12,7 @@ import { isGistTap } from "../../core/gist-url.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { hasSkillMd, loadSkillName } from "../../skill/load.ts";
 import { isGistSkillCandidate } from "../../sources/gist.ts";
-import { leadsOutOfSource, type SourceBoundary } from "../../sources/source-boundary.ts";
+import { isRefusedSourceFolder, type SourceBoundary } from "../../sources/source-boundary.ts";
 import { isGoneError, unreadablePathError } from "../../util/errno.ts";
 import { isDirectory } from "../../util/fs.ts";
 import type { SiblingEntry } from "./index.ts";
@@ -32,7 +32,7 @@ export function readSiblingEntry(
   const gist = isGistTap(tap);
   const folder = !gist && isDirectory(path);
   const skill = gist ? isGistSkillCandidate(path) : folder && hasSkillMd(path);
-  const leadsOut = folder && leadsOutOfSource(boundary, path);
+  const leadsOut = folder && isRefusedSourceFolder(boundary, path);
   return { skill, leadsOut, declared: skill && !leadsOut ? nameOrNull(path) : null };
 }
 

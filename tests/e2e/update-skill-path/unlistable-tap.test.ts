@@ -88,6 +88,25 @@ test("C-SPEC-18 a tap that fails as a whole reads as one failure, with its next 
   ]);
 });
 
+test("C-SPEC-18 a tap whose skills/ crew can list but not look into fails, never reads as empty", () => {
+  const home = makeCrewHome();
+  const tapDir = trackedTap(home, "tb", "w");
+  chmodSync(join(tapDir, "skills"), 0o444);
+  let r: { code: number; stdout: string };
+  try {
+    r = run(home, ["update", "--json"]);
+  } finally {
+    chmodSync(join(tapDir, "skills"), 0o755);
+  }
+  expect(r.code).toBe(1);
+  const rows: { kind: string; whole_group?: boolean; error?: { code: string } }[] = JSON.parse(
+    r.stdout,
+  ).tap_reexpand_rows;
+  expect(rows.map((row) => [row.kind, row.whole_group, row.error?.code])).toEqual([
+    ["tap_error", true, "source_unreachable"],
+  ]);
+});
+
 test("C-SPEC-18 crew outdated never calls a tap it couldn't re-expand up to date", () => {
   const home = makeCrewHome();
   // The test home's unreachable `core` tap would mark the run unchecked on its own.

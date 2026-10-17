@@ -6,15 +6,10 @@
 import { posix } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { isGistSkillFileName, isGistTap } from "../../core/gist-url.ts";
-import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { withExportedTree } from "../../git/export.ts";
-import { ensureClone } from "../../git/repo/index.ts";
-import { classifyRef } from "../../git/repo/refs.ts";
-import { migrateTapClone } from "../migrate-clones.ts";
-import { type AcquiredTap, acquireTap } from "./index.ts";
+import { type AcquiredTap, acquireTap, resolveTapRef } from "./index.ts";
 import { liveSkillPath } from "./live-skill-path.ts";
-import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 import {
   assertFolderSkillMdLinkAllowed,
   assertStillASkill,
@@ -53,12 +48,7 @@ export function withAcquiredSkill<T>(
     const acquired = acquireTap(tap, home);
     return fn(acquired, liveSkillPath(tap, home, acquired.rootDir, tapRelativePath));
   }
-  migrateTapClone(tap, home);
-  const clonePath = tapClonePath(tap, home);
-  ensureClone(tap.url, clonePath);
-  const sha = resolveRefFetchingIfNeeded(clonePath, ref);
-  const kind = classifyRef(clonePath, ref);
-  const pinned = kind === "sha" || kind === "tag";
+  const { clonePath, sha, pinned } = resolveTapRef(tap, ref, home);
   const exportPath =
     tapRelativePath.length === 0
       ? tap.subpath

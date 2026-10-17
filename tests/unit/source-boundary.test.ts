@@ -12,7 +12,7 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { leadsOutOfSource, repositoryBoundary } from "../../src/sources/source-boundary.ts";
+import { isRefusedSourceFolder, repositoryBoundary } from "../../src/sources/source-boundary.ts";
 import { makeTempDir } from "../helpers/fixtures.ts";
 
 test("C-SPEC-17 a folder linked to `.GIT` leads into `.git`, in any case", () => {
@@ -21,8 +21,8 @@ test("C-SPEC-17 a folder linked to `.GIT` leads into `.git`, in any case", () =>
   mkdirSync(join(repo, "skills", "real"), { recursive: true });
   symlinkSync(join("..", ".GIT"), join(repo, "skills", "meta"));
   const boundary = repositoryBoundary(repo);
-  expect(leadsOutOfSource(boundary, join(repo, "skills", "meta"))).toBe(true);
-  expect(leadsOutOfSource(boundary, join(repo, "skills", "real"))).toBe(false);
+  expect(isRefusedSourceFolder(boundary, join(repo, "skills", "meta"))).toBe(true);
+  expect(isRefusedSourceFolder(boundary, join(repo, "skills", "real"))).toBe(false);
 });
 
 test("C-SPEC-17 a folder whose link text isn't UTF-8 leads out", () => {
@@ -30,12 +30,12 @@ test("C-SPEC-17 a folder whose link text isn't UTF-8 leads out", () => {
   const repo = makeTempDir("crew-boundary-");
   mkdirSync(join(repo, "skills", "\uFFFD"), { recursive: true });
   symlinkSync(Buffer.from([0xff]), join(repo, "skills", "evil"));
-  expect(leadsOutOfSource(repositoryBoundary(repo), join(repo, "skills", "evil"))).toBe(true);
+  expect(isRefusedSourceFolder(repositoryBoundary(repo), join(repo, "skills", "evil"))).toBe(true);
 });
 
 test("C-SPEC-17 a folder crew can't follow to its end leads out", () => {
   const repo = makeTempDir("crew-boundary-");
   mkdirSync(join(repo, "skills"));
   symlinkSync("gone/deeper", join(repo, "skills", "lost"));
-  expect(leadsOutOfSource(repositoryBoundary(repo), join(repo, "skills", "lost"))).toBe(true);
+  expect(isRefusedSourceFolder(repositoryBoundary(repo), join(repo, "skills", "lost"))).toBe(true);
 });

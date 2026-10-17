@@ -83,6 +83,20 @@ test("C-SPEC-18 a skills/ folder crew can't list is source_unreachable for the s
   expect(r.json.error?.message).toContain(`couldn't read \`${skills}\``);
 });
 
+test("C-SPEC-18 a skills/ folder crew can list but not look into is source_unreachable, not empty", () => {
+  // Listed, its every child would read as no folder: never "no skills".
+  const { src } = sourceWith("other");
+  const skills = join(src, "skills");
+  chmodSync(skills, 0o444);
+  try {
+    const r = crew(makeCrewHome(), ["install", src]);
+    expect([r.code, r.json.error?.name]).toEqual([5, "source_unreachable"]);
+    expect(r.json.error?.message).toContain(`couldn't look at \`${skills}\``);
+  } finally {
+    chmodSync(skills, 0o755);
+  }
+});
+
 test("C-SPEC-18 a source crew can't list is source_unreachable", () => {
   const parent = makeTempDir();
   const src = join(parent, "src");

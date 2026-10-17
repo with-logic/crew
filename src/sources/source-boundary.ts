@@ -55,11 +55,11 @@ export function sourceBoundary(
 }
 
 /**
- * True when `folder` — a folder discovery found, below the repository's
- * root or the root itself — leads out of `boundary`, or to the root or
- * into its `.git` through a link.
+ * True when discovery must refuse `folder` — a folder it found, below the
+ * repository's root or the root itself: it leads out of `boundary`, or to
+ * the root or into its `.git`, through a link, or crew can't place it.
  */
-export function leadsOutOfSource(boundary: SourceBoundary, folder: string): boolean {
+export function isRefusedSourceFolder(boundary: SourceBoundary, folder: string): boolean {
   if (boundary === null || resolve(folder) === boundary.root) return false;
   let real: string;
   try {
@@ -90,8 +90,9 @@ function realFolder(folder: string): string {
 }
 
 /**
- * More links than any OS follows in one path (Linux allows 40): discovery
- * has just seen that `folder` is a folder, so the OS resolved it in fewer.
+ * As many links as any OS follows in one path (Linux allows 40):
+ * discovery has just seen that `folder` is a folder, so the OS resolved it
+ * in at most 40.
  */
 const MAX_FOLDER_LINKS = 40;
 
@@ -141,11 +142,15 @@ function followableText(path: string): string {
 }
 
 /**
- * `invalid_skill` for a folder discovery won't read: it leads out of
- * `boundary`'s repository. The message names it by its place in the
- * repository; `details.path` holds it as crew found it.
+ * `invalid_skill` for a folder discovery won't read (`isRefusedSourceFolder`):
+ * it leads out of `boundary`'s repository, or to its root or `.git`. The
+ * message names it by its place in the repository; `details.path` holds it
+ * as crew found it.
  */
-export function outOfSourceError(boundary: NonNullable<SourceBoundary>, folder: string): CrewError {
+export function refusedSourceFolderError(
+  boundary: NonNullable<SourceBoundary>,
+  folder: string,
+): CrewError {
   return new CrewError(
     "invalid_skill",
     `\`${toPosix(relative(boundary.root, folder))}\` leads out of the repository through a link — or to its root or \`.git\` — so crew won't read it`,

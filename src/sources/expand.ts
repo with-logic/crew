@@ -40,7 +40,11 @@ import { isSkillFile } from "../skill/skill-file.ts";
 import { gistLabel, gistSkillCandidates, isOneSkillGist } from "./gist.ts";
 import { findRecursiveSkillDirs } from "./recursive.ts";
 import { standardSkillFolders } from "./skill-folders.ts";
-import { leadsOutOfSource, outOfSourceError, type SourceBoundary } from "./source-boundary.ts";
+import {
+  isRefusedSourceFolder,
+  refusedSourceFolderError,
+  type SourceBoundary,
+} from "./source-boundary.ts";
 
 /** A skill candidate that couldn't be loaded, or staged (§9 steps 4, 8). */
 export interface SkippedSkill {
@@ -161,9 +165,7 @@ function hasCandidates(result: ExpansionResult): boolean {
 function loadCandidates(paths: readonly string[], boundary: SourceBoundary): ExpansionResult {
   const valid: LoadedSkill[] = [];
   const skipped: SkippedSkill[] = [];
-  for (const path of paths) {
-    pushSoft(path, valid, skipped, boundary);
-  }
+  for (const path of paths) pushSoft(path, valid, skipped, boundary);
   return { valid, skipped };
 }
 
@@ -174,8 +176,9 @@ function pushSoft(
   boundary: SourceBoundary,
 ): void {
   // §9 step 5 "Folder links": refused before anything in it is read.
-  if (boundary !== null && leadsOutOfSource(boundary, candidate)) {
-    skipped.push(skippedFrom(candidate, outOfSourceError(boundary, candidate), "invalid_skill"));
+  if (boundary !== null && isRefusedSourceFolder(boundary, candidate)) {
+    const refusal = refusedSourceFolderError(boundary, candidate);
+    skipped.push(skippedFrom(candidate, refusal, "invalid_skill"));
     return;
   }
   try {

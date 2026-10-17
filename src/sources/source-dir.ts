@@ -6,7 +6,7 @@
  * so its failure reports the errno code (`listDir`).
  */
 
-import { statSync } from "node:fs";
+import { accessSync, constants, statSync } from "node:fs";
 import { isGoneError, unreadablePathError } from "../util/errno.ts";
 import { listDir } from "../util/fs.ts";
 
@@ -33,5 +33,18 @@ export function isSourceDir(path: string): boolean {
   } catch (err) {
     if (isGoneError(err)) return false;
     throw unreadablePathError(path, err);
+  }
+}
+
+/**
+ * `source_unreachable` naming source folder `dir` when crew can list it
+ * but not look anything up in it: each entry would read as nothing at
+ * all, and the folder as empty.
+ */
+export function assertSourceDirSearchable(dir: string): void {
+  try {
+    accessSync(dir, constants.X_OK);
+  } catch (err) {
+    throw unreadablePathError(dir, err);
   }
 }

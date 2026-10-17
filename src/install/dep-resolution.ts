@@ -25,7 +25,7 @@ import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../core/types.ts";
 import { loadSkill } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
-import { outOfSourceError, sourceBoundary } from "../sources/source-boundary.ts";
+import { refusedSourceFolderError, sourceBoundary } from "../sources/source-boundary.ts";
 import { listSourceDir } from "../sources/source-dir.ts";
 import { assertCanLookForSkillMd, readSiblingEntry } from "./siblings/disk.ts";
 import type { SiblingScan } from "./siblings/index.ts";
@@ -93,7 +93,11 @@ export function findSiblingDep(
       // Leading out, it fails the dependency whether or not crew can see a
       // `SKILL.md` through it — never a miss to look past (C-SPEC-17).
       if (dir.boundary !== null && sibling.leadsOut) {
-        throw dependencyError(depName, siblingPath, outOfSourceError(dir.boundary, siblingPath));
+        throw dependencyError(
+          depName,
+          siblingPath,
+          refusedSourceFolderError(dir.boundary, siblingPath),
+        );
       }
       if (!sibling.skill) continue;
     }

@@ -145,14 +145,31 @@ export function holdAcquiredTap(tap: TapConfig, ref: string | null, home: string
   if (ref === null || tap.kind === "path") {
     return { acquired: acquireTap(tap, home), release: () => undefined };
   }
+  const { clonePath, sha, pinned } = resolveTapRef(tap, ref, home);
+  const tree = exportTree(clonePath, sha, tap.subpath, home);
+  return { acquired: { rootDir: tree.location, resolvedSha: sha, pinned }, release: tree.remove };
+}
+
+/** A git tap's clone, and the commit a ref names in it (§9 step 3). */
+export interface ResolvedTapRef {
+  readonly clonePath: string;
+  readonly sha: string;
+  /** The ref names an immutable revision: a SHA or a tag (§11.1). */
+  readonly pinned: boolean;
+}
+
+/**
+ * Git tap `tap`'s clone — migrated, and made if missing — and the commit
+ * `ref` names in it, fetched when the clone lacks it. Callers export what
+ * they read of that commit themselves: the tap, or one skill of it.
+ */
+export function resolveTapRef(tap: TapConfig, ref: string, home: string): ResolvedTapRef {
   migrateTapClone(tap, home);
   const clonePath = tapClonePath(tap, home);
   ensureClone(tap.url, clonePath);
   const sha = resolveRefFetchingIfNeeded(clonePath, ref);
   const kind = classifyRef(clonePath, ref);
-  const pinned = kind === "sha" || kind === "tag";
-  const tree = exportTree(clonePath, sha, tap.subpath, home);
-  return { acquired: { rootDir: tree.location, resolvedSha: sha, pinned }, release: tree.remove };
+  return { clonePath, sha, pinned: kind === "sha" || kind === "tag" };
 }
 
 /**

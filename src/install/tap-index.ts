@@ -42,7 +42,11 @@ import { gistSkillCandidates } from "../sources/gist.ts";
 import { migrateTapClone } from "../sources/migrate-clones.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
 import { standardSkillFolders } from "../sources/skill-folders.ts";
-import { leadsOutOfSource, outOfSourceError, sourceBoundary } from "../sources/source-boundary.ts";
+import {
+  isRefusedSourceFolder,
+  refusedSourceFolderError,
+  sourceBoundary,
+} from "../sources/source-boundary.ts";
 import { toPosix } from "../util/fs.ts";
 import {
   type NameFailures,
@@ -152,8 +156,8 @@ function walkTap(
   const boundary = sourceBoundary(tap, home, root);
   for (const folder of standardSkillFolders(root, boundary)) {
     const tapRelativePath = toPosix(relative(root, folder));
-    if (boundary !== null && leadsOutOfSource(boundary, folder)) {
-      failures.set(folder, outOfSourceError(boundary, folder));
+    if (boundary !== null && isRefusedSourceFolder(boundary, folder)) {
+      failures.set(folder, refusedSourceFolderError(boundary, folder));
       continue;
     }
     const skillName = skillNameForIndex(folder);

@@ -27,7 +27,7 @@ import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
 import { removeEach, withLeftBehind } from "../util/cleanup.ts";
-import { ensureDir, rmrf } from "../util/fs.ts";
+import { ensureDir } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { type GitProcessError, runGit } from "./exec.ts";
 import { assertNoSymlinkEscape } from "./tree-safety.ts";
@@ -59,12 +59,13 @@ export function exportTreeAt(clonePath: string, sha: string, subpath: string, de
   try {
     runGit(args, { cwd: clonePath, env: { GIT_INDEX_FILE: indexFile } });
   } catch (err) {
-    // `runGit` only throws `GitProcessError`.
-    const ge = err as GitProcessError;
-    rmrf(indexFile);
-    throw exportFailure(ge, sha, subpath, pathspec, clonePath);
+    // `runGit` only throws `GitProcessError`. The failure stays the one
+    // reported, naming the scratch index if crew couldn't remove it.
+    const failure = exportFailure(err as GitProcessError, sha, subpath, pathspec, clonePath);
+    throw withLeftBehind(failure, removeEach([indexFile]));
   }
-  rmrf(indexFile);
+  // An index crew can't remove is left beside the export, which stands.
+  removeEach([indexFile]);
 }
 
 /**

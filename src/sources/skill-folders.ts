@@ -14,27 +14,31 @@
  * might hold a skill, so it is a candidate too, and the loader reports why
  * it can't be read (§9 step 4). At the root, a folder crew can't list
  * holds no `SKILL.md` it can see, so it is passed over. A `skills/` folder
- * or root crew can't list is `source_unreachable` (`listSourceDir`).
+ * or root crew can't list — or a `skills/` it can list but not look into —
+ * is `source_unreachable` (`./source-dir.ts`).
  */
 
 import { join } from "node:path";
 import { hasSkillMd } from "../skill/load.ts";
 import { canList, isDirectory } from "../util/fs.ts";
-import { leadsOutOfSource, type SourceBoundary } from "./source-boundary.ts";
-import { isSourceDir, listSourceDir } from "./source-dir.ts";
+import { isRefusedSourceFolder, type SourceBoundary } from "./source-boundary.ts";
+import { assertSourceDirSearchable, isSourceDir, listSourceDir } from "./source-dir.ts";
 
 /** The candidate skill folders under `root`, in walk order. */
 export function standardSkillFolders(root: string, boundary: SourceBoundary): string[] {
   const skillsDir = join(root, "skills");
   // A `skills/` crew can't look at is no reason to walk the root instead.
   if (!isSourceDir(skillsDir)) return skillChildren(root);
-  if (leadsOutOfSource(boundary, skillsDir)) return [skillsDir];
+  if (isRefusedSourceFolder(boundary, skillsDir)) return [skillsDir];
+  const names = listSourceDir(skillsDir);
+  // Listed but not searchable, every child would read as no folder.
+  assertSourceDirSearchable(skillsDir);
   const found: string[] = [];
-  for (const name of listSourceDir(skillsDir)) {
+  for (const name of names) {
     const child = join(skillsDir, name);
     if (!isDirectory(child)) continue;
     // A namespace is listed only once it is known to stay inside.
-    if (mayHoldSkill(child) || leadsOutOfSource(boundary, child)) found.push(child);
+    if (mayHoldSkill(child) || isRefusedSourceFolder(boundary, child)) found.push(child);
     // Exactly one level of namespace; other folders (docs, scripts) hold none.
     else found.push(...skillChildren(child, mayHoldSkill));
   }
