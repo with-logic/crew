@@ -23,8 +23,9 @@ import type { IsHiddenInstall } from "./unreadable.ts";
 import { rebuiltTap } from "./usable-marker.ts";
 
 /**
- * True when the entry is project-scope and its recorded root is gone,
- * so no marker could have been read for it (§11.2 check 8).
+ * True when the entry is project-scope and its recorded root is gone
+ * (check 8) or one crew can't look at (check 9), so no marker could have
+ * been read for it (§11.2).
  *
  * A root replaced by a regular file counts as gone: nothing can be
  * read beneath it, so treating it as usable would drop the entry's

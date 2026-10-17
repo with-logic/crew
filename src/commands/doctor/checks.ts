@@ -149,9 +149,9 @@ export function checkProjectRoots(stateEntries: readonly StateEntry[]): Finding[
   for (const entry of stateEntries) {
     if (entry.scope !== "project") continue;
     // A path replaced by a regular file is as unusable as a missing
-    // one — nothing can be read beneath it — and repair applies the
-    // same test, so the two must not disagree. One crew can't look at
-    // isn't missing: check 9 reports it.
+    // one — nothing can be read beneath it. One crew can't look at isn't
+    // missing: check 9 reports it. Repair keeps every entry whose root
+    // isn't usable, a hidden one included.
     if (lookAtEntryRoot(entry).kind === "missing") {
       findings.push({
         level: "warn",

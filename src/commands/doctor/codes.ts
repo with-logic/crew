@@ -15,7 +15,8 @@ export const CODE_LABELS = {
   autoupdate_not_loaded: "autoupdate is enabled but the background updater isn't loaded",
   autoupdate_unexpectedly_loaded: "autoupdate is off but the background updater is still loaded",
   config_invalid: "~/.crew/config.yaml couldn't be parsed",
-  unreadable_marker: "crew can't read or use an install's marker, or list a skills folder",
+  unreadable_marker:
+    "crew can't read or use an install's marker, or look into a skills folder or project root",
   marker_attribution_drift: "an install's marker names a different tap or path than crew's records",
 } as const satisfies Record<string, string>;
 

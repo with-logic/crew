@@ -11,7 +11,7 @@ import { installDirOf } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import type { StateEntry } from "../../core/types.ts";
 import type { Finding } from "./checks.ts";
-import type { UnreadablePath } from "./markers.ts";
+import type { UncheckedPath } from "./markers.ts";
 
 /** Whether `entry`'s install in `agent` sits where crew couldn't read. */
 export type IsHiddenInstall = (entry: StateEntry, agent: string) => boolean;
@@ -21,7 +21,7 @@ export type IsHiddenInstall = (entry: StateEntry, agent: string) => boolean;
  * path it can't read is the user's permissions to fix; a marker it read
  * but can't use, the install's to reinstall.
  */
-export function unreadableFindings(unreadable: readonly UnreadablePath[]): Finding[] {
+export function unreadableFindings(unreadable: readonly UncheckedPath[]): Finding[] {
   const findings: Finding[] = [];
   for (const u of unreadable) {
     findings.push({
@@ -41,7 +41,7 @@ export function unreadableFindings(unreadable: readonly UnreadablePath[]): Findi
  * from the entry alone (§11.1): a project entry's from its root, and one
  * whose root locates nothing (check 8 reports it) is hidden by nothing.
  */
-export function isHiddenBy(unreadable: readonly UnreadablePath[]): IsHiddenInstall {
+export function isHiddenBy(unreadable: readonly UncheckedPath[]): IsHiddenInstall {
   return (entry, agent) => {
     const adapter = agentByName(agent);
     const dir = adapter ? installDirOf(entry, adapter) : "";

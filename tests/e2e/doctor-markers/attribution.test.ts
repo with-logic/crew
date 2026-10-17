@@ -66,13 +66,21 @@ test("C-STATE-05b a marker's own text is printed escaped, so it can't forge outp
   expect(cap.stdout()).not.toContain("\u001b[2J");
 });
 
-for (const [what, change, named] of [
+// A copy on another tap is reinstalled; one on the entry's tap at another
+// path took a relocation whose update failed elsewhere, so it is retried.
+for (const [what, change, named, next] of [
   [
     "another path in its entry's tap",
     { path: "skills/elsewhere" },
     "tap `T` at `skills/elsewhere`",
+    "run `crew update a` to bring it in line",
   ],
-  ["another tap at its entry's path", { tap_name: "elsewhere" }, "tap `elsewhere` at `skills/a`"],
+  [
+    "another tap at its entry's path",
+    { tap_name: "elsewhere" },
+    "tap `elsewhere` at `skills/a`",
+    "reinstall that copy with `--force` to bring it in line",
+  ],
 ] as const) {
   test(`C-STATE-05b a marker that names ${what} is reported too`, () => {
     const home = makeCrewHome();
@@ -85,7 +93,7 @@ for (const [what, change, named] of [
     expect(codes(plain.findings)).toEqual(["marker_attribution_drift:warn"]);
     const tap = marker.tap_name;
     expect(plain.findings[0]!.message).toContain(
-      `names ${named.replace("`T`", `\`${tap}\``)}, but crew's records put a on tap \`${tap}\` at \`skills/a\``,
+      `names ${named.replace("`T`", `\`${tap}\``)}, but crew's records put a on tap \`${tap}\` at \`skills/a\`; ${next}`,
     );
   });
 }

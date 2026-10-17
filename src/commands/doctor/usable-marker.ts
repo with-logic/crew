@@ -4,7 +4,9 @@
  * crew found it in — its `name` that folder's, its `scope` the one crew
  * walked — and its tap loads as a `config.yaml` row (§6.1), since
  * `--repair` may write it there. Anything else is the user's to reinstall,
- * and repair writes nothing from it.
+ * and repair writes nothing from it — except a marker of the other scope
+ * in a folder that scope's walk reads too (`./scope-folders.ts`), which is
+ * that walk's.
  */
 
 import { basename } from "node:path";
@@ -17,21 +19,39 @@ import { parseTapEntry, recordedDiscovery, serializeTap } from "../../config/tap
 import type { CrewError } from "../../core/errors.ts";
 import type { Marker, Scope, TapConfig } from "../../core/types.ts";
 
-/** `marker` when doctor can use it, found in `installDir` at `scope`; otherwise why not. */
+/** What doctor makes of a marker it read: one it uses, the other scope's walk's, or why not. */
+export type MarkerUse =
+  | { readonly kind: "usable"; readonly marker: Marker }
+  | { readonly kind: "elsewhere" }
+  | { readonly kind: "unusable"; readonly reason: string };
+
+/**
+ * What doctor makes of `marker`, found in `installDir` on `scope`'s walk,
+ * in a folder the walks of `scopesHere` read.
+ */
 export function usableMarker(
   marker: UncheckedMarker,
   installDir: string,
   scope: Scope,
-): Marker | string {
+  scopesHere: ReadonlySet<Scope>,
+): MarkerUse {
   if (!isCompleteMarker(marker)) {
-    return `not a crew marker: missing or invalid \`${markerFieldProblem(marker)}\``;
+    return unusable(`not a crew marker: missing or invalid \`${markerFieldProblem(marker)}\``);
   }
   if (marker.name !== basename(installDir)) {
-    return `not this folder's marker: it names the skill \`${marker.name}\``;
+    return unusable(`not this folder's marker: it names the skill \`${marker.name}\``);
   }
-  if (marker.scope !== scope) return `not this folder's marker: it records ${marker.scope} scope`;
+  if (marker.scope !== scope) {
+    if (scopesHere.has(marker.scope)) return { kind: "elsewhere" };
+    return unusable(`not this folder's marker: it records ${marker.scope} scope`);
+  }
   const tapProblem = rebuiltTapProblem(marker);
-  return tapProblem === null ? marker : `its tap wouldn't load: ${tapProblem}`;
+  if (tapProblem !== null) return unusable(`its tap wouldn't load: ${tapProblem}`);
+  return { kind: "usable", marker };
+}
+
+function unusable(reason: string): MarkerUse {
+  return { kind: "unusable", reason };
 }
 
 /** The auto tap `--repair` rebuilds from `marker` when config has none by its name. */

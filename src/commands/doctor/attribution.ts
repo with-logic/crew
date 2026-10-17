@@ -4,7 +4,9 @@
  * a move couldn't relabel (§5.4), say — is reported, not repaired: the
  * entry's other copies name the tap state records, so re-pointing state
  * at this one would move them too. Reinstalling the copy with `--force`
- * brings it in line.
+ * brings a copy on another tap in line; one on the entry's own tap at
+ * another path took a relocated skill (§10.1) whose update failed
+ * elsewhere, and `crew update <name>` retries it.
  */
 
 import type { StateEntry } from "../../core/types.ts";
@@ -23,10 +25,14 @@ export function checkMarkerAttribution(
     const entry = stateEntries.find((e) => ownsInstall(e, m));
     if (entry === undefined) continue;
     if (marker.tap_name === entry.source.tap && marker.path === entry.source.path) continue;
+    const next =
+      marker.tap_name === entry.source.tap
+        ? `run \`crew update ${entry.name}\``
+        : "reinstall that copy with `--force`";
     findings.push({
       level: "warn",
       code: "marker_attribution_drift",
-      message: `\`${m.record.installDir}\` names ${tapLocationLabel(marker.tap_name, marker.path)}, but crew's records put ${entry.name} on ${tapLocationLabel(entry.source.tap, entry.source.path)}; reinstall that copy with \`--force\` to bring it in line`,
+      message: `\`${m.record.installDir}\` names ${tapLocationLabel(marker.tap_name, marker.path)}, but crew's records put ${entry.name} on ${tapLocationLabel(entry.source.tap, entry.source.path)}; ${next} to bring it in line`,
     });
   }
   return findings;
