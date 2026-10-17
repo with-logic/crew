@@ -24,6 +24,7 @@ import {
   crew,
   markerTap,
   NOT_MARKERS,
+  plantMarker,
   redirectAgents,
   tapKept,
   tapOf,
@@ -100,11 +101,7 @@ test("C-INST-13m a copy whose marker names another tap isn't the move's, and doe
   expect(crew(home, ["install", `file://${repo}//skills/a`, ...BOTH])).toBe(0);
   tagRepo(repo, "v1");
   const codexCopy = join(codexAdapter.userPath(), "a");
-  const markerPath = join(codexCopy, ".crew.json");
-  writeFileSync(
-    markerPath,
-    JSON.stringify({ ...JSON.parse(readFileSync(markerPath, "utf8")), tap_name: "elsewhere" }),
-  );
+  plantMarker(codexCopy, codexCopy, { tap_name: "elsewhere" });
   chmodSync(codexCopy, 0o555);
   try {
     expect(crew(home, ["install", `file://${repo}@v1`, ...CLAUDE, "--force"])).toBe(0);

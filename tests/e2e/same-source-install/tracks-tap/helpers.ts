@@ -1,7 +1,8 @@
 /**
  * Shared steps for the whole-tap tracking suites (§10.1.1, §11.1): run
- * the CLI, read each entry's attribution and subscription, and add a
- * sibling upstream before an update.
+ * the CLI, read each entry's attribution and subscription, add a sibling
+ * upstream before an update, and plant markers — or paths that can't hold
+ * one — at install folders (§5.4, §16.5).
  */
 
 import {
@@ -110,7 +111,7 @@ export function addSiblingAndUpdate(home: string, repo: string): number {
 
 /**
  * Paths at an install folder that can't hold a marker, and so name
- * nothing (§10.1, §16.5). Each plants over whatever is at `folder` and
+ * nothing: no move claims one, nor does collection (§5.4, §10.1, §16.5). Each plants over whatever is at `folder` and
  * returns a check that it is still as planted.
  */
 export const NOT_MARKERS: readonly (readonly [string, (folder: string) => () => boolean])[] = [

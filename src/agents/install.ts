@@ -11,6 +11,7 @@
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { CrewError } from "../core/errors.ts";
+import { markerTapFields } from "../core/marker.ts";
 import type { Marker, Scope, TapConfig } from "../core/types.ts";
 import { CREW_INSTALLED_BY } from "../core/version.ts";
 import { hashDirectory } from "../hash/content.ts";
@@ -133,12 +134,7 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
     schema_version: 1,
     name: input.skillName,
     agents,
-    tap_name: input.tap.name,
-    tap_kind: input.tap.kind,
-    tap_url: input.tap.url,
-    tap_subpath: input.tap.subpath,
-    tap_path: input.tap.path,
-    ...(input.tap.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
+    ...markerTapFields(input.tap),
     path: input.tapRelativePath,
     ref: input.ref,
     resolved_sha: input.resolvedSha,

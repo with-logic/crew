@@ -7,19 +7,19 @@
  * names nothing, nor does a folder crew can't search in an agent no entry
  * is installed in. A project entry whose root is missing, relative, or not
  * a string locates no folder, so it neither stops collection nor breaks it.
- * Folders an entry's own agents install into: `./collection-owned.test.ts`.
+ * Folders entries' agents install into: `./agent-folders.test.ts`.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmodSync } from "node:fs";
 import { join, relative } from "node:path";
-import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
-import { codexAdapter } from "../../../../src/agents/codex.ts";
-import { geminiCliAdapter } from "../../../../src/agents/gemini-cli.ts";
-import { readState, writeState } from "../../../../src/state/load.ts";
-import { makeCrewHome } from "../../../helpers/env.ts";
-import { makeTempDir, tagRepo } from "../../../helpers/fixtures.ts";
-import { buildRepo } from "../helpers.ts";
+import { claudeCodeAdapter } from "../../../../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../../../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../../../../src/agents/gemini-cli.ts";
+import { readState, writeState } from "../../../../../src/state/load.ts";
+import { makeCrewHome } from "../../../../helpers/env.ts";
+import { makeTempDir, tagRepo } from "../../../../helpers/fixtures.ts";
+import { buildRepo } from "../../helpers.ts";
 import {
   BOTH,
   CLAUDE,
@@ -30,7 +30,7 @@ import {
   redirectAgents,
   tapKept,
   tapOf,
-} from "./helpers.ts";
+} from "../helpers.ts";
 
 let agents: ReturnType<typeof redirectAgents>;
 beforeEach(() => {

@@ -65,34 +65,31 @@ export function garbageCollectAutoTaps(state: StateFile, home: string): string[]
  * in every agent, so a copy state doesn't list counts too; each folder read
  * once (agents share some, §7.2) — or "unreadable" as soon as one that
  * might name a tap can't be read: any in a folder one of an entry's agents
- * installs into, and elsewhere one whose file crew can see. Elsewhere, a
+ * installs into, and elsewhere one whose file crew can see. Any other
  * folder crew can't search names nothing.
  */
 function scanMarkerTaps(state: StateFile): ReadonlySet<string> | "unreadable" {
-  const located = state.installations.filter(
-    // §11.1: a missing, relative, or non-string project root locates nothing.
-    (entry) => entry.scope === "user" || hasUsableProjectRoot(entry),
-  );
-  // The folders entries' agents install into, settled over all of state
-  // first: a folder two entries share (a project root at the user's home,
-  // say) counts as installed into whichever entry reaches it first.
-  const own = new Set<string>();
-  for (const entry of located) {
+  // Settled over all of state first: a folder two entries share (a project
+  // root at the user's home, say) is one an entry's agent installs into no
+  // matter which entry the scan reaches it from first.
+  const agentFolders = new Set<string>();
+  for (const entry of state.installations) {
     for (const adapter of ALL_AGENTS) {
-      if (entry.agents.includes(adapter.name)) own.add(folderOf(entry, adapter));
+      const installDir = installDirOf(entry, adapter);
+      if (installDir !== "" && entry.agents.includes(adapter.name)) agentFolders.add(installDir);
     }
   }
   const named = new Set<string>();
   const seen = new Set<string>();
-  for (const entry of located) {
+  for (const entry of state.installations) {
     for (const adapter of ALL_AGENTS) {
-      const installDir = folderOf(entry, adapter);
+      const installDir = installDirOf(entry, adapter);
       if (installDir === "" || seen.has(installDir)) continue;
       seen.add(installDir);
       const read = readMarkerAt(installDir);
       if (read.kind === "none") continue;
       if (read.kind === "unreadable") {
-        if (own.has(installDir) || markerFileExists(installDir)) return "unreadable";
+        if (agentFolders.has(installDir) || markerFileVisible(installDir)) return "unreadable";
         continue;
       }
       const tap = read.marker.tap_name;
@@ -102,8 +99,13 @@ function scanMarkerTaps(state: StateFile): ReadonlySet<string> | "unreadable" {
   return named;
 }
 
-/** `entry`'s install folder in `adapter`; "" where the adapter has none at its scope. */
-function folderOf(entry: StateEntry, adapter: AgentAdapter): string {
+/**
+ * `entry`'s install folder in `adapter`; "" where there is none: the
+ * adapter has no folder at its scope, or the entry is a project one whose
+ * root is missing, relative, or not a string (§11.1), which locates nothing.
+ */
+function installDirOf(entry: StateEntry, adapter: AgentAdapter): string {
+  if (entry.scope === "project" && !hasUsableProjectRoot(entry)) return "";
   const base = baseFor(adapter, entry.scope, cwdForEntry(entry, ""));
   return base === "" ? "" : join(base, entry.name);
 }
@@ -113,7 +115,7 @@ function folderOf(entry: StateEntry, adapter: AgentAdapter): string {
  * it. Outside the folders entries' agents install into, one crew can't
  * see — gone, or in a folder it can't search — names nothing (§16.5).
  */
-function markerFileExists(installDir: string): boolean {
+function markerFileVisible(installDir: string): boolean {
   try {
     lstatSync(join(installDir, ".crew.json"));
     return true;

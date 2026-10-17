@@ -15,6 +15,7 @@ import {
   type UncheckedMarker,
 } from "../../agents/marker-read.ts";
 import { ALL_AGENTS } from "../../agents/registry.ts";
+import { markerTapFields } from "../../core/marker.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { tryReadJson, writeJson } from "../../util/json.ts";
 import type { Reattribution } from "../duplicate-rules/index.ts";
@@ -179,12 +180,7 @@ function rewriteMarker(m: MarkerToMove, tapsByName: ReadonlyMap<string, TapConfi
   const { tap_discovery: _dropped, ...rest } = m.marker;
   writeJson(join(m.installDir, ".crew.json"), {
     ...rest,
-    tap_name: tap.name,
-    tap_kind: tap.kind,
-    tap_url: tap.url,
-    tap_subpath: tap.subpath,
-    tap_path: tap.path,
-    ...(tap.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
+    ...markerTapFields(tap),
     path: m.move.toPath,
   } satisfies UncheckedMarker);
 }

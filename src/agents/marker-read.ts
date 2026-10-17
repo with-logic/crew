@@ -1,9 +1,9 @@
 /**
  * Reading the crew marker in an install folder (§7.5, §11.1). A path that
- * can't hold a marker names nothing. To `readMarkerAt`, neither does one
- * crew can't parse, while one it can't read might name any tap, so a
- * caller deciding whether a marker still names a tap — auto-tap
- * collection, say — must treat it as possibly naming one.
+ * can't hold a marker names nothing. `readMarkerAt` also reports a marker
+ * crew can't parse as `none`, and one it can't read as `unreadable`: that
+ * marker might name any tap, so a caller deciding whether a tap is still
+ * named — auto-tap collection, say — must treat it as naming one.
  */
 
 import { join } from "node:path";
@@ -21,8 +21,9 @@ export type MarkerRead =
 
 /**
  * True for a failed read of a path that can't hold a marker: gone (§10.1),
- * or a folder. A parse error isn't one: the move path refuses a marker it
- * can't parse (§5.4), while `readMarkerAt` counts it as naming nothing.
+ * or a folder. A parse error isn't one: the move's strict read refuses a
+ * marker it can't parse (§5.4), while `readMarkerAt` counts it as naming
+ * nothing.
  */
 export function isNotAMarkerError(err: unknown): boolean {
   return isGoneError(err) || (err as NodeJS.ErrnoException).code === "EISDIR";
