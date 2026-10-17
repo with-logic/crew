@@ -29,7 +29,7 @@
 - Unreadable source files are reported as `source_unreachable`.
 
 ### Fixed
-- `--dry-run` no longer modifies anything on `uninstall`, `update`, `tap add/remove/update`, `agents`, `autoupdate`, `cache clean` and `doctor --repair`.
+- `--dry-run` no longer changes installed skills, markers, state or config on `uninstall`, `update`, `tap add/remove/update`, `agents`, `autoupdate`, `cache clean` and `doctor --repair`. (`update --dry-run` still refreshes tap clones under `~/.crew/repos/`, as `crew outdated` does.)
 - `crew uninstall --scope` and `--prune` now honor the scope, and no longer drop same-named installs in other projects.
 - `doctor --repair` reconciles autoupdate scheduler drift.
 - A failed agent target on `update` keeps its previous state and is retried next run.
