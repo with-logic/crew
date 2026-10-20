@@ -2,13 +2,9 @@
  * Per-skill update logic for `crew update` (§10.1).
  *
  * Given one state entry, look up its tap, acquire it, and either:
- *   - report `up_to_date` if the resolved SHA / content hash hasn't moved
- *     and the skill is still where state records it;
+ *   - report `up_to_date` if the resolved SHA / content hash hasn't moved;
  *   - report `skipped` if the entry is pinned and not forced;
- *   - re-stage and re-install (`./apply.ts`) if the SHA moved, if a pinned
- *     entry is forced (`--force`, §10.1 step 3b), or if the skill moved to
- *     another path in its tap at the same SHA — a relocation (C-UPD-37),
- *     reinstalled so every copy's marker records the new path.
+ *   - re-stage and re-install if the SHA moved.
  *
  * Tap re-expansion (additions / source_gone) lives in `tap-reexpand/index.ts`;
  * this module handles only the per-existing-entry update.
@@ -16,15 +12,16 @@
 
 import { existsSync } from "node:fs";
 import { cwdForEntry } from "../../agents/adapter.ts";
-import type { Config, StateEntry, StateFile } from "../../core/types.ts";
-import { withAcquiredSkill } from "../../sources/acquire/one-skill.ts";
-import { entryIdentity } from "../../state/collections/index.ts";
+import type { CrewError } from "../../core/errors.ts";
+import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
+import { hashDirectory } from "../../hash/content.ts";
+import { loadSkill } from "../../skill/load.ts";
+import { type AcquiredTap, withAcquiredSkillDir } from "../../sources/acquire/index.ts";
+import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
-import { crewErrorNameOf } from "../../util/errno.ts";
-import { applyUpdate } from "./apply.ts";
 import { peekResolvedSha } from "./peek.ts";
-import { hasFailedTarget, rowFor } from "./public-row.ts";
+import { reinstallIntoAgents } from "./reinstall.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
@@ -38,28 +35,29 @@ export function updateOneEntry(
   dryRun: boolean = false,
 ): { row: UpdateRow; updatedState: StateFile; bumpHardFailure: boolean } {
   try {
-    const relocated = isRelocated(entry, state);
-    const outcome = updateOne(entry, config, home, { force, fallbackCwd, dryRun, relocated });
+    const outcome = updateOne(entry, config, home, force, fallbackCwd, dryRun);
     let next = state;
-    const targetFailed = hasFailedTarget(outcome);
-    // §10.1: a target crew couldn't write keeps its previous install, so
-    // the entry stays as it was — its recorded path too — and the next
-    // run tries again.
-    if (outcome.kind === "updated" && !targetFailed) {
-      const agents = outcome.per_target.map((t) => t.agent);
-      const newEntry = rebuildStateEntry(entry, outcome.new_sha, outcome.content_hash, agents);
+    if (outcome.kind === "updated") {
+      const successfulTargets = outcome.per_target
+        .filter((t) => t.kind !== "failed")
+        .map((t) => t.agent);
+      const newEntry = rebuildStateEntry(
+        entry,
+        outcome.new_sha,
+        outcome.content_hash,
+        successfulTargets,
+      );
       next = upsertEntry(state, newEntry);
     }
     return {
       row: rowFor(entry, outcome),
       updatedState: next,
-      bumpHardFailure: targetFailed,
+      bumpHardFailure:
+        outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed"),
     };
   } catch (err) {
-    // A raw `node:fs` error can land here too (a file crew can't read
-    // while hashing); its errno `.code` is no §13 name.
-    const code = crewErrorNameOf(err, "usage_error");
-    const soft = code === "no_skills_found" || code === "invalid_ref";
+    const ce = err as CrewError;
+    const soft = ce.code === "no_skills_found" || ce.code === "invalid_ref";
     if (soft) {
       return {
         row: rowFor(entry, { kind: "source_gone" }),
@@ -75,7 +73,7 @@ export function updateOneEntry(
     return {
       row: rowFor(entry, {
         kind: "failed",
-        error: { code, message: (err as Error).message },
+        error: { code: ce.code ?? "usage_error", message: ce.message },
       }),
       updatedState: state,
       bumpHardFailure: true,
@@ -83,57 +81,30 @@ export function updateOneEntry(
   }
 }
 
-/** How one entry's update runs. */
-interface UpdateRun {
-  readonly force: boolean;
-  readonly fallbackCwd: string;
-  readonly dryRun: boolean;
-  /**
-   * Re-expansion found the skill at a new path (§10.1, C-UPD-37): it is
-   * reinstalled even with its content unchanged, so its marker's `path`
-   * follows — never `up_to_date` while state and marker disagree.
-   */
-  readonly relocated: boolean;
-}
-
-/**
- * True when `entry`, as re-expansion read it back, sits at another path
- * than `state` records for the same install (§11.1: tap, name, scope,
- * project root). State keeps the recorded path until the update succeeds.
- */
-function isRelocated(entry: StateEntry, state: StateFile): boolean {
-  const recorded = recordedPathsOf(state).get(entryIdentity(entry));
-  return recorded !== undefined && recorded !== entry.source.path;
-}
-
-/**
- * Each install's recorded path by identity, built once per state an update
- * run passes — not once per entry, which over every entry would be
- * quadratic. State's list is replaced, never changed in place, so a list
- * stands for its contents.
- */
-const recordedPaths = new WeakMap<readonly StateEntry[], ReadonlyMap<string, string>>();
-
-function recordedPathsOf(state: StateFile): ReadonlyMap<string, string> {
-  const known = recordedPaths.get(state.installations);
-  if (known !== undefined) return known;
-  const paths = new Map<string, string>();
-  for (const e of state.installations) {
-    // The first entry of an identity is the one recorded, as `find` would take.
-    const identity = entryIdentity(e);
-    if (!paths.has(identity)) paths.set(identity, e.source.path);
-  }
-  recordedPaths.set(state.installations, paths);
-  return paths;
+/** Build an UpdateRow for a state entry, threading through project_root. */
+function rowFor(entry: StateEntry, outcome: InternalOutcome): UpdateRow {
+  const publicOutcome =
+    outcome.kind === "updated"
+      ? { kind: "updated" as const, new_sha: outcome.new_sha, per_target: outcome.per_target }
+      : outcome;
+  return {
+    name: entry.name,
+    scope: entry.scope,
+    ...(entry.project_root === undefined
+      ? {}
+      : { project_root: String(entry.project_root ?? "(unknown)") }),
+    outcome: publicOutcome,
+  };
 }
 
 function updateOne(
   entry: StateEntry,
   config: Config,
   home: string,
-  run: UpdateRun,
+  force: boolean,
+  fallbackCwd: string,
+  dryRun: boolean,
 ): InternalOutcome {
-  const { force, fallbackCwd, dryRun } = run;
   if (
     entry.scope === "project" &&
     !(hasUsableProjectRoot(entry) && existsSync(entry.project_root))
@@ -151,9 +122,6 @@ function updateOne(
     // Tap was removed from config (manually); doctor --repair can fix.
     return { kind: "tap_missing", tap: entry.source.tap };
   }
-  // A forced pinned entry, or a relocated one, is reinstalled at an
-  // unchanged commit or content.
-  const reinstallAnyway = run.relocated || (force && entry.pinned);
   // §10.1 step 3c: re-resolve the entry's own ref. An entry installed at
   // a branch follows that branch (a branch is not pinned), and a forced
   // tag update installs the tag's current commit — neither is the
@@ -162,8 +130,10 @@ function updateOne(
   // Resolution happens before materialization: an up-to-date tap needs
   // only its SHA, and exporting a large tree just to discard it is the
   // common case on a routine `crew update`.
+  // `--force` reinstalls a pinned entry even at an unchanged SHA, so it
+  // still needs the bytes.
   const peeked = peekResolvedSha(tap, entry.ref, home);
-  if (peeked !== null && peeked === entry.resolved_sha && !reinstallAnyway) {
+  if (peeked !== null && peeked === entry.resolved_sha && !(force && entry.pinned)) {
     return { kind: "up_to_date" };
   }
   if (peeked !== null && entry.pinned && !force) {
@@ -172,13 +142,51 @@ function updateOne(
   // Only this entry's own subtree is read, so only it is exported —
   // otherwise every entry sharing a whole-repo tap materializes the
   // whole repository again (§10.1).
-  return withAcquiredSkill(tap, entry.ref, entry.source.path, home, (acquired, skillPath) =>
-    applyUpdate(entry, acquired, skillPath, tap, {
-      home,
-      force,
-      entryCwd,
-      dryRun,
-      reinstallAnyway,
-    }),
+  return withAcquiredSkillDir(tap, entry.ref, entry.source.path, home, (acquired, skillDir) =>
+    applyUpdate(entry, acquired, skillDir, tap, home, force, entryCwd, dryRun),
   );
+}
+
+/** Stage and reinstall one entry from an already-acquired tree. */
+function applyUpdate(
+  entry: StateEntry,
+  acquired: AcquiredTap,
+  // Tap re-expansion has already marked missing children `source_gone`.
+  skillDir: string,
+  tap: TapConfig,
+  home: string,
+  force: boolean,
+  entryCwd: string,
+  dryRun: boolean,
+): InternalOutcome {
+  const newSha = acquired.resolvedSha;
+
+  if (entry.pinned && !force && newSha !== null && newSha !== entry.resolved_sha) {
+    return { kind: "skipped", reason: "pinned to tag; upstream moved" };
+  }
+
+  const sourceHash = newSha === null ? hashDirectory(skillDir) : undefined;
+  if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
+    if (newSha !== null) return { kind: "up_to_date" };
+    if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
+  }
+
+  const loaded = loadSkill(skillDir);
+  if (dryRun) return { kind: "would_update", new_sha: newSha };
+  const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash);
+  const perTarget = reinstallIntoAgents({
+    entry,
+    tap,
+    storePath: staged.storePath,
+    contentHash: staged.contentHash,
+    newSha,
+    force,
+    entryCwd,
+  });
+  return {
+    kind: "updated",
+    new_sha: newSha,
+    content_hash: staged.contentHash,
+    per_target: perTarget,
+  };
 }

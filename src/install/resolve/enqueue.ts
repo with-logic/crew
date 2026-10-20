@@ -16,8 +16,7 @@ import { withResolutionRoots } from "../resolve-ref/roots.ts";
 import { expandSkillsAsItems } from "./expand-items.ts";
 
 /**
- * Where a candidate skill lives in the acquired tree — its directory, or
- * a gist's skill file (§9 step 5).
+ * Where a candidate's skill directory lives in the acquired tree.
  *
  * Without a ref, `resolveTapRef` indexed the live clone and
  * `location.path` is absolute inside it. With a ref, resolution already
@@ -25,7 +24,7 @@ import { expandSkillsAsItems } from "./expand-items.ts";
  * path keeps this independent of which root produced the location
  * (§9 step 3).
  */
-function memberPath(
+function memberDir(
   rootDir: string,
   location: { readonly path: string; readonly tapRelativePath: string },
   ref: string | null,
@@ -41,10 +40,8 @@ export interface PendingItem {
   readonly tap: TapConfig;
   readonly tapRelativePath: string;
   readonly resolvedSha: string | null;
-  /** The ref the user asked for, if any (`ResolvedSkill.ref`). */
   readonly requestedRef: string | null;
   readonly pinned: boolean;
-  /** See `ResolvedSkill.explicit`: named by the user, not pulled in as a dependency. */
   readonly explicit: boolean;
   /** See `ResolvedSkill.tracksTap` / `StateEntry.tracks_tap`. */
   readonly tracksTap: boolean;
@@ -73,8 +70,12 @@ export function enqueueTapRef(
         expandSkillsAsItems(
           acquired.rootDir,
           matched,
-          acquired,
-          { baseTapPath: "", requestedRef: source.ref, explicit, tracksTap: true },
+          "",
+          acquired.resolvedSha,
+          source.ref,
+          acquired.pinned,
+          explicit,
+          true,
           home,
         ),
       );
@@ -104,15 +105,14 @@ export function enqueueTapRef(
       const run = (acq: AcquiredTap): void => {
         for (const member of candidate.members) {
           const expansion = expandSkillsAsItems(
-            memberPath(acq.rootDir, member, source.ref),
+            memberDir(acq.rootDir, member, source.ref),
             candidate.tap,
-            acq,
-            {
-              baseTapPath: member.tapRelativePath,
-              requestedRef: source.ref,
-              explicit,
-              tracksTap: true,
-            },
+            member.tapRelativePath,
+            acq.resolvedSha,
+            source.ref,
+            acq.pinned,
+            explicit,
+            true,
             home,
           );
           items.push(...expansion.items);
@@ -127,15 +127,14 @@ export function enqueueTapRef(
     const skill = candidate as Extract<typeof candidate, { kind: "skill" }>;
     const expand = (acq: AcquiredTap) =>
       expandSkillsAsItems(
-        memberPath(acq.rootDir, skill.location, source.ref),
+        memberDir(acq.rootDir, skill.location, source.ref),
         skill.tap,
-        acq,
-        {
-          baseTapPath: skill.location.tapRelativePath,
-          requestedRef: source.ref,
-          explicit,
-          tracksTap: false,
-        },
+        skill.location.tapRelativePath,
+        acq.resolvedSha,
+        source.ref,
+        acq.pinned,
+        explicit,
+        false,
         home,
       );
     const expansion = acquired

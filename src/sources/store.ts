@@ -12,20 +12,14 @@
  *     longer referenced by state or any marker.
  */
 
-import { copyFileSync, existsSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import { CrewError } from "../core/errors.ts";
-import { crewHome, paths, storeEntryPath } from "../core/paths.ts";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { crewHome, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
-import { isSkillFile } from "../skill/skill-file.ts";
-import { appendLeftBehind, removeEach } from "../util/cleanup.ts";
 import { copyTree } from "../util/copy.ts";
-import { errnoReason, isGoneError, unreadablePathError } from "../util/errno.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
-import { isReadable } from "../util/readable.ts";
 import { safePath } from "../util/redact.ts";
-import { climbsOut } from "../util/relative-path.ts";
 
 /** Record returned after staging. */
 export interface StoredSkill {
@@ -37,43 +31,22 @@ export interface StoredSkill {
 }
 
 /**
- * Copy the skill at `skillPath` (a directory, or a gist's skill file)
- * into the store under `<name>@<short-sha>`. If the entry already exists
- * with a matching content hash, the existing one is reused.
- *
- * Every failure is a `source_unreachable` `CrewError` (§9 step 8): one
- * naming a file of the skill crew can't read (`details.path`), or one
- * naming crew's own store (`details.store`) when crew can't use it.
+ * Copy `sourceDir` into the store under `<name>@<short-sha>`. If the
+ * entry already exists with a matching content hash, the existing one
+ * is reused.
  */
 export function stageIntoStore(
-  skillPath: string,
+  sourceDir: string,
   name: string,
   resolvedSha: string | null,
   home: string = crewHome(),
   sourceHash?: string,
 ): StoredSkill {
-  try {
-    return stage(skillPath, name, resolvedSha, home, sourceHash);
-  } catch (err) {
-    // A failed copy is already classified (before its cleanup); anything
-    // else staging throws is an errno error from the filesystem.
-    if (err instanceof CrewError) throw err;
-    throw stagingError(err as NodeJS.ErrnoException, skillPath, home);
-  }
-}
-
-function stage(
-  skillPath: string,
-  name: string,
-  resolvedSha: string | null,
-  home: string,
-  sourceHash: string | undefined,
-): StoredSkill {
   // A path source with no SHA uses the hash itself as the short id so
   // different path-installed skills don't collide in the store.
-  // `sourceHash`, when the caller already hashed `skillPath`, avoids
+  // `sourceHash`, when the caller already hashed `sourceDir`, avoids
   // walking the same unbounded tree twice.
-  const shortSha = shortShaFor(skillPath, resolvedSha, sourceHash);
+  const shortSha = shortShaFor(sourceDir, resolvedSha, sourceHash);
   const storePath = storeEntryPath(name, shortSha, home);
 
   if (existsSync(storePath)) {
@@ -85,93 +58,27 @@ function stage(
 
   const staging = `${storePath}.staging-${Date.now()}`;
   if (exists(staging)) rmrf(staging);
-  // Looked at before copying: a skill file crew can't look at is already
-  // `source_unreachable` naming it, and must not be classified again.
-  const skillFile = isSkillFile(skillPath);
-  try {
-    copySkill(skillPath, skillFile, staging);
-    ensureDir(join(storePath, "..")); // parents
-    atomicReplace(staging, storePath);
-  } catch (err) {
-    // Classified first, while the staging folder is still there to tell a
-    // copy's sides apart; a partial copy is never left for `crew doctor`,
-    // unless crew can't remove it, which the error then names.
-    const fault = stagingError(err as NodeJS.ErrnoException, skillPath, home);
-    throw appendLeftBehind(fault, removeEach([staging]));
-  }
+  copyTree(sourceDir, staging, { stripRootMarker: true });
+  ensureDir(join(storePath, "..")); // parents
+  atomicReplace(staging, storePath);
 
   const contentHash = hashDirectory(storePath);
   return { storePath, contentHash, shortSha, reused: false };
 }
 
-/** True when a `stageIntoStore` failure is crew's own store, not the skill. */
-export function isStoreFault(err: CrewError): boolean {
-  return "store" in err.details;
-}
-
 /**
- * A staging failure as a §13 error: a file of the skill crew can't read
- * names that file; anything else is crew's own store. Reading a file of
- * the skill — or the file going away mid-copy, as the source is edited —
- * is the skill's. A copy and a symlink are ambiguous: Node names a
- * copy's source file even when writing failed, and a symlink's text.
- * Either is the store's when its destination side broke — a symlink, or
- * a copy into a folder that is gone or with a source crew can still read
- * (a full disk, say).
- */
-export function stagingError(
-  err: NodeJS.ErrnoException,
-  skillPath: string,
-  home: string,
-): CrewError {
-  const file = err.path ?? skillPath;
-  // A failed symlink names the link's text, not a file of the skill; a
-  // copy whose destination folder is gone means crew's staging folder was.
-  const dest = (err as { dest?: string }).dest;
-  const storeSide = err.syscall === "symlink" || (dest !== undefined && !existsSync(dirname(dest)));
-  const outsideSkill = climbsOut(relative(skillPath, file));
-  // A copy names its source file even when writing failed: only a copy
-  // whose source is gone, or crew can't read, failed on the skill's side.
-  const skillSide = err.syscall !== "copyfile" || isGoneError(err) || !isReadable(file);
-  if (!(storeSide || outsideSkill) && skillSide) {
-    return unreadablePathError(file, err, "read");
-  }
-  const store = paths(home).storeDir;
-  return new CrewError(
-    "source_unreachable",
-    `couldn't use crew's store at \`${store}\` — ${errnoReason(err)}`,
-    { store },
-    `Check that \`${store}\` and the folders above it are writable by you, and that the disk has room.`,
-  );
-}
-
-/**
- * Copy a skill's files into `dest`. A gist skill (`skillFile`) is a
- * single file, and it becomes the `SKILL.md` of its own directory (§9
- * step 8).
- */
-function copySkill(source: string, skillFile: boolean, dest: string): void {
-  if (skillFile) {
-    ensureDir(dest);
-    copyFileSync(source, join(dest, "SKILL.md"));
-  } else {
-    copyTree(source, dest, { stripRootMarker: true });
-  }
-}
-
-/**
- * First 8 chars of a SHA, or of a hash of the skill directory for path
- * sources (which never hold gist skill files). `sourceHash` lets a
- * caller that already hashed `skillDir` skip a second full walk; it must
- * be a `hashDirectory` digest of that same directory.
+ * First 8 chars of a SHA, or of a hash of the source dir for path
+ * sources. `sourceHash` lets a caller that already hashed `sourceDir`
+ * skip a second full walk; it must be a `hashDirectory` digest of that
+ * same directory.
  */
 export function shortShaFor(
-  skillDir: string,
+  sourceDir: string,
   resolvedSha: string | null,
   sourceHash?: string,
 ): string {
   if (resolvedSha !== null) return resolvedSha.slice(0, 8);
   // Path source: derive a stable short id from the directory's content hash.
-  const digest = sourceHash ?? hashDirectory(skillDir); // `sha256:xxxx...`
+  const digest = sourceHash ?? hashDirectory(sourceDir); // `sha256:xxxx...`
   return digest.slice("sha256:".length, "sha256:".length + 8);
 }

@@ -17,22 +17,22 @@ import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { garbageCollectStore } from "../../maintenance/gc.ts";
 import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
-import { type MarkerEntry, ownsInstall, sameInstall } from "./markers.ts";
-import { lookAtEntryRoot } from "./project-root.ts";
-import type { IsHiddenInstall } from "./unreadable.ts";
-import { rebuiltTap } from "./usable-marker.ts";
+import { hasUsableProjectRoot } from "../../state/validation.ts";
+import { isDirectory } from "../../util/fs.ts";
+import type { MarkerEntry } from "./markers.ts";
 
 /**
- * True when the entry is project-scope and its recorded root is gone
- * (check 8) or one crew can't look at (check 9), so no marker could have
- * been read for it (§11.2).
+ * True when the entry is project-scope and its recorded root is gone,
+ * so no marker could have been read for it (§11.2 check 8).
  *
  * A root replaced by a regular file counts as gone: nothing can be
  * read beneath it, so treating it as usable would drop the entry's
  * state on the assumption a marker exists there.
  */
 function isUnreadableProjectEntry(entry: StateEntry): boolean {
-  return entry.scope === "project" && lookAtEntryRoot(entry).kind !== "usable";
+  return (
+    entry.scope === "project" && !(hasUsableProjectRoot(entry) && isDirectory(entry.project_root))
+  );
 }
 
 /**
@@ -41,11 +41,7 @@ function isUnreadableProjectEntry(entry: StateEntry): boolean {
  * lock-free so that the scheduler step can run under the same lock
  * without nesting a second acquisition, which would deadlock.
  */
-export function repairStateUnderLock(
-  markers: readonly MarkerEntry[],
-  hidden: IsHiddenInstall,
-  home: string,
-): void {
+export function repairStateUnderLock(markers: readonly MarkerEntry[], home: string): void {
   {
     let config = readConfig(home);
     let current = readState(home);
@@ -53,11 +49,19 @@ export function repairStateUnderLock(
     // Reconstruct missing taps from markers FIRST so state entries can
     // reference them.
     const taps = new Map<string, TapConfig>(config.taps.map((t) => [t.name, t]));
-    // Every marker here loads as a tap row (`usableMarker`), so the
-    // rebuilt config does too.
     for (const m of markers) {
       const marker = m.record.marker;
-      if (!taps.has(marker.tap_name)) taps.set(marker.tap_name, rebuiltTap(marker));
+      if (taps.has(marker.tap_name)) continue;
+      const reconstructed: TapConfig = {
+        name: marker.tap_name,
+        kind: marker.tap_kind,
+        registered: false, // reconstructed taps default to auto
+        url: marker.tap_url,
+        subpath: marker.tap_subpath,
+        path: marker.tap_path,
+        ...(marker.tap_discovery === "recursive" ? { discovery: "recursive" } : {}),
+      };
+      taps.set(reconstructed.name, reconstructed);
     }
     config = { ...config, taps: [...taps.values()] };
     writeConfig(config, home);
@@ -71,13 +75,17 @@ export function repairStateUnderLock(
     // in that sense: `buildMarkerIndex` never walked that root, so its
     // marker is unread rather than absent. §11.2 leaves a moved project
     // to the user, so dropping the entry here would silently discard
-    // the only record of the install. So, likewise, is one whose marker
-    // crew couldn't read (check 9): unread, not absent.
+    // the only record of the install.
     const keep = current.installations.filter(
       (entry) =>
         isUnreadableProjectEntry(entry) ||
-        entry.agents.some((agent) => hidden(entry, agent)) ||
-        markers.some((m) => ownsInstall(entry, m)),
+        markers.some(
+          (m) =>
+            m.record.marker.name === entry.name &&
+            m.record.scope === entry.scope &&
+            (m.projectRoot ?? null) === (entry.project_root ?? null) &&
+            entry.agents.some((t) => m.record.marker.agents.includes(t)),
+        ),
     );
     current = { schema_version: 1, installations: keep };
 
@@ -86,7 +94,12 @@ export function repairStateUnderLock(
     // a path-shared install yields one state entry listing every owner.
     for (const m of markers) {
       const marker = m.record.marker;
-      const existing = current.installations.find((e) => sameInstall(e, m));
+      const existing = current.installations.find(
+        (e) =>
+          e.name === marker.name &&
+          e.scope === m.record.scope &&
+          (e.project_root ?? null) === (m.projectRoot ?? null),
+      );
       if (existing) {
         const missing = marker.agents.filter((a) => !existing.agents.includes(a));
         if (missing.length > 0) {

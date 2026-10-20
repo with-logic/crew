@@ -1,6 +1,6 @@
 {
   "name": "crew",
-  "version": "0.11.0",
+  "version": "0.10.1",
   "description": "A package manager for Agent Skills",
   "author": "Logic App, Inc.",
   "license": "MIT",
@@ -21,7 +21,6 @@
     "build-known-taps": "bun run known-taps build",
     "check-known-taps": "bun run known-taps check",
     "update-known-tap-pins": "bun run known-taps update",
-    "smoke:gist": "bun run scripts/smoke-gist.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check . && bun run scripts/check-file-size.ts",
@@ -30,7 +29,7 @@
     "check": "bun run check-release-signing-key && bun run known-taps check && bun run typecheck && bun run lint && bun test"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.14",
+    "@biomejs/biome": "2.5.15",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
     "@types/proper-lockfile": "^4.1.4",
@@ -38,7 +37,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "js-yaml": "^5.4.2",
+    "js-yaml": "^5.5.0",
     "proper-lockfile": "^4.1.2",
     "yargs": "^18.2.0"
   }

@@ -1,8 +1,3 @@
-/**
- * Help entry for `crew install`. Implements PRD §5.5 for the command of
- * §5.1, §8.2 (references, gists included), and §9.
- */
-
 import type { CommandHelp } from "./types.ts";
 
 export const installHelp: CommandHelp = {
@@ -37,7 +32,7 @@ export const installHelp: CommandHelp = {
     {
       flag: "--recursive",
       description:
-        "For direct git/path sources (not gists), fall back to bounded recursive discovery when standard tap layouts find no skills.",
+        "For direct git/path sources, fall back to bounded recursive discovery when standard tap layouts find no skills.",
     },
     {
       flag: "--from-git <git-source>",
@@ -70,10 +65,6 @@ export const installHelp: CommandHelp = {
     {
       command: "crew install gh:acme/skills@v1.2.0//python/testing",
       description: "Install a specific skill, pinned to a release, from a subfolder of a repo.",
-    },
-    {
-      command: "crew install https://gist.github.com/acme/aa5a315d61ae9438b18d",
-      description: "Install every skill in a gist. Each `.md` file with frontmatter is one skill.",
     },
     {
       command: "crew install ./my-skill",
@@ -130,11 +121,6 @@ export const installHelp: CommandHelp = {
             "  gl:acme/skills                     → GitLab.",
             "  bb:acme/skills                     → Bitbucket.",
             "  @acme/skills                       → Same as gh: — a handy GitHub alias.",
-            "",
-            "From a GitHub gist — each top-level .md file with frontmatter is a skill",
-            "(or the whole gist is one skill, if it has a root SKILL.md)",
-            "  https://gist.github.com/acme/<id>     Every skill in the gist.",
-            "  https://gist.github.com/<id>//prd.md  Just the skill in prd.md.",
           ],
         },
         "Any git reference can pin a version with `@<tag>` or `@<sha>`, follow a branch with `@<branch>`, and point at a subfolder with `//<path>`. You can combine them, with the version either before or after the subfolder. Versions containing `/` must go before the subfolder, as in `gh:acme/skills@feature/python//python/testing`:",

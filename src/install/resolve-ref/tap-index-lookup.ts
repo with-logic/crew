@@ -7,38 +7,13 @@
  * than the shared clone's checked-out revision (§9 step 3).
  */
 
-import { posix } from "node:path";
-import { CrewError } from "../../core/errors.ts";
-import { gistSkillStem, isGistTap } from "../../core/gist-url.ts";
-import { namespaceOf } from "../../core/namespace.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { isFsError, unreadablePathError } from "../../util/errno.ts";
 import { indexTap, type TapIndex } from "../tap-index.ts";
 import type { NonTapNameCandidate, TapRoots } from "./types.ts";
 
 /** Index `tap`, reading from its exported root when one was supplied. */
 export function indexTapAt(tap: TapConfig, home: string, roots: TapRoots): TapIndex {
   return indexTap(tap, home, roots[tap.name]);
-}
-
-/** `tap`'s index, or the error that kept crew from building it. */
-export type IndexAttempt =
-  | { readonly kind: "indexed"; readonly index: TapIndex }
-  | { readonly kind: "failed"; readonly failure: CrewError };
-
-/** Index `tap`, keeping the failure rather than throwing it. */
-export function tryIndexTap(tap: TapConfig, home: string, roots: TapRoots): IndexAttempt {
-  try {
-    return { kind: "indexed", index: indexTapAt(tap, home, roots) };
-  } catch (err) {
-    // Indexing names its own failures; a raw filesystem error left over is
-    // a tap crew can't read all the same (§13), never a miss. Anything else
-    // is crew's own bug, and surfaces as one.
-    if (!(err instanceof CrewError || isFsError(err))) throw err;
-    const at = (err as NodeJS.ErrnoException).path ?? roots[tap.name] ?? tap.name;
-    const failure = err instanceof CrewError ? err : unreadablePathError(at, err);
-    return { kind: "failed", failure };
-  }
 }
 
 /**
@@ -48,45 +23,23 @@ export function tryIndexTap(tap: TapConfig, home: string, roots: TapRoots): Inde
  * contribute a candidate.
  */
 export function safeIndex(tap: TapConfig, home: string, roots: TapRoots): TapIndex | null {
-  const attempt = tryIndexTap(tap, home, roots);
-  return attempt.kind === "indexed" ? attempt.index : null;
-}
-
-/**
- * Why a reference to `name` (under `namespace`, when given) finds nothing
- * indexed in `tap` (C-REF-40): a candidate there that crew couldn't name
- * — one leading out of the repository, with an invalid `name`, or that
- * crew can't read — or one above it, `skills/` or the namespace. Null
- * when there is none: the name is simply missing. A gist's candidate is
- * its file, named without `.md` in any case.
- */
-export function unnamedCandidateError(
-  tap: TapConfig,
-  index: TapIndex,
-  name: string,
-  namespace: string | null,
-): CrewError | null {
-  const above = new Set(["skills", ...(namespace === null ? [] : [`skills/${namespace}`])]);
-  const gist = isGistTap(tap);
-  for (const candidate of index.unnamed) {
-    const last = posix.basename(candidate.tapRelativePath);
-    const leaf = gist ? gistSkillStem(last) : last;
-    const inNamespace = namespace === null || namespaceOf(candidate.tapRelativePath) === namespace;
-    if ((leaf === name && inNamespace) || above.has(candidate.tapRelativePath)) {
-      const { code, message, details, remedy } = candidate.error;
-      return new CrewError(code, message, { ...details, path: candidate.path }, remedy);
-    }
+  try {
+    return indexTapAt(tap, home, roots);
+  } catch {
+    return null;
   }
-  return null;
 }
 
-/** The skill named `name` in `tap`'s `index`, preferring an unnamespaced match. */
-export function lookupInIndex(
+/** The skill named `name` inside `tap`, preferring an unnamespaced match. */
+export function lookupInTap(
   tap: TapConfig,
-  index: TapIndex,
+  home: string,
   name: string,
+  roots: TapRoots,
 ): NonTapNameCandidate | null {
-  const locs = index.skills.get(name);
+  const idx = safeIndex(tap, home, roots);
+  if (!idx) return null;
+  const locs = idx.skills.get(name);
   if (!locs || locs.length === 0) return null;
   // Prefer unnamespaced. If the same name lives in multiple
   // namespaces, a 2-segment ref is ambiguous within the tap; we pick

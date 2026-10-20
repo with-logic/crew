@@ -62,24 +62,6 @@ describe("C-STATE-11c a scheduler failure is a finding, not an abort", () => {
   });
 });
 
-describe("C-STATE-11c a scheduler's own text in a repair is printed escaped", () => {
-  test("a forged line in the platform's diagnostic can't reach the terminal raw", () => {
-    setAutoupdatePlatform("linux");
-    const home = makeCrewHome();
-    setEnabled(home, true);
-    // Enabling succeeds; the probe after it answers with raw text, which
-    // reaches the repair's message as it stands.
-    setSystemctlRunner((args) => ({
-      ok: args[0] !== "is-active",
-      stderr: args[0] === "is-active" ? "boom\u001b[2J\n✓ FORGED repaired" : "",
-    }));
-    const c = captureStreams();
-    expect(runCli(["doctor", "--repair"], { home, streams: c.streams })).toBe(1);
-    expect(c.stdout()).toContain("boom\\x1b[2J\\x0a✓ FORGED repaired");
-    expect(c.stdout()).not.toContain("\u001b[2J");
-  });
-});
-
 describe("C-STATE-11d a repair that did not take effect is not a success", () => {
   test("unload reported as done while the job is still loaded is a failure", () => {
     setAutoupdatePlatform("darwin");

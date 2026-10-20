@@ -74,7 +74,7 @@ describe("C-INST-13b re-attribution to the incoming tap", () => {
     expect(existsSync(repoClonePath(`file://${repo}`, home))).toBe(true);
 
     const second = install(home, `file://${repo}`);
-    expect(second.out).toContain("moved from");
+    expect(second.out).toContain("now tracked via");
 
     const entry = readState(home).installations.find((e) => e.name === "docx")!;
     const broadTap = entry.source.tap;
@@ -102,7 +102,7 @@ describe("C-INST-13b re-attribution to the incoming tap", () => {
 
     const second = installInProject(home, project, `file://${repo}`);
     expect(second.code).toBe(0);
-    expect(second.out).toContain("moved from");
+    expect(second.out).toContain("now tracked via");
 
     const entry = readState(home).installations.find((e) => e.name === "docx")!;
     expect(entry.scope).toBe("project");

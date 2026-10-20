@@ -8,8 +8,7 @@
 import { join } from "node:path";
 import { listInstalledForAgent } from "../agents/list.ts";
 import { ALL_AGENTS } from "../agents/registry.ts";
-import { recordedDiscovery } from "../config/taps.ts";
-import type { Config, Marker, StateEntry, TapDiscovery } from "../core/types.ts";
+import type { Marker, StateEntry, TapDiscovery } from "../core/types.ts";
 import { writeJson } from "../util/json.ts";
 
 export interface TapMarkerRewrite {
@@ -42,35 +41,9 @@ export function rewriteTapMarkers(
 
 function maybeRewrite(installDir: string, marker: Marker, rewrite: TapMarkerRewrite): void {
   if (marker.tap_name !== rewrite.oldName) return;
-  // Recomputed, not inherited: a gist never records recursive discovery (§8.2).
-  const { tap_discovery: previous, ...rest } = marker;
-  const discovery = recordedDiscovery(
-    { kind: marker.tap_kind, url: marker.tap_url },
-    rewrite.discovery ?? previous,
-  ).discovery;
   writeJson(join(installDir, ".crew.json"), {
-    ...rest,
+    ...marker,
     tap_name: rewrite.newName,
-    ...(discovery === undefined ? {} : { tap_discovery: discovery }),
+    ...(rewrite.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
   });
-}
-
-/** Rewrite the markers of every tap an install upgraded to recursive discovery (§16.3). */
-export function rewriteDiscoveryUpgradeMarkers(
-  before: Config,
-  after: Config,
-  stateEntries: readonly StateEntry[],
-  cwd: string,
-): void {
-  const previous = new Map(before.taps.map((tap) => [tap.name, tap]));
-  for (const tap of after.taps) {
-    const old = previous.get(tap.name);
-    if (!old) continue;
-    if (old.discovery === "recursive" || tap.discovery !== "recursive") continue;
-    rewriteTapMarkers(
-      { oldName: tap.name, newName: tap.name, discovery: "recursive" },
-      stateEntries,
-      cwd,
-    );
-  }
 }
