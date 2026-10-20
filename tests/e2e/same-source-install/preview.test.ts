@@ -41,9 +41,9 @@ describe("re-attribution preview", () => {
         streams: cap.streams,
       }),
     ).toBe(0);
-    expect(cap.stdout()).toContain("would move from");
+    expect(cap.stdout()).toContain("would track via");
     expect(cap.stdout()).toContain("(dry run)");
-    expect(cap.stdout()).not.toContain("moved from");
+    expect(cap.stdout()).not.toContain("now tracked via");
     expect(readState(home)).toEqual(beforeState);
     expect(readConfig(home)).toEqual(beforeConfig);
     expect(readFileSync(markerPath, "utf8")).toBe(beforeMarker);

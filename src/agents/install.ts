@@ -10,8 +10,7 @@
 
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { CrewError, type CrewErrorName } from "../core/errors.ts";
-import { markerTapFields } from "../core/marker.ts";
+import { CrewError } from "../core/errors.ts";
 import type { Marker, Scope, TapConfig } from "../core/types.ts";
 import { CREW_INSTALLED_BY } from "../core/version.ts";
 import { hashDirectory } from "../hash/content.ts";
@@ -41,15 +40,8 @@ export interface InstallInput {
   readonly force: boolean;
 }
 
-/**
- * Outcome of one physical install (one `dest`). `replacedSameName`: `dest`
- * already held a crew marker naming this skill, from any source, which
- * this call replaced; false when `dest` was new, or `--force` replaced a
- * folder without such a marker. `marker`: the one this call wrote.
- */
-export type InstallOutcome =
-  | { kind: "installed"; replacedSameName: boolean; marker: Marker }
-  | { kind: "up_to_date" };
+/** Outcome of one physical install (one `dest`). */
+export type InstallOutcome = { kind: "installed" } | { kind: "up_to_date" };
 
 /**
  * Install a staged skill into one physical `dest`, performing all
@@ -67,14 +59,12 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
 
   const incomingAdapters = [...new Set(input.agents.map((a) => a.name))].sort();
   let priorAdapters: readonly string[] = [];
-  let replacedSameName = false;
 
   if (existsSync(dest)) {
     const existingMarker = tryReadJson<Marker>(join(dest, ".crew.json"));
     if (existingMarker) {
       priorAdapters = existingMarker.agents ?? [];
       if (existingMarker.name === input.skillName) {
-        replacedSameName = true;
         const currentHash = hashDirectory(dest);
         if (currentHash !== existingMarker.content_hash) {
           if (!input.force)
@@ -88,12 +78,7 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
               },
             );
         }
-        // Same hash, same name, same resolved SHA, same owners, recorded
-        // under the same tap at the same path → up-to-date, no-op. A copy
-        // whose marker names another tap is rewritten, so a move reaches
-        // every agent the install targets (§5.4); one at another path is
-        // a skill relocated upstream, whose marker follows it (§10.1,
-        // C-UPD-37).
+        // Same hash, same name, same resolved SHA, same owners → up-to-date, no-op.
         const mergedAdapters = mergeAdapters(priorAdapters, incomingAdapters);
         const sameAdapters =
           mergedAdapters.length === priorAdapters.length &&
@@ -101,8 +86,6 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
         if (
           existingMarker.resolved_sha === input.resolvedSha &&
           existingMarker.content_hash === input.contentHash &&
-          existingMarker.tap_name === input.tap.name &&
-          existingMarker.path === input.tapRelativePath &&
           sameAdapters &&
           !input.force
         )
@@ -136,7 +119,12 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
     schema_version: 1,
     name: input.skillName,
     agents,
-    ...markerTapFields(input.tap),
+    tap_name: input.tap.name,
+    tap_kind: input.tap.kind,
+    tap_url: input.tap.url,
+    tap_subpath: input.tap.subpath,
+    tap_path: input.tap.path,
+    ...(input.tap.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
     path: input.tapRelativePath,
     ref: input.ref,
     resolved_sha: input.resolvedSha,
@@ -148,25 +136,7 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
   writeJson(join(staging, ".crew.json"), marker);
 
   atomicReplace(staging, dest);
-  return { kind: "installed", replacedSameName, marker };
-}
-
-/** The codes of §7.3's safety checks: each refuses one agent, and is no failure. */
-const SAFETY_REFUSALS = [
-  "customized",
-  "inconsistent_marker",
-  "untracked_directory",
-] as const satisfies readonly CrewErrorName[];
-
-/** A §7.3 safety check's code. */
-type SafetyRefusal = (typeof SAFETY_REFUSALS)[number];
-
-/**
- * True when `err` is a §7.3 safety check refusing to overwrite an agent's
- * copy — which skips that agent — rather than a failure to install there.
- */
-export function isSafetyRefusal(err: unknown): err is CrewError & { readonly code: SafetyRefusal } {
-  return err instanceof CrewError && (SAFETY_REFUSALS as readonly string[]).includes(err.code);
+  return { kind: "installed" };
 }
 
 /** Union of two adapter-name lists, sorted and deduplicated. */

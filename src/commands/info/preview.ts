@@ -11,18 +11,12 @@
  * namespace fallback can search every tap at the requested ref.
  */
 
-import { basename, relative } from "node:path";
-import { CrewError } from "../../core/errors.ts";
 import type { Config, LoadedSkill, TapConfig, TapSource } from "../../core/types.ts";
 import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
 import { loadSkill } from "../../skill/load.ts";
-import { isSkillFile } from "../../skill/skill-file.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
-import { expandTapSkills } from "../../sources/expand.ts";
-import { selectGistFile } from "../../sources/gist.ts";
-import { type SourceBoundary, sourceBoundary } from "../../sources/source-boundary.ts";
-import { toPosix } from "../../util/fs.ts";
+import { expandSkills } from "../../sources/expand.ts";
 import type { SkillInfo } from "./render.ts";
 
 export interface TapPreview {
@@ -46,21 +40,9 @@ export function tapCandidate(
   );
 }
 
-/**
- * Expand a tap's skills, reading at `ref` when one was requested.
- * `gistFile` narrows a gist tap to the one skill file a `//<file>` named
- * (§8.2).
- */
-export function skillsAtRef(
-  tap: TapConfig,
-  ref: string | null,
-  home: string,
-  gistFile = "",
-): SkillInfo[] {
-  return withAcquiredTap(tap, ref, home, (acq) => {
-    const root = selectGistFile(acq, tap, gistFile, ref);
-    return previewSkills(root, tap, acq.resolvedSha, sourceBoundary(tap, home, root));
-  });
+/** Expand a tap's skills, reading at `ref` when one was requested. */
+export function skillsAtRef(tap: TapConfig, ref: string | null, home: string): SkillInfo[] {
+  return withAcquiredTap(tap, ref, home, (acq) => buildSkillInfos(acq.rootDir, tap));
 }
 
 /**
@@ -81,65 +63,18 @@ function narrowAtRoots(
 /** Preview only the selected locations while their acquisition scope is live. */
 function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
   if (candidate.kind === "skill") {
-    return { tap: candidate.tap, skills: buildSkillInfosAt([candidate.location]) };
+    return { tap: candidate.tap, skills: buildSkillInfosFromDirs([candidate.location]) };
   }
-  return { tap: candidate.tap, skills: buildSkillInfosAt(candidate.members) };
+  return { tap: candidate.tap, skills: buildSkillInfosFromDirs(candidate.members) };
 }
 
-/**
- * The valid skills at `root`. When it holds candidates but none is
- * valid, the preview fails naming the reason (§9.1) — "No skills here"
- * would hide why: `invalid_skill` if any candidate is invalid (install's
- * verdict too), else `source_unreachable`.
- */
-function previewSkills(
-  root: string,
-  tap: TapConfig,
-  sha: string | null,
-  boundary: SourceBoundary,
-): SkillInfo[] {
-  const { valid, skipped } = expandTapSkills(root, tap, sha, boundary);
-  // An invalid skill is reported ahead of an unreadable one, whatever the
-  // directory order; the reason, code, and next step all come from it.
-  const reported = skipped.find((s) => s.code === "invalid_skill") ?? skipped[0];
-  if (valid.length === 0 && reported) {
-    // A gist file's message, and one about the SKILL.md file itself (a read
-    // failure, a link out), already name it; frontmatter messages don't.
-    const rel = toPosix(relative(root, reported.path));
-    const named =
-      rel === "" || isSkillFile(reported.path) || reported.message.includes(reported.path);
-    const reason = named ? reported.message : `\`${rel}\`: ${reported.message}`;
-    const unreadableCount = skipped.filter((s) => s.code === "source_unreachable").length;
-    const alsoUnreadable =
-      reported.code === "invalid_skill" && unreadableCount > 0
-        ? ` (${unreadableCount} of them couldn't be read)`
-        : "";
-    const headline =
-      reported.code === "invalid_skill"
-        ? `none of the ${skipped.length} skills here is valid${alsoUnreadable}`
-        : `crew couldn't read any of the ${skipped.length} skills here`;
-    const message = skipped.length === 1 ? reason : `${headline} — ${reason}`;
-    const candidates = skipped.map((s) => candidateName(root, s.path));
-    // Named as the user knows them, never by crew's clone or scratch folders.
-    const path = candidateName(root, reported.path);
-    throw new CrewError(reported.code, message, { path, candidates }, reported.remedy);
-  }
+function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
+  const { valid } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
   return valid.map(skillInfoOf);
 }
 
-/**
- * How `details` (`path` and `candidates`) names a skipped candidate: a gist skill file by
- * its file name (the root may be that file itself); anything else by its
- * path under `root`, `.` for the root skill — never crew's own clone or
- * scratch-export folder name.
- */
-function candidateName(root: string, path: string): string {
-  if (isSkillFile(path)) return basename(path);
-  return toPosix(relative(root, path)) || ".";
-}
-
-function buildSkillInfosAt(locations: readonly { readonly path: string }[]): SkillInfo[] {
-  return locations.map((l) => skillInfoOf(loadSkill(l.path)));
+function buildSkillInfosFromDirs(dirs: readonly { readonly path: string }[]): SkillInfo[] {
+  return dirs.map((dir) => skillInfoOf(loadSkill(dir.path)));
 }
 
 function skillInfoOf(s: LoadedSkill): SkillInfo {

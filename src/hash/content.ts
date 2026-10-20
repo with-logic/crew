@@ -25,7 +25,7 @@
 
 import { createHash } from "node:crypto";
 import { readFileSync, readlinkSync } from "node:fs";
-import { walk } from "../util/walk.ts";
+import { walk } from "../util/fs.ts";
 
 /**
  * Compute the content hash of a directory.
@@ -51,7 +51,7 @@ export function hashDirectory(dir: string): string {
     } else {
       fileSha = sha256OfBytes(readFileSync(e.absPath));
     }
-    tuples.push({ relPath: hashPath(e.relPath), fileSha });
+    tuples.push({ relPath: e.relPath, fileSha });
   }
 
   // §12.1 step 3: sort by byte-wise comparison of the POSIX relative path.
@@ -65,16 +65,6 @@ export function hashDirectory(dir: string): string {
     acc.update(Buffer.from([0x0a]));
   }
   return `sha256:${acc.digest("hex")}`;
-}
-
-/**
- * `relPath` as §12.1 hashes it: a backslash in a name as `/`, as every
- * release has. Crew never reads a backslash as a separator to find a file,
- * but hashing it otherwise would make each unedited install of such a
- * skill read as customized, and stop it updating.
- */
-function hashPath(relPath: string): string {
-  return relPath.split(/[\\/]+/).join("/");
 }
 
 /** SHA-256 of a byte buffer as lowercase hex. */

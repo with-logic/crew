@@ -8,9 +8,7 @@
 
 import { basename } from "node:path";
 import { hasSkillMd } from "../skill/load.ts";
-import { unreadablePathError } from "../util/errno.ts";
-import { canList } from "../util/fs.ts";
-import { type WalkedEntry, walk } from "../util/walk.ts";
+import { type WalkedEntry, walk } from "../util/fs.ts";
 
 const MAX_RECURSIVE_DEPTH = 5;
 const SKIPPED_DIRS = new Set([
@@ -29,7 +27,7 @@ const SKIPPED_DIRS = new Set([
 /** Return skill directories discovered recursively, in deterministic order. */
 export function findRecursiveSkillDirs(rootDir: string): string[] {
   const dirs: string[] = [];
-  for (const entry of walkSource(rootDir)) {
+  for (const entry of walk(rootDir, { shouldDescend: shouldDescendInto })) {
     if (!entry.isDirectory) continue;
     if (shouldSkipDirectory(entry.relPath)) continue;
     if (!hasSkillMd(entry.absPath)) continue;
@@ -39,26 +37,11 @@ export function findRecursiveSkillDirs(rootDir: string): string[] {
   return dirs;
 }
 
-/**
- * The source tree under `rootDir`, never descending into a folder crew
- * can't list. Anything else that stops the walk — a path past the
- * system's limit, say — is `source_unreachable` naming where (§13,
- * C-SPEC-18), never a raw filesystem error.
- */
-function walkSource(rootDir: string): WalkedEntry[] {
-  try {
-    return walk(rootDir, { shouldDescend: shouldDescendInto });
-  } catch (err) {
-    throw unreadablePathError((err as NodeJS.ErrnoException).path ?? rootDir, err);
-  }
-}
-
 function shouldDescendInto(entry: WalkedEntry): boolean {
   if (shouldSkipDirectory(entry.relPath)) return false;
   // Refuse to descend into depth-5 dirs so emitted entries are bounded at depth 5 (§9 step 5.4).
   if (depthOf(entry.relPath) >= MAX_RECURSIVE_DEPTH) return false;
-  // A folder crew can't list holds nothing it can find (§9 step 5.4).
-  return !hasSkillMd(entry.absPath) && canList(entry.absPath);
+  return !hasSkillMd(entry.absPath);
 }
 
 function shouldSkipDirectory(relPath: string): boolean {

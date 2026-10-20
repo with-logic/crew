@@ -34,7 +34,7 @@ import { ALL_AGENTS, agentByName } from "../../agents/registry.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateFile } from "../../core/types.ts";
-import { collectionWarnings, garbageCollectAutoTaps } from "../../maintenance/auto-taps.ts";
+import { garbageCollectAutoTaps } from "../../maintenance/auto-taps.ts";
 import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
@@ -60,24 +60,21 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
   if (all) confirmAll(ctx, readState(ctx.home));
 
   // A dry run reads state and reports; it never locks, writes, or GCs.
-  const { records, exitCode, warnings } = ctx.flags.dryRun
-    ? { ...runUninstall(ctx, prune, agentFilter), warnings: [] }
+  const { records, exitCode } = ctx.flags.dryRun
+    ? runUninstall(ctx, prune, agentFilter)
     : withStateLock(() => {
         const plan = runUninstall(ctx, prune, agentFilter);
         writeState(plan.state, ctx.home);
-        // Auto-tap GC: an auto tap no state entry or marker names any more
-        // is dropped from config and its clone deleted (§16.5); one a
-        // marker crew can't read might name is kept, and the run says so.
-        // Registered taps stay.
-        const collection = garbageCollectAutoTaps(plan.state, ctx.home);
-        return { ...plan, warnings: collectionWarnings(collection) };
+        // Auto-tap GC: any auto tap with no remaining state entries is
+        // dropped from config and its clone deleted. Registered taps stay.
+        garbageCollectAutoTaps(plan.state, ctx.home);
+        return plan;
       }, ctx.home);
 
   return {
     exitCode,
     human: renderUninstall(records, ctx.flags.dryRun, ctx.style),
-    stderr: warnings,
-    json: { records, dry_run: ctx.flags.dryRun, warnings },
+    json: { records, dry_run: ctx.flags.dryRun },
   };
 }
 

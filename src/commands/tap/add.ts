@@ -18,7 +18,6 @@ import type { Config, TapConfig } from "../../core/types.ts";
 import { rewriteTapMarkers } from "../../install/rewrite-tap-markers.ts";
 import { displayText } from "../../refs/display-url.ts";
 import { NAME_PATTERN } from "../../refs/parse.ts";
-import { assertNoRecursiveGist } from "../../sources/gist.ts";
 import { readState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { isDirectory } from "../../util/fs.ts";
@@ -34,7 +33,7 @@ import { displayTarget, parseTapAddTarget, sameTap, type TapAddTarget } from "./
  */
 type TapAddPlan =
   | { readonly outcome: "added" }
-  | { readonly outcome: "no-op"; readonly sameTarget: TapConfig }
+  | { readonly outcome: "no-op" }
   | { readonly outcome: "updated"; readonly sameTarget: TapConfig }
   | { readonly outcome: "promoted"; readonly sameTarget: TapConfig };
 
@@ -66,7 +65,6 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   const explicitName = args[1];
   const name = explicitName ?? deriveName(target);
   const recursive = Boolean(ctx.flags.extras["recursive"]);
-  if (recursive && target.kind === "git") assertNoRecursiveGist(target.url);
   if (!NAME_PATTERN.test(name)) {
     throw new CrewError(
       "usage_error",
@@ -78,47 +76,19 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   if (ctx.flags.dryRun) {
     // Read-only preview: no lock, no clone, no config write (§16.3).
     const plan = planAdd(readConfig(ctx.home), input);
-    return renderTapAdd(
-      plan.outcome,
-      shownName(plan, input),
-      shownTarget(plan, input),
-      true,
-      ctx.style,
-    );
+    return renderTapAdd(plan.outcome, name, target, true, ctx.style);
   }
   // Wrap in an object so TS doesn't narrow the literal type via the
   // initial assignment — `withStateLock`'s callback assigns later but
   // TS doesn't trace control flow into closures.
-  const out: { value: TapAddOutcome; name: string; target: TapAddTarget } = {
-    value: "added",
-    name,
-    target,
-  };
+  const out: { value: TapAddOutcome } = { value: "added" };
   withStateLock(() => {
     const config = readConfig(ctx.home);
     const plan = planAdd(config, input);
     applyAdd(ctx, config, plan, input);
     out.value = plan.outcome;
-    out.name = shownName(plan, input);
-    out.target = shownTarget(plan, input);
   }, ctx.home);
-  return renderTapAdd(out.value, out.name, out.target, false, ctx.style);
-}
-
-/**
- * The tap's name once the add is done: the new tap's, or — when an
- * existing row matched — that row's, renamed only by an explicit name.
- * A derived name would misreport a tap recorded under another name (a
- * gist tap from before `gist-<id8>` names, §16.3).
- */
-function shownName(plan: TapAddPlan, input: TapAddInput): string {
-  if (plan.outcome === "added") return input.name;
-  return input.explicitName ?? plan.sameTarget.name;
-}
-
-/** The tap's source as stored: an existing row keeps the URL it was recorded with. */
-function shownTarget(plan: TapAddPlan, input: TapAddInput): TapAddTarget {
-  return plan.outcome === "added" ? input.target : plan.sameTarget;
+  return renderTapAdd(out.value, name, target, false, ctx.style);
 }
 
 /**
@@ -131,7 +101,7 @@ function planAdd(config: Config, input: TapAddInput): TapAddPlan {
   if (sameTarget) {
     if (sameTarget.registered && (explicitName === undefined || explicitName === sameTarget.name)) {
       const upgrade = recursive && sameTarget.discovery !== "recursive";
-      return { outcome: upgrade ? "updated" : "no-op", sameTarget };
+      return upgrade ? { outcome: "updated", sameTarget } : { outcome: "no-op" };
     }
     return { outcome: "promoted", sameTarget };
   }

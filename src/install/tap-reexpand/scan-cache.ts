@@ -1,23 +1,22 @@
 /**
  * Per-run tap scan cache (§10.1.1).
  *
- * State entries are grouped by `(tap, scope, project_root, ref)`, so one tap
+ * State entries are grouped by `(tap, scope, project_root)`, so one tap
  * can back several groups — a user install plus two project installs,
- * say. The groups at the default branch share one clone, so acquiring
- * it, walking its children, and validating each child are identical work
- * repeated per group. (A group at an explicit ref acquires its own export
- * of that ref, never through `acquire`, which is keyed by tap name alone.)
+ * say. The clone is the same for all of them, so acquiring it, walking
+ * its children, and validating each child are identical work repeated
+ * per group.
  *
  * This memoises all three for the lifetime of one update run. Clone
  * locks are held across the run (see `sources/tap-lock.ts`), so the
  * snapshot cannot go stale underneath us.
  */
 
-import type { CrewError } from "../../core/errors.ts";
+import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
-import { currentTapChildren, type TapChildren } from "../tap-children.ts";
+import { type CurrentTapChild, currentTapChildren } from "../tap-children.ts";
 
 /** One tap's acquired clone location. */
 export interface AcquiredTapScan {
@@ -34,20 +33,18 @@ export interface TapScanCache {
   acquire(tap: TapConfig, home: string): AcquiredTapScan;
   /**
    * Walk a tap's children, memoised. Kept separate from `acquire`
-   * because the two fail differently: a tap crew can't acquire is
-   * unreachable, while a child set it can't list (`skills/` unreadable,
-   * C-SPEC-18) is the local filesystem's fault, `source_unreachable`
-   * naming the folder. Either fails only this group, as `tap_error` rows
-   * (`./group.ts`).
+   * because a filesystem error while walking (an unreadable directory,
+   * say) is a local fault that must propagate, not be reported as the
+   * tap being unreachable.
    */
-  children(tap: TapConfig, home: string, rootDir: string): TapChildren;
-  /** Full validation (§9 step 4) for one child — a directory, or a gist's skill file — memoised. */
-  validate(skillPath: string): CrewError | null;
+  children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[];
+  /** Full validation (§9 step 4) for one child directory, memoised. */
+  validate(skillDir: string): CrewError | null;
 }
 
 export function makeTapScanCache(): TapScanCache {
   const acquisitions = new Map<string, AcquiredTapScan>();
-  const childLists = new Map<string, TapChildren>();
+  const childLists = new Map<string, readonly CurrentTapChild[]>();
   const validations = new Map<string, CrewError | null>();
 
   return {
@@ -63,7 +60,7 @@ export function makeTapScanCache(): TapScanCache {
       return scan;
     },
 
-    children(tap: TapConfig, home: string, rootDir: string): TapChildren {
+    children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[] {
       const key = JSON.stringify([tap.name, rootDir]);
       const hit = childLists.get(key);
       if (hit) return hit;
@@ -72,11 +69,11 @@ export function makeTapScanCache(): TapScanCache {
       return walked;
     },
 
-    validate(skillPath: string): CrewError | null {
-      const hit = validations.get(skillPath);
+    validate(skillDir: string): CrewError | null {
+      const hit = validations.get(skillDir);
       if (hit !== undefined) return hit;
-      const result = validationErrorFor(skillPath);
-      validations.set(skillPath, result);
+      const result = validationErrorFor(skillDir);
+      validations.set(skillDir, result);
       return result;
     },
   };
@@ -87,16 +84,18 @@ export function makeTapScanCache(): TapScanCache {
  * the failure instead of throwing. `loadSkill` is the same validator
  * the install flow uses.
  *
- * `loadSkill` throws only `CrewError`: `invalid_skill` for the author's
- * mistakes, and `source_unreachable` for a file crew couldn't read — an
- * I/O failure (EACCES, EIO) is reported under that code, naming the
- * file, so it is never blamed on the skill's author.
+ * It reads from disk, so an I/O failure (EACCES, EIO) can surface here
+ * as a plain `Error`. Reporting that as `invalid_skill` would blame the
+ * skill author for a local filesystem problem, so only `CrewError`s —
+ * the validator's own verdicts — are returned; anything else rethrows
+ * and is handled as a run-level failure by the caller.
  */
-function validationErrorFor(skillPath: string): CrewError | null {
+function validationErrorFor(skillDir: string): CrewError | null {
   try {
-    loadSkill(skillPath);
+    loadSkill(skillDir);
     return null;
   } catch (err) {
-    return err as CrewError;
+    if (err instanceof CrewError) return err;
+    throw err;
   }
 }

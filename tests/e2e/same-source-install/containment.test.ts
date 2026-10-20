@@ -82,10 +82,9 @@ describe("C-TAP-25 deletion stays inside the managed root", () => {
           }),
         ).toBe(0);
       } else {
-        expect(garbageCollectAutoTaps({ schema_version: 1, installations: [] }, home)).toEqual({
-          kind: "collected",
-          taps: ["..skills"],
-        });
+        expect(garbageCollectAutoTaps({ schema_version: 1, installations: [] }, home)).toEqual([
+          "..skills",
+        ]);
       }
       expect(existsSync(clone)).toBe(false);
       expect(readConfig(home).taps.some((tap) => tap.name === "..skills")).toBe(false);
