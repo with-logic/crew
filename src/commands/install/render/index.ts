@@ -12,14 +12,11 @@ import { join } from "node:path";
 import { baseFor } from "../../../agents/adapter.ts";
 import { agentByName } from "../../../agents/registry.ts";
 import type { ResolvedSkill } from "../../../core/types.ts";
-import type { AttributionChange } from "../../../install/attribution-changes.ts";
 import type { AlreadyInstalled } from "../../../install/duplicate-rules/index.ts";
 import type { InstallRecord } from "../../../install/perform/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { firstSentences, plural, shortenHome, wrap } from "../../../util/format.ts";
 import type { Styler } from "../../../util/term.ts";
-import { changeLines } from "./changes.ts";
-import { failedLines } from "./failed.ts";
 import { formatVersion, renderAgentLine, type Totals, tallyAgents } from "./helpers.ts";
 
 export interface RenderInstallInput {
@@ -27,8 +24,6 @@ export interface RenderInstallInput {
   readonly alreadyInstalled: readonly AlreadyInstalled[];
   readonly resolved: readonly ResolvedSkill[];
   readonly skipped: readonly SkippedSkill[];
-  /** Entries whose tap or tracking the install changed (C-INST-13o). */
-  readonly changes: readonly AttributionChange[];
   readonly dryRun: boolean;
   readonly cwd: string;
   readonly width: number;
@@ -36,7 +31,6 @@ export interface RenderInstallInput {
 
 export function renderInstall(input: RenderInstallInput, style: Styler): string[] {
   const byName = new Map(input.resolved.map((r) => [r.name, r]));
-  const notes = (name: string) => changeLines(input.changes, name, input.dryRun, style);
   const lines: string[] = [];
   const dryTag = input.dryRun ? style.dim(" (dry run)") : "";
 
@@ -52,14 +46,13 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
         ...renderAlreadyInstalled(
           existing,
           byName.get(existing.name),
-          notes(existing.name),
-          input,
+          input.cwd,
+          input.width,
           style,
+          input.dryRun,
         ),
       );
     }
-    // A re-run still exits non-zero for a sibling that failed, so say why.
-    lines.push(...failedLines(input, style));
     return lines;
   }
 
@@ -79,16 +72,17 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
       ...renderAlreadyInstalled(
         existing,
         byName.get(existing.name),
-        notes(existing.name),
-        input,
+        input.cwd,
+        input.width,
         style,
+        input.dryRun,
       ),
     );
   }
 
   for (const record of input.records) {
     lines.push("");
-    lines.push(...renderRecord(record, byName.get(record.name), notes(record.name), input, style));
+    lines.push(...renderRecord(record, byName.get(record.name), input.cwd, input.width, style));
   }
 
   const totals = tallyAgents(input.records);
@@ -98,7 +92,18 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
     lines.push(style.dim(totalsText));
   }
 
-  lines.push(...failedLines(input, style));
+  if (input.skipped.length > 0) {
+    lines.push("");
+    lines.push(style.bold(`Failed (${input.skipped.length}):`));
+    for (const s of input.skipped) {
+      // `wrap` always returns at least one element for a non-empty
+      // message — `s.message` is a CrewError message, never empty.
+      const wrapped = wrap(s.message, Math.max(40, input.width - 4));
+      lines.push(`  ${style.symbol("fail")} ${style.red(wrapped[0]!)}`);
+      for (let i = 1; i < wrapped.length; i++) lines.push(`    ${style.red(wrapped[i]!)}`);
+    }
+  }
+
   return lines;
 }
 
@@ -123,9 +128,10 @@ function formatTotalsWithSkipped(totals: Totals, skippedCount: number): string |
 function renderAlreadyInstalled(
   existing: AlreadyInstalled,
   resolved: ResolvedSkill | undefined,
-  notes: readonly string[],
-  { cwd, width, dryRun }: RenderInstallInput,
+  cwd: string,
+  width: number,
   style: Styler,
+  dryRun: boolean,
 ): string[] {
   const lines: string[] = [];
   const tagParts: string[] = [style.dim("(already installed)")];
@@ -135,7 +141,11 @@ function renderAlreadyInstalled(
   // Match `renderRecord`'s scope-tag shape: two leading spaces
   // inside `style.dim` so color markup brackets the whole tag.
   const scopeTag = existing.scope === "project" ? style.dim(`  in ${shortenHome(cwd)}`) : "";
-  lines.push(`  ${style.bold(existing.name)} ${tagParts.join(" ")}${scopeTag}`, ...notes);
+  lines.push(`  ${style.bold(existing.name)} ${tagParts.join(" ")}${scopeTag}`);
+  if (existing.reattributedFrom && resolved) {
+    const tracking = dryRun ? "would track via" : "now tracked via";
+    lines.push(style.dim(`    ${tracking} ${resolved.tap.name}`));
+  }
   if (resolved?.frontmatter.description) {
     const desc = firstSentences(resolved.frontmatter.description, 200);
     const indent = "    ";
@@ -160,8 +170,8 @@ function renderAlreadyInstalled(
 function renderRecord(
   record: InstallRecord,
   resolved: ResolvedSkill | undefined,
-  notes: readonly string[],
-  { cwd, width }: RenderInstallInput,
+  cwd: string,
+  width: number,
   style: Styler,
 ): string[] {
   const lines: string[] = [];
@@ -169,7 +179,7 @@ function renderRecord(
   // default and showing `[user]` everywhere is noise. For a project
   // install, surface where it landed.
   const scopeTag = record.scope === "project" ? style.dim(`  in ${shortenHome(cwd)}`) : "";
-  lines.push(`  ${style.bold(record.name)}${scopeTag}`, ...notes);
+  lines.push(`  ${style.bold(record.name)}${scopeTag}`);
   if (resolved?.frontmatter.description) {
     const desc = firstSentences(resolved.frontmatter.description, 200);
     const indent = "    ";

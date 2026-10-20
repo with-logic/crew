@@ -13,9 +13,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
-import type { Marker } from "../../../src/core/types.ts";
-import { readState } from "../../../src/state/load.ts";
-import { readJson } from "../../../src/util/json.ts";
 import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { buildNamespacedTap, bump, freshHome, installedBody, run } from "./helpers.ts";
 
@@ -97,37 +94,4 @@ describe("crew update entry identity across relocation", () => {
     expect(outcomes).not.toContain("mover:source_gone");
     expect(body("mover")).toContain("mover-v2");
   });
-
-  test("C-UPD-37 a moved skill outside the selection keeps its path until its own update", () => {
-    const home = freshHome();
-    const repo = buildNamespacedTap("upd-coll-b4-", { alpha: ["mover"], eng: ["other"] });
-    run(home, ["tap", "add", `file://${repo}`, "acme"]);
-    expect(run(home, ["install", "acme"]).code).toBe(0);
-    mkdirSync(join(repo, "skills", "beta"));
-    renameSync(join(repo, "skills", "alpha", "mover"), join(repo, "skills", "beta", "mover"));
-    commitAll(repo, "move mover to beta");
-
-    // Updating `other` re-expands the tap, but leaves `mover` — not
-    // updated — recorded where its marker and commit say it is.
-    expect(run(home, ["update", "other"]).code).toBe(0);
-    expect(recordedPaths(home)).toEqual(["skills/alpha/mover", "skills/alpha/mover"]);
-    expect(driftCodes(home)).toEqual([]);
-
-    expect(run(home, ["update", "mover"]).code).toBe(0);
-    expect(recordedPaths(home)).toEqual(["skills/beta/mover", "skills/beta/mover"]);
-    expect(driftCodes(home)).toEqual([]);
-  });
 });
-
-/** `mover`'s path as state records it, then as its marker does. */
-function recordedPaths(home: string): string[] {
-  const entry = readState(home).installations.find((e) => e.name === "mover");
-  const marker = readJson<Marker>(join(ccRoot, "mover", ".crew.json"));
-  return [entry?.source.path ?? "", marker.path];
-}
-
-/** The codes of `crew doctor`'s findings about state and markers disagreeing. */
-function driftCodes(home: string): string[] {
-  const findings = JSON.parse(run(home, ["doctor", "--json"]).out).findings as { code: string }[];
-  return findings.map((f) => f.code).filter((code) => code.includes("drift"));
-}

@@ -16,14 +16,12 @@ export interface SkillFrontmatter {
   };
 }
 
-/**
- * A skill on disk: where it is, and its parsed frontmatter. Its SKILL.md
- * text isn't kept: nothing after validation reads it, and a resolution may
- * hold many skills at once (staging copies the files, §9 step 8).
- */
+/** A skill on disk: the directory, the parsed frontmatter, and its raw SKILL.md. */
 export interface LoadedSkill {
-  /** Absolute path to the skill's directory — or, for a gist skill, its file (§9 step 5). */
+  /** Absolute path to the skill's directory. */
   readonly path: string;
   /** Parsed frontmatter. */
   readonly frontmatter: SkillFrontmatter;
+  /** Raw SKILL.md bytes. */
+  readonly skillMd: string;
 }

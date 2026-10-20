@@ -3,9 +3,7 @@
  */
 
 import { CrewError } from "../core/errors.ts";
-import { isGistTap } from "../core/gist-url.ts";
-import { TAP_KINDS, type TapKind } from "../core/tap.ts";
-import type { TapConfig, TapDiscovery } from "../core/types.ts";
+import type { TapConfig, TapDiscovery, TapKind } from "../core/types.ts";
 import type { YamlMap, YamlValue } from "../yaml/parse.ts";
 
 /** Parse one entry under the top-level `taps:` list. */
@@ -44,19 +42,6 @@ export function parseTapEntry(entry: YamlValue): TapConfig {
   return parsePathTap(em, name, registered, discovery);
 }
 
-/**
- * The `discovery` a tap row records. §8.2 "Gists": recursive discovery
- * never applies to a gist, so a gist row never records it — whether an
- * older crew wrote it to config or to a marker `doctor --repair` reads. (A
- * path tap is never a gist, whatever URL a hand-edited row carries.)
- */
-export function recordedDiscovery(
-  tap: Pick<TapConfig, "kind" | "url">,
-  discovery: TapDiscovery | undefined,
-): { discovery?: TapDiscovery } {
-  return discovery === "recursive" && !isGistTap(tap) ? { discovery } : {};
-}
-
 /** Serialize a normalized tap entry back to YAML. */
 export function serializeTap(t: TapConfig): YamlValue {
   if (t.kind === "git") {
@@ -92,17 +77,7 @@ function parseGitTap(
     );
   }
   const subpath = parseSubpath(em["subpath"]);
-  // A gist row an older crew recorded as recursive would otherwise keep
-  // claiming it in `tap list` and spread it into every new marker.
-  return {
-    name,
-    kind: "git",
-    registered,
-    url,
-    subpath,
-    path: "",
-    ...recordedDiscovery({ kind: "git", url }, discovery.discovery),
-  };
+  return { name, kind: "git", registered, url, subpath, path: "", ...discovery };
 }
 
 function parsePathTap(
@@ -123,7 +98,7 @@ function parsePathTap(
 
 function parseKind(raw: YamlValue | undefined): TapKind {
   if (raw === undefined || raw === null) return "git";
-  if (TAP_KINDS.includes(raw as TapKind)) return raw as TapKind;
+  if (raw === "git" || raw === "path") return raw;
   throw new CrewError(
     "config_invalid",
     "config.yaml: tap `kind`, when present, must be `git` or `path`",

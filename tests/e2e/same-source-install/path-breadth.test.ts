@@ -64,7 +64,7 @@ describe("C-INST-13j path-tap breadth", () => {
     // entry moves onto the wider row rather than conflicting.
     const second = install(home, root);
     expect(second.code).toBe(0);
-    expect(second.out).toContain("moved from");
+    expect(second.out).toContain("now tracked via");
 
     const entry = readState(home).installations.find((e) => e.name === "docx")!;
     expect(entry.source.tap).not.toBe(narrowTap);

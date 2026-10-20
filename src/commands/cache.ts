@@ -15,9 +15,8 @@ import { garbageCollectStore, orphanStoreEntries } from "../maintenance/gc.ts";
 import { readState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { plural } from "../util/format.ts";
-import { rmrf } from "../util/fs.ts";
+import { rmrf, walk } from "../util/fs.ts";
 import type { Styler } from "../util/term.ts";
-import { walk } from "../util/walk.ts";
 import { showCommandHelp } from "./help/index.ts";
 import type { CommandContext, CommandOutput } from "./types.ts";
 

@@ -107,14 +107,12 @@ function add(parsed: ParsedArgs, paths: Paths): void {
     throw new Error("usage: bun run known-taps add <name> <url>");
   }
   const manifest = readManifest(paths.manifestPath);
-  const description = flagValue(parsed, "description");
-  const trust = trustFlag(parsed);
   const result = addKnownTapSource(manifest, {
     name: parsed.positionals[0]!,
     url: parsed.positionals[1]!,
     subpath: flagValue(parsed, "subpath") ?? "",
-    ...(description === undefined ? {} : { description }),
-    ...(trust === undefined ? {} : { trust }),
+    description: flagValue(parsed, "description"),
+    trust: trustFlag(parsed),
     trackingRef: flagValue(parsed, "tracking-ref") ?? "main",
   });
   writeKnownTapManifest(paths.manifestPath, result.manifest);

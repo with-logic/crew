@@ -18,7 +18,6 @@ import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry } from "../../core/types.ts";
 import { attributeRef } from "../../install/tap-attribution.ts";
-import { splitGistFile } from "../../refs/gist.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { hasSkillMd, loadSkill } from "../../skill/load.ts";
 import { withDiscoveredTapLocks } from "../../sources/discovered-tap-locks.ts";
@@ -70,13 +69,17 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
     if (source.type === "tap") {
       return tapCandidate(source, config, ref, ctx.home);
     }
-    // A configured tap for the source is reused, else an auto tap is
-    // derived (never saved). A gist's `//<file>` previews one skill of the
-    // whole-gist tap (§8.2).
-    const { tapSource, gistFile } = splitGistFile(source);
-    const { tap } = attributeRef(tapSource, config);
-    requireTap(tap);
-    return { tap, skills: skillsAtRef(tap, ref, ctx.home, gistFile) };
+    const matched = config.taps.find((t) => {
+      if (source.type === "git")
+        return t.kind === "git" && t.url === source.url && t.subpath === source.subpath;
+      return t.kind === "path" && t.path === source.path;
+    });
+    if (matched) {
+      return { tap: matched, skills: skillsAtRef(matched, ref, ctx.home) };
+    }
+    const attrib = attributeRef(source, config);
+    requireTap(attrib.tap);
+    return { tap: attrib.tap, skills: skillsAtRef(attrib.tap, ref, ctx.home) };
   });
 
   return {

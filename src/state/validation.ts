@@ -5,7 +5,6 @@
  */
 
 import { isAbsolute } from "node:path";
-import { SCOPES, type Scope } from "../core/scope.ts";
 import type { StateEntry } from "../core/types.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -31,7 +30,7 @@ export function isStateEntry(value: unknown): value is StateEntry {
     (value["ref"] === null || typeof value["ref"] === "string") &&
     (value["resolved_sha"] === null || typeof value["resolved_sha"] === "string") &&
     typeof value["content_hash"] === "string" &&
-    SCOPES.includes(value["scope"] as Scope) &&
+    (value["scope"] === "user" || value["scope"] === "project") &&
     typeof value["installed_at"] === "string" &&
     isStrings(value["agents"]) &&
     typeof value["pinned"] === "boolean" &&

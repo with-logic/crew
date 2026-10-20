@@ -1,10 +1,9 @@
-/** Synchronous filesystem and atomic replacement helpers (§6, §12.1). */
+/** Synchronous filesystem, walking, and atomic replacement helpers (§6, §12.1). */
 
 import {
-  accessSync,
   closeSync,
-  constants,
   existsSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readdirSync,
@@ -15,8 +14,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, relative, resolve, sep } from "node:path";
-import { climbsOut } from "./relative-path.ts";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 /** Ensure a directory exists (like `mkdir -p`). */
 export function ensureDir(path: string, mode: number = 0o755): void {
@@ -95,7 +93,7 @@ export function rmrf(path: string): void {
  */
 export function isInside(root: string, candidate: string): boolean {
   const rel = relative(resolve(root), resolve(candidate));
-  return rel.length > 0 && !climbsOut(rel);
+  return rel.length > 0 && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 /** Delete a persisted-name target only inside the crew-owned root (§16.5). */
@@ -119,35 +117,59 @@ export function isDirectory(path: string): boolean {
   }
 }
 
-/**
- * List immediate children of a directory, or `[]` if the directory is
- * absent. One crew can't list throws the raw filesystem error: whose
- * fault it is — the source's, an agent folder's, the store's — is the
- * caller's to say (`listSourceDir` for a source, §9 step 5).
- */
+/** List immediate children of a directory, or `[]` if the directory is absent. */
 export function listDir(path: string): string[] {
   if (!isDirectory(path)) return [];
   return readdirSync(path);
 }
 
-/** True when crew can list `dir` and look at what's in it. */
-export function canList(dir: string): boolean {
-  try {
-    accessSync(dir, constants.R_OK | constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
+/** Information about an entry discovered during a walk. */
+export interface WalkedEntry {
+  /** POSIX relative path from the walk root. */
+  readonly relPath: string;
+  /** Absolute path. */
+  readonly absPath: string;
+  /** True if a symlink (not followed). */
+  readonly isSymlink: boolean;
+  /** True if a regular file (and not a symlink). */
+  readonly isFile: boolean;
+  /** True if a directory (and not a symlink). */
+  readonly isDirectory: boolean;
 }
 
-/**
- * `path`'s link text, or null when it isn't UTF-8: decoded lossily, it
- * would name another file than the one the kernel follows.
- */
-export function utf8LinkText(path: string): string | null {
-  const raw = readlinkSync(path, { encoding: "buffer" });
-  const text = raw.toString("utf8");
-  return Buffer.from(text).equals(raw) ? text : null;
+/** Options for `walk`. */
+export interface WalkOptions {
+  /** Whether to descend into a given directory. Called with each directory's relPath. */
+  readonly shouldDescend?: (entry: WalkedEntry) => boolean;
+  /** Whether to emit a given entry. Defaults to "yes" for everything. */
+  readonly shouldEmit?: (entry: WalkedEntry) => boolean;
+}
+
+/** Walk a directory tree non-recursively (iterative). Never follows symlinks. */
+export function walk(root: string, options: WalkOptions = {}): WalkedEntry[] {
+  const results: WalkedEntry[] = [];
+  if (!isDirectory(root)) return results;
+  const stack: string[] = [root];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    const names = readdirSync(current);
+    for (const name of names) {
+      const abs = join(current, name);
+      const rel = toPosix(relative(root, abs));
+      const lst = lstatSync(abs);
+      const entry: WalkedEntry = {
+        relPath: rel,
+        absPath: abs,
+        isSymlink: lst.isSymbolicLink(),
+        isFile: lst.isFile() && !lst.isSymbolicLink(),
+        isDirectory: lst.isDirectory() && !lst.isSymbolicLink(),
+      };
+      if (!options.shouldEmit || options.shouldEmit(entry)) results.push(entry);
+      if (entry.isDirectory && (!options.shouldDescend || options.shouldDescend(entry)))
+        stack.push(abs);
+    }
+  }
+  return results;
 }
 
 /** Read a symlink's target as raw bytes (utf-8). */
@@ -162,13 +184,9 @@ export function atomicReplace(src: string, dest: string): void {
   renameSync(src, dest);
 }
 
-/**
- * A relative path in POSIX (`/`) form (§12.1). Only the platform's own
- * separator is one: on POSIX a backslash is part of a name, and reading
- * it as a separator would turn a name like `a\..\b` into a climb.
- */
+/** Convert any relative path to POSIX (/) form. */
 export function toPosix(p: string): string {
-  return p.split(sep).join("/");
+  return p.split(/[\\/]+/).join("/");
 }
 
 /** `touch` — creates an empty file if missing. */

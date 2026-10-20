@@ -23,11 +23,14 @@ describe("currentTapChildren", () => {
     const root = makeTempDir("tap-children-root-");
     makeSkill(root, ".", skillFrontmatter({ name: "declared-root" }));
 
-    const found = currentTapChildren(pathTap(root), "/unused", root);
+    const children = currentTapChildren(pathTap(root), "/unused", root);
 
-    expect(found).toEqual({
-      children: [{ name: "declared-root", path: root, tapRelativePath: "" }],
-      unnamed: [],
-    });
+    expect(children).toEqual([
+      {
+        name: "declared-root",
+        path: root,
+        tapRelativePath: "",
+      },
+    ]);
   });
 });

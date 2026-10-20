@@ -12,12 +12,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
-import { readState } from "../../../../src/state/load.ts";
-import { makeCrewHome } from "../../../helpers/env.ts";
-import { makeTempDir } from "../../../helpers/fixtures.ts";
-import { buildRepo, install } from "../helpers.ts";
-import { crew } from "./helpers.ts";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
+import { runCli } from "../../../src/cli/main.ts";
+import { readState } from "../../../src/state/load.ts";
+import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
+import { buildRepo, install } from "./helpers.ts";
 
 let cc: { root: string };
 let ccOriginal: { userPath: () => string; detect: () => boolean };
@@ -33,6 +33,19 @@ afterEach(() => {
   claudeCodeAdapter.detect = ccOriginal.detect;
 });
 
+/** Install a single skill by its `<tap>/<skill>` name. */
+function installByName(home: string, ref: string): { code: number; out: string } {
+  const cap = captureStreams();
+  const code = runCli(["install", ref, "--agent", "claude-code"], { home, streams: cap.streams });
+  return { code, out: cap.stdout() };
+}
+
+/** Uninstall, so a later by-name install is a fresh single-skill one. */
+function uninstall(home: string, name: string): number {
+  const cap = captureStreams();
+  return runCli(["uninstall", name, "--yes"], { home, streams: cap.streams });
+}
+
 describe("re-attribution and whole-tap tracking", () => {
   test("C-INST-13l a reattributed entry gains the broad tap's subscription", () => {
     const home = makeCrewHome();
@@ -42,12 +55,12 @@ describe("re-attribution and whole-tap tracking", () => {
     // stays installed so that tap survives garbage collection.
     expect(install(home, `file://${repo}//skills`).code).toBe(0);
     const narrowTap = readState(home).installations[0]!.source.tap;
-    expect(crew(home, ["uninstall", "solo", "--yes"])).toBe(0);
+    expect(uninstall(home, "solo")).toBe(0);
 
     // Re-install just `solo` by name through that auto tap. A
     // single-skill tap ref is not a whole-tap install, so no
     // subscription is recorded.
-    expect(install(home, `${narrowTap}/solo`).code).toBe(0);
+    expect(installByName(home, `${narrowTap}/solo`).code).toBe(0);
     const narrow = readState(home).installations.find((e) => e.name === "solo");
     expect(narrow?.source.tap).toBe(narrowTap);
     expect(narrow?.tracks_tap ?? false).toBe(false);
@@ -57,7 +70,7 @@ describe("re-attribution and whole-tap tracking", () => {
     // for the tap, so the subscription must move with the attribution.
     const second = install(home, `file://${repo}`);
     expect(second.code).toBe(0);
-    expect(second.out).toContain("moved from");
+    expect(second.out).toContain("now tracked via");
 
     const after = readState(home).installations.find((e) => e.name === "solo");
     expect(after?.source.tap).not.toBe(narrowTap);
