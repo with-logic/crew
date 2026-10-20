@@ -88,5 +88,5 @@ test("C-SPEC-17 a chain through `..` that really stays inside the repository is 
   });
   const r = crew(makeCrewHome(), ["install", `file://${repo}`]);
   expect(r.code).toBe(0);
-  expect(readdirSync(claude.userRoot)).toEqual(["good", "real-b"]);
+  expect(readdirSync(claude.userRoot).sort()).toEqual(["good", "real-b"]);
 });
