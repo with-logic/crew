@@ -3,41 +3,24 @@
  *
  * Groups findings under themed headers ("Agents", "State", "Autoupdate",
  * "Config", "Storage") and translates machine codes into plain-English
- * sentences. An all-clean run prints a single check-mark line; anything
- * else ends with a hint pointing at `--repair` when it's the right fix.
+ * sentences (`./codes.ts`). An all-clean run prints a single check-mark
+ * line; anything else ends with a hint pointing at `--repair` when it's
+ * the right fix. A message can echo text read from disk (a marker's
+ * `path`, say), so each is escaped as it is printed (§5.2).
  */
 
 import { plural } from "../../util/format.ts";
+import { redactText, sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 import type { AutoupdateRepair } from "./autoupdate.ts";
 import type { Finding } from "./checks.ts";
+import { CODE_GROUPS, CODE_LABELS, type DoctorCode, GROUP_ORDER } from "./codes.ts";
 import { isRepairable, isRepairableCode, repairableCount } from "./repairable.ts";
 
-const CODE_LABELS: Record<string, string> = {
-  state_entry_without_marker: "crew's records show an install that isn't on disk",
-  marker_without_state: "there's an install on disk crew doesn't remember",
-  customized: "local edits detected (won't be overwritten)",
-  orphan_store_entry: "a cached skill is no longer referenced",
-  agent_missing: "an agent in your state isn't detected anymore",
-  missing_project_root: "a project folder is missing",
-  autoupdate_not_loaded: "autoupdate is enabled but the background updater isn't loaded",
-  autoupdate_unexpectedly_loaded: "autoupdate is off but the background updater is still loaded",
-  config_invalid: "~/.crew/config.yaml couldn't be parsed",
-};
-
-const CODE_GROUPS: Record<string, string> = {
-  state_entry_without_marker: "State",
-  marker_without_state: "State",
-  customized: "State",
-  orphan_store_entry: "Storage",
-  agent_missing: "Agents",
-  missing_project_root: "State",
-  autoupdate_not_loaded: "Autoupdate",
-  autoupdate_unexpectedly_loaded: "Autoupdate",
-  config_invalid: "Config",
-};
-
-const GROUP_ORDER = ["Agents", "State", "Autoupdate", "Config", "Storage", "Other"];
+/** `message` safe to print: no credentials, no terminal controls. */
+function printable(message: string): string {
+  return sanitizeLine(redactText(message));
+}
 
 export function renderDoctor(
   findings: readonly Finding[],
@@ -76,7 +59,7 @@ export function renderDoctor(
     const byCode = clusterByCode(items);
     for (const [code, cluster] of byCode) {
       const sym = cluster[0]!.level === "error" ? style.symbol("fail") : style.symbol("warn");
-      const label = CODE_LABELS[code] ?? code.replace(/_/g, " ");
+      const label = CODE_LABELS[code];
       const qty = cluster.length > 1 ? style.dim(` (${cluster.length})`) : "";
       // On a repair preview, say per cluster whether this is one of
       // the findings the run would address. The trailing count alone
@@ -88,7 +71,7 @@ export function renderDoctor(
       // Show the first few messages; for larger clusters summarise.
       const shown = cluster.slice(0, 3);
       for (const f of shown) {
-        lines.push(style.dim(`       ${f.message}`));
+        lines.push(style.dim(`       ${printable(f.message)}`));
       }
       if (cluster.length > shown.length) {
         lines.push(style.dim(`       ...and ${cluster.length - shown.length} more`));
@@ -154,7 +137,8 @@ function renderRepaired(
   }
   for (const r of repairs) {
     const sym = r.level === "error" ? style.symbol("fail") : style.symbol("ok");
-    lines.push(`  ${sym} ${r.level === "error" ? style.red(r.message) : style.dim(r.message)}`);
+    const message = printable(r.message);
+    lines.push(`  ${sym} ${r.level === "error" ? style.red(message) : style.dim(message)}`);
   }
   return lines;
 }
@@ -169,15 +153,15 @@ function formatHeadline(errors: number, warns: number): string {
 function groupFindings(findings: readonly Finding[]): Map<string, Finding[]> {
   const out = new Map<string, Finding[]>();
   for (const f of findings) {
-    const group = CODE_GROUPS[f.code] ?? "Other";
+    const group = CODE_GROUPS[f.code];
     if (!out.has(group)) out.set(group, []);
     out.get(group)!.push(f);
   }
   return out;
 }
 
-function clusterByCode(findings: readonly Finding[]): Map<string, Finding[]> {
-  const out = new Map<string, Finding[]>();
+function clusterByCode(findings: readonly Finding[]): Map<DoctorCode, Finding[]> {
+  const out = new Map<DoctorCode, Finding[]>();
   for (const f of findings) {
     if (!out.has(f.code)) out.set(f.code, []);
     out.get(f.code)!.push(f);

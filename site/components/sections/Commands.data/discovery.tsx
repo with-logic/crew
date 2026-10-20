@@ -24,8 +24,9 @@ export const DISCOVERY: CommandGroup = {
       signature: <>crew tap add [--recursive] &lt;url-or-path&gt; [name]</>,
       description: (
         <>
-          Add a registry from a git source or local folder. Name defaults to the repo/path name.
-          Recursive discovery is opt-in for trusted non-standard layouts.
+          Add a registry from a git source or local folder. Name defaults to the repo/path name (
+          <code>gist-</code> plus the first 8 characters of the ID for a gist). Recursive discovery
+          is opt-in for trusted non-standard layouts.
         </>
       ),
     },

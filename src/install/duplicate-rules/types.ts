@@ -8,6 +8,7 @@
  */
 
 import type { ResolvedSkill, Scope, StateEntry, TapConfig } from "../../core/types.ts";
+import type { Promotions } from "../promote-flags.ts";
 
 export interface AlreadyInstalled {
   readonly name: string;
@@ -28,16 +29,20 @@ export interface Reattribution {
   readonly toTap: string;
   readonly toPath: string;
   /**
-   * Whether the incoming install subscribed to its whole tap. Carried
-   * with the move because an already-installed entry can skip
-   * `performInstall`, which otherwise records `tracks_tap` (§10.1.1).
+   * Whether the moved entry takes the incoming install's subscription:
+   * the install is of the whole tap, at the ref the entry ends at (§11.1).
+   * Carried with a move made before the install, because an
+   * already-installed entry skips `performInstall`, which otherwise
+   * records `tracks_tap` (§10.1.1).
    */
   readonly tracksTap: boolean;
 }
 
 /**
- * Attribution retained when a reinstall must preserve a registered tap
- * or a broad subscription (§5.4, §10.1.1). The full descriptor keeps
+ * Attribution retained when a reinstall must preserve a registered tap,
+ * or a tracking entry's own tap the incoming install doesn't take over
+ * (§5.4, §10.1.1); whether the subscription survives too is
+ * `buildStateEntry`'s call (the same ref only). The full descriptor keeps
  * authoritative markers consistent with state (§11.1).
  */
 export interface KeptSource {
@@ -51,8 +56,16 @@ export interface KeptSource {
 export interface DuplicateAnalysis {
   readonly toInstall: ResolvedSkill[];
   readonly alreadyInstalled: AlreadyInstalled[];
-  readonly promoteToExplicit: string[];
+  /** One-way flags to set on already-installed entries (`../promote-flags.ts`). */
+  readonly promotions: Promotions;
+  /** Moves of already-installed entries, made before the install runs. */
   readonly reattributions: Reattribution[];
+  /**
+   * Moves of entries the install reinstalls: `performInstall` writes the
+   * incoming attribution itself, and the entry's other markers follow
+   * only if it succeeds (§5.4).
+   */
+  readonly movesOnSuccess: Reattribution[];
   readonly keepSource: KeptSource[];
 }
 

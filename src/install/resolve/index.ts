@@ -20,7 +20,7 @@ import { withDiscoveredTapLocks } from "../../sources/discovered-tap-locks.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
 import { topoSort } from "../topo.ts";
-import { enqueueDeps } from "./dep/index.ts";
+import { type DependencyReads, enqueueDeps, makeDependencyReads } from "./dep/index.ts";
 import type { PendingItem } from "./enqueue.ts";
 import { enqueueRoot, sameInstallSetSource, sourceLabel } from "./root.ts";
 
@@ -48,9 +48,12 @@ export interface ResolveResult {
   /** Config including any auto-taps we created. Caller writes it. */
   readonly config: Config;
   /**
-   * Skill directories that failed validation during expansion and
-   * were soft-skipped. The install command surfaces them and factors
-   * them into the exit code per PRD §9 step 9.
+   * Candidates (skill directories or gist skill files) that couldn't be
+   * loaded and were soft-skipped — including a lone root skill or a
+   * selected gist file. `invalid_skill` is a validation failure;
+   * `source_unreachable` (a SKILL.md crew couldn't read) an operational
+   * one. The install command surfaces them and factors them into the
+   * exit code per PRD §9 step 9.
    */
   readonly skipped: readonly SkippedSkill[];
 }
@@ -64,9 +67,16 @@ export function resolveInstallSet(
   options: Partial<ResolveOptions> = {},
 ): ResolveResult {
   const home = options.home ?? crewHome();
-  return withDiscoveredTapLocks(startingConfig.taps, home, (requireTap) =>
-    resolveLockedInstallSet(refs, startingConfig, options, requireTap),
-  );
+  return withDiscoveredTapLocks(startingConfig.taps, home, (requireTap) => {
+    // The dependency walk's exports outlive each parent, not the resolution.
+    const reads = makeDependencyReads(home);
+    try {
+      return resolveLockedInstallSet(refs, startingConfig, options, requireTap, reads);
+    } finally {
+      // Never throws, so it can't replace the resolution's result or error.
+      reads.trees.release();
+    }
+  });
 }
 
 function resolveLockedInstallSet(
@@ -74,6 +84,7 @@ function resolveLockedInstallSet(
   startingConfig: Config,
   options: Partial<ResolveOptions>,
   requireTap: (tap: TapConfig) => void,
+  reads: DependencyReads,
 ): ResolveResult {
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
@@ -139,11 +150,11 @@ function resolveLockedInstallSet(
       tracksTap: item.tracksTap,
     });
 
-    // Enqueue dependencies (if any). Batched so a pinned parent's
-    // commit is exported once for all of them, not once per edge.
+    // Enqueue dependencies (if any). A pinned parent's commit is exported
+    // once for the resolution (`reads`), not once per edge or parent.
     const deps = item.loaded.frontmatter.metadata?.crew?.dependencies ?? [];
     if (deps.length > 0) {
-      const enqueued = enqueueDeps(deps, item, config, cwd, home, requireTap);
+      const enqueued = enqueueDeps(deps, item, config, { cwd, home, reads }, requireTap);
       config = enqueued.config;
       skipped.push(...enqueued.skipped);
       for (const depItem of enqueued.items) {

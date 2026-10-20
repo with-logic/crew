@@ -36,10 +36,6 @@ export function buildStateEntry(
   // `explicit` never demotes: once a user explicitly wanted a skill,
   // we keep remembering (§11.1).
   const explicit = skill.explicit || (existing?.explicit ?? false);
-  // `tracks_tap` is one-way too: once a user asked for the whole tap,
-  // siblings keep following, even if a later `crew install <same>/<one>`
-  // would be individual on its own.
-  const tracksTap = skill.tracksTap || (existing?.tracks_tap ?? false);
   const required_by = [...(options.requiredBy.get(skill.name) ?? [])].sort();
   // Merge preserves agents from prior installs that aren't part of
   // this operation (e.g. agent X installed the skill last run; this
@@ -52,6 +48,14 @@ export function buildStateEntry(
   const retainedSource = options.keepSource?.find(
     (k) => k.name === skill.name && k.scope === scope && k.projectRoot === incomingProjectRoot,
   );
+  // `tracks_tap` never demotes at the same ref: once a user asked for the
+  // whole tap, siblings keep following, even if a later
+  // `crew install <same>/<one>` would be individual on its own. Reinstalled
+  // alone at another ref, the entry is recorded there without it; and one
+  // that keeps another tap never takes it from this install. Either would
+  // follow siblings the user never asked for (§11.1).
+  const keepsTracking = existing?.tracks_tap === true && existing.ref === skill.ref;
+  const tracksTap = (retainedSource === undefined && skill.tracksTap) || keepsTracking;
   return {
     name: skill.name,
     source: retainedSource?.source ?? { tap: skill.tap.name, path: skill.tapRelativePath },

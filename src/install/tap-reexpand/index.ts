@@ -6,10 +6,13 @@
  *
  *   1. ADDITIONS — children present upstream but not in state: validate
  *      in full (§9 step 4) and install via the caller-provided
- *      `installNewChild` callback. A child that fails validation is
- *      reported as a `tap_error` and never installed.
- *   2. SOURCE_GONE — entries in state attributed to this tap whose
- *      directory is no longer present upstream: report; preserve local
+ *      `installNewChild` callback. A child that fails validation, that
+ *      crew can't name, can't stage (§9 step 8), or can't install into an
+ *      agent's folder is reported as a `tap_error` and installed nowhere:
+ *      not recorded, and removed from any agent it was just installed
+ *      into (C-UPD-18e).
+ *   2. SOURCE_GONE — entries in state attributed to this tap whose skill
+ *      is no longer upstream (§10.1.1 step 3): report; preserve local
  *      install.
  *
  * Existing-and-still-present children are handled by the regular
@@ -66,14 +69,14 @@ export function reexpandTaps(
   const sourceGone = new Set<string>();
   const rows: TapReexpandRow[] = [];
   let hardFailure = false;
-  // One tap backs several (scope, project_root) groups; acquire, walk
-  // and validate it once per run rather than once per group.
+  // One tap backs several (scope, project_root, ref) groups; those at the
+  // default branch acquire, walk and validate it once per run.
   const cache = makeTapScanCache();
   const installedIndex = buildInstalledSourceIndex(state, config);
 
-  // Group state entries by (tap-name, scope, project_root). Entries
-  // sharing all three are managed together: same tap clone, same
-  // install location, same target set (typically).
+  // Group state entries by (tap, scope, project_root, ref) (§11.1).
+  // Entries sharing all four are managed together: same tap clone at the
+  // same revision, same install location, same target set (typically).
   const byKey = new Map<string, StateEntry[]>();
   for (const entry of state.installations) {
     const key = JSON.stringify([

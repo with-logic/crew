@@ -16,8 +16,8 @@ import {
   readSymlinkTarget,
   toPosix,
   touch,
-  walk,
 } from "../../../src/util/fs.ts";
+import { walk } from "../../../src/util/walk.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
 
 describe("fs utilities", () => {
@@ -51,8 +51,9 @@ describe("fs utilities", () => {
     symlinkSync("target", join(d, "link"));
     expect(readSymlinkTarget(join(d, "link"))).toBe("target");
   });
-  test("toPosix backslashes", () => {
-    expect(toPosix("a\\b\\c")).toBe("a/b/c");
+  test("§12.1 toPosix splits on the platform's separator; a backslash stays part of a name", () => {
+    expect(toPosix(join("a", "b", "c"))).toBe("a/b/c");
+    expect(toPosix(join("skills", "a\\..\\b"))).toBe("skills/a\\..\\b");
   });
   test("walk on empty dir returns empty", () => {
     const d = makeTempDir();

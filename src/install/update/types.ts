@@ -6,12 +6,19 @@
  * public row shapes so JSON output stays stable.
  */
 
-export interface PerAgentUpdate {
-  readonly agent: string;
-  readonly kind: "installed" | "up_to_date" | "skipped" | "failed";
-  readonly error?: { code: string; message: string };
-  readonly reason?: string;
-}
+import type { CrewErrorName } from "../../core/errors.ts";
+import type { FailureCode } from "../../util/errno.ts";
+
+/** One agent's part of an `updated` row (§10.1). */
+export type PerAgentUpdate =
+  | { readonly agent: string; readonly kind: "installed" | "up_to_date" }
+  /** A safety check refused it (§7.3); `reason` is its §13 name. */
+  | { readonly agent: string; readonly kind: "skipped"; readonly reason: CrewErrorName }
+  | {
+      readonly agent: string;
+      readonly kind: "failed";
+      readonly error: { code: FailureCode; message: string };
+    };
 
 export type Outcome =
   | { kind: "up_to_date" }
@@ -28,7 +35,7 @@ export type Outcome =
   /** §10.1: the entry's tap is no longer in config. Soft; install is kept. */
   | { kind: "tap_missing"; tap: string }
   | { kind: "missing_project_root"; root: string }
-  | { kind: "failed"; error: { code: string; message: string } };
+  | { kind: "failed"; error: { code: CrewErrorName; message: string } };
 
 export interface UpdateRow {
   readonly name: string;

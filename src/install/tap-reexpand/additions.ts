@@ -7,7 +7,9 @@
  * (`--dry-run`) or install it.
  */
 
+import { namespaceOf } from "../../core/namespace.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
+import { failureCodeOf } from "../../util/errno.ts";
 import {
   type InstalledSourceIndex,
   indexHasSameSource,
@@ -16,6 +18,7 @@ import {
 import type { CurrentTapChild } from "../tap-children.ts";
 import type { InstallNewChild, TapReexpandRow } from "./index.ts";
 import type { TapScanCache } from "./scan-cache.ts";
+import { reexpandErrorOf } from "./types.ts";
 
 export interface AdditionsInput {
   readonly children: readonly CurrentTapChild[];
@@ -41,11 +44,18 @@ export interface AdditionsInput {
   readonly namespaces: ReadonlySet<string> | null;
 }
 
-/** The namespace a child lives under (`skills/<ns>/<name>`), or null. */
-function namespaceForChild(child: CurrentTapChild): string | null {
-  const parts = child.tapRelativePath.split("/");
-  if (parts.length === 3 && parts[0] === "skills") return parts[1]!;
-  return null;
+/**
+ * Whether a run may add the child at `tapRelativePath`: any, when
+ * unbounded (`null`); else only one under a namespace it named
+ * (`skills/<ns>/<name>`, §10.1.1).
+ */
+export function withinNamespaces(
+  tapRelativePath: string,
+  namespaces: ReadonlySet<string> | null,
+): boolean {
+  if (namespaces === null) return true;
+  const namespace = namespaceOf(tapRelativePath);
+  return namespace !== null && namespaces.has(namespace);
 }
 
 export interface AdditionsResult {
@@ -62,10 +72,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
   for (const child of input.children) {
     if (input.conflictedNames.has(child.name)) continue;
     if (input.memberNames.has(child.name)) continue;
-    if (input.namespaces !== null) {
-      const ns = namespaceForChild(child);
-      if (ns === null || !input.namespaces.has(ns)) continue;
-    }
+    if (!withinNamespaces(child.tapRelativePath, input.namespaces)) continue;
 
     const lookup = {
       name: child.name,
@@ -80,15 +87,15 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
     // can reach here with (say) no `description`. Validate in full
     // before reporting or installing, so the preview and the real run
     // agree and an invalid child never lands on disk.
-    const invalid = input.cache.validate(child.path);
-    if (invalid) {
+    const loadError = input.cache.validate(child.path);
+    if (loadError) {
       hardFailure = true;
       rows.push({
         name: child.name,
         scope: input.scope,
         tap: input.tap.name,
         kind: "tap_error",
-        error: { code: invalid.code ?? "invalid_skill", message: invalid.message },
+        error: reexpandErrorOf(loadError.code, loadError),
       });
       continue;
     }
@@ -102,18 +109,33 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       });
       continue;
     }
-    const entry = input.installOne({
-      skillDir: child.path,
-      skillName: child.name,
-      tapRelativePath: child.tapRelativePath,
-      scope: input.scope,
-      tap: input.tap,
-      agents: input.agents,
-      resolvedSha: input.resolvedSha,
-      projectRoot: input.projectRoot,
-      ref: input.ref,
-      pinned: input.pinned,
-    });
+    let entry: StateEntry | null;
+    try {
+      entry = input.installOne({
+        skillPath: child.path,
+        skillName: child.name,
+        tapRelativePath: child.tapRelativePath,
+        scope: input.scope,
+        tap: input.tap,
+        agents: input.agents,
+        resolvedSha: input.resolvedSha,
+        projectRoot: input.projectRoot,
+        ref: input.ref,
+        pinned: input.pinned,
+      });
+    } catch (err) {
+      // A child crew can't stage (a file it can't read, §9 step 8), or
+      // can't write into an agent's folder, fails that child alone.
+      hardFailure = true;
+      rows.push({
+        name: child.name,
+        scope: input.scope,
+        tap: input.tap.name,
+        kind: "tap_error",
+        error: reexpandErrorOf(failureCodeOf(err), err),
+      });
+      continue;
+    }
     if (entry) {
       added.push(entry);
       noteInstalled(input.installedIndex, lookup);

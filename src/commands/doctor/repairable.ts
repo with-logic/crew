@@ -11,6 +11,7 @@
  */
 
 import type { Finding } from "./checks.ts";
+import type { DoctorCode } from "./codes.ts";
 
 /**
  * Codes `--repair` actually fixes. An allowlist on purpose: a new
@@ -30,11 +31,17 @@ import type { Finding } from "./checks.ts";
  *
  * Deliberately absent:
  *   - `customized`, `agent_missing`, `config_invalid` — need a human.
+ *   - `unreadable_marker` — a path crew can't read is the user's
+ *     permissions to fix, and a marker it can't use the install's to
+ *     reinstall; repair keeps the state entries either hides.
+ *   - `marker_attribution_drift` — re-pointing state at one copy's
+ *     marker would move the entry's other copies; the user reinstalls
+ *     that copy.
  *   - `missing_project_root` — `checks.ts` documents that removing a
  *     vanished project's install isn't doctor's job, so it is a
  *     permanent heads-up rather than pending work.
  */
-const REPAIRABLE_CODES: ReadonlySet<string> = new Set([
+const REPAIRABLE_CODES: ReadonlySet<DoctorCode> = new Set<DoctorCode>([
   "state_entry_without_marker",
   "marker_without_state",
   "orphan_store_entry",
@@ -43,7 +50,7 @@ const REPAIRABLE_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /** True when `code` is one `crew doctor --repair` can actually fix. */
-export function isRepairableCode(code: string): boolean {
+export function isRepairableCode(code: DoctorCode): boolean {
   return REPAIRABLE_CODES.has(code);
 }
 

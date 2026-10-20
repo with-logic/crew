@@ -1,6 +1,6 @@
 {
   "name": "crew",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "A package manager for Agent Skills",
   "author": "Logic App, Inc.",
   "license": "MIT",
@@ -21,6 +21,7 @@
     "build-known-taps": "bun run known-taps build",
     "check-known-taps": "bun run known-taps check",
     "update-known-tap-pins": "bun run known-taps update",
+    "smoke:gist": "bun run scripts/smoke-gist.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check . && bun run scripts/check-file-size.ts",

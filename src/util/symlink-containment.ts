@@ -15,9 +15,10 @@
  */
 
 import { lstatSync, type Stats } from "node:fs";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { toPosix } from "./fs.ts";
+import { climbsOut } from "./relative-path.ts";
 
 /**
  * Throw unless `target` is contained by `root`: lexically beneath it,
@@ -37,10 +38,9 @@ export function assertNoSymlinkEscape(root: string, target: string, describe: st
   const rootAbs = resolve(root);
   const targetAbs = resolve(target);
   // `relative` is the lexical test: a target below the root never needs
-  // to climb, so a leading `..` means it escaped. An absolute result
-  // means the two share no common base at all (different drives).
+  // to climb, so a result that climbs out (`climbsOut`) means it escaped.
   const rel = relative(rootAbs, targetAbs);
-  if (rel.startsWith("..") || isAbsolute(rel)) {
+  if (climbsOut(rel)) {
     throw new CrewError(
       "invalid_ref",
       `${describe} resolves outside the source, which would read content that isn't part of it`,

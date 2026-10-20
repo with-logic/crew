@@ -6,11 +6,13 @@
  */
 
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
+import { isTapErrorRow } from "../../install/tap-reexpand/types.ts";
+import { hasFailedTarget } from "../../install/update/public-row.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { columns, plural } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
-import { formatRowParts, groupByTap, nameCell } from "./rows.ts";
+import { formatRowParts, groupByTap, nameCell, tapErrorBlocks } from "./rows.ts";
 
 /** A tap or namespace the user selected, with how many entries it expanded to. */
 export interface CollectionSummary {
@@ -102,20 +104,19 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
     }
   }
 
-  // Errors surfaced by re-expansion: a tap that couldn't be reached, or
-  // a discovered child that failed validation (§9 step 4). Both name the
-  // subject and the reason — an invalid child is the user's to fix, so
-  // "tap acme (invalid_skill)" alone would tell them nothing.
-  const errorRows = input.tapReexpandRows.filter((r) => r.kind === "tap_error");
-  for (const r of errorRows) {
-    const code = r.error?.code ?? "unreachable";
-    lines.push(
-      `${style.symbol("fail")} ${style.bold(r.name)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
-    );
-    if (r.error?.message) lines.push(style.dim(`  ${r.error.message}`));
-  }
+  // Errors surfaced by re-expansion: a tap that couldn't be reached, or a
+  // discovered child that failed validation (§9 step 4), couldn't be
+  // staged (§9 step 8), or couldn't be written into an agent. Each names
+  // the subject and the reason — "tap acme (invalid_skill)" alone would
+  // tell the user nothing.
+  const errors = tapErrorBlocks(
+    input.tapReexpandRows.filter(isTapErrorRow),
+    style.symbol("fail"),
+    style,
+  );
+  lines.push(...errors.lines);
 
-  const totals = tally(input.rows, addedRows.length, errorRows.length);
+  const totals = tally(input.rows, addedRows.length, errors.failures);
   lines.push("");
   lines.push(style.dim(formatTotals(totals, dryRun)));
 
@@ -139,15 +140,16 @@ function tally(rows: readonly UpdateRow[], addedCount: number, tapErrorCount: nu
     skipped: 0,
     sourceGone: 0,
     tapMissing: 0,
-    // Re-expansion errors are failures too: a child that failed
-    // validation was not added, and the run exits 1 for it.
+    // Re-expansion errors are failures too: a child that failed was not
+    // added, and the run exits 1 for it.
     failed: tapErrorCount,
     added: addedCount,
   };
   for (const r of rows) {
     const o = r.outcome;
     const k = o.kind;
-    if (k === "updated" || k === "would_update") t.updated++;
+    if (hasFailedTarget(o)) t.failed++;
+    else if (k === "updated" || k === "would_update") t.updated++;
     else if (k === "up_to_date") t.upToDate++;
     else if (k === "skipped" || k === "missing_project_root") t.skipped++;
     else if (k === "source_gone") t.sourceGone++;

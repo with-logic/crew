@@ -104,6 +104,17 @@ describe("hashDirectory", () => {
     expect(hashDirectory(d).startsWith("sha256:")).toBe(true);
   });
 
+  test("§12.1 a backslash in a name hashes as `/`, as every release has", () => {
+    // Hashed otherwise, an unedited install of such a skill would read as
+    // customized after an upgrade.
+    const d1 = makeTempDir();
+    const d2 = makeTempDir();
+    writeFileSync(join(d1, "a\\b.txt"), "X");
+    mkdirSync(join(d2, "a"));
+    writeFileSync(join(d2, "a", "b.txt"), "X");
+    expect(hashDirectory(d1)).toBe(hashDirectory(d2));
+  });
+
   test("missing directory returns empty-directory hash", () => {
     const h = hashDirectory(`/tmp/does-not-exist-crew-test-${Date.now()}`);
     expect(h).toBe("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");

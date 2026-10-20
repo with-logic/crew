@@ -1,12 +1,13 @@
 /**
- * Installed-skill marker type for `.crew.json` (§7.5, §11.1).
+ * Installed-skill marker type for `.crew.json` (§7.5, §11.1), and the tap
+ * descriptor every marker writer records.
  *
  * Markers are self-describing so `crew doctor --repair` can rebuild a
  * missing tap row from installed bytes alone.
  */
 
 import type { Scope } from "./scope.ts";
-import type { TapDiscovery, TapKind } from "./tap.ts";
+import type { TapConfig, TapDiscovery, TapKind } from "./tap.ts";
 
 /** The shape written into every `.crew.json` marker. */
 export interface Marker {
@@ -34,4 +35,19 @@ export interface Marker {
   readonly scope: Scope;
   readonly installed_at: string;
   readonly installed_by: string;
+}
+
+/** A marker's tap descriptor: every `tap_*` field, so a new one must be written. */
+export type MarkerTapFields = Pick<Marker, Extract<keyof Marker, `tap_${string}`>>;
+
+/** `tap` as a marker records it; `tap_discovery` only when non-standard (§7.5). */
+export function markerTapFields(tap: TapConfig): MarkerTapFields {
+  return {
+    tap_name: tap.name,
+    tap_kind: tap.kind,
+    tap_url: tap.url,
+    tap_subpath: tap.subpath,
+    tap_path: tap.path,
+    ...(tap.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
+  };
 }

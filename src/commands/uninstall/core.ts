@@ -10,10 +10,10 @@
 import { type AgentAdapter, baseFor, cwdForEntry } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
 import { uninstallSkillFromAgents } from "../../agents/uninstall.ts";
-import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, StateFile } from "../../core/types.ts";
 import type { CollectionKind } from "../../state/collections/index.ts";
 import type { StateSubject } from "../../state/subjects.ts";
+import { failureCodeOf } from "../../util/errno.ts";
 import type { CommandContext } from "../types.ts";
 import { dropScopedEntriesAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
 
@@ -181,13 +181,8 @@ function removeFromAgents(
       // Absent and removed alike leave no bytes owned by this agent.
       for (const a of group) detached.add(a.name);
     } catch (err) {
-      const ce = err as CrewError;
-      for (const a of group) {
-        rec.failures.push({
-          agent: a.name,
-          error: { code: ce.code ?? "usage_error", message: ce.message },
-        });
-      }
+      const error = { code: failureCodeOf(err), message: (err as Error).message };
+      for (const a of group) rec.failures.push({ agent: a.name, error });
     }
   }
   return detached;

@@ -26,15 +26,17 @@
  * tap to acquire.
  */
 
-import { join, posix } from "node:path";
+import { statSync } from "node:fs";
+import { join } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { crewHome } from "../../core/paths.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
-import { withExportedTree } from "../../git/export.ts";
+import { exportTree } from "../../git/export.ts";
 import { ensureClone } from "../../git/repo/index.ts";
 import { classifyRef, resolveRef } from "../../git/repo/refs.ts";
 import { displayUrl } from "../../refs/display-url.ts";
+import { isGoneError, unreadablePathError } from "../../util/errno.ts";
 import { isDirectory } from "../../util/fs.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
@@ -42,7 +44,7 @@ import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
-  /** Materialized tap root, or the narrowed root returned by skill acquisition. */
+  /** The tap's root directory: the clone (or path), or at a ref its scratch export, with `subpath` applied. */
   readonly rootDir: string;
   /** Full 40-char SHA for git taps; null for path taps. */
   readonly resolvedSha: string | null;
@@ -55,13 +57,14 @@ export interface AcquiredTap {
 
 /**
  * Materialize a tap on disk. Throws `source_unreachable` when the clone
- * cannot be obtained, `no_skills_found` when the subpath doesn't exist,
- * and `invalid_ref` when the stored subpath escapes the clone (see
+ * cannot be obtained or a path tap's directory can't be looked at,
+ * `no_skills_found` when the subpath (or path) isn't a directory, and
+ * `invalid_ref` when the stored subpath escapes the clone (see
  * `tapRootDir`).
  */
 export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredTap {
   if (tap.kind === "path") {
-    if (!isDirectory(tap.path)) {
+    if (!isTapDirectory(tap.path)) {
       throw new CrewError(
         "no_skills_found",
         `tap \`${tap.name}\` points at \`${tap.path}\` which isn't a directory`,
@@ -89,13 +92,29 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
 }
 
 /**
+ * Whether a path tap's path is a directory. A failure to look other than
+ * its absence — a folder above it crew can't search — is the local
+ * filesystem's, `source_unreachable`, never a source that went away
+ * (§10.1).
+ */
+function isTapDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch (err) {
+    if (isGoneError(err)) return false;
+    throw unreadablePathError(path, err);
+  }
+}
+
+/**
  * Acquire a tap at `ref` and run `fn` against the result.
  *
  * With a null `ref` (or a path-kind tap, which has no commits) this is
  * exactly `acquireTap` and `fn` sees the live clone. With a ref, the
  * commit is resolved first — an unknown ref is `ref_not_found` (exit 5,
  * §13) — and `fn` sees a scratch export of that commit that is deleted
- * when `fn` returns or throws.
+ * when `fn` returns or throws. One crew can't delete is left, noted under
+ * `--verbose`, and never replaces `fn`'s result or error.
  */
 export function withAcquiredTap<T>(
   tap: TapConfig,
@@ -103,58 +122,54 @@ export function withAcquiredTap<T>(
   home: string,
   fn: (acquired: AcquiredTap) => T,
 ): T {
-  if (ref === null || tap.kind === "path") {
-    return fn(acquireTap(tap, home));
+  const held = holdAcquiredTap(tap, ref, home);
+  try {
+    return fn(held.acquired);
+  } finally {
+    held.release();
   }
-  migrateTapClone(tap, home);
-  const clonePath = tapClonePath(tap, home);
-  ensureClone(tap.url, clonePath);
-  const sha = resolveRefFetchingIfNeeded(clonePath, ref);
-  const kind = classifyRef(clonePath, ref);
-  const pinned = kind === "sha" || kind === "tag";
-  return withExportedTree(clonePath, sha, tap.subpath, home, (rootDir) =>
-    fn({ rootDir, resolvedSha: sha, pinned }),
-  );
+}
+
+/** An acquired tap kept for as long as its holder needs it. */
+export interface HeldTap {
+  readonly acquired: AcquiredTap;
+  /** Delete the scratch export behind it, if any. Never throws (`exportTree`). */
+  readonly release: () => void;
 }
 
 /**
- * Acquire only ONE skill's subtree of a tap at `ref`.
- *
- * `crew update` reads exactly `<tap root>/<entry source path>` per entry.
- * For a whole-repo tap (`subpath` empty) the general `withAcquiredTap`
- * would export the entire repository for each such entry — N full
- * exports for N skills sharing a tap and ref. Narrowing the export to
- * the skill's own path makes that cost proportional to what is read
- * (§10.1).
- *
- * `fn` receives the skill directory itself, not the tap root.
+ * `withAcquiredTap` without the scope, for a caller that reads one commit
+ * for many skills: the holder calls `release` once it is done.
  */
-export function withAcquiredSkillDir<T>(
-  tap: TapConfig,
-  ref: string | null,
-  skillPath: string,
-  home: string,
-  fn: (acquired: AcquiredTap, skillDir: string) => T,
-): T {
+export function holdAcquiredTap(tap: TapConfig, ref: string | null, home: string): HeldTap {
   if (ref === null || tap.kind === "path") {
-    const acquired = acquireTap(tap, home);
-    return fn(acquired, join(acquired.rootDir, skillPath));
+    return { acquired: acquireTap(tap, home), release: () => undefined };
   }
+  const { clonePath, sha, pinned } = resolveTapRef(tap, ref, home);
+  const tree = exportTree(clonePath, sha, tap.subpath, home);
+  return { acquired: { rootDir: tree.location, resolvedSha: sha, pinned }, release: tree.remove };
+}
+
+/** A git tap's clone, and the commit a ref names in it (§9 step 3). */
+export interface ResolvedTapRef {
+  readonly clonePath: string;
+  readonly sha: string;
+  /** The ref names an immutable revision: a SHA or a tag (§11.1). */
+  readonly pinned: boolean;
+}
+
+/**
+ * Git tap `tap`'s clone — migrated, and made if missing — and the commit
+ * `ref` names in it, fetched when the clone lacks it. Callers export what
+ * they read of that commit themselves: the tap, or one skill of it.
+ */
+export function resolveTapRef(tap: TapConfig, ref: string, home: string): ResolvedTapRef {
   migrateTapClone(tap, home);
   const clonePath = tapClonePath(tap, home);
   ensureClone(tap.url, clonePath);
   const sha = resolveRefFetchingIfNeeded(clonePath, ref);
   const kind = classifyRef(clonePath, ref);
-  const pinned = kind === "sha" || kind === "tag";
-  const exportPath =
-    skillPath.length === 0
-      ? tap.subpath
-      : tap.subpath.length > 0
-        ? posix.join(tap.subpath, skillPath)
-        : skillPath;
-  return withExportedTree(clonePath, sha, exportPath, home, (skillDir) =>
-    fn({ rootDir: skillDir, resolvedSha: sha, pinned }, skillDir),
-  );
+  return { clonePath, sha, pinned: kind === "sha" || kind === "tag" };
 }
 
 /**

@@ -239,7 +239,7 @@ the right format. This keeps every command trivially testable.
 `crew doctor --repair` reconstructs state from markers. Do not invert
 this hierarchy.
 
-**9. Never follow symlinks out of a skill.** `src/util/fs.ts` walks
+**9. Never follow symlinks out of a skill.** `src/util/walk.ts` walks
 with `lstatSync`; `src/hash/content.ts` and `src/util/copy.ts` both
 honor symlinks as-is. Violating this would hash or copy arbitrary
 filesystem content.
@@ -621,6 +621,7 @@ bun run lint                           # biome check (lint + format check)
 bun run lint:fix                       # biome check --write (auto-fix)
 bun run format                         # biome format --write
 bun run check                          # typecheck + lint + test (the full gate)
+bun run smoke:gist                     # live gist install against GitHub (needs network; not in bun test)
 bun run install-bin                    # build + copy to ~/.local/bin/crew
 bun run uninstall-bin                  # remove the installed binary
 ```
@@ -650,9 +651,12 @@ on `$PATH`.
   `makeGitRepo` + `commitAll`.
 - **Don't let a test reach the network.** No remote URLs in fixtures;
   use `file://` repos, or a nonexistent local path when the clone is
-  meant to fail. Protocol-specific credential tests may substitute a
-  local source through the git runner seam while retaining the original
-  CLI input and real local git diagnostics. The preload tripwire fails
+  meant to fail. Protocol-specific credential tests, and tests of a
+  source crew recognises by its host (a GitHub gist —
+  `tests/e2e/gist/helpers.ts`), may substitute a local source through
+  the git runner seam while retaining the original CLI input and real
+  local git diagnostics. What only the real host can answer is checked
+  by hand with `bun run smoke:gist` (`scripts/smoke-gist.ts`). The preload tripwire fails
   any actual remote transport attempt — see
   "Tests never contact the network" above.
 - **Don't write to `~/.claude/skills/`, `~/.codex/skills/`, or

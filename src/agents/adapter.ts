@@ -10,6 +10,7 @@
  * behaves identically; each adapter really only supplies the paths.
  */
 
+import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { Marker, Scope, StateEntry } from "../core/types.ts";
 import { hasUsableProjectRoot } from "../state/validation.ts";
@@ -74,4 +75,15 @@ export function cwdForEntry(
     );
   }
   return entry.project_root;
+}
+
+/**
+ * `entry`'s install folder in `adapter`; "" where there is none: the
+ * adapter has no folder at its scope, or the entry is a project one whose
+ * root is missing, relative, or not a string (§11.1), which locates nothing.
+ */
+export function installDirOf(entry: StateEntry, adapter: AgentAdapter): string {
+  if (entry.scope === "project" && !hasUsableProjectRoot(entry)) return "";
+  const base = baseFor(adapter, entry.scope, cwdForEntry(entry, ""));
+  return base === "" ? "" : join(base, entry.name);
 }

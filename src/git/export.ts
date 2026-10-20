@@ -18,14 +18,17 @@
  * would add an undeclared dependency.
  *
  * `withExportedTree` wraps the common "use it, then delete it" shape so
- * normal success and failure share a cleanup scope.
+ * normal success and failure share a cleanup scope; `exportTree` hands
+ * the export to a caller that keeps it longer.
  */
 
 import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
-import { ensureDir, rmrf } from "../util/fs.ts";
+import { appendLeftBehind, removeEach } from "../util/cleanup.ts";
+import { ensureDir } from "../util/fs.ts";
+import { progress } from "../util/progress.ts";
 import { type GitProcessError, runGit } from "./exec.ts";
 import { assertNoSymlinkEscape } from "./tree-safety.ts";
 
@@ -56,12 +59,13 @@ export function exportTreeAt(clonePath: string, sha: string, subpath: string, de
   try {
     runGit(args, { cwd: clonePath, env: { GIT_INDEX_FILE: indexFile } });
   } catch (err) {
-    // `runGit` only throws `GitProcessError`.
-    const ge = err as GitProcessError;
-    rmrf(indexFile);
-    throw exportFailure(ge, sha, subpath, pathspec, clonePath);
+    // `runGit` only throws `GitProcessError`. The failure stays the one
+    // reported, naming the scratch index if crew couldn't remove it.
+    const failure = exportFailure(err as GitProcessError, sha, subpath, pathspec, clonePath);
+    throw appendLeftBehind(failure, removeEach([indexFile]));
   }
-  rmrf(indexFile);
+  // An index crew can't remove is left beside the export, which stands.
+  removeEach([indexFile]);
 }
 
 /**
@@ -91,35 +95,75 @@ function exportFailure(
   );
 }
 
+/** A scratch export of a commit: the source root inside it, and how to delete it. */
+export interface ExportedTree {
+  readonly location: string;
+  /**
+   * Delete the export. Never throws: one crew can't remove must not replace
+   * its holder's result or error, so it is left — noted under `--verbose`,
+   * naming it — for `crew cache clean`.
+   */
+  readonly remove: () => void;
+}
+
 /**
- * Run `fn` against a scratch export of `sha`, then delete the scratch
- * directory when `fn` returns or throws. Cleanup IO errors propagate;
- * `crew cache clean` can remove any leftover scratch directories.
+ * Export `sha` into a scratch directory the caller deletes with `remove`
+ * — after one callback (`withExportedTree`), or after a whole resolution
+ * that reads the same commit for many skills.
  *
- * `fn` receives the directory matching the source root: the export root
- * when `subpath` is empty, otherwise the subpath inside it. That root is
- * checked for symlink escapes first, because §9 step 3 requires every
- * byte crew reads to come from the requested commit: a repository can
- * commit a symlink at the subpath itself, and following it would read
- * content from outside that commit entirely.
+ * `location` matches the source root: the export root when `subpath` is
+ * empty, otherwise the subpath inside it — a directory, or the file itself
+ * when the subpath names a gist skill file. It is checked for symlink
+ * escapes first, because §9 step 3 requires every byte crew reads to come
+ * from the requested commit: a repository can commit a symlink at the
+ * subpath itself, and following it would read content from outside that
+ * commit entirely. Each export sits directly under the git cache, which is
+ * how discovery finds the repository a location below it must stay in
+ * (`sourceBoundary`). A failed export leaves nothing behind, or names
+ * what crew couldn't remove in its error, which stays the export's own.
+ */
+export function exportTree(
+  clonePath: string,
+  sha: string,
+  subpath: string,
+  home: string,
+): ExportedTree {
+  const dest = makeScratchDir(paths(home).gitCacheDir, sha);
+  try {
+    exportTreeAt(clonePath, sha, subpath, dest);
+    const location = subpath.length > 0 ? join(dest, subpath) : dest;
+    assertNoSymlinkEscape(dest, location, subpath);
+    return { location, remove: () => removeScratch(dest) };
+  } catch (err) {
+    // The export's own failure stays the error; a folder left behind is named in it.
+    throw appendLeftBehind(err as Error, removeEach([dest]));
+  }
+}
+
+/**
+ * Run `fn` against a scratch export of `sha` (`exportTree`), then delete
+ * it when `fn` returns or throws; an export crew can't delete is left,
+ * never replacing `fn`'s result or error.
  */
 export function withExportedTree<T>(
   clonePath: string,
   sha: string,
   subpath: string,
   home: string,
-  fn: (rootDir: string) => T,
+  fn: (location: string) => T,
 ): T {
-  const dest = makeScratchDir(paths(home).gitCacheDir, sha);
+  const tree = exportTree(clonePath, sha, subpath, home);
   try {
-    exportTreeAt(clonePath, sha, subpath, dest);
-    const rootDir = subpath.length > 0 ? join(dest, subpath) : dest;
-    assertNoSymlinkEscape(dest, rootDir, subpath);
-    return fn(rootDir);
+    return fn(tree.location);
   } finally {
-    // Cleanup can throw on an IO/permission failure and replace the callback
-    // result. Any leftover scratch export can be removed by `crew cache clean`.
-    rmrf(dest);
+    tree.remove();
+  }
+}
+
+/** Remove the scratch export at `dest`; one crew can't remove is noted under `--verbose`. */
+function removeScratch(dest: string): void {
+  for (const left of removeEach([dest])) {
+    progress(`left the scratch export ${left}; \`crew cache clean\` removes it`);
   }
 }
 

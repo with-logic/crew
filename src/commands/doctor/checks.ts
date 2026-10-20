@@ -12,36 +12,34 @@ import { isAutoupdateLoaded } from "../../autoupdate/scheduler.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import { hashDirectory } from "../../hash/content.ts";
 import { orphanStoreEntries } from "../../maintenance/gc.ts";
-import { hasUsableProjectRoot } from "../../state/validation.ts";
-import { isDirectory } from "../../util/fs.ts";
-import type { MarkerEntry } from "./markers.ts";
+import { errnoReason, isGoneError } from "../../util/errno.ts";
+import type { DoctorCode } from "./codes.ts";
+import { type MarkerEntry, ownsInstall } from "./markers.ts";
+import { lookAtEntryRoot } from "./project-root.ts";
+import type { IsHiddenInstall } from "./unreadable.ts";
 
 export interface Finding {
   readonly level: "ok" | "warn" | "error";
-  readonly code: string;
+  readonly code: DoctorCode;
   readonly message: string;
 }
 
 /**
  * Check 1 & 2: state ↔ markers drift. With path sharing (§7.2), a
  * single marker's `adapters` list covers multiple adapter names, so we
- * check the list-overlap instead of a scalar equality.
+ * check the list-overlap instead of a scalar equality. An install whose
+ * marker crew couldn't read (`hidden`) is check 9's, not missing.
  */
 export function checkStateMarkerDrift(
   stateEntries: readonly StateEntry[],
   markers: readonly MarkerEntry[],
+  hidden: IsHiddenInstall,
 ): Finding[] {
   const findings: Finding[] = [];
   for (const entry of stateEntries) {
     for (const targetName of entry.agents) {
-      const match = markers.find(
-        (m) =>
-          m.record.marker.name === entry.name &&
-          m.record.scope === entry.scope &&
-          (m.projectRoot ?? null) === (entry.project_root ?? null) &&
-          m.record.marker.agents.includes(targetName),
-      );
-      if (!match) {
+      if (hidden(entry, targetName)) continue;
+      if (!markers.some((m) => ownsInstall(entry, m, [targetName]))) {
         findings.push({
           level: "error",
           code: "state_entry_without_marker",
@@ -51,16 +49,7 @@ export function checkStateMarkerDrift(
     }
   }
   for (const m of markers) {
-    const ownedByAny = m.record.marker.agents.some((a) =>
-      stateEntries.some(
-        (e) =>
-          e.name === m.record.marker.name &&
-          e.scope === m.record.scope &&
-          (e.project_root ?? null) === (m.projectRoot ?? null) &&
-          e.agents.includes(a),
-      ),
-    );
-    if (!ownedByAny) {
+    if (!stateEntries.some((e) => ownsInstall(e, m))) {
       findings.push({
         level: "error",
         code: "marker_without_state",
@@ -72,14 +61,29 @@ export function checkStateMarkerDrift(
 }
 
 /**
- * Check 3: content hash drift. Mutates `markers[i].currentHash` so that
- * `doctor-repair.ts` can reuse the value without re-hashing.
+ * Check 3: content hash drift. An install folder crew can't read all of
+ * is check 9's (§11.2), named by the path it couldn't read, and the
+ * others are still checked. One that changes while it is hashed — a
+ * concurrent update replacing it — is passed over: it isn't unreadable,
+ * and the next run checks what replaced it.
  */
-export function checkContentHashDrift(markers: MarkerEntry[]): Finding[] {
+export function checkContentHashDrift(markers: readonly MarkerEntry[]): Finding[] {
   const findings: Finding[] = [];
   for (const m of markers) {
-    const actual = hashDirectory(m.record.installDir);
-    m.currentHash = actual;
+    const installDir = m.record.installDir;
+    let actual: string;
+    try {
+      actual = hashDirectory(installDir);
+    } catch (err) {
+      if (isGoneError(err)) continue;
+      const at = (err as NodeJS.ErrnoException).path ?? installDir;
+      findings.push({
+        level: "error",
+        code: "unreadable_marker",
+        message: `crew can't read \`${at}\` (${errnoReason(err)}), so it can't check \`${installDir}\` for local edits`,
+      });
+      continue;
+    }
     if (actual !== m.record.marker.content_hash) {
       findings.push({
         level: "warn",
@@ -145,9 +149,10 @@ export function checkProjectRoots(stateEntries: readonly StateEntry[]): Finding[
   for (const entry of stateEntries) {
     if (entry.scope !== "project") continue;
     // A path replaced by a regular file is as unusable as a missing
-    // one — nothing can be read beneath it — and repair applies the
-    // same test, so the two must not disagree.
-    if (!(hasUsableProjectRoot(entry) && isDirectory(entry.project_root))) {
+    // one — nothing can be read beneath it. One crew can't look at isn't
+    // missing: check 9 reports it. Repair keeps every entry whose root
+    // isn't usable, a hidden one included.
+    if (lookAtEntryRoot(entry).kind === "missing") {
       findings.push({
         level: "warn",
         code: "missing_project_root",

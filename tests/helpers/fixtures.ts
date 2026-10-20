@@ -7,7 +7,7 @@
  * parse/acquire/install stack is the most faithful test.
  */
 
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readConfig } from "../../src/config/load.ts";
@@ -68,12 +68,25 @@ export function skillFrontmatter(opts: {
   return lines.join("\n");
 }
 
+const REPO_CONFIG = [
+  "[user]",
+  "\temail = test@example.com",
+  "\tname = Test",
+  "[commit]",
+  "\tgpgsign = false",
+  "[core]",
+  "\texcludesFile = /dev/null",
+  "",
+].join("\n");
+
 /** Create a git repo at `path`, init, add, commit once. */
 export function makeGitRepo(path: string, commitMessage: string = "init"): { sha: string } {
   runGit(["init", "--quiet", "-b", "main", path]);
-  runGit(["config", "user.email", "test@example.com"], { cwd: path });
-  runGit(["config", "user.name", "Test"], { cwd: path });
-  runGit(["config", "commit.gpgsign", "false"], { cwd: path });
+  // Written directly rather than through `git config`: this runs for most
+  // tests in the suite, and each `git` process costs real time. A
+  // developer's global excludes (a `PRD.md` line matches `prd.md` on a
+  // case-insensitive disk) would silently drop fixture files from commits.
+  appendFileSync(join(path, ".git", "config"), REPO_CONFIG);
   runGit(["add", "."], { cwd: path });
   runGit(["commit", "--quiet", "-m", commitMessage, "--allow-empty"], { cwd: path });
   const result = runGit(["rev-parse", "HEAD"], { cwd: path });

@@ -16,7 +16,13 @@
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapSource } from "../../core/types.ts";
 import { ambiguityError, twoSegmentMissError } from "./errors.ts";
-import { indexTapAt, lookupInTap, safeIndex } from "./tap-index-lookup.ts";
+import {
+  indexTapAt,
+  lookupInIndex,
+  safeIndex,
+  tryIndexTap,
+  unnamedCandidateError,
+} from "./tap-index-lookup.ts";
 import type { NonTapNameCandidate, TapRoots } from "./types.ts";
 
 /** `<tap>/<namespace>/<skill>` — unambiguous, so it matches or throws. */
@@ -39,6 +45,9 @@ export function resolveThreeSegment(
   const locs = index.skills.get(source.name) ?? [];
   const match = locs.find((l) => l.namespace === source.namespace);
   if (!match) {
+    // A candidate there crew couldn't name says why it isn't found (C-REF-40).
+    const candidateError = unnamedCandidateError(tap, index, source.name, source.namespace);
+    if (candidateError) throw candidateError;
     throw new CrewError(
       "invalid_ref",
       `\`${source.tap}/${source.namespace}/${source.name}\` doesn't exist — no skill \`${source.name}\` found in namespace \`${source.namespace}\` of tap \`${source.tap}\``,
@@ -58,7 +67,11 @@ export function resolveTwoSegment(
   const first = source.tap!;
   const second = source.name;
   const tap = config.taps.find((t) => t.name === first);
-  const asTapSkill = tap ? lookupInTap(tap, home, second, roots) : null;
+  // The referenced tap is indexed once: its skills answer the tap reading,
+  // and what it couldn't name — or why it couldn't be read — explains a miss.
+  const tapAttempt = tap ? tryIndexTap(tap, home, roots) : null;
+  const tapIndex = tapAttempt?.kind === "indexed" ? tapAttempt.index : null;
+  const asTapSkill = tap && tapIndex ? lookupInIndex(tap, tapIndex, second) : null;
 
   // Collect namespace candidates: `<first>` is a namespace in some tap
   // that holds a skill named `<second>`.
@@ -87,5 +100,12 @@ export function resolveTwoSegment(
       `\`${first}/${second}\` is a namespaced skill in multiple taps`,
     );
   }
+  // A candidate the referenced tap couldn't name says why it isn't found
+  // (C-REF-40); a referenced tap crew couldn't read at all says that
+  // instead (§8.3), once no namespace in another tap answers it.
+  const candidateError =
+    tap && tapIndex ? unnamedCandidateError(tap, tapIndex, second, null) : null;
+  if (candidateError) throw candidateError;
+  if (tapAttempt?.kind === "failed") throw tapAttempt.failure;
   throw twoSegmentMissError(first, second, source.ref);
 }
