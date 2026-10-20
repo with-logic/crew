@@ -31,12 +31,7 @@ export function tryReadJson<T>(path: string): T | null {
  * a truncated file (see `writeText`).
  */
 export function writeJson(path: string, value: unknown): void {
-  writeText(path, jsonText(value));
-}
-
-/** The bytes `writeJson` writes for `value`. */
-export function jsonText(value: unknown): string {
-  return `${JSON.stringify(value, null, 2)}\n`;
+  writeText(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function isEnoent(err: unknown): boolean {

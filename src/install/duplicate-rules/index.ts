@@ -1,17 +1,14 @@
 /**
- * Duplicate-install detection and flag promotion (§5.4, §11.1).
+ * Duplicate-install detection (§5.4).
  *
- * Compares the resolved install set against current state, putting each
- * entry in one of two buckets:
+ * Compares the resolved install set against current state, partitioning
+ * each entry into one of three buckets:
  *
  *   - `toInstall` — no existing entry, OR same source at a different SHA.
  *   - `alreadyInstalled` — same source + same SHA + same content hash.
- *
- * An already-installed entry may also need a one-way flag set without
- * re-staging (`promotions`, applied by `../promote-flags.ts`): `explicit`
- * for one first pulled in as a dependency and now named, `tracks_tap` for
- * one installed on its own and now reached by a whole install of its tap,
- * on that tap at the same ref.
+ *   - `promoteToExplicit` — was-a-dep, now-explicitly-named. Handled
+ *      separately so the install loop can flip the flag without
+ *      re-staging.
  *
  * A different-source install of the same name throws `name_conflict`
  * (never overridden by --force — per §13). "Same source" means the same
@@ -28,7 +25,7 @@
  */
 
 import type { ResolvedSkill, Scope, StateFile } from "../../core/types.ts";
-import { classifySource, hasSameAttribution } from "./classify.ts";
+import { classifySource } from "./classify.ts";
 import type {
   AlreadyInstalled,
   DuplicateAnalysis,
@@ -54,9 +51,8 @@ export function applyDuplicateRules(
 ): DuplicateAnalysis {
   const toInstall: ResolvedSkill[] = [];
   const alreadyInstalled: AlreadyInstalled[] = [];
-  const promotions: { explicit: string[]; tracksTap: string[] } = { explicit: [], tracksTap: [] };
+  const promoteToExplicit: string[] = [];
   const reattributions: Reattribution[] = [];
-  const movesOnSuccess: Reattribution[] = [];
   const keepSource: KeptSource[] = [];
 
   const incomingProjectRoot = scope === "project" ? cwd : null;
@@ -72,35 +68,14 @@ export function applyDuplicateRules(
       continue;
     }
 
-    // The set of adapters active for this install — if it includes
-    // any adapter the existing entry doesn't, the install still has
-    // work to do (attach ownership to those adapters), even if the
-    // bytes are identical. Similarly with --force.
-    const newAdapters = options.activeAgents.filter((a) => !existing.agents.includes(a));
-    const upToDate =
-      existing.resolved_sha === skill.resolvedSha &&
-      existing.content_hash === skill.contentHash &&
-      newAdapters.length === 0 &&
-      !options.force;
-
-    const reinstalls = !upToDate;
-    const sameAttribution = hasSameAttribution(existing, skill);
-    const reattribution = classifySource(
-      existing,
-      skill,
-      options.taps,
-      incomingProjectRoot,
-      reinstalls,
-    );
-    // §5.4: an entry the install finds already installed moves before the
-    // install runs; one it reinstalls moves with its reinstall, once that
-    // succeeds, so a failed reinstall leaves it, and its subscription, as
-    // they were.
-    if (reattribution) (reinstalls ? movesOnSuccess : reattributions).push(reattribution);
-    // A registered tap, and a tracking entry's own tap the incoming
-    // install doesn't take over, survive reinstalls as well as duplicate
-    // short-circuits (§5.4, §10.1.1).
-    else if (!sameAttribution) {
+    const reattribution = classifySource(existing, skill, options.taps, incomingProjectRoot);
+    if (reattribution) reattributions.push(reattribution);
+    // Registered attribution and broad subscriptions survive reinstalls
+    // as well as duplicate short-circuits (§5.4, §10.1.1).
+    else if (
+      existing.source.tap !== skill.tap.name ||
+      existing.source.path !== skill.tapRelativePath
+    ) {
       // Successful source classification already proved this tap exists.
       const tap = options.taps.find((row) => row.name === existing.source.tap)!;
       keepSource.push({
@@ -112,7 +87,19 @@ export function applyDuplicateRules(
       });
     }
 
-    if (upToDate) {
+    // The set of adapters active for this install — if it includes
+    // any adapter the existing entry doesn't, the install still has
+    // work to do (attach ownership to those adapters), even if the
+    // bytes are identical. Similarly with --force.
+    const newAdapters = options.activeAgents.filter((a) => !existing.agents.includes(a));
+    const adaptersChanged = newAdapters.length > 0;
+
+    if (
+      existing.resolved_sha === skill.resolvedSha &&
+      existing.content_hash === skill.contentHash &&
+      !adaptersChanged &&
+      !options.force
+    ) {
       alreadyInstalled.push({
         name: skill.name,
         ref: existing.ref,
@@ -121,19 +108,14 @@ export function applyDuplicateRules(
         agents: existing.agents,
         ...(reattribution ? { reattributedFrom: reattribution.fromTap } : {}),
       });
-      if (skill.explicit && !existing.explicit) promotions.explicit.push(skill.name);
-      // §11.1: only onto the tap, path, and ref this install subscribes
-      // to — an entry that keeps another tap, or sits at another ref,
-      // would follow siblings the user never asked for. (A moved entry
-      // takes it with the move, by the same rule: `./classify.ts`.)
-      const onIncomingTapAtRef = sameAttribution && existing.ref === skill.ref;
-      if (skill.tracksTap && existing.tracks_tap !== true && onIncomingTapAtRef)
-        promotions.tracksTap.push(skill.name);
+      if (skill.explicit && !existing.explicit) {
+        promoteToExplicit.push(skill.name);
+      }
       continue;
     }
     // Same source, different SHA, or a new active adapter, or --force
     // → install (possibly as no-op byte-copy but with marker rewrite).
     toInstall.push(skill);
   }
-  return { toInstall, alreadyInstalled, promotions, reattributions, movesOnSuccess, keepSource };
+  return { toInstall, alreadyInstalled, promoteToExplicit, reattributions, keepSource };
 }
