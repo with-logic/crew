@@ -2,8 +2,8 @@
  * Marker-index construction for `crew doctor`.
  *
  * Walks every adapter's user base once, then every distinct
- * `project_root` in state (plus the current cwd) for project-scope
- * markers. A `project_root` that doesn't exist on disk is silently
+ * `project_root` in state (plus the current cwd and retained scan
+ * candidates) for project-scope markers. A root missing on disk is silently
  * skipped — `checkProjectRoots` already reports it, so reporting
  * again here would be noise.
  *
@@ -16,11 +16,13 @@
  */
 
 import { existsSync, realpathSync } from "node:fs";
-import type { AgentAdapter, InstalledSkillRecord } from "../../../agents/adapter.ts";
+import { dirname, join } from "node:path";
+import type { InstalledSkillRecord } from "../../../agents/adapter.ts";
 import { ALL_AGENTS } from "../../../agents/registry.ts";
-import type { StateEntry } from "../../../core/types.ts";
+import type { Scope, StateEntry } from "../../../core/types.ts";
 import { hasUsableProjectRoot } from "../../../state/validation.ts";
 import type { Finding } from "../checks.ts";
+import { invalidMarkerFinding } from "./findings.ts";
 import { scanMarkers } from "./scan.ts";
 
 export interface MarkerEntry {
@@ -37,29 +39,31 @@ export interface MarkerEntry {
 export function buildMarkerIndex(
   stateEntries: readonly StateEntry[],
   cwd: string,
-): { markers: MarkerEntry[]; findings: Finding[] } {
+  additionalProjectRoots: readonly string[] = [],
+): { markers: MarkerEntry[]; findings: Finding[]; projectRoots: readonly string[] } {
   const markers: MarkerEntry[] = [];
   const inventoryFindings = new Map<string, Finding>();
   const seen = new Set<string>();
-  const projectRoots = new Set<string>([cwd]);
+  const sameBase = cachedPhysicalBaseComparison();
+  // §11.2: a last-entry uninstall must not hide other markers at a previously scanned root.
+  const projectRoots = new Set<string>([cwd, ...additionalProjectRoots]);
   for (const e of stateEntries) {
     if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
   const roots = [...projectRoots];
+  const otherOwningScopeBase = cachedOtherOwningScopeBase(roots, sameBase);
   for (const adapter of ALL_AGENTS) {
-    const sharedBases = new Map<string, boolean>();
-    const sharesUserBase = (root: string): boolean => {
-      const shared = sharedBases.get(root) ?? sharesScopeBase(adapter, root);
-      sharedBases.set(root, shared);
-      return shared;
-    };
+    const sharesUserBase = (root: string): boolean =>
+      sameBase(adapter.userPath(), adapter.projectPath(root));
     let anySharedBase: boolean | undefined;
     const userInventory = scanMarkers(adapter, "user", cwd);
     for (const [key, finding] of userInventory.findings) inventoryFindings.set(key, finding);
     for (const rec of userInventory.records) {
       if (rec.marker.scope !== "user") {
         anySharedBase ??= roots.some(sharesUserBase);
-        if (anySharedBase) continue;
+        if (!(anySharedBase || otherOwningScopeBase(rec)))
+          inventoryFindings.set(...scopeMismatchFinding(rec));
+        continue;
       }
       const key = `user\0${rec.installDir}`;
       if (seen.has(key)) continue;
@@ -74,7 +78,11 @@ export function buildMarkerIndex(
         projectInventory.records.some((rec) => rec.marker.scope !== "project") &&
         sharesUserBase(root);
       for (const rec of projectInventory.records) {
-        if (rec.marker.scope !== "project" && projectBaseIsShared) continue;
+        if (rec.marker.scope !== "project") {
+          if (!(projectBaseIsShared || otherOwningScopeBase(rec)))
+            inventoryFindings.set(...scopeMismatchFinding(rec));
+          continue;
+        }
         const key = `project\0${rec.installDir}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -82,18 +90,74 @@ export function buildMarkerIndex(
       }
     }
   }
-  return { markers, findings: [...inventoryFindings.values()] };
+  return { markers, findings: [...inventoryFindings.values()], projectRoots: roots };
 }
 
-/** Scope labels disambiguate only an actual shared physical base (§11.1). */
-function sharesScopeBase(adapter: AgentAdapter, root: string): boolean {
-  const userBase = adapter.userPath();
-  const projectBase = adapter.projectPath(root);
-  return (
-    userBase !== "" &&
-    projectBase !== "" &&
-    existsSync(userBase) &&
-    existsSync(projectBase) &&
-    realpathSync(userBase) === realpathSync(projectBase)
+/** A path-shared marker can acquire its declared scope through another owner (§7.2, §11.2). */
+function hasOtherOwningScopeBase(
+  record: InstalledSkillRecord,
+  roots: readonly string[],
+  sameBase: (first: string, second: string) => boolean,
+): boolean {
+  const observedBase = dirname(record.installDir);
+  for (const owner of ALL_AGENTS) {
+    if (owner.name === record.adapter || !record.marker.agents.includes(owner.name)) continue;
+    const ownsDeclaredBase = {
+      user: () => sameBase(observedBase, owner.userPath()),
+      project: () => roots.some((root) => sameBase(observedBase, owner.projectPath(root))),
+    } satisfies Record<Scope, () => boolean>;
+    if (ownsDeclaredBase[record.marker.scope]()) return true;
+  }
+  return false;
+}
+
+/** Resolve aliases only when a mismatched observation needs physical identity (§11.1). */
+function samePhysicalBase(first: string, second: string): boolean {
+  const nonemptyPaths = first !== "" && second !== "";
+  if (!nonemptyPaths) return false;
+  const pathsExist = existsSync(first) && existsSync(second);
+  if (!pathsExist) return false;
+  return realpathSync(first) === realpathSync(second);
+}
+
+/** A declared scope cannot authorize reconstruction at a physically distinct base (§11.2). */
+function scopeMismatchFinding(record: InstalledSkillRecord): [string, Finding] {
+  return invalidMarkerFinding(
+    join(record.installDir, ".crew.json"),
+    `marker scope ${record.marker.scope} disagrees with its ${record.scope} adapter base; correct the marker or install location before repair`,
   );
+}
+
+/** Physical identity is stable only within this inventory build (§11.1). */
+function cachedPhysicalBaseComparison(): (first: string, second: string) => boolean {
+  const pairs = new Map<string, boolean>();
+  return (first, second) => {
+    const key = `${first}\0${second}`;
+    const cached = pairs.get(key);
+    if (cached !== undefined) return cached;
+    const same = samePhysicalBase(first, second);
+    pairs.set(key, same);
+    return same;
+  };
+}
+
+/** Reuse owner-scope traversal for markers with the same observed inventory identity. */
+function cachedOtherOwningScopeBase(
+  roots: readonly string[],
+  sameBase: (first: string, second: string) => boolean,
+): (record: InstalledSkillRecord) => boolean {
+  const results = new Map<string, boolean>();
+  return (record) => {
+    const key = JSON.stringify([
+      dirname(record.installDir),
+      record.marker.scope,
+      record.adapter,
+      [...record.marker.agents].sort(),
+    ]);
+    const cached = results.get(key);
+    if (cached !== undefined) return cached;
+    const matches = hasOtherOwningScopeBase(record, roots, sameBase);
+    results.set(key, matches);
+    return matches;
+  };
 }

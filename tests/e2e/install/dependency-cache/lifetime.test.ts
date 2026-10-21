@@ -35,8 +35,8 @@ test("C-INST-05f an evicted revision can be revisited with its original bytes", 
   const { roots, alive } = captureExports();
   withDependencyTrees(fixture.home, (trees) => {
     for (const i of [0, 1, 2, 0]) {
-      const parentDir = trees.parentDir(parents[i]!)!;
-      expect(readFileSync(join(parentDir, "..", "dependency", "SKILL.md"), "utf8")).toEndWith(
+      const parentPath = trees.parentPath(parents[i]!)!;
+      expect(readFileSync(join(parentPath, "..", "dependency", "SKILL.md"), "utf8")).toEndWith(
         `revision ${i}\n`,
       );
       if (roots.length >= 3) expect(existsSync(roots[roots.length - 3]!)).toBe(false);
@@ -52,12 +52,12 @@ test("C-INST-05f interleaved hits retain the most recently used captured revisio
   const parents = revisionParents(fixture);
   const { roots, alive } = captureExports();
   withDependencyTrees(fixture.home, (trees) => {
-    const first = trees.parentDir(parents[0]!);
-    trees.parentDir(parents[1]!);
-    expect(trees.parentDir(parents[0]!)).toBe(first);
-    trees.parentDir(parents[2]!);
+    const first = trees.parentPath(parents[0]!);
+    trees.parentPath(parents[1]!);
+    expect(trees.parentPath(parents[0]!)).toBe(first);
+    trees.parentPath(parents[2]!);
     expect(existsSync(roots[1]!)).toBe(false);
-    expect(trees.parentDir(parents[0]!)).toBe(first);
+    expect(trees.parentPath(parents[0]!)).toBe(first);
     expect(readFileSync(join(first!, "..", "dependency", "SKILL.md"), "utf8")).toEndWith(
       "revision 0\n",
     );
@@ -75,14 +75,14 @@ test("C-INST-05f a removed retained export is recreated at its captured revision
     readFileSync(join(fixture.url.slice("file://".length), "dependency", "SKILL.md"), "utf8"),
   ).toEndWith("revision 3\n");
   withDependencyTrees(fixture.home, (trees) => {
-    trees.parentDir(parents[0]!);
-    trees.parentDir(parents[1]!);
+    trees.parentPath(parents[0]!);
+    trees.parentPath(parents[1]!);
     rmSync(roots[0]!, { recursive: true });
-    const parentDir = trees.parentDir(parents[0]!)!;
-    expect(readFileSync(join(parentDir, "..", "dependency", "SKILL.md"), "utf8")).toEndWith(
+    const parentPath = trees.parentPath(parents[0]!)!;
+    expect(readFileSync(join(parentPath, "..", "dependency", "SKILL.md"), "utf8")).toEndWith(
       "revision 0\n",
     );
-    expect(trees.parentDir(parents[0]!)).toBe(parentDir);
+    expect(trees.parentPath(parents[0]!)).toBe(parentPath);
   });
   expect(roots).toHaveLength(3);
   expect(Math.max(...alive)).toBe(2);
@@ -96,8 +96,8 @@ test("throwing from a dependency walk cleans every retained export", () => {
   const failure = new Error("stop the dependency walk");
   expect(() =>
     withDependencyTrees(fixture.home, (trees) => {
-      trees.parentDir(parents[0]!);
-      trees.parentDir(parents[1]!);
+      trees.parentPath(parents[0]!);
+      trees.parentPath(parents[1]!);
       throw failure;
     }),
   ).toThrow(failure);
@@ -112,10 +112,10 @@ test("failed eviction still attempts final cleanup of every retained export", ()
   try {
     expect(() =>
       withDependencyTrees(fixture.home, (trees) => {
-        trees.parentDir(parents[0]!);
-        trees.parentDir(parents[1]!);
+        trees.parentPath(parents[0]!);
+        trees.parentPath(parents[1]!);
         chmodSync(roots[0]!, 0o500);
-        trees.parentDir(parents[2]!);
+        trees.parentPath(parents[2]!);
       }),
     ).toThrow(/EACCES|EPERM/);
     expect(roots).toHaveLength(2);
@@ -134,11 +134,11 @@ test("failed eviction keeps its export owned for final cleanup", () => {
   try {
     expect(() =>
       withDependencyTrees(fixture.home, (trees) => {
-        trees.parentDir(parents[0]!);
-        trees.parentDir(parents[1]!);
+        trees.parentPath(parents[0]!);
+        trees.parentPath(parents[1]!);
         chmodSync(roots[0]!, 0o500);
         try {
-          trees.parentDir(parents[2]!);
+          trees.parentPath(parents[2]!);
         } catch (err) {
           chmodSync(roots[0]!, 0o700);
           throw err;

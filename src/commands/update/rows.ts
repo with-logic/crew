@@ -12,7 +12,8 @@
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { shortenHome } from "../../util/format.ts";
-import type { Styler } from "../../util/term.ts";
+import type { Styler, SymbolKind } from "../../util/term.ts";
+import { targetIssues, updatedRowStatus } from "./targets.ts";
 
 export interface RowParts {
   readonly status: string;
@@ -31,7 +32,18 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
     return { status: style.dim("up to date"), detail: "", required };
   }
   if (o.kind === "updated") {
-    return { status: style.green("updated"), detail: style.cyan(shortSha(o.new_sha)), required };
+    const status = updatedRowStatus(o);
+    const color = {
+      failed: style.red,
+      skipped: style.dim,
+      "partially updated": style.yellow,
+      updated: style.green,
+    }[status];
+    const details = targetIssues(o);
+    if (status === "updated" || status === "partially updated") {
+      details.unshift(style.cyan(shortSha(o.new_sha)));
+    }
+    return { status: color(status), detail: details.join("; "), required };
   }
   if (o.kind === "would_update") {
     return {
@@ -78,7 +90,16 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
 
 export function symbolFor(row: UpdateRow, style: Styler): string {
   const o = row.outcome;
-  if (o.kind === "updated" || o.kind === "would_update") return style.symbol("ok");
+  if (o.kind === "updated") {
+    const symbols = {
+      updated: "ok",
+      "partially updated": "warn",
+      failed: "fail",
+      skipped: "muted",
+    } satisfies Record<ReturnType<typeof updatedRowStatus>, SymbolKind>;
+    return style.symbol(symbols[updatedRowStatus(o)]);
+  }
+  if (o.kind === "would_update") return style.symbol("ok");
   if (o.kind === "up_to_date") return style.symbol("muted");
   if (o.kind === "skipped" || o.kind === "missing_project_root") return style.symbol("muted");
   if (o.kind === "source_gone" || o.kind === "tap_missing") return style.symbol("warn");
