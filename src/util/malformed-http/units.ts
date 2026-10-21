@@ -10,6 +10,10 @@ export function controlUnitLength(text: string, index: number): number {
   return /^[\da-f]{2}$/i.test(hex) && isControlCharacterCode(Number.parseInt(hex, 16)) ? 4 : 0;
 }
 
+/**
+ * Skip raw/escaped controls and ordinary whitespace by default; `controlsOnly`
+ * leaves ordinary whitespace in place while still treating escaped controls as units.
+ */
 export function skipHttpGap(text: string, start: number, controlsOnly = false): number {
   let index = start;
   while (index < text.length) {

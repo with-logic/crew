@@ -45,6 +45,8 @@ function malformedSeparators(text: string, opener: HttpOpener): boolean {
  * `HTTP:` label cannot consume the letters of a later malformed opener (§13).
  * Failed fixed-length matches and opening gaps have bounded overlapping scans;
  * unresolved zero-separator authorities share one earliest candidate, never suffix rescans.
+ * `wholeToken` defaults to false and scans later scheme boundaries; true considers
+ * only the opener after leading controls/whitespace, preserving structured URL paths.
  */
 export function firstMalformedHttpStart(text: string, wholeToken = false): number | undefined {
   let authorityStart: number | undefined;
