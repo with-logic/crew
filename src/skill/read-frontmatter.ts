@@ -25,6 +25,7 @@ export function readFrontmatter(path: string): YamlValue {
   }
 }
 
+/** Return an exclusive byte end, or synthetic inputs preserving missing/unclosed parser errors. */
 function frontmatterExtent(fd: number): number | "" | "---" {
   const buffer = Buffer.alloc(4096);
   const decoder = new StringDecoder("utf8");
