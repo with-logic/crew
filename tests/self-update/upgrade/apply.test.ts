@@ -1,11 +1,11 @@
 /**
- * runSelfUpdate happy paths (§17.2): download, verify, swap, and the
+ * runSelfUpdate happy paths (§10.3): download, verify, swap, and the
  * version-check refresh; plus runSelfUpdateCheck.
  */
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { paths } from "../../../src/core/paths.ts";
 import { CREW_VERSION } from "../../../src/core/version.ts";
 import { readVersionCheck } from "../../../src/self-update/check.ts";
@@ -53,7 +53,12 @@ describe("runSelfUpdate", () => {
       tag: "v99.99.99",
       assets: releaseAssets(),
     }));
-    setAssetDownloader(downloaderForBinary("NEW"));
+    let assetPath = "";
+    const download = downloaderForBinary("NEW");
+    setAssetDownloader((url, destPath, timeout, maxBytes) => {
+      if (url.endsWith("/asset")) assetPath = destPath;
+      download(url, destPath, timeout, maxBytes);
+    });
     setReleaseSignatureVerifier(() => true);
     setXattrClearer(() => {});
 
@@ -65,6 +70,7 @@ describe("runSelfUpdate", () => {
     const record = readVersionCheck(home);
     expect(record?.latest_tag).toBe("v99.99.99");
     expect(existsSync(paths(home).versionCheckFile)).toBe(true);
+    expect(existsSync(dirname(assetPath))).toBe(false);
   });
 
   test("downloads the Linux release asset on Linux hosts", () => {

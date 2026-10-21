@@ -76,13 +76,17 @@ export function runSelfUpdate(options: SelfUpdateOptions): SelfUpdateResult {
   const tempPath = downloadAssetToTemp(downloadUrl, DOWNLOAD_TIMEOUT_SECONDS);
   try {
     verifyAssetChecksum(tempPath, assetName, checksumsText);
-  } catch (err) {
-    rmrf(dirname(tempPath));
-    throw err;
+    installBinary(tempPath, resolveDest(options.execPath));
+    writeVersionCheck(release.tag, options.home);
+    return { currentVersion, latestTag: release.tag, replaced: true };
+  } finally {
+    // §10.3: retain the asset through its last consumer, then release its root.
+    try {
+      rmrf(dirname(tempPath));
+    } catch {
+      // Cleanup must not mask checksum/swap/write errors or a completed update.
+    }
   }
-  installBinary(tempPath, resolveDest(options.execPath));
-  writeVersionCheck(release.tag, options.home);
-  return { currentVersion, latestTag: release.tag, replaced: true };
 }
 
 /**
