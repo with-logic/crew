@@ -16,7 +16,7 @@
  */
 
 import { existsSync, realpathSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { AgentAdapter, InstalledSkillRecord } from "../../../agents/adapter.ts";
 import { ALL_AGENTS } from "../../../agents/registry.ts";
 import type { StateEntry } from "../../../core/types.ts";
@@ -61,7 +61,8 @@ export function buildMarkerIndex(
     for (const rec of userInventory.records) {
       if (rec.marker.scope !== "user") {
         anySharedBase ??= roots.some(sharesUserBase);
-        if (!anySharedBase) inventoryFindings.set(...scopeMismatchFinding(rec));
+        if (!(anySharedBase || hasOtherOwningScopeBase(rec, roots)))
+          inventoryFindings.set(...scopeMismatchFinding(rec));
         continue;
       }
       const key = `user\0${rec.installDir}`;
@@ -78,7 +79,8 @@ export function buildMarkerIndex(
         sharesUserBase(root);
       for (const rec of projectInventory.records) {
         if (rec.marker.scope !== "project") {
-          if (!projectBaseIsShared) inventoryFindings.set(...scopeMismatchFinding(rec));
+          if (!(projectBaseIsShared || hasOtherOwningScopeBase(rec, roots)))
+            inventoryFindings.set(...scopeMismatchFinding(rec));
           continue;
         }
         const key = `project\0${rec.installDir}`;
@@ -95,12 +97,30 @@ export function buildMarkerIndex(
 function sharesScopeBase(adapter: AgentAdapter, root: string): boolean {
   const userBase = adapter.userPath();
   const projectBase = adapter.projectPath(root);
+  return samePhysicalBase(userBase, projectBase);
+}
+
+/** A path-shared marker can acquire its declared scope through another owner (§7.2, §11.2). */
+function hasOtherOwningScopeBase(record: InstalledSkillRecord, roots: readonly string[]): boolean {
+  const observedBase = dirname(record.installDir);
+  for (const owner of ALL_AGENTS) {
+    if (owner.name === record.adapter || !record.marker.agents.includes(owner.name)) continue;
+    if (record.marker.scope === "user") {
+      if (samePhysicalBase(observedBase, owner.userPath())) return true;
+    } else if (roots.some((root) => samePhysicalBase(observedBase, owner.projectPath(root))))
+      return true;
+  }
+  return false;
+}
+
+/** Resolve aliases only when a mismatched observation needs physical identity (§11.1). */
+function samePhysicalBase(first: string, second: string): boolean {
   return (
-    userBase !== "" &&
-    projectBase !== "" &&
-    existsSync(userBase) &&
-    existsSync(projectBase) &&
-    realpathSync(userBase) === realpathSync(projectBase)
+    first !== "" &&
+    second !== "" &&
+    existsSync(first) &&
+    existsSync(second) &&
+    realpathSync(first) === realpathSync(second)
   );
 }
 
