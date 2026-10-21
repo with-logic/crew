@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Release helper. Bumps the version in package.json, updates
+# Release helper. Bumps or selects an exact stable version in package.json, updates
 # CHANGELOG.md and the PR body using a Claude-generated summary of
 # the changes since the last tag, opens a release PR, and prints the
 # URL.
@@ -10,10 +10,11 @@
 #   bun run release patch
 #   bun run release minor
 #   bun run release major
+#   bun run release 0.12.0      # exact version greater than the current version
 #
 # Flow:
 #   1. Safety: clean working tree, on main, up-to-date with origin/main.
-#   2. Compute next version from package.json + bump kind.
+#   2. Compute next version from package.json + bump kind or exact version.
 #   3. Call `claude -p` once with a JSON schema to get
 #      { pr_body, changelog } for commits since the last tag.
 #   4. Update package.json, CHANGELOG.md, and generated release
@@ -27,14 +28,14 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+source "$ROOT/scripts/next-version.sh"
 
 DRY_RUN=false
 BUMP="patch"
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=true ;;
-    patch|minor|major) BUMP="$arg" ;;
-    *) echo "error: unknown argument '$arg' (expected patch|minor|major, --dry-run)" >&2; exit 1 ;;
+    *) validate_release_target "$arg"; BUMP="$arg" ;;
   esac
 done
 
@@ -86,13 +87,7 @@ fi
 # ---------- 2. Compute next version ---------------------------------------
 
 current_version="$(bun -e 'console.log(require("./package.json").version)')"
-IFS='.' read -r major minor patch <<<"$current_version"
-case "$BUMP" in
-  patch) patch=$((patch + 1)) ;;
-  minor) minor=$((minor + 1)); patch=0 ;;
-  major) major=$((major + 1)); minor=0; patch=0 ;;
-esac
-next_version="${major}.${minor}.${patch}"
+next_version="$(next_release_version "$current_version" "$BUMP")"
 next_tag="v${next_version}"
 branch="release/${next_tag}"
 
