@@ -76,7 +76,7 @@ test("parent tap indexing already rejects an unreadable sibling", () => {
   }
 });
 
-test("an explicit parent path does not resolve an unreadable sibling from another tap", () => {
+test("an explicit parent path cannot fall back past an unreadable local sibling", () => {
   const { root, sibling, config, options } = fixture("dep");
   const manifest = join(sibling, "SKILL.md");
   chmodSync(manifest, 0);
