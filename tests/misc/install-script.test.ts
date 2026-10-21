@@ -6,16 +6,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { makeTempDir } from "../helpers/fixtures.ts";
 
 const INSTALL_SCRIPT = "site/public/install.sh";
 const INSTALL_COMMAND = "curl -fsSL https://crew.logic.inc/install.sh | bash";
@@ -72,7 +65,7 @@ type InstallEnv = {
 };
 
 function installEnv(os: string, arch: string, asset: string): InstallEnv {
-  const root = mkdtempSync(join(tmpdir(), "crew-install-script-"));
+  const root = makeTempDir("crew-install-script-");
   const bin = join(root, "bin");
   const prefix = join(root, "prefix");
   mkdirSync(bin);

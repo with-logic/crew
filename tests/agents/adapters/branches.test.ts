@@ -4,10 +4,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { withOriginalAdapter } from "../../helpers/env.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
 
 // Every adapter redirects its user path detection via $HOME. Swap in
 // a throwaway HOME so the real `isDirectory` checks land on a
@@ -16,7 +15,7 @@ const realHome = process.env["HOME"];
 let tempHome: string;
 
 beforeEach(() => {
-  tempHome = mkdtempSync(join(tmpdir(), "crew-adapter-test-"));
+  tempHome = makeTempDir("crew-adapter-test-");
   process.env["HOME"] = tempHome;
 });
 
@@ -46,7 +45,7 @@ describe("adapter path branches", () => {
 
   test("command-code detects via the `cmd` binary alias", () => {
     // Create a fake `cmd` binary on PATH; isOnPath should pick it up.
-    const binDir = mkdtempSync(join(tmpdir(), "crew-cmd-bin-"));
+    const binDir = makeTempDir("crew-cmd-bin-");
     const fakeCmd = join(binDir, "cmd");
     require("node:fs").writeFileSync(fakeCmd, "#!/bin/sh\n", { mode: 0o755 });
     const prevPath = process.env["PATH"];
