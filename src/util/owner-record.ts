@@ -4,6 +4,10 @@ import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 // Three numeric fields (PID, inode, birthtime) fit well below this metadata bound.
 const RECORD_BYTES = 256;
 
+/**
+ * Missing or linked records, non-file devices, and oversized records return undefined.
+ * Directory reads and other I/O errors propagate.
+ */
 export function readOwnerRecord(path: string): string | undefined {
   let fd: number;
   try {

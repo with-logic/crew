@@ -304,8 +304,9 @@ overwrite anything it didn't install itself.
   `--force`.
 - **Concurrency-safe.** A state lock coordinates writes within each crew
   home. Shared target locks coordinate installs and marker changes at each
-  physical agent skill directory, including when the background updater and
-  your shell use different `CREW_HOME` roots.
+  physical agent skill base, including when the background updater and
+  your shell use different `CREW_HOME` roots. Each target lock covers the whole
+  base, so changes to unrelated skills in that base wait for one another.
 - **Reproducible versions.** Tags and branches resolve to full 40-char commit
   SHAs at install time. The SHA — not the tag — is what's recorded.
 - **Owns only `~/.crew/`.** Homecrew writes to its own directory and to each

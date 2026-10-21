@@ -19,7 +19,7 @@ export function prepareUpdateSources(input: LockedPlanInput): PreparedSources {
     if (entry.scope === "project" && !hasUsableProjectRoot(entry)) continue;
     const tap = input.config.taps.find((candidate) => candidate.name === entry.source.tap);
     if (!tap || tap.kind === "path") continue;
-    // Exact-SHA ordinary entries skip without acquisition; tracked groups still scan.
+    // Exact-SHA ordinary entries skip acquisition; tracked groups still scan to discover new children.
     if (
       entry.pinned &&
       entry.ref !== null &&

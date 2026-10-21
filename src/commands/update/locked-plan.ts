@@ -49,6 +49,7 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
   const tapRows = refreshTaps(input.taps, input.home);
   const prepared = prepareUpdateSources(input);
   const { bases, missingProjectRoots } = updateTargetBatch(input);
+  // §14: previews share decision logic but read an unlocked, non-snapshot-consistent inventory.
   if (input.dryRun) return runTargetBatch(input, tapRows, undefined, missingProjectRoots, prepared);
   // §14: source clone locks are already held; acquisition stays outside per-entry catches.
   return withTargetLocks(bases, (failures) =>

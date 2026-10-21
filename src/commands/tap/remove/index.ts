@@ -176,7 +176,8 @@ function removeWithSkills(ctx: CommandContext, plan: RemovePlan, dryRun: boolean
     : withTargetLocks(entryTargetBases(plan.attached, ctx.cwd, false), (_failures, unavailable) =>
         remove(unavailable),
       );
-  // §14: clone deletion happens after target locks have been released.
+  // §14: retain the tap after any failed removal so retained installs remain retryable.
+  // Clone deletion happens after target locks have been released.
   if (!(dryRun || failed)) dropTap(ctx.home, plan.tap);
   return {
     exitCode: failed ? 1 : 0,

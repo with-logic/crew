@@ -674,7 +674,7 @@ Install takes a staged skill directory in the store, a skill name, a scope, and 
       iv. Write a `.crew.json` marker into the staging directory per §7.5. The marker's `agents` field is the **union** of (a) any `agents` list present in a prior marker at `dest`, and (b) the agent names in this group. This preserves ownership by agents that installed into the same path on an earlier run and aren't part of the current operation.
       v. If `dest` exists, remove it.
       vi. Rename the staging directory to `dest`.
-4. **Never modify files outside `dest`**, except the sibling staging/rollback directories required by installation and the reserved target-coordination entries in the adapter skill-base (§6, §14). Adapters must not edit shared configuration files the agent tool may use (such as global `AGENTS.md`, settings JSON, etc.). If a agent tool's documented convention requires modifying a shared file, that is out of scope for v1.
+4. **Never modify files outside `dest`**, except the sibling staging/rollback directories required by installation and the reserved target-coordination entries in the adapter skill-base (§6, §14). Adapters must not edit shared configuration files the agent tool may use (such as global `AGENTS.md`, settings JSON, etc.). If an agent tool's documented convention requires modifying a shared file, that is out of scope for v1.
 
 **Per-agent reporting.** Even when N adapters share one `dest`, the user-facing summary lists all N adapter names as installed (or up-to-date, or failed). The install summary returned to callers is keyed by adapter name, not by `dest`.
 

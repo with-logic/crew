@@ -91,7 +91,7 @@ interface UninstallResult {
  * Walk every selector (and the `--prune` pass), returning what state
  * would look like afterwards. The per-agent work honours `--dry-run`
  * inside `removeOne`, so this one function drives both the preview and
- * the real removal — they can never disagree about what happens.
+ * the real removal. Previews use an unlocked view and can differ under concurrent changes (§14).
  */
 function runUninstall(
   ctx: CommandContext,
