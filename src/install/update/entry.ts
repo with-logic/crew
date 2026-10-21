@@ -17,7 +17,7 @@ import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.
 import { loadSkill } from "../../skill/load.ts";
 import { type AcquiredTap, withAcquiredSkillPath } from "../../sources/acquire/index.ts";
 import { isGistTap } from "../../sources/gist.ts";
-import { hashSourceDirectory } from "../../sources/read.ts";
+import { hashSourceDirectory, isSourceDirectory } from "../../sources/read.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
@@ -143,7 +143,6 @@ function updateOne(
 function applyUpdate(
   entry: StateEntry,
   acquired: Pick<AcquiredTap, "resolvedSha" | "pinned">,
-  // Tap re-expansion has already marked missing children `source_gone`.
   sourcePath: string,
   tap: TapConfig,
   home: string,
@@ -157,6 +156,9 @@ function applyUpdate(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
+  // §10.1: re-expansion handles removed children of tracked whole-tap installs;
+  // individual path sources rely on this directory check.
+  if (newSha === null && !isSourceDirectory(sourcePath)) return { kind: "source_gone" };
   const sourceHash = newSha === null ? hashSourceDirectory(sourcePath) : undefined;
   if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
     if (newSha !== null) return { kind: "up_to_date" };
