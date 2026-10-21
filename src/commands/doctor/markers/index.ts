@@ -10,7 +10,9 @@
  * When multiple adapters share an install path (§7.2), the same
  * physical marker would be returned by `scanMarkers` once
  * per adapter. We dedupe by `(scope, installDir)` so each marker
- * appears exactly once in the index.
+ * appears exactly once in the index. A base can also serve both scopes
+ * (for example when cwd is HOME); the marker owns its scope (§11.1),
+ * so an alias reached through the other scope must not relabel it.
  */
 
 import { existsSync } from "node:fs";
@@ -47,6 +49,7 @@ export function buildMarkerIndex(
     const userInventory = scanMarkers(adapter, "user", cwd);
     for (const [key, finding] of userInventory.findings) inventoryFindings.set(key, finding);
     for (const rec of userInventory.records) {
+      if (rec.marker.scope !== "user") continue;
       const key = `user\0${rec.installDir}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -57,6 +60,7 @@ export function buildMarkerIndex(
       const projectInventory = scanMarkers(adapter, "project", root);
       for (const [key, finding] of projectInventory.findings) inventoryFindings.set(key, finding);
       for (const rec of projectInventory.records) {
+        if (rec.marker.scope !== "project") continue;
         const key = `project\0${rec.installDir}`;
         if (seen.has(key)) continue;
         seen.add(key);
