@@ -31,11 +31,11 @@ cd "$ROOT"
 source "$ROOT/scripts/next-version.sh"
 
 DRY_RUN=false
-BUMP="patch"
+RELEASE_TARGET="patch"
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=true ;;
-    *) validate_release_target "$arg"; BUMP="$arg" ;;
+    *) validate_release_target "$arg"; RELEASE_TARGET="$arg" ;;
   esac
 done
 
@@ -87,11 +87,11 @@ fi
 # ---------- 2. Compute next version ---------------------------------------
 
 current_version="$(bun -e 'console.log(require("./package.json").version)')"
-next_version="$(next_release_version "$current_version" "$BUMP")"
+next_version="$(next_release_version "$current_version" "$RELEASE_TARGET")"
 next_tag="v${next_version}"
 branch="release/${next_tag}"
 
-echo "==> Releasing ${current_version} -> ${next_version} (${BUMP})"
+echo "==> Releasing ${current_version} -> ${next_version} (${RELEASE_TARGET})"
 
 if git show-ref --verify --quiet "refs/heads/${branch}"; then
   echo "error: branch ${branch} already exists locally — delete it or pick a different bump" >&2
