@@ -1,5 +1,5 @@
 /**
- * Load a skill from disk: read its `SKILL.md`, parse and validate
+ * Load a skill from disk (§9 step 4): read its `SKILL.md` or gist file, parse and validate
  * frontmatter, and return a structured `LoadedSkill`.
  *
  * `loadSkill` is the boundary between raw filesystem state and validated
@@ -7,6 +7,7 @@
  * a skill goes through here first.
  */
 
+import { lstatSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
@@ -14,9 +15,21 @@ import { exists, readText } from "../util/fs.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
-/** Load and validate the skill at `path`. Throws `invalid_skill` on any failure. */
-export function loadSkill(path: string): LoadedSkill {
-  const skillMdPath = join(path, "SKILL.md");
+/** Load and validate a directory or explicit gist file (§9 steps 4–5). */
+export function loadSkill(path: string, file = false): LoadedSkill {
+  // §9 step 5: a recorded gist filename must never become a directory skill.
+  if (file) {
+    const stat = lstatSync(path, { throwIfNoEntry: false });
+    if (stat === undefined) {
+      throw new CrewError("no_skills_found", `gist skill \`${path}\` no longer exists`, { path });
+    }
+    if (!stat.isFile()) {
+      throw new CrewError("invalid_skill", `gist skill \`${path}\` must be a regular file`, {
+        path,
+      });
+    }
+  }
+  const skillMdPath = file ? path : join(path, "SKILL.md");
   if (!exists(skillMdPath)) {
     throw new CrewError(
       "invalid_skill",

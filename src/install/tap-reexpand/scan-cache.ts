@@ -38,8 +38,8 @@ export interface TapScanCache {
    * tap being unreachable.
    */
   children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[];
-  /** Full validation (§9 step 4) for one child directory, memoised. */
-  validate(skillDir: string): CrewError | null;
+  /** Full validation (§9 step 4) for one child directory or gist file, memoised. */
+  validate(skillDir: string, file?: boolean): CrewError | null;
 }
 
 export function makeTapScanCache(): TapScanCache {
@@ -69,11 +69,12 @@ export function makeTapScanCache(): TapScanCache {
       return walked;
     },
 
-    validate(skillDir: string): CrewError | null {
-      const hit = validations.get(skillDir);
+    validate(skillDir: string, file = false): CrewError | null {
+      const key = JSON.stringify([skillDir, file]);
+      const hit = validations.get(key);
       if (hit !== undefined) return hit;
-      const result = validationErrorFor(skillDir);
-      validations.set(skillDir, result);
+      const result = validationErrorFor(skillDir, file);
+      validations.set(key, result);
       return result;
     },
   };
@@ -90,9 +91,9 @@ export function makeTapScanCache(): TapScanCache {
  * the validator's own verdicts — are returned; anything else rethrows
  * and is handled as a run-level failure by the caller.
  */
-function validationErrorFor(skillDir: string): CrewError | null {
+function validationErrorFor(skillDir: string, file: boolean): CrewError | null {
   try {
-    loadSkill(skillDir);
+    loadSkill(skillDir, file);
     return null;
   } catch (err) {
     if (err instanceof CrewError) return err;

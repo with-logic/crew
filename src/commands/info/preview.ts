@@ -17,6 +17,7 @@ import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import { expandSkills } from "../../sources/expand.ts";
+import { isGistTap } from "../../sources/gist.ts";
 import type { SkillInfo } from "./render.ts";
 
 export interface TapPreview {
@@ -63,18 +64,27 @@ function narrowAtRoots(
 /** Preview only the selected locations while their acquisition scope is live. */
 function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
   if (candidate.kind === "skill") {
-    return { tap: candidate.tap, skills: buildSkillInfosFromDirs([candidate.location]) };
+    return {
+      tap: candidate.tap,
+      skills: buildSkillInfosFromDirs([candidate.location], candidate.tap),
+    };
   }
-  return { tap: candidate.tap, skills: buildSkillInfosFromDirs(candidate.members) };
+  return { tap: candidate.tap, skills: buildSkillInfosFromDirs(candidate.members, candidate.tap) };
 }
 
 function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
-  const { valid } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
+  const { valid } = expandSkills(dir, {
+    recursive: tap.discovery === "recursive",
+    gist: isGistTap(tap),
+  });
   return valid.map(skillInfoOf);
 }
 
-function buildSkillInfosFromDirs(dirs: readonly { readonly path: string }[]): SkillInfo[] {
-  return dirs.map((dir) => skillInfoOf(loadSkill(dir.path)));
+function buildSkillInfosFromDirs(
+  dirs: readonly { readonly path: string }[],
+  tap: TapConfig,
+): SkillInfo[] {
+  return dirs.map((dir) => skillInfoOf(loadSkill(dir.path, isGistTap(tap))));
 }
 
 function skillInfoOf(s: LoadedSkill): SkillInfo {

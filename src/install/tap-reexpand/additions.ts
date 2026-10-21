@@ -8,6 +8,7 @@
  */
 
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
+import { isGistTap } from "../../sources/gist.ts";
 import {
   type InstalledSourceIndex,
   indexHasSameSource,
@@ -80,7 +81,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
     // can reach here with (say) no `description`. Validate in full
     // before reporting or installing, so the preview and the real run
     // agree and an invalid child never lands on disk.
-    const invalid = input.cache.validate(child.path);
+    const invalid = input.cache.validate(child.path, isGistTap(input.tap));
     if (invalid) {
       hardFailure = true;
       rows.push({

@@ -12,7 +12,7 @@
  *     longer referenced by state or any marker.
  */
 
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { crewHome, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
@@ -31,7 +31,7 @@ export interface StoredSkill {
 }
 
 /**
- * Copy `sourceDir` into the store under `<name>@<short-sha>`. If the
+ * Stage a source directory, or a gist file as SKILL.md, under `<name>@<short-sha>`. If the
  * entry already exists with a matching content hash, the existing one
  * is reused.
  */
@@ -41,6 +41,7 @@ export function stageIntoStore(
   resolvedSha: string | null,
   home: string = crewHome(),
   sourceHash?: string,
+  file = false,
 ): StoredSkill {
   // A path source with no SHA uses the hash itself as the short id so
   // different path-installed skills don't collide in the store.
@@ -58,7 +59,10 @@ export function stageIntoStore(
 
   const staging = `${storePath}.staging-${Date.now()}`;
   if (exists(staging)) rmrf(staging);
-  copyTree(sourceDir, staging, { stripRootMarker: true });
+  if (file) {
+    ensureDir(staging);
+    copyFileSync(sourceDir, join(staging, "SKILL.md"));
+  } else copyTree(sourceDir, staging, { stripRootMarker: true });
   ensureDir(join(storePath, "..")); // parents
   atomicReplace(staging, storePath);
 

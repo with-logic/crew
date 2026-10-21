@@ -814,6 +814,8 @@ The output is tagged as a dry run and reports three things separately:
 
 Written into every Homecrew-installed skill directory. JSON, UTF-8, trailing newline. The marker is Homecrew's authoritative record at the install site; `state.json` is a convenience index but can be rebuilt from markers (§13, `crew doctor --repair`).
 
+For a GitHub gist skill (§8.2), `path` is its original top-level filename inside the tap. The marker format and schema version are unchanged.
+
 ```json
 {
   "schema_version": 1,
@@ -875,6 +877,8 @@ Tilde is expanded. Relative paths are resolved against `cwd`.
 ### 8.2 Git source
 
 Any reachable git URL. A tap is **not** required.
+
+An HTTPS GitHub gist page URL, `https://gist.github.com/<owner>/<id>`, is a git source and uses the existing URL identity, ref selection, and auto-tap naming. Its top-level regular files are skill candidates regardless of filename or extension (§9 step 5). Each valid file installs under its declared name with its exact bytes as `SKILL.md`; other gist files are not included. Gists use the existing directory content hash after this normalization.
 
 Accepted forms:
 
@@ -1215,7 +1219,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Every other spec rule from the Agent Skills specification.
 
    A skill that fails validation is recorded as a failed skill with its message and path; the run continues. No validation failure aborts the whole command. See the exit-code rules in step 9.
-5. **Expand directories.** Three cases, checked in order:
+5. **Expand skills.** For an HTTPS GitHub gist source (§8.2), inspect every top-level regular file with the full validator from step 4. Ignore files without valid skill frontmatter, directories, and symlinks. Filenames and extensions do not affect eligibility, including `SKILL.md` and `skills`. Each valid file is a separate skill; duplicate declared names follow step 6's `conflicting_dependencies` rule. Record the original filename as the source path, and stage only that file's bytes as `SKILL.md`. Reloading a recorded gist filename requires a regular file and never falls back to directory discovery. Gist sibling dependencies resolve by declared name at the parent's commit. For other sources, check these directory layouts in order:
    1. If the resolved source location has a `SKILL.md` at its root, it is one skill.
    2. Else, if the resolved source location has a `skills/` subdirectory, crew walks under `skills/` and collects skills:
       - Every immediate child of `skills/` that contains a `SKILL.md` is a skill (as before).
@@ -1860,7 +1864,7 @@ UTF-8 JSON with a trailing newline. Single top-level object.
 }
 ```
 
-Every entry's `source` is `{ tap, path }`: the name of a configured tap (registered or auto, see §16) and the skill's directory path inside that tap. The URL or filesystem location is held in `config.yaml` on the tap row, not duplicated here, so renaming a tap or changing its URL doesn't require rewriting state.
+Every entry's `source` is `{ tap, path }`: the name of a configured tap (registered or auto, see §16) and the skill's directory path inside that tap, or its original top-level filename for a GitHub gist (§8.2). The URL or filesystem location is held in `config.yaml` on the tap row, not duplicated here, so renaming a tap or changing its URL doesn't require rewriting state.
 
 One entry per (skill, scope, project_root) triple: the same skill can be installed at user scope, at project scope under `~/work/product-x`, and at project scope under `~/work/product-y` — that's three independent entries. `agents` is the list of agent names this skill is currently installed into.
 
@@ -2086,6 +2090,8 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
 ### 16.1 What a tap is
 
 A **tap** is any directory that exposes skills through the standard layouts in §9 step 5. It can be a git-managed directory (a clone of a git repo, optionally rooted at a subdirectory via `subpath`) or a local filesystem directory. Every tap has a unique short name in `config.yaml`. Every installed skill belongs to exactly one tap, recorded as `state.installations[i].source.tap`.
+
+A GitHub gist is a git-kind tap using the file layout in §9 step 5. Search, info, qualified installs, and updates use its declared skill names and original filenames; whole-gist installs track additions and removals through §10.1.1, and a removed source file reports `source_gone` while preserving the installed copy.
 
 Taps come in two flavors that differ only in lifecycle, not in structure or behavior:
 
@@ -2356,6 +2362,17 @@ Each criterion has:
 Implementations and test suites refer to criteria by ID.
 
 ### 18.3 Criteria
+
+#### C-GIST: GitHub gist skills (§8.2, §9, §10.1.1)
+
+| ID | Reference | Assertion |
+|---|---|---|
+| C-GIST-01 | §8.2 | An HTTPS gist owner/id URL remains a git source with existing identity and ref parsing; unrelated and lookalike hosts do not select the gist layout. |
+| C-GIST-02 | §7.5, §9, §11.1 | Each valid gist file installs only its exact bytes as SKILL.md plus the marker, records its original filename and git SHA, and uses the normal directory hash; duplicate names produce conflicting_dependencies. |
+| C-GIST-03 | §9 step 5 | All top-level regular filenames are eligible, including SKILL.md and skills; invalid manifests, directories, and symlinks are ignored, and no valid files produces no_skills_found. Reloading a selected filename never reads a directory or symlink as a skill. |
+| C-GIST-04 | §16.1 | A gist can be registered as a tap, searched, previewed, and installed by tap/skill using declared names. |
+| C-GIST-05 | §10.1.1 | Gist updates refresh changed files and follow whole-tap additions; removed files preserve local copies with source_gone, and filenames replaced by directories or symlinks never supply replacement skill bytes. |
+| C-GIST-06 | §9 steps 3, 6 | Gists retain existing ref pinning and dependency semantics; bare sibling dependencies resolve valid files by declared name from the parent's commit. |
 
 #### C-REF: Reference parsing (§8)
 

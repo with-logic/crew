@@ -1,6 +1,6 @@
 /**
  * Shallow index of a single tap's layout — just what we need for
- * reference resolution (§8.3). It reads only each skill's declared
+ * reference resolution (§8.3). For directory skills it reads only the declared
  * `name` from SKILL.md; full validation happens later in the install
  * flow.
  *
@@ -9,21 +9,22 @@
  *     skills/<name>, or skills/<namespace>/<name>).
  *   - `namespaces`: every namespace name and its skill children.
  *
- * The index is intentionally optimistic: it validates only the
+ * The directory index is intentionally optimistic: it validates only the
  * declared `name`; full SKILL.md validation still happens at install
- * or search-render time.
+ * or search-render time. Gists use fully validated top-level files (§8.2).
  *
  * Namespace rules (§9 step 5 case 2): a namespace is a directory
  * directly under `skills/` that contains no `SKILL.md` of its own
  * but contains child directories with a `SKILL.md`.
  */
 
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
+import { isGistTap, scanGist } from "../sources/gist.ts";
 import { migrateTapClone } from "../sources/migrate-clones.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
 import { isDirectory, listDir, toPosix } from "../util/fs.ts";
@@ -34,7 +35,7 @@ export interface SkillLocation {
   readonly name: string;
   /** Namespace the skill lives under, or null if at skills/ root or tap root. */
   readonly namespace: string | null;
-  /** Absolute path to the skill's directory on disk. */
+  /** Absolute source directory or gist file path on disk. */
   readonly path: string;
   /**
    * Path RELATIVE to the tap root, POSIX-style. Empty when the skill
@@ -87,6 +88,18 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
       else namespaces.set(loc.namespace, [loc]);
     }
   };
+
+  if (isGistTap(tap)) {
+    for (const skill of scanGist(root)) {
+      addSkill({
+        name: skill.frontmatter.name,
+        namespace: null,
+        path: skill.path,
+        tapRelativePath: basename(skill.path),
+      });
+    }
+    return { skills, namespaces };
+  }
 
   if (hasSkillMd(root)) {
     const skillName = skillNameForIndex(root);

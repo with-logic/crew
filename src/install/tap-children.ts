@@ -8,6 +8,7 @@
 
 import type { TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
+import { isGistTap } from "../sources/gist.ts";
 import { isDirectory } from "../util/fs.ts";
 import { indexTap } from "./tap-index.ts";
 
@@ -24,7 +25,7 @@ export function currentTapChildren(
 ): CurrentTapChild[] {
   const children: CurrentTapChild[] = [];
   if (!isDirectory(rootDir)) return children;
-  if (hasSkillMd(rootDir)) {
+  if (!isGistTap(tap) && hasSkillMd(rootDir)) {
     pushLoaded(children, rootDir, "");
     return children;
   }

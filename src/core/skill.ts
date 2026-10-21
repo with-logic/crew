@@ -16,9 +16,9 @@ export interface SkillFrontmatter {
   };
 }
 
-/** A skill on disk: the directory, the parsed frontmatter, and its raw SKILL.md. */
+/** A skill on disk: its source path, parsed frontmatter, and raw manifest (§9). */
 export interface LoadedSkill {
-  /** Absolute path to the skill's directory. */
+  /** Absolute directory path, or original file path for a gist skill. */
   readonly path: string;
   /** Parsed frontmatter. */
   readonly frontmatter: SkillFrontmatter;
