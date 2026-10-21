@@ -10,8 +10,10 @@ const MAX_DISCOVERY_RSS_GROWTH_BYTES = 32 * 1024 * 1024;
 const reader = new URL("../../../src/sources/gist.ts", import.meta.url).href;
 const child = `
 import { gistCandidates } from ${JSON.stringify(reader)};
+// Bun 1.4 normalized macOS SELF maxRSS from native bytes to Node-compatible KiB.
+const rssUnit = process.platform === "darwin" && Bun.semver.satisfies(Bun.version, "<1.4.0") ? 1 : 1024;
 const names = gistCandidates(process.argv[1]).map((candidate) => candidate.frontmatter.name);
-console.log(JSON.stringify({ names, peakBytes: process.resourceUsage().maxRSS * (process.platform === "darwin" ? 1 : 1024) }));
+console.log(JSON.stringify({ names, peakBytes: process.resourceUsage().maxRSS * rssUnit }));
 `;
 for (const [label, prefix, chunk, fixtureMiB] of [
   ["valid body", "---\nname: candidate\ndescription: candidate\n---\n", "x", 64],

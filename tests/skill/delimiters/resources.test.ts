@@ -11,10 +11,12 @@ const MAX_RSS_GROWTH_BYTES = 32 * 1024 * 1024;
 const reader = new URL("../../../src/skill/read-frontmatter.ts", import.meta.url).href;
 const child = `
 import { readFrontmatter } from ${JSON.stringify(reader)};
+// Bun 1.4 normalized macOS SELF maxRSS from native bytes to Node-compatible KiB.
+const rssUnit = process.platform === "darwin" && Bun.semver.satisfies(Bun.version, "<1.4.0") ? 1 : 1024;
 let result;
 try { result = readFrontmatter(process.argv[1]); }
 catch (error) { result = { code: error.code, message: error.message }; }
-console.log(JSON.stringify({ result, peakBytes: process.resourceUsage().maxRSS * (process.platform === "darwin" ? 1 : 1024) }));
+console.log(JSON.stringify({ result, peakBytes: process.resourceUsage().maxRSS * rssUnit }));
 `;
 
 test("frontmatter discovery bounds memory for a 64 MiB newline-only unclosed header", () => {

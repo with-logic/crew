@@ -8,10 +8,12 @@ import { makeTempDir } from "../helpers/fixtures.ts";
 const reader = new URL("../../src/skill/load.ts", import.meta.url).href;
 const child = `
 import { loadSkillName } from ${JSON.stringify(reader)};
+// Bun 1.4 normalized macOS SELF maxRSS from native bytes to Node-compatible KiB.
+const rssUnit = process.platform === "darwin" && Bun.semver.satisfies(Bun.version, "<1.4.0") ? 1 : 1024;
 let result;
 try { result = loadSkillName(process.argv[1]); }
 catch (error) { result = { code: error.code, message: error.message }; }
-console.log(JSON.stringify({ result, peakBytes: process.resourceUsage().maxRSS * (process.platform === "darwin" ? 1 : 1024) }));
+console.log(JSON.stringify({ result, peakBytes: process.resourceUsage().maxRSS * rssUnit }));
 `;
 const extraMemoryBytes = 32 * 1024 * 1024;
 
