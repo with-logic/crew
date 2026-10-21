@@ -31,9 +31,9 @@ afterEach(() => {
   resetGitRunner();
 });
 
-for (const tracked of [false, true]) {
+for (const tracksTap of [false, true]) {
   for (const cleanupFault of [false, true]) {
-    test(`C-UPD-16c deletion with cleanupFault=${cleanupFault}, tracked=${tracked}`, () => {
+    test(`C-UPD-16c deletion with cleanupFault=${cleanupFault}, tracksTap=${tracksTap}`, () => {
       const home = makeCrewHome();
       const repo = makeTempDir("crew-update-cleanup-repo-");
       makeSkill(join(repo, "skills"), "demo", skillFrontmatter({ name: "demo" }));
@@ -45,10 +45,13 @@ for (const tracked of [false, true]) {
         }),
       ).toBe(0);
       expect(
-        runCli(["install", "--agent", "claude-code", tracked ? "local@main" : "local/demo@main"], {
-          home,
-          streams: captureStreams().streams,
-        }),
+        runCli(
+          ["install", "--agent", "claude-code", tracksTap ? "local@main" : "local/demo@main"],
+          {
+            home,
+            streams: captureStreams().streams,
+          },
+        ),
       ).toBe(0);
       const state = readFileSync(join(home, "state.json"), "utf8");
       const installed = readFileSync(join(agentRoot, "demo", "SKILL.md"), "utf8");
@@ -85,15 +88,16 @@ for (const tracked of [false, true]) {
       };
       expect(exit).toBe(cleanupFault ? 1 : 0);
       if (cleanupFault) {
-        const error = tracked
+        const error = tracksTap
           ? payload.tap_reexpand_rows[0]!.error!
           : (payload.rows[0]!.outcome as Extract<UpdateRow["outcome"], { kind: "failed" }>).error;
         expect(error.code).toBe("no_skills_found");
+        expect(error.message).toContain("doesn't exist at");
         expect(error.message).toContain(retained);
         expect(error.message).toMatch(/EACCES|EPERM/);
         expect(existsSync(retained)).toBe(true);
       }
-      if (tracked || !cleanupFault) expect(payload.rows[0]!.outcome.kind).toBe("source_gone");
+      if (tracksTap || !cleanupFault) expect(payload.rows[0]!.outcome.kind).toBe("source_gone");
       else expect(payload.rows[0]!.outcome.kind).toBe("failed");
       expect(readFileSync(join(home, "state.json"), "utf8")).toBe(state);
       expect(readFileSync(join(agentRoot, "demo", "SKILL.md"), "utf8")).toBe(installed);

@@ -81,15 +81,18 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
     // can reach here with (say) no `description`. Validate in full
     // before reporting or installing, so the preview and the real run
     // agree and an invalid child never lands on disk.
-    const invalid = input.cache.validate(child.path);
-    if (invalid) {
+    const skillLoadError = input.cache.validate(child.path);
+    if (skillLoadError) {
       hardFailure = true;
       rows.push({
         name: child.name,
         scope: input.scope,
         tap: input.tap.name,
         kind: "tap_error",
-        error: { code: invalid.code ?? "invalid_skill", message: invalid.message },
+        error: {
+          code: skillLoadError.code ?? "invalid_skill",
+          message: skillLoadError.message,
+        },
       });
       continue;
     }

@@ -5,9 +5,9 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { TapConfig } from "../../src/core/types.ts";
-import { indexTap } from "../../src/install/tap-index.ts";
-import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
+import type { TapConfig } from "../../../src/core/types.ts";
+import { indexTap } from "../../../src/install/tap-index.ts";
+import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 
 function pathTap(path: string, name = "t"): TapConfig {
   return {

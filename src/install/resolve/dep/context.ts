@@ -20,6 +20,7 @@ export function withDependencyTrees<T>(home: string, fn: (trees: DependencyTrees
   const exports = new Map<string, ExportedTree>();
   return withExportCleanup(
     () => fn({ parentDir: (parent) => parentDir(parent, home, exports) }),
+    // The live iterator includes exports created by fn; cleanup consumes it after fn finishes.
     exports.values(),
   );
 }

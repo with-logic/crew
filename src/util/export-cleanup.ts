@@ -11,7 +11,7 @@ export function hasExportCleanupFailure(error: Error): boolean {
 }
 
 interface OwnedExport {
-  readonly rootDir: string;
+  readonly cleanupPath: string;
   readonly cleanup: () => void;
 }
 
@@ -37,7 +37,7 @@ export function withExportCleanup<T>(fn: () => T, trees: Iterable<OwnedExport>):
           : new CrewError("usage_error", String(failure.error));
       // Keep CrewError identity, code, details and remedy; only append safe diagnostics (§13).
       primary.message += sanitizeLine(
-        `; export cleanup failed; retained path \`${tree.rootDir}\`: ${diagnostic}`,
+        `; export cleanup failed; retained path \`${tree.cleanupPath}\`: ${diagnostic}`,
       );
       cleanupFailures.add(primary);
       failure.error = primary;

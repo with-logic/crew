@@ -1,11 +1,11 @@
 /** Name-only metadata loading preserves discovery validation and parser semantics (§9 step 4). */
 
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
 import { loadSkill, loadSkillName } from "../../src/skill/load.ts";
-import { makeTempDir } from "../helpers/fixtures.ts";
+import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
 function makeSkillDirectory(rawSkillMd: string): string {
   const dir = makeTempDir();
@@ -14,6 +14,37 @@ function makeSkillDirectory(rawSkillMd: string): string {
 }
 
 describe("loadSkillName", () => {
+  test.each([loadSkill, loadSkillName])(
+    "unreadable SKILL.md is source_unreachable (%p)",
+    (load) => {
+      const skill = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
+      const manifest = join(skill, "SKILL.md");
+      chmodSync(manifest, 0);
+      try {
+        expect(() => load(skill)).toThrow(
+          expect.objectContaining({
+            code: "source_unreachable",
+            details: { path: manifest },
+            remedy: expect.stringContaining("source file"),
+          }),
+        );
+      } finally {
+        chmodSync(manifest, 0o600);
+      }
+    },
+  );
+
+  test("manifest traversal permissions retain their native error", () => {
+    const skill = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
+    chmodSync(skill, 0o400);
+    try {
+      expect(() => loadSkill(skill)).toThrow(expect.objectContaining({ code: "EACCES" }));
+      expect(() => loadSkillName(skill)).toThrow(expect.objectContaining({ code: "EACCES" }));
+    } finally {
+      chmodSync(skill, 0o700);
+    }
+  });
+
   test("missing SKILL.md fails with CrewError", () => {
     const d = makeTempDir();
     expect(() => loadSkillName(d)).toThrow(CrewError);

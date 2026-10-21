@@ -28,6 +28,7 @@ import { migrateTapClone } from "../sources/migrate-clones.ts";
 import { sourceRelativePath } from "../sources/path.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
+import { isSourceReadFailure } from "../util/source-read.ts";
 
 /** Location of one skill inside a tap. */
 export interface SkillLocation {
@@ -165,7 +166,8 @@ function maybeRecursiveIndex(
 function skillNameForIndex(path: string): string | null {
   try {
     return loadSkillName(path);
-  } catch {
+  } catch (err) {
+    if (isSourceReadFailure(err)) throw err;
     return null;
   }
 }

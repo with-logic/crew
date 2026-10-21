@@ -61,7 +61,7 @@ export function exportTreeAt(clonePath: string, sha: string, subpath: string, de
       // `runGit` only throws `GitProcessError`.
       throw exportFailure(err as GitProcessError, sha, subpath, pathspec, clonePath);
     }
-  }, [{ rootDir: indexFile, cleanup: () => rmrf(indexFile) }]);
+  }, [{ cleanupPath: indexFile, cleanup: () => rmrf(indexFile) }]);
 }
 
 /**
@@ -118,6 +118,7 @@ export function withExportedTree<T>(
 /** A captured tree whose owner releases it after its last reader (§9 step 3). */
 export interface ExportedTree {
   readonly rootDir: string;
+  readonly cleanupPath: string;
   readonly cleanup: () => void;
 }
 
@@ -136,9 +137,9 @@ export function createExportedTree({ clonePath, sha, subpath, home }: ExportOpti
     exportTreeAt(clonePath, sha, subpath, dest);
     const rootDir = subpath.length > 0 ? join(dest, subpath) : dest;
     assertNoSymlinkEscape(dest, rootDir, subpath);
-    return { rootDir, cleanup: () => rmrf(dest) };
+    return { rootDir, cleanupPath: dest, cleanup: () => rmrf(dest) };
   } catch (err) {
-    cleanupFailedExport(err, [{ rootDir: dest, cleanup: () => rmrf(dest) }]);
+    cleanupFailedExport(err, [{ cleanupPath: dest, cleanup: () => rmrf(dest) }]);
   }
 }
 
