@@ -8,6 +8,7 @@ import { indexTap, type SkillLocation } from "../../install/tap-index.ts";
 import { displayText } from "../../refs/display-url.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { sanitizeLine } from "../../util/redact.ts";
+import { isSourceReadFailure } from "../../util/source-read.ts";
 import { type SearchInstallIndex, searchInstallStatus } from "./install-state.ts";
 import type { ConfiguredSearchResult, SearchHit } from "./types.ts";
 
@@ -92,6 +93,14 @@ function collectSkillHit(
       ...searchInstallStatus(installIndex, name, tap.name, loc.tapRelativePath),
     });
   } catch (err) {
+    if (isSourceReadFailure(err))
+      warnings.push(
+        sanitizeLine(
+          displayText(
+            `warning: skill \`${loc.name}\` skipped (${err.code}) — ${err.message} (tap \`${tap.name}\`)`,
+          ),
+        ),
+      );
     if (err instanceof CrewError && err.code === "invalid_skill")
       warnings.push(
         invalidManifestWarning({ tap: tap.name, path: loc.path, message: err.message }),
