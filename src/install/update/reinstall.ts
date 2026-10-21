@@ -10,8 +10,8 @@
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
 import { installSkillIntoAgents } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
-import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
+import { sanitizeLine } from "../../util/redact.ts";
 import type { PerAgentUpdate } from "./types.ts";
 
 export interface ReinstallInput {
@@ -74,10 +74,22 @@ function installGroup(
       });
     }
   } catch (err) {
-    // `installSkillIntoAgents` only raises `CrewError` (safety-check aborts).
-    const ce = err as CrewError;
+    // §10.1: safety skips are soft; filesystem failures must remain retryable.
+    // Installation raises CrewError or native filesystem errors with optional string codes.
+    const error = err as NodeJS.ErrnoException;
+    const code = error.code ?? "usage_error";
+    const safetySkip =
+      code === "customized" || code === "untracked_directory" || code === "inconsistent_marker";
     for (const a of group) {
-      perTarget.push({ agent: a.name, kind: "skipped", reason: ce.code });
+      perTarget.push(
+        safetySkip
+          ? { agent: a.name, kind: "skipped", reason: code }
+          : {
+              agent: a.name,
+              kind: "failed",
+              error: { code, message: sanitizeLine(error.message) },
+            },
+      );
     }
   }
 }

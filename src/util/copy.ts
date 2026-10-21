@@ -12,6 +12,7 @@
 
 import { copyFileSync, lstatSync, readdirSync, readlinkSync, symlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { CrewError } from "../core/errors.ts";
 import { ensureDir } from "./fs.ts";
 
 /** Options for `copyTree`. */
@@ -24,7 +25,11 @@ export interface CopyTreeOptions {
   readonly stripRootMarker?: boolean;
 }
 
-/** Copy everything under `src` into `dest`, creating `dest` if needed. */
+/**
+ * Copy `src` into `dest`, creating it if needed. Refuse destination symlinks at
+ * the root and each directory/file write path: source links are preserved, but
+ * destination links must not redirect writes outside `dest` (§7.3 step 4).
+ */
 export function copyTree(src: string, dest: string, options: CopyTreeOptions = {}): void {
   const stripRootMarker = options.stripRootMarker !== false;
   copyDirInto(src, dest, "", stripRootMarker);
@@ -38,6 +43,7 @@ function copyDirInto(
 ): void {
   const srcDir = rel === "" ? srcRoot : join(srcRoot, rel);
   const destDir = rel === "" ? destRoot : join(destRoot, rel);
+  rejectDestinationSymlink(destDir);
   ensureDir(destDir);
   for (const name of readdirSync(srcDir)) {
     if (stripRootMarker && rel === "" && name === ".crew.json") {
@@ -53,8 +59,21 @@ function copyDirInto(
     } else if (lst.isDirectory()) {
       copyDirInto(srcRoot, destRoot, rel === "" ? name : `${rel}/${name}`, stripRootMarker);
     } else if (lst.isFile()) {
+      rejectDestinationSymlink(destPath);
       ensureDir(dirname(destPath));
       copyFileSync(srcPath, destPath);
     }
+  }
+}
+
+/** Destination symlinks, including case-folded aliases, must not redirect writes (§7.3 step 4). */
+function rejectDestinationSymlink(path: string): void {
+  if (lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    throw new CrewError(
+      "usage_error",
+      `Refusing to copy through destination symlink: ${path}`,
+      { path },
+      "Rename case-colliding source entries or remove destination symlinks, then retry.",
+    );
   }
 }

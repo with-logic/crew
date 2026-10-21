@@ -14,18 +14,21 @@ import { existsSync } from "node:fs";
 import { cwdForEntry } from "../../agents/adapter.ts";
 import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
-import { hashDirectory } from "../../hash/content.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { type AcquiredTap, withAcquiredSkillDir } from "../../sources/acquire/index.ts";
+import { hashSourceDirectory, isSourceDirectory } from "../../sources/read.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
+import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { peekResolvedSha } from "./peek.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
-import { sourceDirectoryExists } from "./source-directory.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
+/** Preserve the input state on hard failure so every target can retry (§10.1).
+ * `bumpHardFailure` reports that failure; successful target copies remain installed.
+ */
 export function updateOneEntry(
   entry: StateEntry,
   state: StateFile,
@@ -37,29 +40,29 @@ export function updateOneEntry(
 ): { row: UpdateRow; updatedState: StateFile; bumpHardFailure: boolean } {
   try {
     const outcome = updateOne(entry, config, home, force, fallbackCwd, dryRun);
+    const hardFailure =
+      outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed");
     let next = state;
-    if (outcome.kind === "updated") {
-      const successfulTargets = outcome.per_target
-        .filter((t) => t.kind !== "failed")
-        .map((t) => t.agent);
+    // §10.1: one revision covers all targets; retain it until failed targets can retry.
+    if (outcome.kind === "updated" && !hardFailure) {
+      const nonFailedTargets = outcome.per_target.map((t) => t.agent);
       const newEntry = rebuildStateEntry(
         entry,
         outcome.new_sha,
         outcome.content_hash,
-        successfulTargets,
+        nonFailedTargets,
       );
       next = upsertEntry(state, newEntry);
     }
     return {
       row: rowFor(entry, outcome),
       updatedState: next,
-      bumpHardFailure:
-        outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed"),
+      bumpHardFailure: hardFailure,
     };
   } catch (err) {
     const ce = err as CrewError;
     const soft = ce.code === "no_skills_found" || ce.code === "invalid_ref";
-    if (soft) {
+    if (soft && !hasExportCleanupFailure(ce)) {
       return {
         row: rowFor(entry, { kind: "source_gone" }),
         updatedState: state,
@@ -166,8 +169,8 @@ function applyUpdate(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
-  if (newSha === null && !sourceDirectoryExists(skillDir)) return { kind: "source_gone" };
-  const sourceHash = newSha === null ? hashDirectory(skillDir) : undefined;
+  if (newSha === null && !isSourceDirectory(skillDir)) return { kind: "source_gone" };
+  const sourceHash = newSha === null ? hashSourceDirectory(skillDir) : undefined;
   if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
     if (newSha !== null) return { kind: "up_to_date" };
     if (sourceHash === entry.content_hash) return { kind: "up_to_date" };

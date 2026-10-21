@@ -93,7 +93,10 @@ commands that do what they say, across every agent you use.
    meta-skill can pull in a dozen others in one command.
 5. **Stay current automatically.** `crew update` pulls the latest versions
    of everything. Flip on autoupdate and a background job keeps every agent
-   fresh.
+   fresh. If adding a new tap skill fails for an agent, update reports the
+   target and reason, including which successful targets retain copies. The
+   next update that re-expands the affected tap group retries that skill
+   (unless it is a dry run).
 
 ## Skill references
 
@@ -199,7 +202,7 @@ When a command asks for an installed skill name, you can use the bare name
 
 | Command | What it does |
 |---|---|
-| `crew doctor [--verify] [--repair]` | Check integrity between state, markers, and agent directories. `--repair` fixes recoverable drift without ever touching customized files. |
+| `crew doctor [--verify] [--repair]` | Check integrity between state, markers, and agent directories. `--repair` fixes recoverable drift without ever touching customized files. Unreadable or invalid markers block repair until corrected. |
 | `crew cache clean` | Remove ephemeral caches and unreferenced store entries. |
 | `crew self-update [--check]` | Replace the running binary with the latest verified release. `--check` reports without downloading. |
 

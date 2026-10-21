@@ -31,7 +31,10 @@ export function expandSkillsAsItems(
   tracksTap: boolean,
   home: string,
 ): ExpansionItems {
-  const { valid, skipped } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
+  const { valid, skipped } = expandSkills(dir, {
+    recursive: tap.discovery === "recursive",
+    followStandardLayoutSymlinks: tap.kind === "path",
+  });
   const items: PendingItem[] = [];
   for (const l of valid) {
     const subSegment = l.path === dir ? "" : l.path.slice(dir.length + 1);

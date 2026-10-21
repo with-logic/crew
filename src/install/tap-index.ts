@@ -18,15 +18,17 @@
  * but contains child directories with a `SKILL.md`.
  */
 
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
 import { migrateTapClone } from "../sources/migrate-clones.ts";
+import { sourceRelativePath } from "../sources/path.ts";
+import { isSourceDirectory, listSourceDirectory } from "../sources/read.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
-import { isDirectory, listDir, toPosix } from "../util/fs.ts";
+import { isSourceReadFailure } from "../util/source-read.ts";
 
 /** Location of one skill inside a tap. */
 export interface SkillLocation {
@@ -88,6 +90,8 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
     }
   };
 
+  const followSymlinks = tap.kind === "path";
+  if (!isSourceDirectory(root, followSymlinks)) return { skills, namespaces };
   if (hasSkillMd(root)) {
     const skillName = skillNameForIndex(root);
     if (skillName !== null)
@@ -96,11 +100,11 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
   }
 
   const skillsDir = join(root, "skills");
-  if (isDirectory(skillsDir)) {
+  if (isSourceDirectory(skillsDir, followSymlinks)) {
     // Case 2: walk under skills/
-    for (const name of listDir(skillsDir)) {
+    for (const name of listSourceDirectory(skillsDir)) {
       const child = join(skillsDir, name);
-      if (!isDirectory(child)) continue;
+      if (!isSourceDirectory(child, followSymlinks)) continue;
       if (hasSkillMd(child)) {
         const skillName = skillNameForIndex(child);
         if (skillName === null) continue;
@@ -113,9 +117,9 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
         continue;
       }
       // Possibly a namespace: look at its children.
-      for (const childName of listDir(child)) {
+      for (const childName of listSourceDirectory(child)) {
         const grandchild = join(child, childName);
-        if (!isDirectory(grandchild)) continue;
+        if (!isSourceDirectory(grandchild, followSymlinks)) continue;
         if (!hasSkillMd(grandchild)) continue;
         const skillName = skillNameForIndex(grandchild);
         if (skillName === null) continue;
@@ -131,9 +135,9 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
   }
 
   // Case 3: walk one level under root.
-  for (const name of listDir(root)) {
+  for (const name of listSourceDirectory(root)) {
     const child = join(root, name);
-    if (!isDirectory(child)) continue;
+    if (!isSourceDirectory(child, followSymlinks)) continue;
     if (!hasSkillMd(child)) continue;
     const skillName = skillNameForIndex(child);
     if (skillName === null) continue;
@@ -151,7 +155,7 @@ function maybeRecursiveIndex(
 ): TapIndex {
   if (skills.size > 0 || tap.discovery !== "recursive") return { skills, namespaces };
   for (const dir of findRecursiveSkillDirs(root)) {
-    const tapRelativePath = toPosix(relative(root, dir));
+    const tapRelativePath = sourceRelativePath(root, dir);
     const skillName = skillNameForIndex(dir);
     if (skillName === null) continue;
     addSkill({ name: skillName, namespace: null, path: dir, tapRelativePath });
@@ -162,7 +166,8 @@ function maybeRecursiveIndex(
 function skillNameForIndex(path: string): string | null {
   try {
     return loadSkillName(path);
-  } catch {
+  } catch (err) {
+    if (isSourceReadFailure(err)) throw err;
     return null;
   }
 }

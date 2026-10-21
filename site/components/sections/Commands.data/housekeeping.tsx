@@ -19,7 +19,7 @@ export const HOUSEKEEPING: CommandGroup = {
         <>
           Check integrity between state, markers, and agent directories.{" "}
           <span className={styles.flag}>--repair</span> fixes recoverable drift without ever
-          touching customized files.
+          touching customized files. Unreadable or invalid markers block repair until corrected.
         </>
       ),
     },

@@ -9,11 +9,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
+import { paths } from "../../src/core/paths.ts";
 import { runGit } from "../../src/git/exec.ts";
-import { exportTreeAt, withExportedTree } from "../../src/git/export.ts";
+import { createExportedTree, exportTreeAt, withExportedTree } from "../../src/git/export.ts";
 import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
 /** A one-commit repo with a single `demo/` skill. */
@@ -89,6 +90,20 @@ describe("exportTreeAt failure classification", () => {
 
     expect(Bun.file(join(dest, "demo", "SKILL.md")).size).toBeGreaterThan(0);
   });
+});
+
+test("C-INST-05h a failed captured export removes its scratch directory and index", () => {
+  const { repo, sha } = repoWithDemo();
+  const home = makeTempDir("crew-exporthome-");
+  let caught: unknown;
+  try {
+    createExportedTree({ clonePath: repo, sha, subpath: "nosuchdir", home });
+  } catch (err) {
+    caught = err;
+  }
+  expect(caught).toBeInstanceOf(CrewError);
+  expect((caught as CrewError).code).toBe("no_skills_found");
+  expect(readdirSync(paths(home).gitCacheDir)).toEqual([]);
 });
 
 test("C-INST-05d export preserves a source-authored scratch-index filename", () => {

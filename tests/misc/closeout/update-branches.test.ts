@@ -92,31 +92,6 @@ describe("commands/update — branch coverage", () => {
     expect([0, 1]).toContain(code);
   });
 
-  test("update where install throws non-clean error → per_target failed (update.ts:183)", () => {
-    const home = makeCrewHome();
-    const src = makeTempDir();
-    const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", skill], { home, streams: captureStreams().streams });
-    // Change source content then replace the dest with a no-marker dir
-    // so reinstall sees `untracked_directory`. Update treats it as a
-    // clean skip — so this hits the "skipped" kind, not "failed".
-    // Swap the MARKER for a different-name marker so the install throws
-    // inconsistent_marker, which update's catch re-categorizes as
-    // "skipped" (line 182 covered). For the "failed" branch we need an
-    // install exception that is none of those three codes, e.g. a
-    // filesystem error. Simulate by making dest read-only.
-    const { readState } =
-      require("../../../src/state/load.ts") as typeof import("../../../src/state/load.ts");
-    const entry = readState(home).installations[0]!;
-    void entry;
-    // Change the source so update re-stages.
-    writeFileSync(join(skill, "NEW.md"), "x");
-    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
-    const c = captureStreams();
-    const code = runCli(["update"], { home, streams: c.streams });
-    expect([0, 1]).toContain(code);
-  });
-
   test("update re-acquires tap source (update.ts:196)", () => {
     const home = makeCrewHome();
     const repo = makeTempDir();

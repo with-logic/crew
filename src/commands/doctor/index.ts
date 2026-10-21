@@ -4,7 +4,7 @@
  * Runs integrity checks (from `./checks.ts`) and optionally reconciles
  * recoverable drift via `./repair.ts`. `--repair --dry-run` runs the
  * checks and lists what a repair would address without applying it.
- * Marker-index construction lives in `./markers.ts` and is shared.
+ * Marker-index construction lives in `./markers/index.ts` and is shared.
  */
 
 import { readConfig } from "../../config/load.ts";
@@ -23,7 +23,7 @@ import {
   type Finding,
 } from "./checks.ts";
 import { applyRepairs } from "./coordinator.ts";
-import { buildMarkerIndex } from "./markers.ts";
+import { buildMarkerIndex } from "./markers/index.ts";
 import { renderDoctor } from "./render.ts";
 import { isRepairableCode } from "./repairable.ts";
 
@@ -44,7 +44,9 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
 
   const state = readState(home);
   const stateEntries = state.installations;
-  const markers = buildMarkerIndex(stateEntries, ctx.cwd);
+  const { markers, findings: inventoryFindings } = buildMarkerIndex(stateEntries, ctx.cwd);
+  findings.push(...inventoryFindings);
+  const markerInventoryBlocksRepair = inventoryFindings.length > 0;
 
   findings.push(...checkStateMarkerDrift(stateEntries, markers));
   if (verify) findings.push(...checkContentHashDrift(markers));
@@ -61,16 +63,25 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   // An unparseable config still skips the repair entirely: the rebuild
   // rewrites `config.yaml` taps from markers, so running it against a
   // file we could not read would discard whatever the user has there.
-  const applied = repair && !dryRun && config !== null;
+  const shouldApplyRepairs = repair && !dryRun;
+  const configReadable = config !== null;
+  // Emitted marker findings leave reconstruction and store cleanup unable to identify every live install.
+  const markerInventoryHasNoFindings = !markerInventoryBlocksRepair;
+  const applied = shouldApplyRepairs && configReadable && markerInventoryHasNoFindings;
   const repairs: AutoupdateRepair[] = applied ? applyRepairs(markers, home) : [];
 
-  const human = renderDoctor(findings, { repair, verify, dryRun, applied }, ctx.style, repairs);
-  // A `--repair` run resolves the repairable drift classes, so those
+  const human = renderDoctor(
+    findings,
+    { repair, verify, dryRun, applied, markerInventoryBlocksRepair },
+    ctx.style,
+    repairs,
+  );
+  // Applied repairs resolve repairable drift, so only then do those
   // findings stop counting against the exit code. Anything repair
   // can't fix (§11.2) still does — otherwise a repair would report
   // success while a real problem remains — as does a repair that was
   // attempted and failed. Without `--repair` (or on a dry run, or when
-  // an unparseable config skipped the repair), every error counts.
+  // config or marker-inventory errors skipped repair), every error counts.
   const blocking = findings.filter(
     (f) => f.level === "error" && !(applied && isRepairableCode(f.code)),
   );
@@ -80,7 +91,11 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
     exitCode,
     human,
     ...(ctx.flags.quiet
-      ? { stderr: failedRepairs.map((r) => sanitizeLine(redactText(r.message))) }
+      ? {
+          stderr: [...inventoryFindings, ...failedRepairs].map((diagnostic) =>
+            sanitizeLine(redactText(diagnostic.message)),
+          ),
+        }
       : {}),
     // §11.2: `repairs` describes what a repair did, so it appears on
     // every `--repair` response — including one where an unparseable

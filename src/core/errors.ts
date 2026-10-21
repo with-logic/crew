@@ -112,3 +112,10 @@ export function fail(
 ): never {
   throw new CrewError(code, message, details);
 }
+
+/** Preserve recognized errors; classify other local failures as usage_error (§13). */
+export function normalizeLocalError(err: unknown): CrewError {
+  return err instanceof CrewError
+    ? err
+    : new CrewError("usage_error", (err as Error).message ?? String(err));
+}

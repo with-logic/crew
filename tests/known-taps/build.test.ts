@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildKnownTapRegistry } from "../../src/known-taps/build/index.ts";
 import { parseKnownTapManifest } from "../../src/known-taps/build/manifest.ts";
@@ -98,16 +98,19 @@ describe("known tap registry builder", () => {
     const root = makeTempDir("crew-known-taps-");
     const repoA = join(root, "repo-a");
     const repoB = join(root, "repo-b");
-    mkdirSync(join(repoA, "catalog", "skills", "database"), { recursive: true });
-    makeSkill(join(repoA, "catalog", "skills"), "beta", skillFrontmatter({ name: "beta" }));
-    makeSkill(join(repoA, "catalog", "skills"), "alpha", skillFrontmatter({ name: "alpha" }));
+    const skillsA = join(repoA, "catalog", "skills");
+    mkdirSync(join(skillsA, "database"), { recursive: true });
+    makeSkill(skillsA, "beta\\..\\literal", skillFrontmatter({ name: "beta" }));
+    makeSkill(skillsA, "alpha", skillFrontmatter({ name: "alpha" }));
     makeSkill(
-      join(repoA, "catalog", "skills", "database"),
+      join(skillsA, "database"),
       "schema-review",
       skillFrontmatter({ name: "schema-review", description: "Review schema changes" }),
     );
+    const outside = makeSkill(root, "outside", skillFrontmatter({ name: "outside" }));
+    symlinkSync(outside, join(repoA, "catalog", "skills", "linked"));
     const pinnedA = makeGitRepo(repoA).sha;
-    makeSkill(join(repoA, "catalog", "skills"), "newer", skillFrontmatter({ name: "newer" }));
+    makeSkill(skillsA, "newer", skillFrontmatter({ name: "newer" }));
     commitAll(repoA, "newer skill");
     mkdirSync(repoB, { recursive: true });
     writeFileSync(join(repoB, "SKILL.md"), `---\n${skillFrontmatter({ name: "second" })}\n---\n`);
@@ -127,7 +130,7 @@ describe("known tap registry builder", () => {
     expect(registry.map((tap) => tap.name)).toEqual(["first", "second"]);
     expect(registry[0]?.skills.map((skill) => skill.path)).toEqual([
       "skills/alpha",
-      "skills/beta",
+      "skills/beta\\..\\literal",
       "skills/database/schema-review",
     ]);
     expect(registry[0]?.skills[2]?.namespace).toBe("database");

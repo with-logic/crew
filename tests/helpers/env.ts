@@ -4,13 +4,14 @@
  * directory.
  */
 
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentAdapter } from "../../src/agents/adapter.ts";
 import { ALL_AGENTS } from "../../src/agents/registry.ts";
 import type { OutputStreams } from "../../src/cli/output.ts";
 import { DEFAULT_TAP_NAME } from "../../src/config/defaults.ts";
+import { makeTempDir } from "./fixtures.ts";
 
 /** Capture stdout/stderr into a buffer. */
 export function captureStreams(): { streams: OutputStreams; stdout(): string; stderr(): string } {
@@ -45,7 +46,7 @@ const OFFLINE_CORE_TAP_URL = `file://${join(tmpdir(), "crew-offline-core-tap")}`
  * an unreachable local path (see `OFFLINE_CORE_TAP_URL`).
  */
 export function makeCrewHome(): string {
-  const home = mkdtempSync(join(tmpdir(), "crew-home-"));
+  const home = makeTempDir("crew-home-");
   activeCrewHome = home;
   writeFileSync(
     join(home, "config.yaml"),

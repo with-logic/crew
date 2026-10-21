@@ -8,7 +8,8 @@
 
 import type { TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
-import { isDirectory } from "../util/fs.ts";
+import { isSourceDirectory } from "../sources/read.ts";
+import { isSourceReadFailure } from "../util/source-read.ts";
 import { indexTap } from "./tap-index.ts";
 
 export interface CurrentTapChild {
@@ -23,7 +24,7 @@ export function currentTapChildren(
   rootDir: string,
 ): CurrentTapChild[] {
   const children: CurrentTapChild[] = [];
-  if (!isDirectory(rootDir)) return children;
+  if (!isSourceDirectory(rootDir, tap.kind === "path")) return children;
   if (hasSkillMd(rootDir)) {
     pushLoaded(children, rootDir, "");
     return children;
@@ -56,7 +57,8 @@ export function groupChildrenByName(
 function pushLoaded(children: CurrentTapChild[], path: string, tapRelativePath: string): void {
   try {
     children.push({ name: loadSkillName(path), path, tapRelativePath });
-  } catch {
+  } catch (err) {
+    if (isSourceReadFailure(err)) throw err;
     // Skip invalid names; same as tap indexing/search behavior.
   }
 }

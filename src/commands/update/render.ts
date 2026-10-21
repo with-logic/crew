@@ -102,10 +102,8 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
     }
   }
 
-  // Errors surfaced by re-expansion: a tap that couldn't be reached, or
-  // a discovered child that failed validation (§9 step 4). Both name the
-  // subject and the reason — an invalid child is the user's to fix, so
-  // "tap acme (invalid_skill)" alone would tell them nothing.
+  // Re-expansion errors name the subject and reason (§10.1.1), including
+  // tap access, child validation, staging, and target-install failures.
   const errorRows = input.tapReexpandRows.filter((r) => r.kind === "tap_error");
   for (const r of errorRows) {
     const code = r.error?.code ?? "unreachable";
@@ -139,8 +137,7 @@ function tally(rows: readonly UpdateRow[], addedCount: number, tapErrorCount: nu
     skipped: 0,
     sourceGone: 0,
     tapMissing: 0,
-    // Re-expansion errors are failures too: a child that failed
-    // validation was not added, and the run exits 1 for it.
+    // Re-expansion errors also count toward the exit-1 failure summary (§10.1.1).
     failed: tapErrorCount,
     added: addedCount,
   };

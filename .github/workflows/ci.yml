@@ -19,6 +19,17 @@ permissions:
   contents: read
 
 jobs:
+  case-copy:
+    runs-on: macos-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Refuse case-folded destination symlinks
+        run: bun run scripts/check-case-copy.ts
+
   check:
     # Ubuntu is plenty for `bun run check`; platform schedulers are
     # stubbed in tests, and release builds cross-compile from Linux.

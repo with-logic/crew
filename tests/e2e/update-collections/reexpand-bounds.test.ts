@@ -1,6 +1,6 @@
 /**
  * Bounds on what `crew update <selector>` re-expansion installs and
- * keeps selected (PRD §10.1, §10.1.1, C-UPD-36/37).
+ * keeps selected (PRD §10.1, §10.1.1, C-UPD-05/24/27/36/37).
  *
  * Re-expansion groups are keyed by `(tap, scope, project_root)`, so the
  * group behind a namespace selector spans the whole tap. Two things
@@ -10,9 +10,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, renameSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
+import type { Marker } from "../../../src/core/types.ts";
+import { readState } from "../../../src/state/load.ts";
+import { readJson } from "../../../src/util/json.ts";
 import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { buildNamespacedTap, bump, freshHome, installedBody, run } from "./helpers.ts";
 
@@ -94,4 +97,82 @@ describe("crew update entry identity across relocation", () => {
     expect(outcomes).not.toContain("mover:source_gone");
     expect(body("mover")).toContain("mover-v2");
   });
+});
+
+for (const [selector, criterion] of [
+  ["alpha", "C-UPD-05"],
+  ["acme/one", "C-UPD-27"],
+] as const) {
+  test(`${criterion} ${selector} preserves an unselected sibling's relocated state`, () => {
+    const home = freshHome();
+    const repo = buildNamespacedTap("upd-coll-relocation-", { one: ["alpha"], two: ["beta"] });
+    expect(run(home, ["tap", "add", `file://${repo}`, "acme"]).code).toBe(0);
+    expect(run(home, ["install", "acme"]).code).toBe(0);
+    const betaBefore = readState(home).installations.find((entry) => entry.name === "beta")!;
+    const betaBody = body("beta");
+    const betaMarkerPath = join(ccRoot, "beta", ".crew.json");
+    const betaMarker = readFileSync(betaMarkerPath, "utf8");
+
+    mkdirSync(join(repo, "skills", "moved"));
+    for (const [namespace, name] of [
+      ["one", "alpha"],
+      ["two", "beta"],
+    ] as const) {
+      renameSync(join(repo, "skills", namespace, name), join(repo, "skills", "moved", name));
+      makeSkill(join(repo, "skills", "moved"), name, skillFrontmatter({ name }), `${name}-v2`);
+    }
+    const newSha = commitAll(repo, "move and change alpha and beta");
+
+    const selected = run(home, ["update", selector, "--json"]);
+    expect(selected.code).toBe(0);
+    expect(selected.json().rows.map((row) => row.name)).toEqual(["alpha"]);
+    expect(body("alpha")).toContain("alpha-v2");
+    const alpha = readState(home).installations.find((entry) => entry.name === "alpha")!;
+    expect(alpha.source.path).toBe("skills/moved/alpha");
+    expect(alpha.resolved_sha).toBe(newSha);
+    expect(readState(home).installations.find((entry) => entry.name === "beta")).toEqual(
+      betaBefore,
+    );
+    expect(body("beta")).toBe(betaBody);
+    expect(readFileSync(betaMarkerPath, "utf8")).toBe(betaMarker);
+
+    const remaining = selector === "alpha" ? ["acme"] : [];
+    expect(run(home, ["update", ...remaining]).code).toBe(0);
+    const beta = readState(home).installations.find((entry) => entry.name === "beta")!;
+    expect(beta.source.path).toBe("skills/moved/beta");
+    expect(beta.resolved_sha).toBe(newSha);
+    expect(body("beta")).toContain("beta-v2");
+    expect(readJson<Marker>(betaMarkerPath).path).toBe(beta.source.path);
+  });
+}
+
+test("C-UPD-24 a selected skill's relocated dependency still updates", () => {
+  const home = freshHome();
+  const repo = buildNamespacedTap("upd-coll-dep-move-", { one: ["alpha", "beta"] });
+  makeSkill(
+    join(repo, "skills", "one"),
+    "alpha",
+    skillFrontmatter({
+      name: "alpha",
+      dependencies: ["beta"],
+    }),
+  );
+  commitAll(repo, "alpha depends on beta");
+  expect(run(home, ["tap", "add", `file://${repo}`, "acme"]).code).toBe(0);
+  expect(run(home, ["install", "acme"]).code).toBe(0);
+  expect(
+    readState(home).installations.find((entry) => entry.name === "beta")!.required_by,
+  ).toContain("alpha");
+
+  mkdirSync(join(repo, "skills", "two"));
+  renameSync(join(repo, "skills", "one", "beta"), join(repo, "skills", "two", "beta"));
+  makeSkill(join(repo, "skills", "two"), "beta", skillFrontmatter({ name: "beta" }), "beta-v2");
+  const newSha = commitAll(repo, "move and change beta");
+  const result = run(home, ["update", "alpha", "--json"]);
+  expect(result.code).toBe(0);
+  expect(result.json().rows.map((row) => row.name)).toEqual(["alpha", "beta"]);
+  expect(body("beta")).toContain("beta-v2");
+  const beta = readState(home).installations.find((entry) => entry.name === "beta")!;
+  expect(beta.source.path).toBe("skills/two/beta");
+  expect(beta.resolved_sha).toBe(newSha);
 });

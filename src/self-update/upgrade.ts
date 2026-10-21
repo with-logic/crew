@@ -10,6 +10,7 @@ import { dirname } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { CREW_VERSION } from "../core/version.ts";
 import { rmrf } from "../util/fs.ts";
+import { sanitizeLine } from "../util/redact.ts";
 import { writeVersionCheck } from "./check.ts";
 import { checksumAssetUrl, downloadChecksums, verifyAssetChecksum } from "./checksum.ts";
 import { downloadAssetToTemp, installBinary, releaseAssetName } from "./download.ts";
@@ -31,6 +32,8 @@ export interface SelfUpdateResult {
   readonly latestTag: string;
   /** True if a replacement actually happened; false when already up-to-date. */
   readonly replaced: boolean;
+  /** Non-fatal failure to remove the downloaded binary's temporary directory. */
+  readonly cleanupWarning?: string;
 }
 
 export interface SelfUpdateOptions {
@@ -74,15 +77,32 @@ export function runSelfUpdate(options: SelfUpdateOptions): SelfUpdateResult {
     verifyChecksumsSignature(checksumsText, signature);
   }
   const tempPath = downloadAssetToTemp(downloadUrl, DOWNLOAD_TIMEOUT_SECONDS);
+  let failure: unknown;
+  let cleanupWarning: string | undefined;
   try {
     verifyAssetChecksum(tempPath, assetName, checksumsText);
+    installBinary(tempPath, resolveDest(options.execPath));
+    writeVersionCheck(release.tag, options.home);
   } catch (err) {
-    rmrf(dirname(tempPath));
+    failure = err;
     throw err;
+  } finally {
+    // §10.3: retain the asset through its last consumer, then release its root.
+    try {
+      rmrf(dirname(tempPath));
+    } catch (err) {
+      cleanupWarning = sanitizeLine(
+        `couldn't remove self-update temporary directory ${dirname(tempPath)}: ${(err as Error).message}`,
+      );
+      if (failure instanceof Error) failure.message += `; cleanup warning: ${cleanupWarning}`;
+    }
   }
-  installBinary(tempPath, resolveDest(options.execPath));
-  writeVersionCheck(release.tag, options.home);
-  return { currentVersion, latestTag: release.tag, replaced: true };
+  return {
+    currentVersion,
+    latestTag: release.tag,
+    replaced: true,
+    ...(cleanupWarning === undefined ? {} : { cleanupWarning }),
+  };
 }
 
 /**

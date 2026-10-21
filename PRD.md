@@ -206,6 +206,11 @@ terminal in 8-bit mode reads C1 as an escape sequence — are rendered as
 `\xNN` escapes. An SCP-style remote (`git@host:owner/repo`) keeps its
 user, which names the protocol account rather than a secret (§13).
 
+Human-readable skill metadata follows the same C0, DEL, and C1
+control-character escaping rule before wrapping or styling. This includes
+descriptions, license, compatibility, homepage, and dependencies. JSON
+values and installed skill bytes are unchanged.
+
 ### 5.2 Global flags
 
 Accepted on any command where they apply:
@@ -466,7 +471,7 @@ With `--json`, help MUST emit a structured payload:
 │   └── <readable-prefix>-<sha256>/
 ├── cache/               # ephemeral git clones of ad-hoc git sources
 │   └── git/<host>/<owner>/<repo>@<ref>/
-├── locks/               # per-repository clone locks (see §14)
+├── locks/               # maintenance and per-repository clone locks (see §14)
 │   └── tap-<hash>
 
 ├── store/               # content-addressed canonical skill copies
@@ -478,7 +483,7 @@ With `--json`, help MUST emit a structured payload:
         └── Info.plist
 ```
 
-All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `repos/`, `state.json`, `config.yaml`, and `logs/` are durable. `locks/` holds coordination lockfiles and MUST NOT live under `cache/`: cleaning the cache must not remove an active lock. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
+All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` when no command is using its source exports (§14); `store/` is garbage-collected by `crew update` and `crew cache clean`; `repos/`, `state.json`, `config.yaml`, and `logs/` are durable. `locks/` holds coordination lockfiles and MUST NOT live under `cache/`: cleaning the cache must not remove an active lock. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
 
 **One clone per repository.** A tap row is identified by its
 `(url, subpath)` pair, so several taps can point into one repository —
@@ -1207,7 +1212,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
 
    **The materialized tree is a boundary.** The resolved location MUST be reached without traversing a symlink. A repository can commit a symlink at the very path a reference names; following it would read content from outside the requested commit — potentially from anywhere on the host filesystem.
 4. **Validate each candidate skill** against the Agent Skills specification:
-   - `SKILL.md` exists at the expected location.
+   - `SKILL.md` exists at the expected location and is not a symbolic link. Reject a symbolic-link manifest with `invalid_skill` before reading its contents, including when the link points inside the skill directory. Name-only indexing uses the same rule.
    - Frontmatter parses as YAML.
    - `name` matches `[a-z0-9][a-z0-9-]*`, length 1–64, no leading/trailing hyphen, and no consecutive hyphens. It MAY begin with a digit and need not match the parent directory name.
    - `description` is present, non-empty, length ≤ 1024 characters.
@@ -1457,11 +1462,35 @@ On every `crew update` run, for each group of state entries sharing
    `source.tap` pointing at this tap. This is how `crew install
    @with-logic/skills` + autoupdate picks up new skills as the team
    adds them, with no follow-up `crew install`.
+   Before copying or reporting `would_add`, enforce §5.4 against state
+   at the same scope/project root and markers at every intended physical
+   target. A different canonical source produces a per-child
+   `name_conflict`, including with `--force`; preserve its bytes, marker,
+   and state, and continue other children. A missing state tap or a
+   present marker whose source metadata cannot be read or validated
+   cannot establish shared ownership and also produces `name_conflict`.
+   For a new child without a same-source state identity, full §9 step 4
+   validation precedes ownership checks: invalid frontmatter produces
+   `invalid_skill` even when a conflicting owner exists.
+   Same-source tap aliases remain duplicates, but cannot hide another
+   conflicting owner at that location. A directory without a marker
+   retains the existing `untracked_directory`/`--force` rules (§13).
    Child discovery reads only the declared `name`, so validation here
    is mandatory: a child whose frontmatter is invalid (missing
    `description`, over-long fields, …) MUST be reported as a per-child
    failure carrying `invalid_skill` and MUST NOT be installed, in both
    real and `--dry-run` runs. The run exits 1.
+   If installation fails for any applicable target group, attempt the
+   remaining groups, report a per-child `tap_error` naming each failed
+   target and its reason, disclose successful targets whose copies remain
+   on disk, and exit 1. Preserve a recognized error code; otherwise use
+   `usage_error` for an unclassified local failure. Do not
+   record a state entry for that child unless every applicable target
+   group succeeds, so the next non-dry-run update that re-expands the
+   affected tap group retries it. Other children and existing skills
+   continue processing. Successful copies may remain on
+   disk after a failed child attempt; withholding its state entry does
+   not roll those copies back.
 3. For each skill in state attributed to this tap whose directory is
    **no longer present** under the resolved root: reports `source_gone`
    and leaves the local install untouched (per the upstream-deletion
@@ -1742,6 +1771,16 @@ the latest-release URL (used by tests and private forks).
    update notice doesn't nag the user about a version they already
    installed.
 
+After consuming the downloaded binary, remove its temporary directory,
+including when verification, replacement, or version recording fails.
+A cleanup failure MUST preserve the completed update or original failure.
+On success, report a non-fatal warning identifying the retained directory
+and cleanup error on stderr (including with `--quiet`), or in an optional
+`cleanup_warning` field with `--json`; omit that field when cleanup succeeds.
+On failure, append the secondary cleanup diagnostic to the original error
+message while preserving its name, exit code, and details. Escape control
+characters in the diagnostic (§5.2).
+
 **Flags.**
 
 - `--check` — query the release feed and print whether an update is
@@ -1939,6 +1978,8 @@ off.
 7. If autoupdate is enabled in config, the platform scheduler is actually loaded.
 8. For every project-scope entry, `project_root` exists on disk and a `.crew.json` marker lives under `<project_root>/<adapter-base>/<name>/`. A `project_root` that no longer exists produces a `missing_project_root` finding (warn, not error — the user may have simply moved the project, and the right fix is a `crew uninstall` from their new location).
 
+Markers must be readable JSON objects with the required §7.5 field types, schema version, scope and nonempty agent list. Their tap metadata must pass the same validation as a config tap (§6.1). A missing marker is absent; an unreadable marker produces an error-level `marker_unreadable` finding, and malformed JSON or invalid marker fields produce an error-level `marker_invalid` finding. Findings identify the marker path. Either marker finding prevents reconstruction or deletion: it causes `--repair` to apply no repairs, preserving state, config and the store, and exit 1. Repair previews count zero findings as addressable until these marker problems are corrected.
+
 `--verify` includes check 3 (hash recomputation); without it, check 3 is skipped for speed.
 
 `--repair` attempts to fix:
@@ -1993,7 +2034,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 | `invalid_ref` | 4 | The skill reference failed to parse (§8.4). |
 | `invalid_skill` | 4 | A skill directory failed spec validation. Message names the failing field. |
 | `no_skills_found` | 4 | A directory source expanded to zero valid skills. |
-| `source_unreachable` | 5 | Network or git failure acquiring a source. |
+| `source_unreachable` | 5 | Network or git failure acquiring a source, or filesystem failure reading source files. |
 | `ref_not_found` | 5 | Ref doesn't exist in the repo. |
 | `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
 | `tap_missing` | 0 | On update, the installed skill's tap is no longer in `config.yaml` (e.g. after `crew tap remove --force`). Soft outcome; local install is preserved. Never causes a non-zero exit. |
@@ -2007,7 +2048,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 | `not_installed_here` | 6 | Uninstall agent has no marker. |
 | `no_agents` | 4 | No agent tools detected or all disabled. |
 | `config_invalid` | 4 | `config.yaml` did not parse, or a tap name is not a single directory component (contains `/`, `\`, or is `.`/`..`). |
-| `state_locked` | 7 | Could not acquire a coordination lock within the timeout — either the state lock (`state.json.lock`) or a per-repository clone lock (§14). |
+| `state_locked` | 7 | Could not acquire a coordination lock within the timeout — the state lock (`state.json.lock`), maintenance lock, or a per-repository clone lock (§14). |
 | `autoupdate_failure` | 8 | Autoupdate enable/disable couldn't load/unload the platform scheduler. |
 | `self_update_unavailable` | 5 | `crew self-update` couldn't reach the release feed, the asset is missing for the current arch, or the named `--version` doesn't exist. |
 | `self_update_failed` | 8 | `crew self-update` fetched a new binary but couldn't replace the running one (e.g. the install prefix isn't writable). |
@@ -2067,6 +2108,7 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
    - Locks are acquired in a deterministic order (sorted physical clone path) so two runs touching the same taps cannot deadlock, and use the same 30 s timeout and `state_locked` failure as the state lock.
    - This applies to read-only previews too: `crew update --dry-run` does not take the state lock (§10.1.1) but DOES take clone locks, because it still fetches.
    - The state lock and clone locks are separate. A command that takes both acquires the state lock first.
+5. Commands using ephemeral source exports or the store hold a separate **maintenance advisory lock** at `locks/maintenance.lock` for their whole command handler, including source resolution, staging, installation, and collection. This covers `install`, `update` (including `--dry-run`), `outdated`, `info`, `search`, `doctor` (including read-only checks), `cache clean` (including `--dry-run`), and tap acquisition/refresh (`tap add`, shorthand add, and `tap update`). Tap operations acquire it after argument validation and retain it through acquisition/refresh; source-free tap `--dry-run` previews and rejected tap arguments do not acquire it. Consequently, no collector can remove another command's in-flight store entry or export. Acquire maintenance before any state or clone lock; release it on success or failure, using the same 30 s timeout and `state_locked` failure. Its lockfiles live outside `cache/` and `store/`. Nested synchronous source consumers in the same process may share the maintenance lock; a nested collector must still wait for the outer source consumer to finish. Read-only commands still never acquire the state lock. Commands that do not use these trees, including `list`, `tap list`, `help`, and `version`, do not acquire the maintenance lock.
 
 ## 15. Exit codes
 
@@ -2422,6 +2464,7 @@ Implementations and test suites refer to criteria by ID.
 | C-SPEC-12 | §9 | Validation errors name the offending field in the human-readable message. |
 | C-SPEC-13 | §9 | No file is written to any agent when validation fails. |
 | C-SPEC-14 | §9 | A skill whose `name` begins with a digit passes validation if the rest of the name is otherwise valid. |
+| C-SPEC-15 | §9 | A symbolic-link `SKILL.md` is rejected with `invalid_skill` before full or name-only metadata loading; no files are installed into an agent. Absolute, relative, and internal links are all rejected. |
 
 #### C-INST: Install (§9)
 
@@ -2579,6 +2622,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-35 | §10.1 | A tap named as a selector whose refresh fails is a hard failure (exit 1), even with nothing installed from it; an unnamed configured tap whose refresh fails remains a warning and the run exits 0. |
 | C-UPD-36 | §10.1, §10.1.1 | A namespace selector bounds re-expansion additions to that namespace: a child added upstream under a different namespace of the same tap is not installed. Naming the tap installs both. |
 | C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. |
+| C-UPD-38 | §10.1.1 | A new tap child whose target installation fails produces a per-child `tap_error` naming failed targets and reasons and disclosing successful targets whose copies remain on disk. It exits 1 and is absent from state until every applicable target group succeeds. Remaining target groups, other children, and existing entries still process; the next non-dry-run update that re-expands the affected tap group retries the child. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
@@ -2717,6 +2761,7 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-12 | §11.2 | `crew doctor --repair --dry-run` reports the findings a repair would address and changes nothing: state, config, and the store are byte-identical afterward. |
 | C-STATE-12a | §11.2 | Findings `--repair` cannot fix (`customized`, `agent_missing`, `config_invalid`, `missing_project_root`) are excluded from both the dry-run "would address" count and the post-repair "addressed" count; an unrepairable error-level finding keeps the exit code non-zero after `--repair`. |
 | C-STATE-13 | §6 | `crew cache clean --dry-run` reports the bytes and orphan store entries a clean would free and deletes nothing. |
+| C-STATE-14 | §11.2 | Unreadable or invalid markers produce path-specific error findings without aborting doctor; repair and repair previews apply no repairs or destructive inference from the incomplete inventory. State, config and store remain unchanged, and the run exits 1. A genuinely missing marker remains repairable drift. |
 
 #### C-AUTO: Autoupdate (§10.2)
 
@@ -2770,6 +2815,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CONC-02 | §14 | If the lock is not acquired within the timeout, the second process exits with `state_locked`, exit 7. |
 | C-CONC-03 | §14 | Read-only commands (`list`, `info`, `search`, `agents`, `tap list`, `help`, `version`) do NOT take the state lock. |
 | C-CONC-04 | §14 | The lock is released when the holding process exits for any reason (including crash). |
+| C-CONC-05 | §6, §14 | A maintenance collector waits while another command consumes a source export or stages an install; timeout returns `state_locked` without deleting its bytes. Read-only source commands use this separate coordination lock without creating `state.json`. |
 
 #### C-CLI: CLI contract (§5)
 

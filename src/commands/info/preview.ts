@@ -69,7 +69,10 @@ function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
 }
 
 function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
-  const { valid } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
+  const { valid } = expandSkills(dir, {
+    recursive: tap.discovery === "recursive",
+    followStandardLayoutSymlinks: tap.kind === "path",
+  });
   return valid.map(skillInfoOf);
 }
 

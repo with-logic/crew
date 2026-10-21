@@ -5,6 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { defaultPrompt, realIO } from "../../../src/cli/prompt.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
 
 describe("defaultPrompt real IO seam", () => {
   // These tests drive each `realIO` method in isolation — we don't
@@ -46,11 +47,9 @@ describe("defaultPrompt real IO seam", () => {
   });
 
   test("realIO.readByte reads from the given fd (EOF on an empty file)", () => {
-    const { openSync, closeSync, writeFileSync, mkdtempSync } =
-      require("node:fs") as typeof import("node:fs");
+    const { openSync, closeSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
     const { join } = require("node:path") as typeof import("node:path");
-    const { tmpdir } = require("node:os") as typeof import("node:os");
-    const dir = mkdtempSync(join(tmpdir(), "crew-prompt-"));
+    const dir = makeTempDir("crew-prompt-");
     const empty = join(dir, "empty");
     writeFileSync(empty, "");
     const fd = openSync(empty, "r");

@@ -5,11 +5,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { ALL_AGENTS } from "../../../src/agents/registry.ts";
 import { withOriginalAdapter } from "../../helpers/env.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
 
 // Every adapter redirects its user path detection via $HOME. Swap in
 // a throwaway HOME so the real `isDirectory` checks land on a
@@ -18,7 +18,7 @@ const realHome = process.env["HOME"];
 let tempHome: string;
 
 beforeEach(() => {
-  tempHome = mkdtempSync(join(tmpdir(), "crew-adapter-test-"));
+  tempHome = makeTempDir("crew-adapter-test-");
   process.env["HOME"] = tempHome;
 });
 

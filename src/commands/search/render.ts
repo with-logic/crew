@@ -1,8 +1,9 @@
 /**
- * Human output rendering for `crew search` (§16.6).
+ * Human output rendering for `crew search` (§5.1, §16.6).
  */
 
 import { columns, truncate } from "../../util/format.ts";
+import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 import { knownInstallRef, knownSkillRef, knownTapSource } from "./known.ts";
 import type { KnownSearchHit, SearchHit } from "./types.ts";
@@ -122,9 +123,10 @@ function formatConfiguredRows(hits: readonly SearchHit[], style: Styler, width: 
 }
 
 function formatSearchDescription(hit: SearchHit, descBudget: number): string {
-  if (!hit.same_name_installed) return truncate(hit.description, descBudget);
+  const description = sanitizeLine(hit.description);
+  if (!hit.same_name_installed) return truncate(description, descBudget);
   const budget = Math.max(SAME_NAME_NOTE.length, descBudget);
-  const suffix = hit.description.length === 0 ? "" : ` — ${hit.description}`;
+  const suffix = description.length === 0 ? "" : ` — ${description}`;
   return truncate(`${SAME_NAME_NOTE}${suffix}`, budget);
 }
 
@@ -140,7 +142,9 @@ function formatKnownRows(hits: readonly KnownSearchHit[], style: Styler, width: 
   const descBudget = Math.max(20, width - descStart);
   const rows = hits.map((h) => [
     `    ${knownSkillRef(h)}`,
-    style.dim(`${truncate(h.description, descBudget)} (crew install ${knownInstallRef(h)})`),
+    style.dim(
+      `${truncate(sanitizeLine(h.description), descBudget)} (crew install ${knownInstallRef(h)})`,
+    ),
   ]);
   return columns(rows, 2);
 }
