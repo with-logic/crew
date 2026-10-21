@@ -2,8 +2,8 @@
  * Marker-index construction for `crew doctor`.
  *
  * Walks every adapter's user base once, then every distinct
- * `project_root` in state (plus the current cwd) for project-scope
- * markers. A `project_root` that doesn't exist on disk is silently
+ * `project_root` in state (plus the current cwd and retained scan
+ * candidates) for project-scope markers. A root missing on disk is silently
  * skipped — `checkProjectRoots` already reports it, so reporting
  * again here would be noise.
  *
@@ -37,11 +37,13 @@ export interface MarkerEntry {
 export function buildMarkerIndex(
   stateEntries: readonly StateEntry[],
   cwd: string,
-): { markers: MarkerEntry[]; findings: Finding[] } {
+  additionalProjectRoots: readonly string[] = [],
+): { markers: MarkerEntry[]; findings: Finding[]; projectRoots: readonly string[] } {
   const markers: MarkerEntry[] = [];
   const inventoryFindings = new Map<string, Finding>();
   const seen = new Set<string>();
-  const projectRoots = new Set<string>([cwd]);
+  // §11.2: a last-entry uninstall must not hide other markers at a previously scanned root.
+  const projectRoots = new Set<string>([cwd, ...additionalProjectRoots]);
   for (const e of stateEntries) {
     if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
@@ -82,7 +84,7 @@ export function buildMarkerIndex(
       }
     }
   }
-  return { markers, findings: [...inventoryFindings.values()] };
+  return { markers, findings: [...inventoryFindings.values()], projectRoots: roots };
 }
 
 /** Scope labels disambiguate only an actual shared physical base (§11.1). */
