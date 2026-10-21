@@ -15,8 +15,9 @@
 
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapSource } from "../../core/types.ts";
+import { type RejectedReferenceSkill, withRejectedManifests } from "./diagnostics.ts";
 import { ambiguityError, twoSegmentMissError } from "./errors.ts";
-import { indexTapAt, lookupInTap, safeIndex } from "./tap-index-lookup.ts";
+import { indexTapAt, lookupInIndex, safeIndex } from "./tap-index-lookup.ts";
 import type { NonTapNameCandidate, TapRoots } from "./types.ts";
 
 /** `<tap>/<namespace>/<skill>` — unambiguous, so it matches or throws. */
@@ -39,10 +40,17 @@ export function resolveThreeSegment(
   const locs = index.skills.get(source.name) ?? [];
   const match = locs.find((l) => l.namespace === source.namespace);
   if (!match) {
-    throw new CrewError(
-      "invalid_ref",
-      `\`${source.tap}/${source.namespace}/${source.name}\` doesn't exist — no skill \`${source.name}\` found in namespace \`${source.namespace}\` of tap \`${source.tap}\``,
-      { tap: source.tap, namespace: source.namespace, name: source.name },
+    const rejected: RejectedReferenceSkill[] = [];
+    for (const skill of index.skipped) {
+      if (skill.namespace === source.namespace) rejected.push({ ...skill, tap: tap.name });
+    }
+    throw withRejectedManifests(
+      new CrewError(
+        "invalid_ref",
+        `\`${source.tap}/${source.namespace}/${source.name}\` doesn't exist — no skill \`${source.name}\` found in namespace \`${source.namespace}\` of tap \`${source.tap}\``,
+        { tap: source.tap, namespace: source.namespace, name: source.name },
+      ),
+      rejected,
     );
   }
   return { kind: "skill", tap, location: match };
@@ -58,7 +66,12 @@ export function resolveTwoSegment(
   const first = source.tap!;
   const second = source.name;
   const tap = config.taps.find((t) => t.name === first);
-  const asTapSkill = tap ? lookupInTap(tap, home, second, roots) : null;
+  const tapIndex = tap ? safeIndex(tap, home, roots) : null;
+  const asTapSkill = tap && tapIndex ? lookupInIndex(tap, tapIndex, second) : null;
+  const rejected: RejectedReferenceSkill[] = [];
+  if (tap && tapIndex) {
+    for (const skill of tapIndex.skipped) rejected.push({ ...skill, tap: tap.name });
+  }
 
   // Collect namespace candidates: `<first>` is a namespace in some tap
   // that holds a skill named `<second>`.
@@ -67,6 +80,9 @@ export function resolveTwoSegment(
     if (t === tap) continue;
     const idx = safeIndex(t, home, roots);
     if (!idx) continue;
+    for (const skill of idx.skipped) {
+      if (skill.namespace === first) rejected.push({ ...skill, tap: t.name });
+    }
     const nsMembers = idx.namespaces.get(first);
     if (!nsMembers) continue;
     const loc = nsMembers.find((m) => m.name === second);
@@ -87,5 +103,5 @@ export function resolveTwoSegment(
       `\`${first}/${second}\` is a namespaced skill in multiple taps`,
     );
   }
-  throw twoSegmentMissError(first, second, source.ref);
+  throw withRejectedManifests(twoSegmentMissError(first, second, source.ref), rejected);
 }

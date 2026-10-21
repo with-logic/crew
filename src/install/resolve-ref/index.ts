@@ -23,7 +23,8 @@
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapSource } from "../../core/types.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
-import { enumerateCandidates } from "../attribute-bare-name.ts";
+import { scanNameCandidates } from "../attribute-bare-name.ts";
+import { withRejectedManifests } from "./diagnostics.ts";
 import { ambiguityError, flagFor } from "./errors.ts";
 import { resolveThreeSegment, resolveTwoSegment } from "./qualified.ts";
 import type { KindHint, NonTapNameCandidate, TapRoots } from "./types.ts";
@@ -76,16 +77,25 @@ function resolveBare(
   kindHint: KindHint,
   roots: TapRoots,
 ): NameCandidate {
-  const all = enumerateCandidates(name, config, home, roots);
+  const { candidates: all, rejected } = scanNameCandidates(name, config, home, roots);
+  const scopedRejections =
+    kindHint === "tap"
+      ? []
+      : kindHint === "namespace"
+        ? rejected.filter((skill) => skill.namespace === name)
+        : rejected;
 
   if (kindHint === "non-tap") {
     const filtered = all.filter((c): c is NonTapNameCandidate => c.kind !== "tap");
     if (filtered.length === 0) {
       const tapNames = config.taps.map((t) => t.name).join(", ");
-      throw new CrewError(
-        "invalid_ref",
-        `\`${name}\` isn't a skill or namespace in any configured tap (searched: ${tapNames || "<none>"})`,
-        { name },
+      throw withRejectedManifests(
+        new CrewError(
+          "invalid_ref",
+          `\`${name}\` isn't a skill or namespace in any configured tap (searched: ${tapNames || "<none>"})`,
+          { name },
+        ),
+        scopedRejections,
       );
     }
     if (filtered.length === 1) return filtered[0]!;
@@ -95,10 +105,13 @@ function resolveBare(
   if (kindHint !== null) {
     const filtered = all.filter((c) => c.kind === kindHint);
     if (filtered.length === 0) {
-      throw new CrewError(
-        "invalid_ref",
-        `\`${name}\` is not a ${kindHint}; rerun without \`--${flagFor(kindHint)}\` or pick a different value`,
-        { name, kind: kindHint },
+      throw withRejectedManifests(
+        new CrewError(
+          "invalid_ref",
+          `\`${name}\` is not a ${kindHint}; rerun without \`--${flagFor(kindHint)}\` or pick a different value`,
+          { name, kind: kindHint },
+        ),
+        scopedRejections,
       );
     }
     if (filtered.length === 1) return filtered[0]!;
@@ -107,11 +120,14 @@ function resolveBare(
 
   if (all.length === 0) {
     const tapNames = config.taps.map((t) => t.name).join(", ");
-    throw new CrewError(
-      "invalid_ref",
-      `\`${name}\` was not found in any configured tap.`,
-      { name },
-      `Searched: ${tapNames || "<none>"}.`,
+    throw withRejectedManifests(
+      new CrewError(
+        "invalid_ref",
+        `\`${name}\` was not found in any configured tap.`,
+        { name },
+        `Searched: ${tapNames || "<none>"}.`,
+      ),
+      scopedRejections,
     );
   }
   if (all.length === 1) return all[0]!;
