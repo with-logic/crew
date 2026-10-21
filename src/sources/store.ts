@@ -12,16 +12,16 @@
  *     longer referenced by state or any marker.
  */
 
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { crewHome, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
-import { displayText } from "../refs/display-url.ts";
 import { assertSkillFile } from "../skill/file.ts";
-import { atomicReplace, ensureDir, rmrf } from "../util/fs.ts";
+import { atomicReplace, ensureDir } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
-import { safePath, sanitizeLine } from "../util/redact.ts";
+import { safePath } from "../util/redact.ts";
 import { copySourceFile, copySourceTree, hashSourceDirectory } from "./read.ts";
+import { withStoreStaging } from "./staging.ts";
 
 /** Record returned after staging. */
 export interface StoredSkill {
@@ -60,27 +60,13 @@ export function stageIntoStore(
   progress(`staging ${safePath(name)}@${shortSha} into ${safePath(storePath)}`);
 
   ensureDir(join(storePath, "..")); // parents
-  const staging = mkdtempSync(`${storePath}.staging-`);
-  try {
+  withStoreStaging(storePath, (staging) => {
     if (isGistFile) {
       assertSkillFile(sourcePath);
       copySourceFile(sourcePath, join(staging, "SKILL.md"));
     } else copySourceTree(sourcePath, staging);
     atomicReplace(staging, storePath);
-  } catch (err) {
-    try {
-      rmrf(staging);
-    } catch (cleanupError) {
-      // These filesystem/validation operations throw native Error or CrewError (§9 step 8).
-      const primary = err as Error;
-      primary.message += sanitizeLine(
-        displayText(
-          `; store staging cleanup failed; retained path \`${staging}\`: ${(cleanupError as Error).message}`,
-        ),
-      );
-    }
-    throw err;
-  }
+  });
 
   const contentHash = hashDirectory(storePath);
   return { storePath, contentHash, shortSha, reused: false };
