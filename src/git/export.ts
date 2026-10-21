@@ -25,6 +25,7 @@ import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
+import { cleanupFailedExport, withExportCleanup } from "../util/export-cleanup.ts";
 import { ensureDir, rmrf } from "../util/fs.ts";
 import { type GitProcessError, runGit } from "./exec.ts";
 import { assertNoSymlinkEscape } from "./tree-safety.ts";
@@ -60,15 +61,14 @@ export function exportTreeAt(
   const selectedPath = subpath.length > 0 ? subpath : ".";
   const pathspec = options.literalPathspec ? `:(literal)${selectedPath}` : selectedPath;
   const args = [`--work-tree=${dest}`, "checkout", sha, "--", pathspec];
-  try {
-    runGit(args, { cwd: clonePath, env: { GIT_INDEX_FILE: indexFile } });
-  } catch (err) {
-    // `runGit` only throws `GitProcessError`.
-    const ge = err as GitProcessError;
-    rmrf(indexFile);
-    throw exportFailure(ge, sha, subpath, selectedPath, clonePath);
-  }
-  rmrf(indexFile);
+  withExportCleanup(() => {
+    try {
+      runGit(args, { cwd: clonePath, env: { GIT_INDEX_FILE: indexFile } });
+    } catch (err) {
+      // `runGit` only throws `GitProcessError`.
+      throw exportFailure(err as GitProcessError, sha, subpath, selectedPath, clonePath);
+    }
+  }, [{ cleanupPath: indexFile, cleanup: () => rmrf(indexFile) }]);
 }
 
 /**
@@ -100,7 +100,8 @@ function exportFailure(
 
 /**
  * Run `fn` against a scratch export of `sha`, then delete the scratch
- * directory when `fn` returns or throws. Cleanup IO errors propagate;
+ * directory when `fn` returns or throws. Cleanup IO errors propagate
+ * after success, or annotate the original failure when both fail;
  * `crew cache clean` can remove any leftover scratch directories.
  *
  * `fn` receives the directory matching the source root: the export root
@@ -119,16 +120,13 @@ export function withExportedTree<T>(
   options: ExportPathOptions = {},
 ): T {
   const tree = createExportedTree({ clonePath, sha, subpath, home, ...options });
-  try {
-    return fn(tree.rootDir);
-  } finally {
-    tree.cleanup();
-  }
+  return withExportCleanup(() => fn(tree.rootDir), [tree]);
 }
 
 /** A captured tree whose owner releases it after its last reader (§9 step 3). */
 export interface ExportedTree {
   readonly rootDir: string;
+  readonly cleanupPath: string;
   readonly cleanup: () => void;
 }
 
@@ -153,10 +151,9 @@ export function createExportedTree(options: ExportOptions): ExportedTree {
     exportTreeAt(clonePath, sha, subpath, dest, options);
     const rootDir = subpath.length > 0 ? join(dest, subpath) : dest;
     assertNoSymlinkEscape(dest, rootDir, subpath);
-    return { rootDir, cleanup: () => rmrf(dest) };
+    return { rootDir, cleanupPath: dest, cleanup: () => rmrf(dest) };
   } catch (err) {
-    rmrf(dest);
-    throw err;
+    cleanupFailedExport(err, [{ cleanupPath: dest, cleanup: () => rmrf(dest) }]);
   }
 }
 

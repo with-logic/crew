@@ -1484,6 +1484,19 @@ On every `crew update` run, for each group of state entries sharing
    `source.tap` pointing at this tap. This is how `crew install
    @with-logic/skills` + autoupdate picks up new skills as the team
    adds them, with no follow-up `crew install`.
+   Before copying or reporting `would_add`, enforce §5.4 against state
+   at the same scope/project root and markers at every intended physical
+   target. A different canonical source produces a per-child
+   `name_conflict`, including with `--force`; preserve its bytes, marker,
+   and state, and continue other children. A missing state tap or a
+   present marker whose source metadata cannot be read or validated
+   cannot establish shared ownership and also produces `name_conflict`.
+   For a new child without a same-source state identity, full §9 step 4
+   validation precedes ownership checks: invalid frontmatter produces
+   `invalid_skill` even when a conflicting owner exists.
+   Same-source tap aliases remain duplicates, but cannot hide another
+   conflicting owner at that location. A directory without a marker
+   retains the existing `untracked_directory`/`--force` rules (§13).
    Child discovery reads only the declared `name`, so validation here
    is mandatory: a child whose frontmatter is invalid (missing
    `description`, over-long fields, …) MUST be reported as a per-child

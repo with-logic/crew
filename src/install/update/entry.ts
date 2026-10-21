@@ -21,6 +21,7 @@ import { hashSourceDirectory } from "../../sources/read.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
+import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { peekResolvedSha } from "./peek.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
 import { entryWithGistFilename } from "./source-path.ts";
@@ -64,7 +65,7 @@ export function updateOneEntry(
   } catch (err) {
     const ce = err as CrewError;
     const soft = ce.code === "no_skills_found" || ce.code === "invalid_ref";
-    if (soft) {
+    if (soft && !hasExportCleanupFailure(ce)) {
       return {
         row: rowFor(entry, { kind: "source_gone" }),
         updatedState: state,
