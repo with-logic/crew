@@ -12,6 +12,7 @@
  * The clone is the one validation a preview cannot perform.
  */
 
+import { withSourceMaintenanceLock } from "../../cli/maintenance.ts";
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapConfig } from "../../core/types.ts";
@@ -82,12 +83,14 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   // initial assignment — `withStateLock`'s callback assigns later but
   // TS doesn't trace control flow into closures.
   const out: { value: TapAddOutcome } = { value: "added" };
-  withStateLock(() => {
-    const config = readConfig(ctx.home);
-    const plan = planAdd(config, input);
-    applyAdd(ctx, config, plan, input);
-    out.value = plan.outcome;
-  }, ctx.home);
+  withSourceMaintenanceLock(ctx, () =>
+    withStateLock(() => {
+      const config = readConfig(ctx.home);
+      const plan = planAdd(config, input);
+      applyAdd(ctx, config, plan, input);
+      out.value = plan.outcome;
+    }, ctx.home),
+  );
   return renderTapAdd(out.value, name, target, false, ctx.style);
 }
 

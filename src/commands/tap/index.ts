@@ -12,6 +12,7 @@
  */
 
 import { statSync } from "node:fs";
+import { withSourceMaintenanceLock } from "../../cli/maintenance.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
@@ -76,7 +77,9 @@ function tapUpdate(ctx: CommandContext, args: readonly string[]): CommandOutput 
   const dryRun = ctx.flags.dryRun;
   const rows: TapRefreshRow[] = dryRun
     ? planRefresh(selected)
-    : withTapLocks(selected, ctx.home, () => refreshTaps(selected, ctx.home));
+    : withSourceMaintenanceLock(ctx, () =>
+        withTapLocks(selected, ctx.home, () => refreshTaps(selected, ctx.home)),
+      );
   const anyFailed = rows.some((r) => r.kind === "failed");
   return {
     exitCode: anyFailed ? 1 : 0,

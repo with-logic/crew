@@ -19,11 +19,13 @@ for(const agent of ALL_AGENTS){
  agent.projectPath=()=>${JSON.stringify(target)};
 }
 let paused=false;
+const workTreePrefix="--work-tree=";
 const previous=setGitRunner((args,options)=>{
  const result=previous(args,options);
- if(!paused&&args.some(a=>a.startsWith("--work-tree="))){
+ const workTreeArg=args.find(a=>a.startsWith(workTreePrefix));
+ if(!paused&&workTreeArg){
   paused=true;
-  writeFileSync(${JSON.stringify(barrier)},args.find(a=>a.startsWith("--work-tree=")).slice(12));
+  writeFileSync(${JSON.stringify(barrier)},workTreeArg.slice(workTreePrefix.length));
   const deadline=Date.now()+15000;
   while(!existsSync(${JSON.stringify(`${barrier}.release`)})){
    if(Date.now()>deadline)throw new Error("barrier timed out");
@@ -41,6 +43,7 @@ process.exitCode=runCli(["install",...${JSON.stringify(refs)},"--agent","claude-
   });
 }
 
+/** Poll for up to ten seconds; false means the barrier did not appear before timeout. */
 export async function waitForBarrier(barrier: string): Promise<boolean> {
   const deadline = Date.now() + 10_000;
   while (!existsSync(barrier) && Date.now() < deadline) await Bun.sleep(10);

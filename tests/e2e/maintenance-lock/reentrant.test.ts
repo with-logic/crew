@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { ALL_AGENTS } from "../../../src/agents/registry.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
+import { paths } from "../../../src/core/paths.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 
@@ -84,10 +85,14 @@ process.exitCode=runCli(["cache","clean","--json"],{home:${JSON.stringify(home)}
             expect(external.exitCode).toBe(7);
             expect(JSON.parse(external.stdout.toString()).error.name).toBe("state_locked");
             // A nested collector must still wait while the outer source bytes are live.
-            collectorCode = runCli(["cache", "clean", "--json"], {
-              home,
-              streams: captureStreams().streams,
-            });
+            for (const args of [["cache", "clean"], ["update"], ["doctor", "--repair"]]) {
+              const collector = captureStreams();
+              collectorCode = runCli([...args, "--json"], { home, streams: collector.streams });
+              expect(collectorCode).toBe(7);
+              const error = JSON.parse(collector.stdout()).error;
+              expect(error.name).toBe("state_locked");
+              expect(error.details.lockPath).toBe(join(paths(home).locksDir, "maintenance.lock"));
+            }
           },
         },
       });

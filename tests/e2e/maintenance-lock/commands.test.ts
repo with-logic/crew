@@ -7,6 +7,7 @@ import { runCli } from "../../../src/cli/main.ts";
 import { paths } from "../../../src/core/paths.ts";
 import { acquireLock } from "../../../src/util/advisory-lock.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 
 const sourceCommands = [
   ["install", "./unused"],
@@ -70,4 +71,40 @@ test("C-CONC-05 maintenance lock releases after handler errors and cache cleanin
   expect(existsSync(target)).toBe(true);
   expect(existsSync(`${target}.lock`)).toBe(false);
   expect(existsSync(paths(home).cacheDir)).toBe(false);
+});
+
+test("C-CONC-05 tap previews and rejected arguments do not wait for maintenance", () => {
+  const home = makeCrewHome();
+  const source = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
+  const lock = acquireLock(join(paths(home).locksDir, "maintenance"));
+  const previous = process.env["CREW_LOCK_TIMEOUT_MS"];
+  process.env["CREW_LOCK_TIMEOUT_MS"] = "100";
+  try {
+    for (const args of [
+      ["tap", "add", source, "--dry-run"],
+      ["tap", source, "--dry-run"],
+      ["tap", "update", "--dry-run"],
+    ]) {
+      expect(runCli(args, { home, streams: captureStreams().streams })).toBe(0);
+    }
+    for (const args of [
+      ["tap", "typo"],
+      ["tap", "add"],
+      ["tap", "add", "bare-name"],
+      ["tap", "add", source, "INVALID"],
+      ["tap", "update", "unknown"],
+      ["tap", "update", "--recursive"],
+      ["tap", "add", source, "--uninstall"],
+    ]) {
+      const output = captureStreams();
+      expect(runCli([...args, "--json"], { home, streams: output.streams })).toBe(4);
+      expect(JSON.parse(output.stdout()).error.name).toBe("usage_error");
+    }
+    expect(existsSync(paths(home).stateFile)).toBe(false);
+    expect(existsSync(paths(home).stateLock)).toBe(false);
+  } finally {
+    lock.release();
+    if (previous === undefined) delete process.env["CREW_LOCK_TIMEOUT_MS"];
+    else process.env["CREW_LOCK_TIMEOUT_MS"] = previous;
+  }
 });
