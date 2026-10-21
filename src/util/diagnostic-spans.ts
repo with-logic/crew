@@ -11,7 +11,7 @@ function queryBoundary(text: string, displayableParams: ReadonlySet<string>): nu
   let readingKey = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-    if (ch === "?" || (ch === "&" && keyStart >= 0)) {
+    if ((ch === "?" && !readingKey) || (ch === "&" && keyStart >= 0)) {
       keyStart = i + 1;
       readingKey = true;
     } else if (ch === "=" && readingKey) {
