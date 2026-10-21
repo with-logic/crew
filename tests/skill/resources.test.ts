@@ -8,12 +8,10 @@ import { makeTempDir } from "../helpers/fixtures.ts";
 const reader = new URL("../../src/skill/load.ts", import.meta.url).href;
 const child = `
 import { loadSkillName } from ${JSON.stringify(reader)};
-// Bun 1.4 normalized macOS SELF maxRSS from native bytes to Node-compatible KiB.
-const rssUnit = process.platform === "darwin" && Bun.semver.satisfies(Bun.version, "<1.4.0") ? 1 : 1024;
 let result;
 try { result = loadSkillName(process.argv[1]); }
 catch (error) { result = { code: error.code, message: error.message }; }
-console.log(JSON.stringify({ result, peakBytes: process.resourceUsage().maxRSS * rssUnit }));
+console.log(JSON.stringify({ result }));
 `;
 const extraMemoryBytes = 32 * 1024 * 1024;
 
@@ -37,10 +35,14 @@ for (const [label, prefix, chunk, fixtureMiB] of [
       const process = Bun.spawnSync([Bun.which("bun")!, "--eval", child, path]);
       expect(process.exitCode).toBe(0);
       expect(process.stderr.toString()).toBe("");
-      const sample: unknown = JSON.parse(process.stdout.toString());
-      expect(sample).toHaveProperty("result");
+      const payload: unknown = JSON.parse(process.stdout.toString());
+      expect(payload).toHaveProperty("result");
+      const sample = {
+        result: (payload as { result: unknown }).result,
+        peakBytes: process.resourceUsage.maxRSS,
+      };
       expect(sample).toHaveProperty("peakBytes", expect.any(Number));
-      samples.push(sample as { result: unknown; peakBytes: number });
+      samples.push(sample);
     }
     const baseline = samples[0]!;
     const candidate = samples[1]!;

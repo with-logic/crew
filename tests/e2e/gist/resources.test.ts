@@ -10,10 +10,8 @@ const MAX_DISCOVERY_RSS_GROWTH_BYTES = 32 * 1024 * 1024;
 const reader = new URL("../../../src/sources/gist.ts", import.meta.url).href;
 const child = `
 import { gistCandidates } from ${JSON.stringify(reader)};
-// Bun 1.4 normalized macOS SELF maxRSS from native bytes to Node-compatible KiB.
-const rssUnit = process.platform === "darwin" && Bun.semver.satisfies(Bun.version, "<1.4.0") ? 1 : 1024;
 const names = gistCandidates(process.argv[1]).map((candidate) => candidate.frontmatter.name);
-console.log(JSON.stringify({ names, peakBytes: process.resourceUsage().maxRSS * rssUnit }));
+console.log(JSON.stringify({ names }));
 `;
 for (const [label, prefix, chunk, fixtureMiB] of [
   ["valid body", "---\nname: candidate\ndescription: candidate\n---\n", "x", 64],
@@ -33,7 +31,8 @@ for (const [label, prefix, chunk, fixtureMiB] of [
       const result = Bun.spawnSync([Bun.which("bun")!, "--eval", child, path]);
       expect(result.exitCode).toBe(0);
       expect(result.stderr.toString()).toBe("");
-      samples.push(JSON.parse(result.stdout.toString()));
+      const sample: { names: string[] } = JSON.parse(result.stdout.toString());
+      samples.push({ names: sample.names, peakBytes: result.resourceUsage.maxRSS });
     }
     expect(samples[1]!.names).toEqual(samples[0]!.names);
     console.info(`${label}: baseline=${samples[0]!.peakBytes} large=${samples[1]!.peakBytes}`);
