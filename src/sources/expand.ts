@@ -49,9 +49,11 @@ export interface ExpansionResult {
 export interface ExpandOptions {
   /**
    * If standard expansion finds no candidates, search recursively for
-   * skill-shaped directories.
+   * skill-shaped directories. This fallback always excludes linked descendant directories.
    */
   readonly recursive?: boolean;
+  /** Git discovery excludes directory symlinks to stay in the materialized tree (§9 step 3). */
+  readonly followStandardLayoutSymlinks?: boolean;
 }
 
 /**
@@ -62,6 +64,8 @@ export interface ExpandOptions {
  * a validation failure is present (zero candidates).
  */
 export function expandSkills(rootDir: string, options: ExpandOptions = {}): ExpansionResult {
+  const followSymlinks = options.followStandardLayoutSymlinks ?? true;
+  if (!isDirectory(rootDir, followSymlinks)) throw noSkillsFound(rootDir);
   if (hasSkillMd(rootDir)) {
     const valid: LoadedSkill[] = [];
     const skipped: SkippedSkill[] = [];
@@ -69,15 +73,19 @@ export function expandSkills(rootDir: string, options: ExpandOptions = {}): Expa
     return { valid, skipped };
   }
   const skillsDir = join(rootDir, "skills");
-  const result = isDirectory(skillsDir)
-    ? collectWithNamespaces(skillsDir)
-    : collectSkillChildren(rootDir);
+  const result = isDirectory(skillsDir, followSymlinks)
+    ? collectWithNamespaces(skillsDir, followSymlinks)
+    : collectSkillChildren(rootDir, followSymlinks);
   if (result.valid.length > 0 || result.skipped.length > 0) return result;
   if (options.recursive) {
     const recursive = collectRecursive(rootDir);
     if (recursive.valid.length > 0 || recursive.skipped.length > 0) return recursive;
   }
-  throw new CrewError(
+  throw noSkillsFound(rootDir);
+}
+
+function noSkillsFound(rootDir: string): CrewError {
+  return new CrewError(
     "no_skills_found",
     `no valid skills found at \`${rootDir}\` — expected a SKILL.md there, subdirectories that each contain one, or a \`skills/\` directory of either`,
     { path: rootDir },
@@ -88,12 +96,12 @@ export function expandSkills(rootDir: string, options: ExpandOptions = {}): Expa
  * Walk `skills/` one level deep, descending into namespace dirs
  * (children that lack a `SKILL.md` but contain child skill dirs).
  */
-function collectWithNamespaces(skillsDir: string): ExpansionResult {
+function collectWithNamespaces(skillsDir: string, followSymlinks: boolean): ExpansionResult {
   const valid: LoadedSkill[] = [];
   const skipped: SkippedSkill[] = [];
   for (const name of listDir(skillsDir)) {
     const candidate = join(skillsDir, name);
-    if (!isDirectory(candidate)) continue;
+    if (!isDirectory(candidate, followSymlinks)) continue;
     if (hasSkillMd(candidate)) {
       pushSoft(candidate, valid, skipped);
       continue;
@@ -101,19 +109,19 @@ function collectWithNamespaces(skillsDir: string): ExpansionResult {
     // `candidate` has no SKILL.md — treat as a namespace if at least
     // one grandchild has a SKILL.md. Non-namespace dirs under
     // `skills/` (e.g. docs, scripts) are silently ignored.
-    const inner = collectSkillChildren(candidate);
+    const inner = collectSkillChildren(candidate, followSymlinks);
     valid.push(...inner.valid);
     skipped.push(...inner.skipped);
   }
   return { valid, skipped };
 }
 
-function collectSkillChildren(dir: string): ExpansionResult {
+function collectSkillChildren(dir: string, followSymlinks: boolean): ExpansionResult {
   const valid: LoadedSkill[] = [];
   const skipped: SkippedSkill[] = [];
   for (const name of listDir(dir)) {
     const candidate = join(dir, name);
-    if (!isDirectory(candidate)) continue;
+    if (!isDirectory(candidate, followSymlinks)) continue;
     if (!hasSkillMd(candidate)) continue;
     pushSoft(candidate, valid, skipped);
   }

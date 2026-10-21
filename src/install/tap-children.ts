@@ -23,7 +23,7 @@ export function currentTapChildren(
   rootDir: string,
 ): CurrentTapChild[] {
   const children: CurrentTapChild[] = [];
-  if (!isDirectory(rootDir)) return children;
+  if (!isDirectory(rootDir, tap.kind === "path")) return children;
   if (hasSkillMd(rootDir)) {
     pushLoaded(children, rootDir, "");
     return children;

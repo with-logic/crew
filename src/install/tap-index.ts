@@ -89,6 +89,8 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
     }
   };
 
+  const followSymlinks = tap.kind === "path";
+  if (!isDirectory(root, followSymlinks)) return { skills, namespaces };
   if (hasSkillMd(root)) {
     const skillName = skillNameForIndex(root);
     if (skillName !== null)
@@ -97,11 +99,11 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
   }
 
   const skillsDir = join(root, "skills");
-  if (isDirectory(skillsDir)) {
+  if (isDirectory(skillsDir, followSymlinks)) {
     // Case 2: walk under skills/
     for (const name of listDir(skillsDir)) {
       const child = join(skillsDir, name);
-      if (!isDirectory(child)) continue;
+      if (!isDirectory(child, followSymlinks)) continue;
       if (hasSkillMd(child)) {
         const skillName = skillNameForIndex(child);
         if (skillName === null) continue;
@@ -116,7 +118,7 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
       // Possibly a namespace: look at its children.
       for (const childName of listDir(child)) {
         const grandchild = join(child, childName);
-        if (!isDirectory(grandchild)) continue;
+        if (!isDirectory(grandchild, followSymlinks)) continue;
         if (!hasSkillMd(grandchild)) continue;
         const skillName = skillNameForIndex(grandchild);
         if (skillName === null) continue;
@@ -134,7 +136,7 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
   // Case 3: walk one level under root.
   for (const name of listDir(root)) {
     const child = join(root, name);
-    if (!isDirectory(child)) continue;
+    if (!isDirectory(child, followSymlinks)) continue;
     if (!hasSkillMd(child)) continue;
     const skillName = skillNameForIndex(child);
     if (skillName === null) continue;

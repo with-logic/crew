@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildKnownTapRegistry } from "../../src/known-taps/build/index.ts";
 import { parseKnownTapManifest } from "../../src/known-taps/build/manifest.ts";
@@ -107,6 +107,8 @@ describe("known tap registry builder", () => {
       "schema-review",
       skillFrontmatter({ name: "schema-review", description: "Review schema changes" }),
     );
+    const outside = makeSkill(root, "outside", skillFrontmatter({ name: "outside" }));
+    symlinkSync(outside, join(repoA, "catalog", "skills", "linked"));
     const pinnedA = makeGitRepo(repoA).sha;
     makeSkill(skillsA, "newer", skillFrontmatter({ name: "newer" }));
     commitAll(repoA, "newer skill");

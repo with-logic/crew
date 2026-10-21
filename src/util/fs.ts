@@ -1,4 +1,4 @@
-/** Synchronous filesystem, walking, and atomic replacement helpers (§6, §12.1). */
+/** Synchronous filesystem, walking, and atomic replacement helpers (§6, §9 step 3, §12.1). */
 
 import {
   closeSync,
@@ -108,10 +108,10 @@ export function exists(path: string): boolean {
   return existsSync(path);
 }
 
-/** Is a path a directory? (false if missing or any error.) */
-export function isDirectory(path: string): boolean {
+/** Is a path a directory? Optionally exclude symlinks (§9 step 3); false on any error. */
+export function isDirectory(path: string, followSymlinks: boolean = true): boolean {
   try {
-    return statSync(path).isDirectory();
+    return (followSymlinks ? statSync(path) : lstatSync(path)).isDirectory();
   } catch {
     return false;
   }

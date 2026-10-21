@@ -3,6 +3,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { symlinkSync } from "node:fs";
+import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
 import type { Config, TapConfig } from "../../src/core/types.ts";
 import { findSiblingDep } from "../../src/install/dep-resolution.ts";
@@ -40,6 +42,23 @@ function configWith(tap: TapConfig): Config {
 }
 
 describe("findSiblingDep", () => {
+  test("C-INST-05g git sibling discovery excludes directory links but path sources keep them", () => {
+    const root = makeTempDir("dep-resolution-linked-");
+    const parentDir = makeSkill(root, "parent", skillFrontmatter({ name: "parent" }));
+    const outside = makeTempDir("dep-resolution-outside-");
+    const dep = makeSkill(outside, "dep", skillFrontmatter({ name: "dep" }));
+    symlinkSync(dep, join(root, "linked"));
+    for (const tap of [gitTap(), pathTap(root)]) {
+      const hit = findSiblingDep(
+        { tap, tapRelativePath: "parent", parentDir },
+        "dep",
+        "/unused",
+        configWith(tap),
+      );
+      expect(hit?.loaded.frontmatter.name ?? null).toBe(tap.kind === "git" ? null : "dep");
+    }
+  });
+
   test("finds a sibling by declared name and returns its tap-relative path", () => {
     const root = makeTempDir("dep-resolution-");
     makeSkill(root, "parent-source", skillFrontmatter({ name: "parent" }));
