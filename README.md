@@ -439,6 +439,9 @@ re-resolved: if the tag moved and `--force` is given, the new commit is
 installed. If no recorded agent supports the install's scope, the skill is
 skipped. Its recorded revision stays unchanged until at least one target completes
 without a hard target failure, so an update with no completed targets can retry.
+If a local skill directory disappears during source inspection, update keeps
+the installed copy and continues. Invalid manifests and permission failures
+still report errors.
 
 **What about Linux? Windows?** Linux is supported for x86_64 and ARM64 hosts.
 Windows is future work because agent paths, scheduler integration, and binary
