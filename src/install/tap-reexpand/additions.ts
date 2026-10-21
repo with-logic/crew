@@ -16,6 +16,7 @@ import {
 } from "../installed-lookup.ts";
 import type { CurrentTapChild } from "../tap-children.ts";
 import type { InstallNewChild, TapReexpandRow } from "./index.ts";
+import { assertChildOwnership } from "./ownership.ts";
 import type { TapScanCache } from "./scan-cache.ts";
 
 export interface AdditionsInput {
@@ -75,6 +76,20 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       tap: input.tap,
       tapRelativePath: child.tapRelativePath,
     };
+    try {
+      assertChildOwnership(input.installedIndex, lookup, input.agents);
+    } catch (err) {
+      const ce = err as CrewError;
+      hardFailure = true;
+      rows.push({
+        name: child.name,
+        scope: input.scope,
+        tap: input.tap.name,
+        kind: "tap_error",
+        error: { code: ce.code, message: ce.message },
+      });
+      continue;
+    }
     if (indexHasSameSource(input.installedIndex, lookup)) continue;
 
     // §9 step 4: discovery only validated the declared name, so a child

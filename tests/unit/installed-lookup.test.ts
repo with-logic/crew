@@ -11,6 +11,7 @@ import { describe, expect, test } from "bun:test";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../src/core/types.ts";
 import {
   buildInstalledSourceIndex,
+  indexHasForeignSource,
   indexHasSameSource,
   noteInstalled,
 } from "../../src/install/installed-lookup.ts";
@@ -119,12 +120,20 @@ describe("installed source index", () => {
       }),
     ).toBe(false);
 
-    // An entry whose tap left config can't be resolved, so it is skipped
-    // when the index is built.
+    // Missing taps cannot establish shared ownership.
     const orphaned = buildInstalledSourceIndex(
       stateOf([entry({ source: { tap: "gone", path: "skills/docx" } })]),
       config,
     );
+    expect(
+      indexHasForeignSource(orphaned, {
+        name: "docx",
+        scope: "user",
+        projectRoot: null,
+        tap: broadTap,
+        tapRelativePath: "skills/docx",
+      }),
+    ).toBe(true);
     expect(
       indexHasSameSource(orphaned, {
         name: "docx",
