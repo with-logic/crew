@@ -4,9 +4,7 @@ import { expect, test } from "bun:test";
 import { renderSkills } from "../../src/commands/info/render.ts";
 import { formatSearchResults } from "../../src/commands/search/render.ts";
 import { makeStyler } from "../../src/util/term.ts";
-
-const raw = "safe\x1b[31m\x85\x07\x7f\nend";
-const escaped = "safe\\x1b[31m\\x85\\x07\\x7f\\x0aend";
+import { escapedMetadata as escaped, rawMetadata as raw } from "../helpers/metadata.ts";
 
 test.each([false, true])(
   "search descriptions are safe before truncation (same name: %s)",
@@ -44,6 +42,46 @@ test.each([false, true])(
     }
   },
 );
+
+test.each([false, true])("search escapes controls at the truncation boundary (%s)", (same) => {
+  const note = same ? "same name installed elsewhere — " : "";
+  const configuredPrefix = "x".repeat(47 - note.length);
+  const knownPrefix = "x".repeat(47);
+  const lines = formatSearchResults({
+    hits: [
+      {
+        tap: "local",
+        name: "build",
+        namespace: null,
+        description: `${configuredPrefix}\x1bend${"x".repeat(60)}`,
+        installed: false,
+        same_name_installed: same,
+      },
+    ],
+    knownHits: [
+      {
+        tap: "trusted",
+        name: "other",
+        namespace: null,
+        description: `${knownPrefix}\x1bend${"x".repeat(60)}`,
+        url: "https://example.com/skills.git",
+        subpath: "",
+        trust: "curated",
+      },
+    ],
+    query: "",
+    tap: null,
+    style: makeStyler(false),
+    width: 60,
+  });
+  const configured = lines.find((line) => line.includes("build  "))!;
+  const known = lines.find((line) => line.startsWith("    other  "))!;
+  expect(configured).toHaveLength(60);
+  expect(configured).toEndWith(`${note}${configuredPrefix}\\…`);
+  expect(known).toBe(`    other  ${knownPrefix}\\… (crew install trusted/other)`);
+  expect(known.replace(" (crew install trusted/other)", "")).toHaveLength(60);
+  expect(lines.join("\n")).not.toContain("\x1b");
+});
 
 test("metadata escaping preserves Crew's own ANSI styling", () => {
   const output = renderSkills(

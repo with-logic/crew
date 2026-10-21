@@ -7,10 +7,12 @@ import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import {
+  escapedMetadata as escaped,
+  rawMetadata as raw,
+  yamlMetadata as yamlValue,
+} from "../../helpers/metadata.ts";
 
-const raw = "safe\x1b[31m\x85\x07\x7f\nend";
-const escaped = "safe\\x1b[31m\\x85\\x07\\x7f\\x0aend";
-const yamlValue = '"safe\\x1b[31m\\x85\\x07\\x7f\\nend"';
 const original = { userPath: claudeCodeAdapter.userPath, detect: claudeCodeAdapter.detect };
 let destination: string;
 
