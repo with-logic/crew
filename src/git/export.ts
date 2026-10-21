@@ -110,16 +110,37 @@ export function withExportedTree<T>(
   home: string,
   fn: (rootDir: string) => T,
 ): T {
+  const tree = createExportedTree(clonePath, sha, subpath, home);
+  try {
+    return fn(tree.rootDir);
+  } finally {
+    // Cleanup failures retain their existing propagation behavior.
+    tree.cleanup();
+  }
+}
+
+/** A captured tree whose owner releases it after its last reader (§9 step 3). */
+export interface ExportedTree {
+  readonly rootDir: string;
+  readonly cleanup: () => void;
+}
+
+/** Retain one checked export within a caller-owned cleanup scope. */
+export function createExportedTree(
+  clonePath: string,
+  sha: string,
+  subpath: string,
+  home: string,
+): ExportedTree {
   const dest = makeScratchDir(paths(home).gitCacheDir, sha);
   try {
     exportTreeAt(clonePath, sha, subpath, dest);
     const rootDir = subpath.length > 0 ? join(dest, subpath) : dest;
     assertNoSymlinkEscape(dest, rootDir, subpath);
-    return fn(rootDir);
-  } finally {
-    // Cleanup can throw on an IO/permission failure and replace the callback
-    // result. Any leftover scratch export can be removed by `crew cache clean`.
+    return { rootDir, cleanup: () => rmrf(dest) };
+  } catch (err) {
     rmrf(dest);
+    throw err;
   }
 }
 
