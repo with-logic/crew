@@ -9,6 +9,7 @@ import {
   setAutoupdatePlatform,
 } from "../../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../../src/cli/main.ts";
+import type { Scope } from "../../../src/core/types.ts";
 import { readState, writeState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
@@ -37,7 +38,10 @@ afterEach(() => {
   resetAutoupdatePlatform();
 });
 
-function uninstallInChild(home: string, scope: string) {
+// Fail a hung child well before the state lock's 30-second acquisition timeout.
+const CHILD_TIMEOUT_MS = 10_000;
+
+function uninstallInChild({ home, scope }: { readonly home: string; readonly scope: Scope }) {
   const script = `
     import { join } from "node:path";
     import { ALL_AGENTS } from ${JSON.stringify(new URL("../../../src/agents/registry.ts", import.meta.url).href)};
@@ -52,7 +56,7 @@ function uninstallInChild(home: string, scope: string) {
   `;
   const child = Bun.spawnSync(
     [process.execPath, "--eval", script, JSON.stringify({ home, target, cwd, scope })],
-    { stdout: "pipe", stderr: "pipe", timeout: 10_000 },
+    { stdout: "pipe", stderr: "pipe", timeout: CHILD_TIMEOUT_MS },
   );
   return {
     exitCode: child.exitCode,
@@ -62,7 +66,7 @@ function uninstallInChild(home: string, scope: string) {
 }
 
 for (const scope of ["user", "project"] as const) {
-  test(`C-STATE-06 repair does not resurrect a ${scope} install uninstalled after checks`, () => {
+  test(`C-STATE-06 repair does not resurrect a ${scope} install uninstalled after initial marker scan`, () => {
     const home = makeCrewHome();
     const source = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
     expect(
@@ -80,9 +84,10 @@ for (const scope of ["user", "project"] as const) {
       return join(target, "claude-code");
     };
     let uninstalled = false;
+    // detect runs after the initial marker scan, so the child invalidates that inventory.
     claudeCodeAdapter.detect = () => {
       claudeCodeAdapter.detect = () => true;
-      expect(uninstallInChild(home, scope)).toEqual({
+      expect(uninstallInChild({ home, scope })).toEqual({
         exitCode: 0,
         stderr: "",
         stdout: expect.any(String),

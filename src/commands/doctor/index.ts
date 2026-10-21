@@ -10,6 +10,7 @@
 import { readConfig } from "../../config/load.ts";
 import { crewHome } from "../../core/paths.ts";
 import { readState } from "../../state/load.ts";
+import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { redactText, sanitizeLine } from "../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import {
@@ -43,6 +44,11 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
 
   const state = readState(home);
   const stateEntries = state.installations;
+  const projectRoots: string[] = [];
+  for (const entry of stateEntries) {
+    if (entry.scope === "project" && hasUsableProjectRoot(entry))
+      projectRoots.push(entry.project_root);
+  }
   const { markers, findings: inventoryFindings } = buildMarkerIndex(stateEntries, ctx.cwd);
   findings.push(...inventoryFindings);
 
@@ -67,7 +73,7 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   const markerInventoryHasNoFindings = inventoryFindings.length === 0;
   const outcome =
     shouldApplyRepairs && configReadable && markerInventoryHasNoFindings
-      ? applyRepairs(home, ctx.cwd)
+      ? applyRepairs({ home, cwd: ctx.cwd, projectRoots })
       : { applied: false, findings: [], repairs: [] };
   const { applied, repairs } = outcome;
   findings.push(...outcome.findings);

@@ -28,17 +28,24 @@ export interface RepairOutcome {
   readonly repairs: readonly AutoupdateRepair[];
 }
 
+export interface RepairInput {
+  readonly home: string;
+  readonly cwd: string;
+  readonly projectRoots: readonly string[];
+}
+
 /**
  * Apply every repair §11.2 permits and report what the scheduler step
  * did. Read-only doctor runs never call this — acquiring the lock
  * would create `state.json` on a fresh home (§14).
  */
-export function applyRepairs(home: string, cwd: string): RepairOutcome {
+export function applyRepairs({ home, cwd, projectRoots }: RepairInput): RepairOutcome {
   return withStateLock(() => {
     // §11.1/§14: a concurrent uninstall may have removed markers after the initial checks.
-    const { markers, findings } = buildMarkerIndex(readState(home).installations, cwd);
+    const freshState = readState(home);
+    const { markers, findings } = buildMarkerIndex(freshState.installations, cwd, projectRoots);
     if (findings.length > 0) return { applied: false, findings, repairs: [] };
-    repairStateUnderLock(markers, home);
+    repairStateUnderLock(markers, freshState, home);
     const fresh = readConfig(home);
     return {
       applied: true,

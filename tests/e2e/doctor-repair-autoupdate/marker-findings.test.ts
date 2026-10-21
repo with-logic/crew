@@ -33,7 +33,7 @@ afterEach(() => {
     Object.assign(adapter, { userPath, projectPath, detect });
 });
 
-for (const stage of ["initial", "after checks"] as const) {
+for (const stage of ["initial", "after initial marker scan"] as const) {
   for (const enabled of [true, false]) {
     test(`C-STATE-14 ${stage} invalid marker preserves scheduler when config enabled=${enabled}`, () => {
       const home = makeCrewHome();
@@ -48,6 +48,7 @@ for (const stage of ["initial", "after checks"] as const) {
       mkdirSync(orphan, { recursive: true });
       const marker = join(target, "claude-code", "demo", ".crew.json");
       mkdirSync(dirname(marker), { recursive: true });
+      // detect runs after the initial marker scan, forcing repair to validate fresh marker bytes.
       if (stage === "initial") writeFileSync(marker, "{broken");
       else
         ALL_AGENTS[0]!.detect = () => {
@@ -72,11 +73,13 @@ for (const stage of ["initial", "after checks"] as const) {
       expect(calls).toEqual([["list", "sh.crew.autoupdate"]]);
       const human = captureStreams();
       // Remove the new marker so each invocation crosses the same initially-clean boundary.
-      if (stage === "after checks") rmSync(marker);
+      if (stage === "after initial marker scan") rmSync(marker);
       expect(runCli(["doctor", "--repair"], { home, cwd, streams: human.streams })).toBe(1);
       expect(human.stdout()).not.toContain("Repaired what was fixable");
+      expect(human.stdout()).toContain("an install marker is invalid; repair is blocked");
+      expect(human.stdout()).toContain(marker);
       const quiet = captureStreams();
-      if (stage === "after checks") rmSync(marker);
+      if (stage === "after initial marker scan") rmSync(marker);
       expect(runCli(["doctor", "--repair", "--quiet"], { home, cwd, streams: quiet.streams })).toBe(
         1,
       );
