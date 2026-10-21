@@ -12,16 +12,15 @@
  *     longer referenced by state or any marker.
  */
 
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { crewHome, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
 import { assertSkillFile } from "../skill/file.ts";
-import { atomicReplace, ensureDir, readBytes } from "../util/fs.ts";
+import { atomicReplace, ensureDir } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { safePath } from "../util/redact.ts";
-import { readSourceFile } from "../util/source-read.ts";
-import { copySourceTree, hashSourceDirectory } from "./read.ts";
+import { copySourceFile, copySourceTree, hashSourceDirectory } from "./read.ts";
 
 /** Record returned after staging. */
 export interface StoredSkill {
@@ -63,7 +62,7 @@ export function stageIntoStore(
   const staging = mkdtempSync(`${storePath}.staging-`);
   if (file) {
     assertSkillFile(sourceDir);
-    writeFileSync(join(staging, "SKILL.md"), readSourceFile(sourceDir, readBytes));
+    copySourceFile(sourceDir, join(staging, "SKILL.md"));
   } else copySourceTree(sourceDir, staging);
   atomicReplace(staging, storePath);
 

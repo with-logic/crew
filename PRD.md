@@ -1243,7 +1243,10 @@ Given one or more skill references on the command line, `crew install` proceeds 
    search, info, qualified references, ref pinning, updates, and whole-tap
    additions/removals use the same commands and git SHA semantics. Updating a
    tracked file rereads that file; a replacement directory or symlink is never
-   interpreted as a directory skill. Bare dependencies on another valid gist
+   interpreted as a directory skill. Existing gist entries with an empty
+   source path represent former root `SKILL.md` installs: updates read that
+   literal file and record `SKILL.md` after a successful reinstall.
+   Bare dependencies on another valid gist
    file resolve at the parent's captured commit, including without an explicit
    ref. The existing marker/state schemas and directory hash algorithm stay
    unchanged. The owner's HTTPS gist page URL uses existing git acquisition;

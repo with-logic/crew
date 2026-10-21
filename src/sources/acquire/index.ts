@@ -119,7 +119,7 @@ export function withAcquiredTap<T>(
 }
 
 /**
- * Acquire only ONE skill's subtree of a tap at `ref`.
+ * Acquire only ONE skill directory or literal gist file from a tap at `ref`.
  *
  * `crew update` reads exactly `<tap root>/<entry source path>` per entry.
  * For a whole-repo tap (`subpath` empty) the general `withAcquiredTap`
@@ -147,19 +147,19 @@ export function withAcquiredSkillDir<T>(
   const sha = resolveRefFetchingIfNeeded(clonePath, ref);
   const kind = classifyRef(clonePath, ref);
   const pinned = kind === "sha" || kind === "tag";
-  if (isGistTap(tap))
-    return withExportedTree(clonePath, sha, tap.subpath, home, (rootDir) => {
-      const file = join(rootDir, skillPath);
-      return fn({ rootDir: file, resolvedSha: sha, pinned }, file);
-    });
   const exportPath =
     skillPath.length === 0
       ? tap.subpath
       : tap.subpath.length > 0
         ? posix.join(tap.subpath, skillPath)
         : skillPath;
-  return withExportedTree(clonePath, sha, exportPath, home, (skillDir) =>
-    fn({ rootDir: skillDir, resolvedSha: sha, pinned }, skillDir),
+  return withExportedTree(
+    clonePath,
+    sha,
+    exportPath,
+    home,
+    (skillDir) => fn({ rootDir: skillDir, resolvedSha: sha, pinned }, skillDir),
+    { literalPathspec: isGistTap(tap) },
   );
 }
 

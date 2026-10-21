@@ -1,17 +1,16 @@
 /**
  * Shallow index of a single tap's layout — just what we need for
- * reference resolution (§8.3). It reads only each skill's declared
- * `name` from SKILL.md; full validation happens later in the install
- * flow.
+ * reference resolution (§8.3). Directory layouts read only the declared
+ * `name` from SKILL.md; gist layouts fully validate candidate frontmatter.
  *
  * Given a tap, produces:
  *   - `skills`: every declared skill name findable under the tap (root,
  *     skills/<name>, or skills/<namespace>/<name>).
  *   - `namespaces`: every namespace name and its skill children.
  *
- * The index is intentionally optimistic: it validates only the
- * declared `name`; full SKILL.md validation still happens at install
- * or search-render time.
+ * Directory indexing is intentionally optimistic: full SKILL.md validation
+ * still happens at install or search-render time. Invalid gist files are
+ * excluded during candidate discovery (§9 step 5).
  *
  * Namespace rules (§9 step 5 case 2): a namespace is a directory
  * directly under `skills/` that contains no `SKILL.md` of its own

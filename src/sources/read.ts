@@ -1,6 +1,6 @@
 /** Source filesystem reads preserve operational failures before validation or staging (§9, §13). */
 
-import { accessSync, constants, lstatSync, readdirSync, statSync } from "node:fs";
+import { accessSync, constants, copyFileSync, lstatSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { hashDirectory } from "../hash/content.ts";
@@ -78,13 +78,27 @@ export function copySourceTree(source: string, destination: string): void {
     // `copyTree` lists only source directories; destination operations never use scandir.
     if (error.syscall === "scandir" || sourceInspectionFailed)
       throw sourceDirectoryFailure(path, err);
-    if (error.syscall !== "copyfile") throw err;
-    // copyfile reports the source in `path` even when the destination write failed.
-    try {
-      accessSync(path, constants.R_OK);
-    } catch (readError) {
-      throw sourceReadFailure(path, readError);
-    }
-    throw err;
+    throwCopyFailure(err);
   }
+}
+
+/** Copy raw source bytes without buffering, keeping destination errors native (§9 step 8). */
+export function copySourceFile(source: string, destination: string): void {
+  try {
+    copyFileSync(source, destination);
+  } catch (err) {
+    throwCopyFailure(err);
+  }
+}
+
+function throwCopyFailure(err: unknown): never {
+  const error = err as NodeJS.ErrnoException;
+  if (error.syscall !== "copyfile") throw err;
+  // copyfile reports the source in `path` even when the destination write failed.
+  try {
+    accessSync(error.path!, constants.R_OK);
+  } catch (readError) {
+    throw sourceReadFailure(error.path!, readError);
+  }
+  throw err;
 }

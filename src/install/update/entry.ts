@@ -23,6 +23,7 @@ import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { peekResolvedSha } from "./peek.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
+import { entryWithGistFilename } from "./source-path.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
@@ -39,7 +40,8 @@ export function updateOneEntry(
   dryRun: boolean = false,
 ): { row: UpdateRow; updatedState: StateFile; bumpHardFailure: boolean } {
   try {
-    const outcome = updateOne(entry, config, home, force, fallbackCwd, dryRun);
+    const selectedEntry = entryWithGistFilename(entry, config);
+    const outcome = updateOne(selectedEntry, config, home, force, fallbackCwd, dryRun);
     const hardFailure =
       outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed");
     let next = state;
@@ -47,7 +49,7 @@ export function updateOneEntry(
     if (outcome.kind === "updated" && !hardFailure) {
       const nonFailedTargets = outcome.per_target.map((t) => t.agent);
       const newEntry = rebuildStateEntry(
-        entry,
+        selectedEntry,
         outcome.new_sha,
         outcome.content_hash,
         nonFailedTargets,
@@ -143,7 +145,7 @@ function updateOne(
   if (peeked !== null && entry.pinned && !force) {
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
-  // Only this entry's own subtree is read, so only it is exported —
+  // Only this entry's own directory or gist file is read and exported —
   // otherwise every entry sharing a whole-repo tap materializes the
   // whole repository again (§10.1).
   return withAcquiredSkillDir(tap, entry.ref, entry.source.path, home, (acquired, skillDir) =>
