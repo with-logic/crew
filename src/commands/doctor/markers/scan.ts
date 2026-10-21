@@ -1,10 +1,16 @@
 /** Doctor-local marker inventory preserves missing versus unreadable/invalid distinctions (§11.2). */
+import { lstatSync } from "node:fs";
 import { join } from "node:path";
 import { type AgentAdapter, baseFor, type InstalledSkillRecord } from "../../../agents/adapter.ts";
 import type { Scope } from "../../../core/types.ts";
 import { readJson } from "../../../util/json.ts";
 import type { Finding } from "../checks.ts";
-import { inventoryDirectory, inventoryNames, inventoryReadFailure } from "./filesystem.ts";
+import {
+  inventoryDirectory,
+  inventoryLinkFailure,
+  inventoryNames,
+  inventoryReadFailure,
+} from "./filesystem.ts";
 import { invalidMarkerFinding } from "./findings.ts";
 import { isDoctorMarker } from "./validate.ts";
 
@@ -23,10 +29,14 @@ export function scanMarkers(
   if (base === "") return { records, findings };
   for (const name of inventoryNames(base, findings)) {
     const installDir = join(base, name);
-    if (!inventoryDirectory(installDir, findings)) continue;
+    if (!inventoryDirectory(installDir, findings, false)) continue;
     const path = join(installDir, ".crew.json");
     let marker: unknown = null;
     try {
+      if (lstatSync(path).isSymbolicLink()) {
+        inventoryLinkFailure(path, findings);
+        continue;
+      }
       marker = readJson<unknown>(path);
     } catch (err) {
       if (!(err instanceof SyntaxError)) {
