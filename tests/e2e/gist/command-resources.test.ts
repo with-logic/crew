@@ -14,6 +14,8 @@ import { ALL_AGENTS } from ${JSON.stringify(agents)};
 import { readState } from ${JSON.stringify(state)};
 import { cleanupTempDirs, commitAll, makeTempDir } from ${JSON.stringify(fixtures)};
 import { GIST_URL, gistFile, gistFixture } from ${JSON.stringify(fixture)};
+// Bun 1.4 normalized macOS SELF maxRSS from native bytes to Node-compatible KiB.
+const rssUnit = process.platform === "darwin" && Bun.semver.satisfies(Bun.version, "<1.4.0") ? 1 : 1024;
 const f = gistFixture({});
 const target = makeTempDir();
 for (const adapter of ALL_AGENTS) {
@@ -42,7 +44,7 @@ try {
         return entry.name;
       })
     : JSON.parse(result.out)[command === "search" ? "hits" : "skills"].map((skill) => skill.name);
-  console.log(JSON.stringify({ names: names.sort(), peakBytes: process.resourceUsage().maxRSS * (process.platform === "darwin" ? 1 : 1024) }));
+  console.log(JSON.stringify({ names: names.sort(), peakBytes: process.resourceUsage().maxRSS * rssUnit }));
 } finally {
   cleanupTempDirs();
 }
