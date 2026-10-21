@@ -1483,6 +1483,12 @@ On every `crew update` run, for each group of state entries sharing
    outcomes with `agent` and `kind` (`installed`, `up_to_date`,
    `failed`, or `rolled_back`); failed outcomes include
    `error: { code, message }`.
+   After every target installation succeeds, failure to remove a backup
+   does not undo the successful child or prevent its state entry. Its
+   successful target outcome carries `cleanup_error: { code, message }`,
+   and an additional `tap_error` row reports that the child is installed
+   but backup cleanup failed, including the retained backup path. The
+   update exits 1 so the cleanup problem is visible.
 3. For each skill in state attributed to this tap whose directory is
    **no longer present** under the resolved root: reports `source_gone`
    and leaves the local install untouched (per the upstream-deletion
@@ -2597,7 +2603,9 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-18f | §10.1.1 | `crew outdated [<selector>...]` behaves as `crew update --dry-run`: identical `--json` payload (`dry_run: true`, `would_update` / `would_add` kinds), identical exit code, and the same write boundary — tap clones refresh, while installed skills, markers, store entries, and `state.json` are unchanged. Human output lists only rows that would change and prints a single "up to date" line when none would. |
 | C-UPD-18g | §10.1.1, §14 | `crew outdated` against a home with no `state.json` leaves it absent, and never acquires the state lock. |
 | C-UPD-18h | §10.1.1 | When a tap refresh or re-expansion fails, `crew outdated` reports the results as possibly stale rather than printing an unqualified "up to date", even if every locally-known row is up to date. |
-| C-UPD-18i | §10.1.1 | A new child's target failure reports the failed agents and reason, exits 1, and does not stop other children. No state entry is recorded; only copies newly created for that child during the attempt are rolled back, existing destinations survive, and a later update retries the child. |
+| C-UPD-18i | §10.1.1 | A new child's target installation failure reports the failed agents and reason, exits 1, and does not stop other children. No state entry is recorded; newly created copies are removed, replaced pre-existing destinations are restored, and a later update retries the child. |
+| C-UPD-18j | §5.4, §10.1.1 | A new tap child whose name is occupied at the same scope and project root by a different source reports `name_conflict` and leaves the existing files, marker, and state unchanged, including with `--force` and in previews. Canonical aliases of the same source do not conflict; different scopes and project roots remain independent. |
+| C-UPD-18k | §10.1.1 | If every new-child target installation succeeds but backup cleanup fails, the child remains installed and recorded. The successful target outcome reports `cleanup_error`, an additional `tap_error` names the retained backup path, and update exits 1. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
 | C-UPD-23 | §10.1 / §16.6 | `crew update <selector>...` restricts fetching to taps that back the selected entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
 | C-UPD-24 | §10.1 | `crew update <selector>...` includes each selected entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the selected entries, marked as transitively required in `--json` output. |

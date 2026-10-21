@@ -6,7 +6,7 @@
  * about crew's internals — they only implement the six operations below.
  *
  * The install and uninstall algorithms themselves (with their safety
- * checks) live in `./install.ts` and `./uninstall.ts` so every adapter
+ * checks) live in `./install/index.ts` and `./uninstall.ts` so every adapter
  * behaves identically; each adapter really only supplies the paths.
  */
 

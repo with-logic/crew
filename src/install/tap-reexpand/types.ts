@@ -4,7 +4,11 @@ import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 
 /** Per-target results of a new child transaction (§10.1.1). */
 export type NewChildTargetResult =
-  | { readonly agent: string; readonly kind: "installed" | "up_to_date" | "rolled_back" }
+  | {
+      readonly agent: string;
+      readonly kind: "installed" | "up_to_date" | "rolled_back";
+      readonly cleanup_error?: { readonly code: string; readonly message: string };
+    }
   | {
       readonly agent: string;
       readonly kind: "failed";

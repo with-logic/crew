@@ -28,18 +28,18 @@ import { type SourceIdentity, sameSourceIdentity, sourceIdentityOf } from "./sou
  * `noteInstalled`).
  */
 export interface InstalledSourceIndex {
-  readonly byLocation: Map<string, SourceIdentity[]>;
+  readonly byLocation: Map<string, (SourceIdentity | null)[]>;
 }
 
 /** Build the index for one re-expansion run. */
 export function buildInstalledSourceIndex(state: StateFile, config: Config): InstalledSourceIndex {
-  const byLocation = new Map<string, SourceIdentity[]>();
+  const byLocation = new Map<string, (SourceIdentity | null)[]>();
   const tapsByName = new Map(config.taps.map((t) => [t.name, t]));
   for (const entry of state.installations) {
     const tap = tapsByName.get(entry.source.tap);
-    if (!tap) continue;
     const key = installLocationKey(entry.name, entry.scope, entry.project_root ?? null);
-    const identity = sourceIdentityOf(tap, entry.source.path);
+    // §5.4: an unresolved source still occupies its install location.
+    const identity = tap ? sourceIdentityOf(tap, entry.source.path) : null;
     const bucket = byLocation.get(key);
     if (bucket) bucket.push(identity);
     else byLocation.set(key, [identity]);
@@ -66,7 +66,19 @@ export function indexHasSameSource(index: InstalledSourceIndex, args: LookupArgs
   );
   if (!candidates) return false;
   const incoming = sourceIdentityOf(args.tap, args.tapRelativePath);
-  return candidates.some((identity) => sameSourceIdentity(identity, incoming));
+  return candidates.some((identity) => identity !== null && sameSourceIdentity(identity, incoming));
+}
+
+/** §5.4: every occupant must prove the same source before a child can be added. */
+export function indexHasSourceConflict(index: InstalledSourceIndex, args: LookupArgs): boolean {
+  const candidates = index.byLocation.get(
+    installLocationKey(args.name, args.scope, args.projectRoot),
+  );
+  if (!candidates) return false;
+  const incoming = sourceIdentityOf(args.tap, args.tapRelativePath);
+  return candidates.some(
+    (identity) => identity === null || !sameSourceIdentity(identity, incoming),
+  );
 }
 
 /**

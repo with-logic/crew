@@ -8,7 +8,7 @@
  */
 
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
-import { installNewTapChild } from "../../install/install-new-tap-child.ts";
+import { installNewTapChild } from "../../install/install-new-tap-child/index.ts";
 import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import { updateOneEntry } from "../../install/update/entry.ts";
 import type { UpdateRow } from "../../install/update/types.ts";

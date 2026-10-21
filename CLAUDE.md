@@ -211,7 +211,7 @@ skill lands at `~/.crew/store/<name>@<short-sha>/`. Agent installs are
 copies **from the store**, never from the source. This gives identical
 bytes across agents and makes reinstalls cheap.
 
-**4. Atomic install via rename.** `src/agents/install.ts`. Skills
+**4. Atomic install via rename.** `src/agents/install/index.ts`. Skills
 are staged into a sibling directory whose name cannot collide with a
 real skill (leading dot), then `renameSync` onto `dest` after removing
 the old `dest`. A crash mid-install never leaves a half-copied install.
@@ -600,7 +600,7 @@ start.
 | Add a new error type | `src/core/errors.ts` (both `CrewErrorName` and `EXIT_CODES`); update PRD §13/§15 |
 | Change skill validation | `src/skill/validate.ts`; update PRD §9 step 4 and §18 C-SPEC |
 | Change the hash algorithm | `src/hash/content.ts`; **bump marker `schema_version`** and update PRD §12.1 |
-| Change the marker schema | `src/core/types.ts` (Marker); `src/agents/install.ts`; bump `schema_version`; update PRD §7.5 |
+| Change the marker schema | `src/core/types.ts` (Marker); `src/agents/install/index.ts`; bump `schema_version`; update PRD §7.5 |
 | Change the state schema | `src/core/types.ts` (StateFile); `src/state/load.ts`; update PRD §11.1 |
 
 Every entry above whose "Touch…" includes "update PRD" means the

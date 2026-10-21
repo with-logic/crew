@@ -151,7 +151,7 @@ describe("targets/install — same-SHA early exit", () => {
     // Re-run the install algorithm directly (bypassing the flow-level
     // "already installed" short-circuit) with the same SHA and content.
     const { installSkillIntoAgents } =
-      require("../../../src/agents/install.ts") as typeof import("../../../src/agents/install.ts");
+      require("../../../src/agents/install/index.ts") as typeof import("../../../src/agents/install/index.ts");
     const { claudeCodeAdapter } =
       require("../../../src/agents/claude-code.ts") as typeof import("../../../src/agents/claude-code.ts");
     const { hashDirectory } =

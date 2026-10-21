@@ -23,7 +23,7 @@
  */
 
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
-import { type InstallOutcome, installSkillIntoAgents } from "../../agents/install.ts";
+import { type InstallOutcome, installSkillIntoAgents } from "../../agents/install/index.ts";
 import type { CrewError } from "../../core/errors.ts";
 import type { ResolvedSkill, Scope, StateFile } from "../../core/types.ts";
 import { upsertEntry } from "../../state/load.ts";

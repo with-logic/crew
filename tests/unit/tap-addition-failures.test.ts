@@ -7,7 +7,7 @@ import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { readConfig } from "../../src/config/load.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import type { StateFile } from "../../src/core/types.ts";
-import { installNewTapChild } from "../../src/install/install-new-tap-child.ts";
+import { installNewTapChild } from "../../src/install/install-new-tap-child/index.ts";
 import { reexpandTaps } from "../../src/install/tap-reexpand/index.ts";
 import { makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";

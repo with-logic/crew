@@ -3,21 +3,27 @@
  *
  * Stages the child into the store, runs the install algorithm for
  * every target the rest of the tap was installed into, and returns a
- * fresh state entry only if every target succeeds. Target failures roll
- * back copies created by this attempt and remain visible to the caller.
+ * fresh state entry only if every target succeeds. Target failures restore
+ * preexisting destinations and remove new copies, retaining failure details.
  */
 
-import { lstatSync } from "node:fs";
-import { type AgentAdapter, baseFor } from "../agents/adapter.ts";
-import { installSkillIntoAgents } from "../agents/install.ts";
-import { agentByName } from "../agents/registry.ts";
-import { CrewError } from "../core/errors.ts";
-import type { Scope, StateEntry, TapConfig } from "../core/types.ts";
-import { isGistTap } from "../sources/gist.ts";
-import { stageIntoStore } from "../sources/store.ts";
-import { rmrf } from "../util/fs.ts";
-import { nowIso } from "../util/time.ts";
-import type { NewChildInstallResult, NewChildTargetResult } from "./tap-reexpand/types.ts";
+import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
+import { checkInstall } from "../../agents/install/checks.ts";
+import { installSkillIntoAgents } from "../../agents/install/index.ts";
+import { agentByName } from "../../agents/registry.ts";
+import { CrewError } from "../../core/errors.ts";
+import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
+import { isGistTap } from "../../sources/gist.ts";
+import { stageIntoStore } from "../../sources/store.ts";
+import { nowIso } from "../../util/time.ts";
+import type { NewChildInstallResult, NewChildTargetResult } from "../tap-reexpand/types.ts";
+import { assertSameMarkerSource } from "./source.ts";
+import {
+  discardSnapshots,
+  rollbackTargets,
+  snapshotTarget,
+  type TargetSnapshots,
+} from "./transaction.ts";
 
 export function installNewTapChild(
   args: {
@@ -48,7 +54,7 @@ export function installNewTapChild(
   );
   const successfulTargets: string[] = [];
   const perTarget: NewChildTargetResult[] = [];
-  const created = new Map<string, AgentAdapter[]>();
+  const snapshots: TargetSnapshots = new Map();
   // Group adapters by resolved install path (path sharing, §7.2) so
   // shared-path targets install once but both get marked successful.
   const groups = new Map<string, AgentAdapter[]>();
@@ -64,8 +70,8 @@ export function installNewTapChild(
   }
   for (const [dest, group] of groups) {
     try {
-      const existed = lstatSync(dest, { throwIfNoEntry: false }) !== undefined;
-      const outcome = installSkillIntoAgents({
+      assertSameMarkerSource(dest, args.skillName, args.tap, args.tapRelativePath);
+      const input = {
         agents: group,
         scope: args.scope,
         cwd: childCwd,
@@ -77,8 +83,13 @@ export function installNewTapChild(
         resolvedSha: args.resolvedSha,
         contentHash: staged.contentHash,
         force,
-      });
-      if (!existed) created.set(dest, group);
+      };
+      const checked = checkInstall(input, dest);
+      let outcome: { readonly kind: "installed" | "up_to_date" } = { kind: "up_to_date" };
+      if (!checked.upToDate) {
+        snapshots.set(dest, snapshotTarget(dest, group));
+        outcome = installSkillIntoAgents(input);
+      }
       for (const a of group) {
         successfulTargets.push(a.name);
         perTarget.push({ agent: a.name, kind: outcome.kind });
@@ -97,10 +108,11 @@ export function installNewTapChild(
     }
   }
   if (perTarget.some((target) => target.kind === "failed")) {
-    rollbackCreated(created, perTarget);
+    rollbackTargets(snapshots, perTarget);
     return { entry: null, perTarget };
   }
   if (successfulTargets.length === 0) return { entry: null, perTarget };
+  discardSnapshots(snapshots, perTarget);
   const entry: StateEntry = {
     name: args.skillName,
     source: { tap: args.tap.name, path: args.tapRelativePath },
@@ -124,29 +136,4 @@ export function installNewTapChild(
     ...(args.scope === "project" && args.projectRoot ? { project_root: args.projectRoot } : {}),
   };
   return { entry, perTarget };
-}
-
-/** §10.1.1: never remove an install that predates this attempt. */
-function rollbackCreated(
-  created: ReadonlyMap<string, readonly AgentAdapter[]>,
-  perTarget: NewChildTargetResult[],
-): void {
-  for (const [dest, group] of created) {
-    let error: { readonly code: string; readonly message: string } | undefined;
-    try {
-      rmrf(dest);
-    } catch (err) {
-      const cause = err as Error;
-      error = {
-        code: "source_unreachable",
-        message: `Could not roll back ${dest}: ${cause.message}`,
-      };
-    }
-    for (const adapter of group) {
-      const index = perTarget.findIndex((target) => target.agent === adapter.name);
-      perTarget[index] = error
-        ? { agent: adapter.name, kind: "failed", error }
-        : { agent: adapter.name, kind: "rolled_back" };
-    }
-  }
 }

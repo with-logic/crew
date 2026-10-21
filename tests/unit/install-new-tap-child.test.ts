@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { ampAdapter } from "../../src/agents/amp.ts";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
-import { installNewTapChild } from "../../src/install/install-new-tap-child.ts";
+import { installNewTapChild } from "../../src/install/install-new-tap-child/index.ts";
 import { makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -82,10 +82,12 @@ test("C-UPD-18i shared-path targets roll back one new copy and report both agent
 });
 
 test("C-UPD-18i cleanup failures remain visible with the original target failure", () => {
-  mkdirSync(join(codexRoot, "newbie"));
   let pathCalls = 0;
   codexAdapter.userPath = () => {
-    if (++pathCalls === 2) chmodSync(claudeRoot, 0o555);
+    if (++pathCalls === 2) {
+      chmodSync(claudeRoot, 0o555);
+      mkdirSync(join(codexRoot, "newbie"));
+    }
     return codexRoot;
   };
   try {
@@ -108,11 +110,16 @@ test("C-UPD-18i raw target errors are failures and other targets still run", () 
   const notDirectory = join(codexRoot, "not-a-directory");
   writeFileSync(notDirectory, "blocked\n");
   codexAdapter.userPath = () => notDirectory;
-  const result = installNewTapChild(input, false, home, home);
+  const result = installNewTapChild(
+    { ...input, agents: ["codex", "claude-code"] },
+    false,
+    home,
+    home,
+  );
   expect(result.entry).toBeNull();
   expect(result.perTarget).toMatchObject([
-    { agent: "claude-code", kind: "rolled_back" },
     { agent: "codex", kind: "failed", error: { code: "source_unreachable" } },
+    { agent: "claude-code", kind: "rolled_back" },
   ]);
 });
 
@@ -138,4 +145,43 @@ test("C-UPD-18i successful project additions keep their recorded project root", 
   expect(installNewTapChild({ ...input, scope: "project" }, true, home, home).entry?.scope).toBe(
     "project",
   );
+});
+
+test("C-UPD-18i shared-path replacement restores the original marker for both agents", () => {
+  installNewTapChild({ ...input, agents: ["claude-code"] }, false, home, home);
+  const markerPath = join(claudeRoot, "newbie", ".crew.json");
+  const marker = readFileSync(markerPath, "utf8");
+  mkdirSync(join(codexRoot, "newbie"));
+  const result = installNewTapChild(
+    { ...input, agents: ["claude-code", "amp", "codex"] },
+    false,
+    home,
+    home,
+  );
+  expect(result.perTarget).toMatchObject([
+    { agent: "claude-code", kind: "rolled_back" },
+    { agent: "amp", kind: "rolled_back" },
+    { agent: "codex", kind: "failed" },
+  ]);
+  expect(readFileSync(markerPath, "utf8")).toBe(marker);
+});
+
+test("C-UPD-18k committed installs keep their state entry if backup deletion fails", () => {
+  installNewTapChild({ ...input, agents: ["claude-code"] }, false, home, home);
+  writeFileSync(join(input.skillDir, "SKILL.md"), `${skillFrontmatter({ name: "newbie" })}\nnew\n`);
+  let pathCalls = 0;
+  codexAdapter.userPath = () => {
+    if (++pathCalls === 2) chmodSync(claudeRoot, 0o555);
+    return codexRoot;
+  };
+  try {
+    const result = installNewTapChild(input, false, home, home);
+    expect(result.entry?.agents).toEqual(["claude-code", "codex"]);
+    expect(result.perTarget[0]).toMatchObject({
+      kind: "installed",
+      cleanup_error: { code: "source_unreachable" },
+    });
+  } finally {
+    chmodSync(claudeRoot, 0o755);
+  }
 });

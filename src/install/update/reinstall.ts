@@ -8,7 +8,7 @@
  */
 
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
-import { installSkillIntoAgents } from "../../agents/install.ts";
+import { installSkillIntoAgents } from "../../agents/install/index.ts";
 import { agentByName } from "../../agents/registry.ts";
 import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";

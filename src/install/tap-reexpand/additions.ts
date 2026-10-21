@@ -13,6 +13,7 @@ import { isGistTap } from "../../sources/gist.ts";
 import {
   type InstalledSourceIndex,
   indexHasSameSource,
+  indexHasSourceConflict,
   noteInstalled,
 } from "../installed-lookup.ts";
 import type { CurrentTapChild } from "../tap-children.ts";
@@ -76,6 +77,20 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       tap: input.tap,
       tapRelativePath: child.tapRelativePath,
     };
+    if (indexHasSourceConflict(input.installedIndex, lookup)) {
+      hardFailure = true;
+      rows.push({
+        name: child.name,
+        scope: input.scope,
+        tap: input.tap.name,
+        kind: "tap_error",
+        error: {
+          code: "name_conflict",
+          message: `Skill '${child.name}' is already installed at this location from another source`,
+        },
+      });
+      continue;
+    }
     if (indexHasSameSource(input.installedIndex, lookup)) continue;
 
     // §9 step 4: directory discovery only validated the declared name, so a child
@@ -127,6 +142,20 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
           kind: "added",
           per_target: perTarget,
         });
+        for (const target of perTarget) {
+          if (!("cleanup_error" in target && target.cleanup_error)) continue;
+          hardFailure = true;
+          rows.push({
+            name: child.name,
+            scope: input.scope,
+            tap: input.tap.name,
+            kind: "tap_error",
+            error: {
+              code: target.cleanup_error.code,
+              message: `Installed ${child.name}, but ${target.cleanup_error.message}`,
+            },
+          });
+        }
       } else {
         hardFailure = true;
         const failed = perTarget.filter((target) => target.kind === "failed");

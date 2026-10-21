@@ -119,8 +119,8 @@ describe("installed source index", () => {
       }),
     ).toBe(false);
 
-    // An entry whose tap left config can't be resolved, so it is skipped
-    // when the index is built.
+    // An entry whose tap left config can't match a known source; its
+    // occupied install location remains reserved.
     const orphaned = buildInstalledSourceIndex(
       stateOf([entry({ source: { tap: "gone", path: "skills/docx" } })]),
       config,
