@@ -12,7 +12,7 @@ import { runCli } from "../../../src/cli/main.ts";
 import { readState, writeState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { uninstallInChild } from "./uninstall.ts";
+import { uninstallInChild } from "./helpers.ts";
 
 const originals = ALL_AGENTS.map((adapter) => ({
   adapter,

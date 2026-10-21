@@ -10,18 +10,22 @@ export function uninstallInChild(input: {
   readonly target: string;
   readonly cwd: string;
   readonly scope: Scope;
+  readonly sharedOwners?: readonly string[];
+  readonly agent?: string;
 }) {
   const script = `
     import { join } from "node:path";
     import { ALL_AGENTS } from ${JSON.stringify(new URL("../../../src/agents/registry.ts", import.meta.url).href)};
     import { runCli } from ${JSON.stringify(new URL("../../../src/cli/main.ts", import.meta.url).href)};
-    const { home, target, cwd, scope } = JSON.parse(process.argv[1]);
+    const { home, target, cwd, scope, sharedOwners = [], agent } = JSON.parse(process.argv[1]);
     for (const adapter of ALL_AGENTS) {
-      adapter.userPath = () => join(target, adapter.name);
-      adapter.projectPath = (root) => join(root, adapter.name);
+      const base = sharedOwners.includes(adapter.name) ? "shared" : adapter.name;
+      adapter.userPath = () => join(target, base);
+      adapter.projectPath = (root) => join(root, base);
       adapter.detect = () => adapter.name === "claude-code";
     }
-    process.exitCode = runCli(["uninstall", "demo", "--scope", scope, "--json"], { home, cwd });
+    process.exitCode = runCli(["uninstall", "demo", "--scope", scope, "--json",
+      ...(agent ? ["--agent", agent] : [])], { home, cwd });
   `;
   const child = Bun.spawnSync([process.execPath, "--eval", script, JSON.stringify(input)], {
     stdout: "pipe",

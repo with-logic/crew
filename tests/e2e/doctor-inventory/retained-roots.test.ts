@@ -1,6 +1,6 @@
 /** Locked repair retains project scan candidates without reusing stale markers (§11.1, §11.2). */
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { ALL_AGENTS } from "../../../src/agents/registry.ts";
@@ -16,7 +16,7 @@ import {
   statefulLaunchctl,
   useSchedulerSeams,
 } from "../doctor-repair-autoupdate/helpers.ts";
-import { uninstallInChild } from "./uninstall.ts";
+import { uninstallInChild } from "./helpers.ts";
 
 useSchedulerSeams();
 const originals = ALL_AGENTS.map((adapter) => ({
@@ -122,3 +122,37 @@ for (const invalid of [false, true]) {
     }
   });
 }
+
+test("C-STATE-06 retains an initially empty project candidate after its last state entry disappears", () => {
+  setAutoupdatePlatform("freebsd");
+  const home = makeCrewHome();
+  const project = makeTempDir();
+  const cwd = makeTempDir();
+  const source = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
+  expect(
+    runCli(["install", source, "--agent", "claude-code", "--scope", "project"], {
+      home,
+      cwd: project,
+      streams: captureStreams().streams,
+    }),
+  ).toBe(0);
+  const installDir = join(project, "claude-code", "demo");
+  rmSync(installDir, { recursive: true });
+  claudeCodeAdapter.detect = () => {
+    claudeCodeAdapter.detect = () => true;
+    writeState({ schema_version: 1, installations: [] }, home);
+    expect(
+      runCli(["install", source, "--agent", "claude-code", "--scope", "project"], {
+        home,
+        cwd: project,
+        streams: captureStreams().streams,
+      }),
+    ).toBe(0);
+    writeState({ schema_version: 1, installations: [] }, home);
+    return true;
+  };
+  expect(runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams })).toBe(0);
+  expect(readState(home).installations).toHaveLength(1);
+  expect(readState(home).installations[0]!.project_root).toBe(project);
+  expect(existsSync(join(installDir, ".crew.json"))).toBe(true);
+});

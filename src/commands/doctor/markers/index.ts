@@ -38,7 +38,7 @@ export function buildMarkerIndex(
   stateEntries: readonly StateEntry[],
   cwd: string,
   additionalProjectRoots: readonly string[] = [],
-): { markers: MarkerEntry[]; findings: Finding[] } {
+): { markers: MarkerEntry[]; findings: Finding[]; projectRoots: readonly string[] } {
   const markers: MarkerEntry[] = [];
   const inventoryFindings = new Map<string, Finding>();
   const seen = new Set<string>();
@@ -84,7 +84,7 @@ export function buildMarkerIndex(
       }
     }
   }
-  return { markers, findings: [...inventoryFindings.values()] };
+  return { markers, findings: [...inventoryFindings.values()], projectRoots: roots };
 }
 
 /** Scope labels disambiguate only an actual shared physical base (§11.1). */
