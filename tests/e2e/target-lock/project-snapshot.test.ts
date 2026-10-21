@@ -46,10 +46,14 @@ test("C-CONC-07 a later project-root reappearance admits neither existing entrie
     return { code, output: JSON.parse(streams.stdout()), stderr: streams.stderr() };
   };
   expect(invoke(["tap", "add", `file://${repo}`, "fixture"]).code).toBe(0);
-  expect(invoke(["install", "fixture", "--tap", "--agent", "claude-code"]).code).toBe(0);
+  expect(invoke(["install", `file://${repo}@main`, "--tap", "--agent", "claude-code"]).code).toBe(
+    0,
+  );
   expect(
-    invoke(["install", "fixture", "--tap", "--scope", "project", "--agent", "claude-code"], project)
-      .code,
+    invoke(
+      ["install", `file://${repo}@main`, "--tap", "--scope", "project", "--agent", "claude-code"],
+      project,
+    ).code,
   ).toBe(0);
   const state = readState(home);
   writeState(

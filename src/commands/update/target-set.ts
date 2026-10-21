@@ -12,6 +12,28 @@ export function updateTargetBatch(input: LockedPlanInput): {
   readonly bases: readonly TargetBase[];
   readonly missingProjectRoots: ReadonlySet<string>;
 } {
+  const entries = updateTargetEntries(input);
+  // §10.1: a missing project remains skipped; preparing targets must not recreate it.
+  const available: StateEntry[] = [];
+  const missingProjectRoots = new Set<string>();
+  for (const entry of entries) {
+    if (entry.scope === "project") {
+      if (!hasUsableProjectRoot(entry)) continue;
+      if (!existsSync(entry.project_root)) {
+        missingProjectRoots.add(entry.project_root);
+        continue;
+      }
+    }
+    available.push(entry);
+  }
+  return {
+    bases: entryTargetBases(available, input.ctx.cwd, true),
+    missingProjectRoots,
+  };
+}
+
+/** Source preparation and target admission enumerate the same possible consumers (§14). */
+export function updateTargetEntries(input: LockedPlanInput): StateEntry[] {
   const selected = reexpandSelectionFor(input.subjects, input.initialSelected);
   const groups = new Map<string, StateEntry[]>();
   for (const entry of input.state.installations) {
@@ -34,21 +56,5 @@ export function updateTargetBatch(input: LockedPlanInput): {
       continue;
     entries.push(...group);
   }
-  // §10.1: a missing project remains skipped; preparing targets must not recreate it.
-  const available: StateEntry[] = [];
-  const missingProjectRoots = new Set<string>();
-  for (const entry of entries) {
-    if (entry.scope === "project") {
-      if (!hasUsableProjectRoot(entry)) continue;
-      if (!existsSync(entry.project_root)) {
-        missingProjectRoots.add(entry.project_root);
-        continue;
-      }
-    }
-    available.push(entry);
-  }
-  return {
-    bases: entryTargetBases(available, input.ctx.cwd, true),
-    missingProjectRoots,
-  };
+  return entries;
 }

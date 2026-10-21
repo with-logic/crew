@@ -6,6 +6,7 @@
  */
 
 import * as fs from "node:fs";
+import { readOwnerRecord } from "./owner-record.ts";
 
 /** Build a per-acquisition filesystem view for proper-lockfile. */
 export function lockOwnerFs(lockPath: string): {
@@ -57,13 +58,8 @@ export function lockOwnerFs(lockPath: string): {
 }
 
 function hasLiveOwner(lockPath: string, stat: fs.Stats): boolean {
-  let record: string;
-  try {
-    record = fs.readFileSync(`${lockPath}.owner`, "utf8");
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw err;
-  }
+  const record = readOwnerRecord(`${lockPath}.owner`);
+  if (record === undefined) return false;
   const [pid, inode, birthtime] = record.split(" ").map(Number);
   if (!pid || inode !== stat.ino || birthtime !== stat.birthtimeMs) return false;
   try {

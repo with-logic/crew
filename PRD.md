@@ -2193,6 +2193,11 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
      atomic replacement, never by writing through a pre-existing owner link
      or hardlink. A temporary owner file inside the acquired lock directory
      is removed on failure or stale reclamation without removing other contents.
+     Liveness reads never follow owner links or read special-file streams:
+     use a non-following, nonblocking descriptor and a bounded regular-record
+     read sufficient for the PID/directory-identity format. Unsupported,
+     oversized or malformed records provide no liveness protection; ordinary
+     filesystem read failures still propagate.
    - Resolve trusted adapter-base ancestors physically. Deduplicate aliases
      by the base directory's filesystem device/inode identity and acquire the
      complete required set in ascending numeric `(device, inode)` order;
@@ -2229,7 +2234,13 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
      refreshes sources once under clone locks before determining or acquiring
      targets, so source-only fetch/clone work holds no target locks. A recorded
      project root recreated by that refresh participates in target preparation.
-     Roots still absent after refresh, when the target batch is determined,
+     After refresh, complete clone/ref-fetch fallback decisions before target
+     admission, retaining one coherent revision outcome per configured tap/ref
+     for the command. Consumers share its clone/SHA/pin result or original
+     isolated failure rather than retrying transport inside target exclusion;
+     healthy entries continue with unchanged row/error shapes. Initial refresh
+     and one pre-lock fallback attempt per pair may both contact the source.
+     Roots still absent after complete source preparation, when the target batch is determined,
      retain the ordinary missing-project skip through per-entry updates and
      tap re-expansion for the entire batch, even if they appear later. Do not
      create a missing project root to prepare targets or admit it dynamically.

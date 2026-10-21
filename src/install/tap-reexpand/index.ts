@@ -23,6 +23,7 @@
  */
 
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
+import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { entryIdentity } from "../../state/collections/index.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
@@ -61,6 +62,7 @@ export function reexpandTaps(
   installOne: InstallNewChild,
   dryRun: boolean = false,
   missingProjectRoots?: ReadonlySet<string>,
+  prepared?: PreparedSources,
 ): TapReexpandResult {
   const added: StateEntry[] = [];
   const updated: StateEntry[] = [];
@@ -69,7 +71,7 @@ export function reexpandTaps(
   let hardFailure = false;
   // One tap backs several (scope, project_root) groups; acquire, walk
   // and validate it once per run rather than once per group.
-  const cache = makeTapScanCache();
+  const cache = makeTapScanCache(prepared);
   const installedIndex = buildInstalledSourceIndex(state, config);
 
   // Group state entries by (tap-name, scope, project_root). Entries
@@ -136,6 +138,7 @@ export function reexpandTaps(
       installOne,
       dryRun,
       namespaces: selection?.namespaces ?? null,
+      ...(prepared ? { prepared } : {}),
     });
     rows.push(...result.rows);
     updated.push(...result.updated);

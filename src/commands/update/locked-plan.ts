@@ -14,6 +14,7 @@ import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand/in
 import { updateOneEntry } from "../../install/update/entry.ts";
 import { rowFor } from "../../install/update/row.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
+import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { type CollectionSubject, entryIdentity } from "../../state/collections/index.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { refreshTaps, type TapRefreshRow } from "../tap/refresh.ts";
@@ -21,6 +22,7 @@ import type { CommandContext } from "../types.ts";
 import type { UpdatePlan, UpdateSelector } from "./plan.ts";
 import type { CollectionSummary } from "./render.ts";
 import { entriesAfterReexpansion, reexpandSelectionFor, withTransitive } from "./selection.ts";
+import { prepareUpdateSources } from "./source-preparation.ts";
 import { updateTargetBatch } from "./target-set.ts";
 
 /** Inputs to the locked half of the plan, after selection has run. */
@@ -45,11 +47,12 @@ export interface LockedPlanInput {
 
 export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
   const tapRows = refreshTaps(input.taps, input.home);
-  if (input.dryRun) return runTargetBatch(input, tapRows);
+  const prepared = prepareUpdateSources(input);
   const { bases, missingProjectRoots } = updateTargetBatch(input);
+  if (input.dryRun) return runTargetBatch(input, tapRows, undefined, missingProjectRoots, prepared);
   // §14: source clone locks are already held; acquisition stays outside per-entry catches.
   return withTargetLocks(bases, (failures) =>
-    runTargetBatch(input, tapRows, failures, missingProjectRoots),
+    runTargetBatch(input, tapRows, failures, missingProjectRoots, prepared),
   );
 }
 
@@ -58,6 +61,7 @@ function runTargetBatch(
   tapRows: readonly TapRefreshRow[],
   baseFailures?: TargetBaseFailures,
   missingProjectRoots?: ReadonlySet<string>,
+  prepared?: PreparedSources,
 ): UpdatePlan {
   const { ctx, config, home, dryRun, transitiveSources, subjects, initialSelected } = input;
   const rows: UpdateRow[] = [];
@@ -98,6 +102,7 @@ function runTargetBatch(
     (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd, baseFailures),
     dryRun,
     missingProjectRoots,
+    prepared,
   );
   tapReexpandRows.push(...reexpanded.rows);
   if (reexpanded.hardFailure) hardFailure = true;
@@ -160,6 +165,7 @@ function runTargetBatch(
       ctx.cwd,
       dryRun,
       baseFailures,
+      prepared,
     );
     current = updatedState;
     rows.push(withTransitive(row, transitiveSources));
