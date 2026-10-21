@@ -23,7 +23,7 @@ import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { peekResolvedSha } from "./peek.ts";
-import { reinstallIntoAgents } from "./reinstall.ts";
+import { groupRecordedTargets, reinstallIntoAgents } from "./reinstall.ts";
 import { rowFor } from "./row.ts";
 import { entryWithGistFilename } from "./source-path.ts";
 import { rebuildStateEntry } from "./state.ts";
@@ -47,8 +47,12 @@ export function updateOneEntry(
     const hardFailure =
       outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed");
     let next = state;
-    // §10.1: one revision covers all targets; retain it until failed targets can retry.
-    if (outcome.kind === "updated" && !hardFailure) {
+    // §10.1: advancing a shared revision requires completion without hard failures.
+    if (
+      outcome.kind === "updated" &&
+      !hardFailure &&
+      outcome.per_target.some((t) => t.kind === "installed" || t.kind === "up_to_date")
+    ) {
       const nonFailedTargets = outcome.per_target.map((t) => t.agent);
       const newEntry = rebuildStateEntry(
         selectedEntry,
@@ -166,6 +170,8 @@ function applyUpdate(
   }
 
   const loaded = loadSkill(sourcePath, isGistTap(tap));
+  const targetGroups = groupRecordedTargets(entry, entryCwd);
+  if (targetGroups.size === 0) return { kind: "skipped", reason: "no applicable agent targets" };
   if (dryRun) return { kind: "would_update", new_sha: newSha };
   const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash, isGistTap(tap));
   const perTarget = reinstallIntoAgents({
@@ -176,6 +182,7 @@ function applyUpdate(
     newSha,
     force,
     entryCwd,
+    targetGroups: targetGroups.values(),
   });
   return {
     kind: "updated",

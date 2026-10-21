@@ -44,6 +44,8 @@ export const MANAGING: CommandGroup = {
           tap-qualified), a tap name, or a namespace — a tap or namespace updates everything you
           installed from it. Pinned SHAs are skipped unless{" "}
           <span className={styles.flag}>--force</span>.{" "}
+          Skills with no applicable recorded agent targets are skipped; the recorded revision
+          advances only when a target completes and none fails. {" "}
           <span className={styles.flag}>--dry-run</span> previews what would change: taps still
           refresh, but nothing you have installed is touched. If adding a new tap skill fails for an
           agent, update reports the target and reason and rolls back copies still owned by that
