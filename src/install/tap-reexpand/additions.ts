@@ -7,7 +7,7 @@
  * (`--dry-run`) or install it.
  */
 
-import { normalizeLocalError } from "../../core/errors.ts";
+import { type CrewError, normalizeLocalError } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import {
   type InstalledSourceIndex,
@@ -16,6 +16,7 @@ import {
 } from "../installed-lookup.ts";
 import type { CurrentTapChild } from "../tap-children.ts";
 import type { InstallNewChild, TapReexpandRow } from "./index.ts";
+import { assertChildSourceOwnership } from "./ownership.ts";
 import type { TapScanCache } from "./scan-cache.ts";
 
 export interface AdditionsInput {
@@ -75,27 +76,24 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       tap: input.tap,
       tapRelativePath: child.tapRelativePath,
     };
-    if (indexHasSameSource(input.installedIndex, lookup)) continue;
-
-    // §9 step 4: discovery only validated the declared name, so a child
-    // can reach here with (say) no `description`. Validate in full
-    // before reporting or installing, so the preview and the real run
-    // agree and an invalid child never lands on disk.
-    const skillLoadError = input.cache.validate(child.path);
+    const sameSource = indexHasSameSource(input.installedIndex, lookup);
+    // §9 step 4: discovery only validates names. Existing same-source aliases
+    // remain duplicates, but new children must validate before ownership errors.
+    const skillLoadError = sameSource ? null : input.cache.validate(child.path);
     if (skillLoadError) {
       hardFailure = true;
-      rows.push({
-        name: child.name,
-        scope: input.scope,
-        tap: input.tap.name,
-        kind: "tap_error",
-        error: {
-          code: skillLoadError.code ?? "invalid_skill",
-          message: skillLoadError.message,
-        },
-      });
+      rows.push(childErrorRow(input, child.name, skillLoadError));
       continue;
     }
+    try {
+      assertChildSourceOwnership(input.installedIndex, lookup, input.agents);
+    } catch (err) {
+      hardFailure = true;
+      rows.push(childErrorRow(input, child.name, err as CrewError));
+      continue;
+    }
+    if (sameSource) continue;
+
     if (input.dryRun) {
       noteInstalled(input.installedIndex, lookup);
       rows.push({
@@ -127,15 +125,20 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
     } catch (err) {
       const ce = normalizeLocalError(err);
       hardFailure = true;
-      rows.push({
-        name: child.name,
-        scope: input.scope,
-        tap: input.tap.name,
-        kind: "tap_error",
-        error: { code: ce.code, message: ce.message },
-      });
+      rows.push(childErrorRow(input, child.name, ce));
     }
   }
 
   return { added, rows, hardFailure };
+}
+
+/** Keep every per-child failure in the same update-row shape (§10.1.1). */
+function childErrorRow(input: AdditionsInput, name: string, error: CrewError): TapReexpandRow {
+  return {
+    name,
+    scope: input.scope,
+    tap: input.tap.name,
+    kind: "tap_error",
+    error: { code: error.code, message: error.message },
+  };
 }
