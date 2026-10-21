@@ -1,5 +1,5 @@
 /**
- * Coverage close-out for util/fs helpers, copy idempotence, and rename-based atomic replacement.
+ * Coverage close-out for util/fs, copy idempotence, and atomic replacement (§7.3).
  *
  * Branches the happy-path e2e suites do not reach; each test names the
  * file and line it keeps covered so a regression traces back here.
@@ -79,7 +79,7 @@ describe("copy idempotence", () => {
     chmodSync(f, 0o700);
     const { copyTree } =
       require("../../../src/util/copy.ts") as typeof import("../../../src/util/copy.ts");
-    copyTree(d1, join(d2, "x"));
+    copyTree(d1, join(d2, "x"), { destinationRoot: d2 });
     expect(existsSync(join(d2, "x", "script.sh"))).toBe(true);
   });
 });
