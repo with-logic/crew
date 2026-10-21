@@ -9,7 +9,7 @@ export const outdatedHelp: CommandHelp = {
   synopsis: "crew outdated [<name>...]",
   summary: [
     "See which skills have updates available, without changing anything you have installed.",
-    "This is `crew update --dry-run` with a friendlier name and a shorter answer: it fetches your taps, then lists only what would change — skills with a newer version upstream, new skills added to a tap you installed whole, and anything removed upstream. If nothing would change, it says so in one line.",
+    "This is `crew update --dry-run` with a friendlier name and a shorter answer: it fetches your taps, then lists only what would change — skills with a newer version upstream, new skills added to a tap you installed whole, and skills whose sources are no longer available. If nothing would change, it says so in one line.",
     "Pass names (`pdf` or `anthropic/pdf`) to check just those skills and their dependencies.",
   ],
   flags: [
