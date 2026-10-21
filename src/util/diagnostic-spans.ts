@@ -1,6 +1,7 @@
 /** Monotonic unstructured diagnostic boundaries; ambiguous credential suffixes fail closed (§5.2, §13). */
 
 import { isControlCharacterCode } from "./control-characters.ts";
+import { firstMalformedHttpStart } from "./malformed-http/index.ts";
 
 interface SchemeSpan {
   readonly start: number;
@@ -50,6 +51,7 @@ function schemeSpans(text: string): SchemeSpan[] {
 /**
  * Render URL spans with bounded monotonic scans and disjoint output slices (§13).
  * An undisplayable query value suppresses the remaining diagnostic, starting at that value.
+ * A malformed HTTP(S) opener suppresses the diagnostic from that opener, even without ://.
  * Adjacent :// openers in one space-delimited token suppress the suffix from the first URL.
  * A renderUrl result of "***" is a truncation sentinel: suppress that URL and everything after it.
  */
@@ -58,22 +60,29 @@ export function redactDiagnostic(
   renderUrl: (value: string) => string,
   displayableParams: ReadonlySet<string>,
 ): string {
-  const redactionStart = firstUndisplayableQueryValueStart(text, displayableParams);
-  const visible = text.slice(0, redactionStart ?? text.length);
-  const spans = schemeSpans(visible);
+  const queryStart =
+    firstUndisplayableQueryValueStart(text, displayableParams) ?? Number.POSITIVE_INFINITY;
+  const httpStart = firstMalformedHttpStart(text) ?? Number.POSITIVE_INFINITY;
+  const redactionStart = Math.min(queryStart, httpStart);
+  const visible = text.slice(0, redactionStart);
+  // Original authority context prevents clipping from turning hidden userinfo into a host (§13).
+  const spans = schemeSpans(text);
   const parts: string[] = [];
   let cursor = 0;
   for (let index = 0; index < spans.length; index++) {
     const span = spans[index]!;
+    if (span.start >= redactionStart) break;
     let authorityEnd = span.authorityStart;
-    while (authorityEnd < visible.length && !"/?#".includes(visible[authorityEnd]!)) {
+    while (authorityEnd < text.length && !"/?#".includes(text[authorityEnd]!)) {
       // Backslashes include CrewError-escaped controls and WHATWG slash normalization (§13).
-      const ch = visible[authorityEnd]!;
+      const ch = text[authorityEnd]!;
       const code = ch.charCodeAt(0);
       const ambiguous = /[\s'"<>`\\]/.test(ch) || isControlCharacterCode(code);
       if (ambiguous) return `${parts.join("")}${visible.slice(cursor, span.start)}***`;
       authorityEnd++;
     }
+    if (authorityEnd > visible.length)
+      return `${parts.join("")}${visible.slice(cursor, span.start)}***`;
     let tokenEnd = authorityEnd;
     while (tokenEnd < visible.length && visible[tokenEnd] !== " ") tokenEnd++;
     const next = spans[index + 1];
@@ -91,6 +100,6 @@ export function redactDiagnostic(
     parts.push(visible.slice(cursor, span.start), rendered, visible.slice(trimmedEnd, bodyEnd));
     cursor = bodyEnd;
   }
-  parts.push(visible.slice(cursor), redactionStart === undefined ? "" : "***");
+  parts.push(visible.slice(cursor), redactionStart === Number.POSITIVE_INFINITY ? "" : "***");
   return parts.join("");
 }

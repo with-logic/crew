@@ -1,5 +1,5 @@
 /**
- * Coverage close-out for util/copy symlink handling, agents/path isOnPath, and store symlink hashing.
+ * Coverage close-out for util/copy, agents/path, and store symlink hashing (§7.3, §12.1).
  *
  * Branches the happy-path e2e suites do not reach; each test names the
  * file and line it keeps covered so a regression traces back here.
@@ -76,7 +76,7 @@ describe("copyTree", () => {
     const dest = makeTempDir();
     writeFileSync(join(src, "real.txt"), "hi");
     symlinkSync("real.txt", join(src, "link"));
-    copyTree(src, join(dest, "sub"));
+    copyTree(src, join(dest, "sub"), { destinationRoot: dest });
     const st = lstatSync(join(dest, "sub", "link"));
     expect(st.isSymbolicLink()).toBe(true);
   });
@@ -86,7 +86,7 @@ describe("copyTree", () => {
     const dest = makeTempDir();
     writeFileSync(join(src, ".crew.json"), "{}");
     writeFileSync(join(src, "other.txt"), "x");
-    copyTree(src, join(dest, "sub"));
+    copyTree(src, join(dest, "sub"), { destinationRoot: dest });
     expect(existsSync(join(dest, "sub", ".crew.json"))).toBe(false);
     expect(existsSync(join(dest, "sub", "other.txt"))).toBe(true);
   });
@@ -96,7 +96,7 @@ describe("copyTree", () => {
     const dest = makeTempDir();
     mkdirSync(join(src, "a", "b"), { recursive: true });
     writeFileSync(join(src, "a", "b", "c.txt"), "nested");
-    copyTree(src, dest);
+    copyTree(src, dest, { destinationRoot: dest });
     expect(existsSync(join(dest, "a", "b", "c.txt"))).toBe(true);
   });
 
@@ -127,7 +127,7 @@ describe("copyTree", () => {
       symlinkSync(target, link);
       let error: unknown;
       try {
-        copyTree(src, kind === "root" ? link : dest);
+        copyTree(src, kind === "root" ? link : dest, { destinationRoot: dest });
       } catch (caught) {
         error = caught;
       }
@@ -151,7 +151,7 @@ describe("copyTree", () => {
     writeFileSync(join(src, "nested", "payload"), "new bytes");
     writeFileSync(join(dest, "nested", "payload"), "old bytes");
     writeFileSync(join(dest, "untouched"), "keep");
-    copyTree(src, dest);
+    copyTree(src, dest, { destinationRoot: dest });
     expect(readFileSync(join(dest, "nested", "payload"), "utf8")).toBe("new bytes");
     expect(readFileSync(join(dest, "untouched"), "utf8")).toBe("keep");
   });
@@ -162,7 +162,7 @@ describe("copyTree", () => {
     const f = join(src, "script.sh");
     writeFileSync(f, "#!/bin/sh\n");
     chmodSync(f, 0o755);
-    copyTree(src, dest);
+    copyTree(src, dest, { destinationRoot: dest });
     expect(existsSync(join(dest, "script.sh"))).toBe(true);
   });
 });
