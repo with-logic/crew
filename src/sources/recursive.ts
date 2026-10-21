@@ -8,8 +8,9 @@
 
 import { basename } from "node:path";
 import { hasSkillMd } from "../skill/load.ts";
-import { type WalkedEntry, walk } from "../util/fs.ts";
+import type { WalkedEntry } from "../util/fs.ts";
 import { sourceRelativePath } from "./path.ts";
+import { isSourceDirectory, walkSourceDirectory } from "./read.ts";
 
 const MAX_RECURSIVE_DEPTH = 5;
 const SKIPPED_DIRS = new Set([
@@ -28,7 +29,7 @@ const SKIPPED_DIRS = new Set([
 /** Return skill directories discovered recursively, in deterministic order. */
 export function findRecursiveSkillDirs(rootDir: string): string[] {
   const dirs: string[] = [];
-  for (const entry of walk(rootDir, {
+  for (const entry of walkSourceDirectory(rootDir, {
     shouldDescend: (entry) => shouldDescendInto(entry, rootDir),
   })) {
     if (!entry.isDirectory) continue;
@@ -43,7 +44,11 @@ export function findRecursiveSkillDirs(rootDir: string): string[] {
 function shouldDescendInto(entry: WalkedEntry, rootDir: string): boolean {
   if (shouldSkipDirectory(entry.absPath)) return false;
   // Refuse to descend into depth-5 dirs so emitted entries are bounded at depth 5 (§9 step 5.4).
-  if (depthOf(sourceRelativePath(rootDir, entry.absPath)) >= MAX_RECURSIVE_DEPTH) return false;
+  if (
+    !isSourceDirectory(entry.absPath) ||
+    depthOf(sourceRelativePath(rootDir, entry.absPath)) >= MAX_RECURSIVE_DEPTH
+  )
+    return false;
   return !hasSkillMd(entry.absPath);
 }
 

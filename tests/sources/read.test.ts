@@ -1,4 +1,4 @@
-/** Source hashing classifies only file reads and preserves traversal policies (§9, §12.1, §13). */
+/** Source hashing classifies acquired-source reads and preserves traversal policies (§9, §12.1, §13). */
 
 import { expect, test } from "bun:test";
 import { chmodSync, symlinkSync, writeFileSync } from "node:fs";
@@ -27,14 +27,19 @@ test("source hashing identifies the unreadable file and gives a local remedy", (
 });
 
 for (const mode of [0o100, 0o400]) {
-  test(`source hashing preserves directory permission failures (${mode.toString(8)})`, () => {
+  test(`source hashing normalizes directory permission failures (${mode.toString(8)})`, () => {
     const source = makeTempDir();
     writeFileSync(join(source, "asset.txt"), "bytes");
     chmodSync(source, mode);
     try {
       expect(() => hashSourceDirectory(source)).toThrow(
-        expect.objectContaining({ code: "EACCES" }),
+        expect.objectContaining({
+          code: "source_unreachable",
+          details: { path: mode === 0o100 ? source : join(source, "asset.txt") },
+          remedy: expect.stringContaining("source directory"),
+        }),
       );
+      expect(() => hashDirectory(source)).toThrow(expect.objectContaining({ code: "EACCES" }));
     } finally {
       chmodSync(source, 0o700);
     }

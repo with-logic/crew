@@ -50,7 +50,7 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
   try {
     children = cache.children(tap, home, acquired.rootDir);
   } catch (err) {
-    // §10.1: an unreadable manifest cannot establish deletion or stop other groups.
+    // §10.1: an inaccessible source cannot establish deletion or stop other groups.
     if (isSourceReadFailure(err)) return failedGroup(input, err);
     throw err;
   }
