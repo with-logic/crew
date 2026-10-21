@@ -64,20 +64,23 @@ export function redactDiagnostic(
   const httpStart = firstMalformedHttpStart(text) ?? Number.POSITIVE_INFINITY;
   const redactionStart = Math.min(queryStart, httpStart);
   const visible = text.slice(0, redactionStart);
-  const spans = schemeSpans(visible);
+  const spans = schemeSpans(text);
   const parts: string[] = [];
   let cursor = 0;
   for (let index = 0; index < spans.length; index++) {
     const span = spans[index]!;
+    if (span.start >= redactionStart) break;
     let authorityEnd = span.authorityStart;
-    while (authorityEnd < visible.length && !"/?#".includes(visible[authorityEnd]!)) {
+    while (authorityEnd < text.length && !"/?#".includes(text[authorityEnd]!)) {
       // Backslashes include CrewError-escaped controls and WHATWG slash normalization (§13).
-      const ch = visible[authorityEnd]!;
+      const ch = text[authorityEnd]!;
       const code = ch.charCodeAt(0);
       const ambiguous = /[\s'"<>`\\]/.test(ch) || isControlCharacterCode(code);
       if (ambiguous) return `${parts.join("")}${visible.slice(cursor, span.start)}***`;
       authorityEnd++;
     }
+    if (authorityEnd > visible.length)
+      return `${parts.join("")}${visible.slice(cursor, span.start)}***`;
     let tokenEnd = authorityEnd;
     while (tokenEnd < visible.length && visible[tokenEnd] !== " ") tokenEnd++;
     const next = spans[index + 1];

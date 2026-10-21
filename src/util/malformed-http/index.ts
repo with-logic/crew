@@ -48,6 +48,7 @@ function malformedSeparators(text: string, opener: HttpOpener): boolean {
  */
 export function firstMalformedHttpStart(text: string, wholeToken = false): number | undefined {
   let authorityStart: number | undefined;
+  let malformedStart: number | undefined;
   let previousWasSchemeCharacter = false;
   const wholeStart = skipHttpGap(text, 0);
   for (let index = 0; index < text.length; index++) {
@@ -63,7 +64,10 @@ export function firstMalformedHttpStart(text: string, wholeToken = false): numbe
     if (beginsScheme && (!wholeToken || index === wholeStart)) {
       const opener = httpOpener(text, index);
       if (opener !== undefined) {
-        if (malformedSeparators(text, opener)) return index;
+        if (malformedSeparators(text, opener)) {
+          if (authorityStart === undefined) return index;
+          malformedStart ??= index;
+        }
         // Valid whole URLs have a trusted boundary; their path is not another URL (§13).
         if (wholeToken && text.startsWith("//", opener.afterColon)) return undefined;
         authorityStart ??= index;
@@ -73,7 +77,10 @@ export function firstMalformedHttpStart(text: string, wholeToken = false): numbe
       }
     }
     if (ch === "@" && authorityStart !== undefined) return authorityStart;
-    if ("/?#".includes(ch)) authorityStart = undefined;
+    if ("/?#".includes(ch)) {
+      if (malformedStart !== undefined) return malformedStart;
+      authorityStart = undefined;
+    }
   }
-  return undefined;
+  return malformedStart;
 }
