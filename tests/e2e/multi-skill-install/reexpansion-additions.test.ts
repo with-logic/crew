@@ -90,7 +90,7 @@ describe("tap re-expansion on update (§10.1.1)", () => {
     const second = captureStreams();
     const secondCode = runCli(["update"], { home, streams: second.streams });
     expect(secondCode).toBe(0);
-    expect(second.stdout()).not.toContain("removed upstream");
+    expect(second.stdout()).not.toContain("source no longer available");
     expect(second.stdout()).not.toContain("failed");
   });
 
@@ -105,7 +105,7 @@ describe("tap re-expansion on update (§10.1.1)", () => {
     const capture = captureStreams();
     const code = runCli(["update"], { home, streams: capture.streams });
     expect(code).toBe(0);
-    expect(capture.stdout()).not.toContain("removed upstream");
+    expect(capture.stdout()).not.toContain("source no longer available");
 
     const alpha = readState(home).installations.find((e) => e.name === "alpha")!;
     expect(alpha.source.path).toBe("alpha-renamed");

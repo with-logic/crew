@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { listInstalledForAgent } from "../agents/list.ts";
 import { ALL_AGENTS } from "../agents/registry.ts";
 import type { Marker, StateEntry, TapDiscovery } from "../core/types.ts";
+import { hasUsableProjectRoot } from "../state/validation.ts";
 import { writeJson } from "../util/json.ts";
 
 export interface TapMarkerRewrite {
@@ -25,7 +26,7 @@ export function rewriteTapMarkers(
   if (rewrite.oldName === rewrite.newName && rewrite.discovery === undefined) return;
   const projectRoots = new Set<string>([cwd]);
   for (const e of stateEntries) {
-    if (e.scope === "project" && e.project_root) projectRoots.add(e.project_root);
+    if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
   for (const adapter of ALL_AGENTS) {
     for (const rec of listInstalledForAgent(adapter, "user", cwd)) {

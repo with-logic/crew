@@ -15,7 +15,7 @@ import { join } from "node:path";
 
 const CAP = 200;
 const ROOTS = ["src", "tests", "scripts", "site/app", "site/components", "site/lib"];
-const EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs"]);
+const EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".sh"]);
 const SKIP_DIRS = new Set(["node_modules", ".next", "dist", "coverage"]);
 
 function* walk(dir: string): Generator<string> {

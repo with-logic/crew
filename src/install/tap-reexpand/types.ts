@@ -7,14 +7,17 @@ interface TapReexpandRowBase {
   readonly name: string;
   readonly scope: Scope;
   readonly tap: string;
-  readonly error?: { readonly code: string; readonly message: string };
 }
 
 /** Only successful additions expose non-fatal rollback cleanup diagnostics. */
 export type TapReexpandRow = TapReexpandRowBase &
   (
-    | { readonly kind: "added"; readonly warnings?: readonly string[] }
-    | { readonly kind: "would_add" | "source_gone" | "tap_error" }
+    | { readonly kind: "added"; readonly warnings?: readonly string[]; readonly error?: never }
+    | { readonly kind: "would_add" | "source_gone"; readonly error?: never }
+    | {
+        readonly kind: "tap_error";
+        readonly error: { readonly code: string; readonly message: string };
+      }
   );
 
 /** Callback to install one newly-detected child skill. */

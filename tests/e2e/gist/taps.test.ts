@@ -67,7 +67,7 @@ test("C-GIST-04 whole-gist updates change bytes, add files and preserve deleted 
   expect(readState(f.home)).toEqual(beforePreview);
   const update = f.cli("update");
   expect(update.code).toBe(0);
-  expect(update.out).toContain("removed upstream");
+  expect(update.out).toContain("source no longer available");
   expect(readFileSync(join(target, "prd", "SKILL.md"), "utf8")).toContain("changed");
   expect(readFileSync(join(target, "new", "SKILL.md"), "utf8")).toBe(next);
   expect(readFileSync(join(target, "build", "SKILL.md"), "utf8")).toContain("Original build");
