@@ -17,6 +17,7 @@
  */
 
 import type { TapConfig } from "../../core/types.ts";
+import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { withAcquiredTap } from "./index.ts";
 
 /**
@@ -54,7 +55,7 @@ export function withTapsAtRef<T>(
         return step(i + 1);
       });
     } catch (err) {
-      if (reached) throw err;
+      if (reached || (err instanceof Error && hasExportCleanupFailure(err))) throw err;
       // This tap cannot supply the ref; carry on without it.
       unavailable.set(tap.name, err);
       return step(i + 1);
