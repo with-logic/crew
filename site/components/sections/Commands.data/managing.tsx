@@ -46,9 +46,10 @@ export const MANAGING: CommandGroup = {
           <span className={styles.flag}>--force</span>.{" "}
           <span className={styles.flag}>--dry-run</span> previews what would change: taps still
           refresh, but nothing you have installed is touched. If adding a new tap skill fails for an
-          agent, update reports the target and reason, including which successful targets retain
-          copies. The next update that re-expands the affected tap group retries that skill, unless
-          it is a dry run.
+          agent, update reports the target and reason and rolls back copies still owned by that
+          attempt. Targets detected as changed by another writer are preserved. Lost ownership or
+          restoration failure reports the problem and any retained recovery path. The next update
+          that re-expands the affected tap group retries that skill, unless it is a dry run.
         </>
       ),
     },
