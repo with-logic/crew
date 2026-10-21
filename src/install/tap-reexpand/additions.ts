@@ -7,6 +7,7 @@
  * (`--dry-run`) or install it.
  */
 
+import { CrewError } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import {
   type InstalledSourceIndex,
@@ -102,22 +103,37 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       });
       continue;
     }
-    const entry = input.installOne({
-      skillDir: child.path,
-      skillName: child.name,
-      tapRelativePath: child.tapRelativePath,
-      scope: input.scope,
-      tap: input.tap,
-      agents: input.agents,
-      resolvedSha: input.resolvedSha,
-      projectRoot: input.projectRoot,
-      ref: input.ref,
-      pinned: input.pinned,
-    });
-    if (entry) {
-      added.push(entry);
-      noteInstalled(input.installedIndex, lookup);
-      rows.push({ name: child.name, scope: input.scope, tap: input.tap.name, kind: "added" });
+    try {
+      const entry = input.installOne({
+        skillDir: child.path,
+        skillName: child.name,
+        tapRelativePath: child.tapRelativePath,
+        scope: input.scope,
+        tap: input.tap,
+        agents: input.agents,
+        resolvedSha: input.resolvedSha,
+        projectRoot: input.projectRoot,
+        ref: input.ref,
+        pinned: input.pinned,
+      });
+      if (entry) {
+        added.push(entry);
+        noteInstalled(input.installedIndex, lookup);
+        rows.push({ name: child.name, scope: input.scope, tap: input.tap.name, kind: "added" });
+      }
+    } catch (err) {
+      const ce =
+        err instanceof CrewError
+          ? err
+          : new CrewError("usage_error", (err as Error).message ?? String(err));
+      hardFailure = true;
+      rows.push({
+        name: child.name,
+        scope: input.scope,
+        tap: input.tap.name,
+        kind: "tap_error",
+        error: { code: ce.code, message: ce.message },
+      });
     }
   }
 
