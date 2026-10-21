@@ -7,7 +7,7 @@
  * (`--dry-run`) or install it.
  */
 
-import { normalizeLocalError } from "../../core/errors.ts";
+import { type CrewError, normalizeLocalError } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import {
   type InstalledSourceIndex,
