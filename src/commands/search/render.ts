@@ -2,11 +2,11 @@
  * Human output rendering for `crew search` (§5.1, §16.6).
  */
 
+import { skillRef } from "../../refs/skill-ref.ts";
 import { columns, shellQuote, truncate } from "../../util/format.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 import { knownInstallRef, knownTapSource } from "./known.ts";
-import { skillRef } from "./reference.ts";
 import type { KnownSearchHit, SearchHit } from "./types.ts";
 
 const SAME_NAME_NOTE = "same name installed elsewhere";

@@ -2,6 +2,7 @@
  * Search helpers for the bundled known-tap registry (§16.2.1).
  */
 
+import { skillRef } from "../refs/skill-ref.ts";
 import { getKnownTaps } from "./registry.ts";
 import { sameNullableText, sameText } from "./text.ts";
 import type { KnownTap, KnownTapHit, KnownTapSkill } from "./types.ts";
@@ -46,11 +47,6 @@ export function findKnownTapSkill(
   return null;
 }
 
-export function knownTapSkillLabel(skill: KnownTapSkill): string {
-  if (skill.namespace === null) return skill.name;
-  return `${skill.namespace}/${skill.name}`;
-}
-
 function knownTapMatches(tap: KnownTap, query: string): boolean {
   return (
     query === "" ||
@@ -60,11 +56,11 @@ function knownTapMatches(tap: KnownTap, query: string): boolean {
 }
 
 function knownTapSkillMatches(skill: KnownTapSkill, query: string): boolean {
-  const label = knownTapSkillLabel(skill).toLowerCase();
+  const label = skillRef(skill).toLowerCase();
   return query === "" || skill.description.toLowerCase().includes(query) || label.includes(query);
 }
 
 function compareKnownTapHits(a: KnownTapHit, b: KnownTapHit): number {
   if (a.tap.name !== b.tap.name) return a.tap.name.localeCompare(b.tap.name);
-  return knownTapSkillLabel(a.skill).localeCompare(knownTapSkillLabel(b.skill));
+  return skillRef(a.skill).localeCompare(skillRef(b.skill));
 }
