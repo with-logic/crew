@@ -27,7 +27,7 @@ import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
 import { cleanupFailedExport, withExportCleanup } from "../util/export-cleanup.ts";
 import { ensureDir, rmrf } from "../util/fs.ts";
-import { type GitProcessError, runGit } from "./exec.ts";
+import { GitProcessError, runGit } from "./exec.ts";
 import { assertNoSymlinkEscape } from "./tree-safety.ts";
 
 /**
@@ -65,8 +65,8 @@ export function exportTreeAt(
     try {
       runGit(args, { cwd: clonePath, env: { GIT_INDEX_FILE: indexFile } });
     } catch (err) {
-      // `runGit` only throws `GitProcessError`.
-      throw exportFailure(err as GitProcessError, sha, subpath, selectedPath, clonePath);
+      if (!(err instanceof GitProcessError)) throw err;
+      throw exportFailure(err, sha, subpath, selectedPath, clonePath);
     }
   }, [{ cleanupPath: indexFile, cleanup: () => rmrf(indexFile) }]);
 }
