@@ -47,8 +47,13 @@ export function lockOwnerFs(lockPath: string): {
           flag: "wx",
         });
         fs.renameSync(temporary, ownerPath);
-      } finally {
-        removeTemporaryRecord();
+      } catch (err) {
+        try {
+          removeTemporaryRecord();
+        } catch {
+          // Only native filesystem cleanup runs here; preserve publication's error (§14).
+        }
+        throw err;
       }
       // Leave the sidecar on release: deleting it after rmdir could delete
       // a successor's record. Its directory identity makes old records inert.
