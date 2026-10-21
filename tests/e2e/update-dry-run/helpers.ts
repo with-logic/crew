@@ -13,8 +13,8 @@ import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { paths } from "../../../src/core/paths.ts";
 import type { TapReexpandRow } from "../../../src/install/tap-reexpand/index.ts";
 import type { UpdateRow } from "../../../src/install/update/types.ts";
-import { walk } from "../../../src/util/fs.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
+import { snapshotFiles } from "../../helpers/snapshot.ts";
 
 /** Mirrors the command's `--json` payload; discriminants keep their real types. */
 export interface UpdateJson {
@@ -69,8 +69,5 @@ export function snapshotInstalledState(home: string): Record<string, Buffer> {
 /** Record every file under `root` by content, keyed by relative path. */
 function snapshotTree(out: Record<string, Buffer>, root: string, label: string): void {
   if (!existsSync(root)) return;
-  for (const entry of walk(root)) {
-    if (!entry.isFile) continue;
-    out[`${label}:${relative(root, entry.absPath)}`] = readFileSync(entry.absPath);
-  }
+  snapshotFiles(root, out, (entry) => `${label}:${relative(root, entry.absPath)}`);
 }
