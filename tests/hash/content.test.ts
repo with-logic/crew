@@ -1,3 +1,5 @@
+/** Content-hash compatibility and conformance (§12.1). */
+
 import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, renameSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -83,6 +85,14 @@ describe("hashDirectory", () => {
     writeFileSync(join(d, "a.txt"), "hello world");
     writeFileSync(join(d, "b.txt"), "goodbye");
     expect(hashDirectory(d)).toBe(hashDirectory(d));
+  });
+
+  test("C-HASH-08 existing hashes of literal backslash filenames remain stable", () => {
+    const d = makeTempDir();
+    writeFileSync(join(d, "data\\literal.txt"), "tag asset\n");
+    expect(hashDirectory(d)).toBe(
+      "sha256:d8465e8d17afc111315650462f3b75af8d9b59cdbb8b1697d5c275ddaead7d75",
+    );
   });
 
   test("symlink is hashed as its target", () => {

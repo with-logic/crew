@@ -18,15 +18,16 @@
  * but contains child directories with a `SKILL.md`.
  */
 
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
 import { migrateTapClone } from "../sources/migrate-clones.ts";
+import { sourceRelativePath } from "../sources/path.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
-import { isDirectory, listDir, toPosix } from "../util/fs.ts";
+import { isDirectory, listDir } from "../util/fs.ts";
 
 /** Location of one skill inside a tap. */
 export interface SkillLocation {
@@ -151,7 +152,7 @@ function maybeRecursiveIndex(
 ): TapIndex {
   if (skills.size > 0 || tap.discovery !== "recursive") return { skills, namespaces };
   for (const dir of findRecursiveSkillDirs(root)) {
-    const tapRelativePath = toPosix(relative(root, dir));
+    const tapRelativePath = sourceRelativePath(root, dir);
     const skillName = skillNameForIndex(dir);
     if (skillName === null) continue;
     addSkill({ name: skillName, namespace: null, path: dir, tapRelativePath });
