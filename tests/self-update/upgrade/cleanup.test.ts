@@ -1,24 +1,20 @@
 /** Release-download ownership after swap or version-record failures (§10.3). */
 
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CrewError } from "../../../src/core/errors.ts";
 import { paths } from "../../../src/core/paths.ts";
 import {
   resetAssetDownloader,
   resetXattrClearer,
-  setAssetDownloader,
   setXattrClearer,
 } from "../../../src/self-update/download.ts";
-import { resetReleaseFetcher, setReleaseFetcher } from "../../../src/self-update/github.ts";
-import {
-  resetReleaseSignatureVerifier,
-  setReleaseSignatureVerifier,
-} from "../../../src/self-update/signature.ts";
+import { resetReleaseFetcher } from "../../../src/self-update/github.ts";
+import { resetReleaseSignatureVerifier } from "../../../src/self-update/signature.ts";
 import { runSelfUpdate } from "../../../src/self-update/upgrade.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
-import { downloaderForBinary, releaseAssets } from "../helpers.ts";
+import { captureDownload, removeCapturedDownload, retainDownloadRoot } from "./helpers.ts";
 
 afterEach(() => {
   resetAssetDownloader();
@@ -26,19 +22,6 @@ afterEach(() => {
   resetReleaseFetcher();
   resetReleaseSignatureVerifier();
 });
-
-function captureDownload(): { assetPath: string } {
-  const captured = { assetPath: "" };
-  const download = downloaderForBinary("NEW");
-  setReleaseFetcher(() => ({ tag: "v99.99.99", assets: releaseAssets() }));
-  setReleaseSignatureVerifier(() => true);
-  setXattrClearer(() => {});
-  setAssetDownloader((url, destPath, timeout, maxBytes) => {
-    if (url.endsWith("/asset")) captured.assetPath = destPath;
-    download(url, destPath, timeout, maxBytes);
-  });
-  return captured;
-}
 
 test("failed replacement releases downloaded bytes and preserves self_update_failed", () => {
   const home = makeCrewHome();
@@ -89,12 +72,39 @@ test("cleanup failure preserves the original replacement error and diagnostics",
     expect(failure).toBeInstanceOf(CrewError);
     expect((failure as CrewError).code).toBe("self_update_failed");
     expect((failure as Error).message).toContain("xattr fixture failure");
+    expect((failure as Error).message).toContain("cleanup warning:");
+    expect((failure as Error).message).toContain(dirname(captured.assetPath));
+    expect((failure as Error).message).toContain("EACCES");
     expect((failure as CrewError).details).toEqual({ dest, cause: "xattr fixture failure" });
     expect(readFileSync(dest, "utf8")).toBe("OLD");
     // Real permissions prevent removal until the fixture restores ownership access.
     expect(existsSync(captured.assetPath)).toBe(true);
   } finally {
-    chmodSync(dirname(captured.assetPath), 0o700);
-    rmSync(dirname(captured.assetPath), { recursive: true, force: true });
+    removeCapturedDownload(captured);
+  }
+});
+
+test("cleanup failure preserves success and reports a sanitized retained-root warning", () => {
+  const home = makeCrewHome();
+  const dest = join(home, "crew");
+  writeFileSync(dest, "OLD");
+  const captured = captureDownload();
+  setXattrClearer(retainDownloadRoot);
+  const savedTmp = process.env["TMPDIR"];
+  const tempRoot = join(home, "tmp\ncontrol");
+  mkdirSync(tempRoot);
+  process.env["TMPDIR"] = tempRoot;
+  try {
+    const result = runSelfUpdate({ home, force: true, execPath: dest });
+    expect(result.replaced).toBe(true);
+    expect(readFileSync(dest, "utf8")).toBe("NEW");
+    expect(result.cleanupWarning).toContain("tmp\\x0acontrol/crew-self-update-");
+    expect(result.cleanupWarning).toContain("EACCES");
+    expect(result.cleanupWarning).not.toContain("\n");
+    expect(existsSync(dirname(captured.assetPath))).toBe(true);
+  } finally {
+    if (savedTmp === undefined) delete process.env["TMPDIR"];
+    else process.env["TMPDIR"] = savedTmp;
+    removeCapturedDownload(captured);
   }
 });
