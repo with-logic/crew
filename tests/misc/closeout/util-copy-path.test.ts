@@ -6,13 +6,23 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../src/agents/codex.ts";
 import { geminiCliAdapter } from "../../../src/agents/gemini-cli.ts";
 import { isOnPath } from "../../../src/agents/path.ts";
 import { runCli } from "../../../src/cli/main.ts";
+import { CrewError } from "../../../src/core/errors.ts";
 import { resetGitRunner } from "../../../src/git/exec.ts";
 import { copyTree } from "../../../src/util/copy.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
@@ -67,7 +77,6 @@ describe("copyTree", () => {
     writeFileSync(join(src, "real.txt"), "hi");
     symlinkSync("real.txt", join(src, "link"));
     copyTree(src, join(dest, "sub"));
-    const { lstatSync } = require("node:fs");
     const st = lstatSync(join(dest, "sub", "link"));
     expect(st.isSymbolicLink()).toBe(true);
   });
@@ -89,6 +98,62 @@ describe("copyTree", () => {
     writeFileSync(join(src, "a", "b", "c.txt"), "nested");
     copyTree(src, dest);
     expect(existsSync(join(dest, "a", "b", "c.txt"))).toBe(true);
+  });
+
+  test.each(["root", "directory", "file", "dangling"] as const)(
+    "refuses a destination %s symlink without changing its target",
+    (kind) => {
+      const src = makeTempDir();
+      const dest = makeTempDir();
+      const outside = makeTempDir();
+      const sentinel = join(outside, "payload");
+      writeFileSync(sentinel, "keep outside bytes");
+      const link = join(dest, "entry");
+      const targets = {
+        root: outside,
+        directory: outside,
+        file: sentinel,
+        dangling: join(outside, "missing"),
+      } satisfies Record<typeof kind, string>;
+      const target = targets[kind];
+      if (kind === "root") {
+        writeFileSync(join(src, "payload"), "replacement");
+      } else if (kind === "directory") {
+        mkdirSync(join(src, "entry"));
+        writeFileSync(join(src, "entry", "payload"), "replacement");
+      } else if (kind === "file" || kind === "dangling") {
+        writeFileSync(join(src, "entry"), "replacement");
+      }
+      symlinkSync(target, link);
+      let error: unknown;
+      try {
+        copyTree(src, kind === "root" ? link : dest);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(CrewError);
+      expect(error).toMatchObject({
+        code: "usage_error",
+        message: `Refusing to copy through destination symlink: ${link}`,
+        remedy: expect.stringContaining("Rename case-colliding source entries"),
+      });
+      expect(readFileSync(sentinel, "utf8")).toBe("keep outside bytes");
+      expect(existsSync(join(outside, "missing"))).toBe(false);
+      expect(lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(readlinkSync(link)).toBe(target);
+    },
+  );
+
+  test("merges existing directories and overwrites regular files", () => {
+    const src = makeTempDir();
+    const dest = makeTempDir();
+    for (const root of [src, dest]) mkdirSync(join(root, "nested"));
+    writeFileSync(join(src, "nested", "payload"), "new bytes");
+    writeFileSync(join(dest, "nested", "payload"), "old bytes");
+    writeFileSync(join(dest, "untouched"), "keep");
+    copyTree(src, dest);
+    expect(readFileSync(join(dest, "nested", "payload"), "utf8")).toBe("new bytes");
+    expect(readFileSync(join(dest, "untouched"), "utf8")).toBe("keep");
   });
 
   test("chmod bits not preserved but copy succeeds", () => {
@@ -129,7 +194,6 @@ describe("symlink hashing in store", () => {
     symlinkSync("real.txt", join(skillDir, "link.txt"));
     const code = runCli(["install", skillDir], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
-    const { lstatSync } = require("node:fs");
     expect(lstatSync(join(ccRoot, "demo", "link.txt")).isSymbolicLink()).toBe(true);
   });
 });
