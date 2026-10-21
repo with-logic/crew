@@ -154,19 +154,16 @@ export function validateFrontmatterName(data: YamlValue): string {
   if (!NAME_PATTERN.test(name)) {
     throw new CrewError(
       "invalid_skill",
-      `\`name: ${name}\` has invalid characters — use lowercase letters, digits, and hyphens only, starting with an alphanumeric, not a hyphen`,
+      "`name` has invalid characters — use lowercase letters, digits, and hyphens only, starting with an alphanumeric, not a hyphen",
     );
   }
   if (name.endsWith("-")) {
-    throw new CrewError(
-      "invalid_skill",
-      `\`name: ${name}\` ends with a hyphen — drop the trailing \`-\``,
-    );
+    throw new CrewError("invalid_skill", "`name` ends with a hyphen — drop the trailing `-`");
   }
   if (name.includes("--")) {
     throw new CrewError(
       "invalid_skill",
-      `\`name: ${name}\` contains \`--\` — collapse consecutive hyphens to single ones`,
+      "`name` contains `--` — collapse consecutive hyphens to single ones",
     );
   }
   return name;

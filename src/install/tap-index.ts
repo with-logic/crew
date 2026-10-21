@@ -7,6 +7,7 @@
  *   - `skills`: every declared skill name findable under the tap (root,
  *     skills/<name>, skills/<namespace>/<name>, or original top-level gist filenames).
  *   - `namespaces`: every namespace name and its skill children.
+ *   - `skipped`: rejected directory locations and their validation diagnostics.
  *
  * Directory indexing is intentionally optimistic: full SKILL.md validation
  * still happens at install or search-render time. Invalid gist files are
@@ -18,17 +19,18 @@
  */
 
 import { join } from "node:path";
+import { CrewError } from "../core/errors.ts";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { SkillFrontmatter, TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
+import type { SkippedSkill } from "../sources/expand.ts";
 import { gistCandidates, isGistTap } from "../sources/gist.ts";
 import { migrateTapClone } from "../sources/migrate-clones.ts";
 import { sourceRelativePath } from "../sources/path.ts";
 import { isSourceDirectory, listSourceDirectory } from "../sources/read.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
-import { isSourceReadFailure } from "../util/source-read.ts";
 
 /** Location of one skill inside a tap. */
 export interface SkillLocation {
@@ -47,12 +49,20 @@ export interface SkillLocation {
   readonly tapRelativePath: string;
 }
 
+/** Rejected directory candidate; its declared name cannot be trusted (§9 step 4). */
+export interface RejectedTapSkill extends SkippedSkill {
+  readonly code: "invalid_skill";
+}
+
+type DirectorySkillInput = Pick<SkillLocation, "path" | "namespace" | "tapRelativePath">;
+
 /** Result of indexing a tap. */
 export interface TapIndex {
   /** Every skill location, keyed by skill name. Multiple values when a name repeats across namespaces. */
   readonly skills: ReadonlyMap<string, readonly SkillLocation[]>;
   /** Namespace name → its skill children. */
   readonly namespaces: ReadonlyMap<string, readonly SkillLocation[]>;
+  readonly skipped: readonly RejectedTapSkill[];
 }
 
 /** Resolve a tap's on-disk root, materializing a git clone if needed. */
@@ -67,8 +77,8 @@ export function tapRoot(tap: TapConfig, home: string): string {
 }
 
 /**
- * Build a shallow index of a tap. Returns empty maps only for a tap
- * that turns out to have no valid skills.
+ * Build a shallow index of a tap, retaining rejected directory candidates
+ * separately from valid declared-name matches.
  *
  * `rootOverride` points the index at an already-materialized directory
  * instead of the live clone. A ref-carrying reference needs this: the
@@ -80,6 +90,7 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
   const root = rootOverride ?? tapRoot(tap, home);
   const skills = new Map<string, SkillLocation[]>();
   const namespaces = new Map<string, SkillLocation[]>();
+  const skipped: RejectedTapSkill[] = [];
 
   const addSkill = (loc: SkillLocation): void => {
     const list = skills.get(loc.name);
@@ -92,8 +103,17 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
     }
   };
 
+  const addDirectorySkill = ({ path, namespace, tapRelativePath }: DirectorySkillInput): void => {
+    try {
+      addSkill({ name: loadSkillName(path), namespace, path, tapRelativePath });
+    } catch (err) {
+      if (!(err instanceof CrewError) || err.code !== "invalid_skill") throw err;
+      skipped.push({ path, code: err.code, message: err.message });
+    }
+  };
+
   const followSymlinks = tap.kind === "path";
-  if (!isSourceDirectory(root, followSymlinks)) return { skills, namespaces };
+  if (!isSourceDirectory(root, followSymlinks)) return { skills, namespaces, skipped };
   if (isGistTap(tap)) {
     for (const candidate of gistCandidates(root))
       addSkill({
@@ -103,13 +123,11 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
         path: candidate.path,
         tapRelativePath: candidate.filename,
       });
-    return { skills, namespaces };
+    return { skills, namespaces, skipped };
   }
   if (hasSkillMd(root)) {
-    const skillName = skillNameForIndex(root);
-    if (skillName !== null)
-      addSkill({ name: skillName, namespace: null, path: root, tapRelativePath: "" });
-    return { skills, namespaces };
+    addDirectorySkill({ path: root, namespace: null, tapRelativePath: "" });
+    return { skills, namespaces, skipped };
   }
 
   const skillsDir = join(root, "skills");
@@ -119,14 +137,7 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
       const child = join(skillsDir, name);
       if (!isSourceDirectory(child, followSymlinks)) continue;
       if (hasSkillMd(child)) {
-        const skillName = skillNameForIndex(child);
-        if (skillName === null) continue;
-        addSkill({
-          name: skillName,
-          namespace: null,
-          path: child,
-          tapRelativePath: `skills/${name}`,
-        });
+        addDirectorySkill({ path: child, namespace: null, tapRelativePath: `skills/${name}` });
         continue;
       }
       // Possibly a namespace: look at its children.
@@ -134,17 +145,19 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
         const grandchild = join(child, childName);
         if (!isSourceDirectory(grandchild, followSymlinks)) continue;
         if (!hasSkillMd(grandchild)) continue;
-        const skillName = skillNameForIndex(grandchild);
-        if (skillName === null) continue;
-        addSkill({
-          name: skillName,
-          namespace: name,
+        addDirectorySkill({
           path: grandchild,
+          namespace: name,
           tapRelativePath: `skills/${name}/${childName}`,
         });
       }
     }
-    return maybeRecursiveIndex(tap, root, skills, namespaces, addSkill);
+    return maybeRecursiveIndex({
+      tap,
+      root,
+      index: { skills, namespaces, skipped },
+      addDirectorySkill,
+    });
   }
 
   // Case 3: walk one level under root.
@@ -152,35 +165,33 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
     const child = join(root, name);
     if (!isSourceDirectory(child, followSymlinks)) continue;
     if (!hasSkillMd(child)) continue;
-    const skillName = skillNameForIndex(child);
-    if (skillName === null) continue;
-    addSkill({ name: skillName, namespace: null, path: child, tapRelativePath: name });
+    addDirectorySkill({ path: child, namespace: null, tapRelativePath: name });
   }
-  return maybeRecursiveIndex(tap, root, skills, namespaces, addSkill);
+  return maybeRecursiveIndex({
+    tap,
+    root,
+    index: { skills, namespaces, skipped },
+    addDirectorySkill,
+  });
 }
 
-function maybeRecursiveIndex(
-  tap: TapConfig,
-  root: string,
-  skills: Map<string, SkillLocation[]>,
-  namespaces: Map<string, SkillLocation[]>,
-  addSkill: (loc: SkillLocation) => void,
-): TapIndex {
-  if (skills.size > 0 || tap.discovery !== "recursive") return { skills, namespaces };
+function maybeRecursiveIndex({
+  tap,
+  root,
+  index,
+  addDirectorySkill,
+}: {
+  readonly tap: TapConfig;
+  readonly root: string;
+  readonly index: TapIndex;
+  readonly addDirectorySkill: (input: DirectorySkillInput) => void;
+}): TapIndex {
+  // §9 step 5.4: invalid standard candidates also prevent recursive fallback.
+  if (index.skills.size > 0 || index.skipped.length > 0 || tap.discovery !== "recursive")
+    return index;
   for (const dir of findRecursiveSkillDirs(root)) {
     const tapRelativePath = sourceRelativePath(root, dir);
-    const skillName = skillNameForIndex(dir);
-    if (skillName === null) continue;
-    addSkill({ name: skillName, namespace: null, path: dir, tapRelativePath });
+    addDirectorySkill({ path: dir, namespace: null, tapRelativePath });
   }
-  return { skills, namespaces };
-}
-
-function skillNameForIndex(path: string): string | null {
-  try {
-    return loadSkillName(path);
-  } catch (err) {
-    if (isSourceReadFailure(err)) throw err;
-    return null;
-  }
+  return index;
 }
