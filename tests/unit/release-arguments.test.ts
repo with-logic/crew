@@ -33,7 +33,7 @@ describe("release argument parsing", () => {
       "-euo",
       "pipefail",
       "-c",
-      'RELEASE_TARGET=minor; DRY_RUN=true; source "$1"; declare -F parse_release_arguments >/dev/null; [[ "$RELEASE_TARGET" == minor && "$DRY_RUN" == true ]]',
+      'arguments_helper="$1"; set -- sentinel-one "sentinel two"; RELEASE_TARGET=minor; DRY_RUN=true; source "$arguments_helper"; declare -F parse_release_arguments >/dev/null; [[ "$RELEASE_TARGET" == minor && "$DRY_RUN" == true && "$#" -eq 2 && "$1" == sentinel-one && "$2" == "sentinel two" ]]',
       "release-arguments-source-test",
       argumentHelper,
     ]);
