@@ -1225,6 +1225,12 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Every other spec rule from the Agent Skills specification.
 
    A skill that fails validation is recorded as a failed skill with its message and path; the run continues. No validation failure aborts the whole command. See the exit-code rules in step 9.
+
+   Directory-tap name-only indexing retains a rejected candidate's source
+   path and validation reason separately from valid declared-name matches.
+   A rejected candidate MUST NOT be assigned an inferred skill name.
+   Configured search reports these diagnostics as described in §16.6.
+   The gist file-layout exception in step 5 still ignores invalid files.
 5. **Expand directories.** Three cases, checked in order:
    1. If the resolved source location has a `SKILL.md` at its root, it is one skill.
    2. Else, if the resolved source location has a `skills/` subdirectory, crew walks under `skills/` and collects skills:
@@ -2179,6 +2185,26 @@ of untrusted trailing git prose; separately composed operation prefixes
 and remedy blocks remain available. Redaction MUST scan monotonically
 without repeated suffix searches or an arbitrary input-length cutoff.
 
+Malformed HTTP(S) openers are also credential ambiguities. Recognize
+`http` and `https` case-insensitively as complete scheme names with an
+ASCII colon, including raw C0, DEL, C1, or their visible `\xNN` control
+escapes between scheme letters or around the colon. Ordinary spaces may
+surround the colon but MUST NOT join separated scheme letters. A slash
+or backslash opening run with missing, mixed, whitespace-separated, or
+control-separated separators suppresses the diagnostic from its scheme
+through end-of-input. Existing uninterrupted `://` and extra-forward-slash
+normalization remain unchanged. With no opening separators, an `@` before
+the first `/`, `?`, or `#` authority boundary makes the same suffix
+ambiguous; whitespace, quotes, markup, and raw or escaped controls MUST
+NOT terminate userinfo. Thus `HTTP: contact user@host` may be concealed,
+while `HTTP: request denied` remains readable. Larger scheme names,
+percent-encoded or Unicode-lookalike colons, and ordinary split words
+are outside this recognition rule. Whole-token progress values use the
+same malformed-opener guard; a well-formed structured URL retains its
+existing safe rendering without interpreting its path as another URL.
+These are display rules only: accepted source-reference grammar, SSH
+and SCP behavior, recorded identities, and error names/codes do not change.
+
 **Human-mode error quality.** In human mode, an error message should
 name the offending thing (path, skill, ref, URL) and — whenever a
 reasonable next step exists — point the user at what to try. The stable
@@ -2442,6 +2468,15 @@ Add a tap first, then install a suggested skill by qualified name.
 ```
 
 `crew search` (no query) lists every skill in every configured tap — the exhaustive catalog. It does not list the known-tap registry. Output and JSON shape are identical to the query form; the installed marker appears the same way and `known_hits` is empty.
+
+Invalid directory manifests are omitted from search hits and reported as
+warnings naming the tap, source path, `invalid_skill`, and validation reason.
+This includes candidates rejected during name-only indexing and during full
+metadata loading. Warnings appear on human stderr and in JSON `warnings`,
+regardless of query, since invalid metadata cannot be reliably matched.
+Healthy siblings remain searchable and validation warnings alone leave the
+search exit code at 0. Gist files excluded by §9's file-layout discovery
+remain ignored without validation warnings.
 
 **`--tap <name>`.** `crew search --tap <name> [<query>]` scopes the search
 (or the no-query catalog) to the single configured tap `<name>`. Only that
@@ -2814,6 +2849,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-08 | §16.6 | `crew search --json` emits a structured object `{ tap, hits, known_hits, warnings }`. `tap` is the `--tap <name>` filter's tap name, or `null` when the flag was absent. Each hit in `hits` includes `installed: boolean`, `same_name_installed: boolean`, and `namespace: string \| null` fields. |
 | C-TAP-08b | §16.6 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
 | C-TAP-08c | §16.6 | A same-name skill from a different tap/path is not marked installed in `crew search`; JSON reports `installed: false` and `same_name_installed: true`. |
+| C-TAP-08d | §9, §16.6 | Directory-tap candidates rejected during name-only indexing retain path-specific validation diagnostics without inferred names. Search reports invalid directory manifests in human stderr and JSON warnings, regardless of query, while healthy siblings remain hits and the command exits 0. Gist invalid files remain ignored. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
 | C-TAP-12 | §16.3 | `crew tap add <url>//<subpath>` configures a tap rooted at `<subpath>` inside the repo. Skills at the top level of `<subpath>` are installable by bare name, just like a root tap. |
@@ -2951,6 +2987,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-06 | §5.2 | `--quiet` suppresses non-error stdout. Error output still reaches stderr. |
 | C-CLI-06a | §5.2 | `--verbose` emits progress lines (git invocations, store staging, per-agent install paths) on stderr and nothing extra on stdout; without the flag those lines are absent, including on the run after a failed `--verbose` run. |
 | C-CLI-06b | §5.2 | `--verbose` output redacts credentials: a URL password, an `https://<token>@host` userinfo token, and sensitive query-parameter values are replaced with `***`, while SSH usernames are preserved. Control characters in echoed values are escaped, newlines included, so an interpolated value cannot forge a second message line. The same redaction applies to source URLs in user-visible errors through every channel: the rendered message, diagnostics quoted from `git`, and the `details` object of a `--json` error payload. |
+| C-CLI-06c | §5.2, §13 | Malformed HTTP(S) diagnostic/progress openers with missing or mixed separators, raw or visible escaped controls, or zero-separator userinfo suppress their ambiguous suffix. Rejected references remain `invalid_ref` (exit 4) in human and JSON output; valid structured URL rendering, SSH/SCP behavior, stable details keys, and ordinary non-ambiguous prose remain unchanged. |
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
 | C-CLI-08a | §5.2 | A non-repeatable flag passed more than once is a `usage_error` (exit 4) naming the flag — boolean (`--json --json`) as well as value (`--scope user --scope project`); the repeatable `--agent` collects every occurrence. |

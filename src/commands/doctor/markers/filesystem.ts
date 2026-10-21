@@ -2,6 +2,7 @@
 import { accessSync, constants, lstatSync, readdirSync, statSync } from "node:fs";
 import { redactText, sanitizeLine } from "../../../util/redact.ts";
 import type { Finding } from "../checks.ts";
+import { invalidMarkerFinding } from "./findings.ts";
 
 /** Existing directories must be searchable before their marker inventory can be trusted. */
 export function inventoryDirectory(
@@ -51,13 +52,10 @@ export function inventoryReadFailure(
 
 /** Install leaves and marker entries cannot borrow authority through symbolic links (§11.2). */
 export function inventoryLinkFailure(path: string, findings: Map<string, Finding>): void {
-  findings.set(`marker_invalid\0${path}`, {
-    level: "error",
-    code: "marker_invalid",
-    message: sanitizeLine(
-      redactText(
-        `${path}: symbolic link is invalid inventory; replace it with the managed entry before repair`,
-      ),
+  findings.set(
+    ...invalidMarkerFinding(
+      path,
+      "symbolic link is invalid inventory; replace it with the managed entry before repair",
     ),
-  });
+  );
 }

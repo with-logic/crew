@@ -33,6 +33,7 @@
 
 import { isControlCharacterCode } from "./control-characters.ts";
 import { redactDiagnostic } from "./diagnostic-spans.ts";
+import { firstMalformedHttpStart } from "./malformed-http/index.ts";
 
 /**
  * Query parameters whose values are safe to print. Everything else is
@@ -79,6 +80,7 @@ export function sanitizeLine(text: string): string {
  * recognise — callers pass arbitrary argv, most of which is flags.
  */
 export function redactUrl(token: string): string {
+  if (firstMalformedHttpStart(token, true) !== undefined) return REDACTED;
   if (token.includes("://")) return redactStandardUrl(token);
   // `git@host:owner/repo` — scp-style. The userinfo is a username.
   return token;
