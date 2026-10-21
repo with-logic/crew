@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, renameSync } from "node:fs";
+import { chmodSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../src/agents/codex.ts";
@@ -60,6 +60,36 @@ afterEach(() => {
 });
 
 describe("crew search output", () => {
+  for (const json of [false, true]) {
+    test(`unreadable local manifests retain filesystem warnings (${json ? "JSON" : "human"})`, () => {
+      const home = makeCrewHome();
+      const root = makeTempDir("crew-search-source-read-");
+      const skill = makeSkill(root, "demo", skillFrontmatter({ name: "demo" }));
+      expect(
+        runCli(["tap", "add", root, "local"], { home, streams: captureStreams().streams }),
+      ).toBe(0);
+      const manifest = join(skill, "SKILL.md");
+      chmodSync(manifest, 0);
+      try {
+        const capture = captureStreams();
+        expect(
+          runCli(["search", "--tap", "local", ...(json ? ["--json"] : [])], {
+            home,
+            streams: capture.streams,
+          }),
+        ).toBe(0);
+        const warning = json ? JSON.parse(capture.stdout()).warnings.join("\n") : capture.stderr();
+        expect(warning).toContain("source_unreachable");
+        expect(warning).toContain("EACCES");
+        expect(warning).toContain(manifest);
+        expect(warning).not.toContain("cloned yet");
+        expect(warning).not.toContain("back online");
+      } finally {
+        chmodSync(manifest, 0o600);
+      }
+    });
+  }
+
   test("C-TAP-23 configured matches are followed by known-tap suggestions", () => {
     const home = makeCrewHome();
     setKnownTapsForTest(knownRegistry);

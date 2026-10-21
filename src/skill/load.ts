@@ -1,5 +1,5 @@
 /**
- * Load a skill from disk: read its `SKILL.md`, parse and validate
+ * Load a skill from disk (§9 step 4, §16): read its `SKILL.md`, parse and validate
  * frontmatter, and return a structured `LoadedSkill`.
  *
  * `loadSkill` is the boundary between raw filesystem state and validated
@@ -12,15 +12,16 @@ import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
 import { exists, readText } from "../util/fs.ts";
+import { readSourceFile } from "../util/source-read.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 import { readFrontmatter } from "./read-frontmatter.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
-/** Load and validate the skill at `path`. Throws `invalid_skill` on any failure. */
+/** Load and validate a skill; unreadable bytes are operational failures (§9, §13). */
 export function loadSkill(path: string): LoadedSkill {
   const skillMdPath = join(path, "SKILL.md");
   assertManifestIsNotSymlink(skillMdPath, path);
-  const raw = readText(skillMdPath);
+  const raw = readSourceFile(skillMdPath, readText);
   const { data } = extractFrontmatter(raw);
   const frontmatter = validateFrontmatter(data);
   return { path, frontmatter, skillMd: raw };
@@ -30,7 +31,7 @@ export function loadSkill(path: string): LoadedSkill {
 export function loadSkillName(path: string): string {
   const skillMdPath = join(path, "SKILL.md");
   assertManifestIsNotSymlink(skillMdPath, path);
-  return validateFrontmatterName(readFrontmatter(skillMdPath));
+  return validateFrontmatterName(readSourceFile(skillMdPath, readFrontmatter));
 }
 
 /** True iff `path` contains a `SKILL.md`. Does not validate. */

@@ -79,10 +79,10 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
     const sameSource = indexHasSameSource(input.installedIndex, lookup);
     // §9 step 4: discovery only validates names. Existing same-source aliases
     // remain duplicates, but new children must validate before ownership errors.
-    const invalid = sameSource ? null : input.cache.validate(child.path);
-    if (invalid) {
+    const skillLoadError = sameSource ? null : input.cache.validate(child.path);
+    if (skillLoadError) {
       hardFailure = true;
-      rows.push(childErrorRow(input, child.name, invalid));
+      rows.push(childErrorRow(input, child.name, skillLoadError));
       continue;
     }
     try {

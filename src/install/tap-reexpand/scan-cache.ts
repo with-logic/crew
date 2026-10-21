@@ -16,6 +16,7 @@ import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
+import { isSourceReadFailure } from "../../util/source-read.ts";
 import { type CurrentTapChild, currentTapChildren } from "../tap-children.ts";
 
 /** One tap's acquired clone location. */
@@ -32,20 +33,19 @@ export interface TapScanCache {
    */
   acquire(tap: TapConfig, home: string): AcquiredTapScan;
   /**
-   * Walk a tap's children, memoised. Kept separate from `acquire`
-   * because a filesystem error while walking (an unreadable directory,
-   * say) is a local fault that must propagate, not be reported as the
-   * tap being unreachable.
+   * Walk a tap's children, memoising results and normalized manifest read failures
+   * that become group `tap_error` rows. Unclassified directory-walk errors
+   * still propagate separately from acquisition failures.
    */
   children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[];
-  /** Full validation (§9 step 4) for one child directory, memoised. */
+  /** Load and validate one child (§9 step 4), memoising validation and source-read errors. */
   validate(skillDir: string): CrewError | null;
 }
 
 export function makeTapScanCache(): TapScanCache {
   const acquisitions = new Map<string, AcquiredTapScan>();
-  const childLists = new Map<string, readonly CurrentTapChild[]>();
-  const validations = new Map<string, CrewError | null>();
+  const childScans = new Map<string, readonly CurrentTapChild[] | CrewError>();
+  const skillLoadErrors = new Map<string, CrewError | null>();
 
   return {
     acquire(tap: TapConfig, home: string): AcquiredTapScan {
@@ -62,35 +62,37 @@ export function makeTapScanCache(): TapScanCache {
 
     children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[] {
       const key = JSON.stringify([tap.name, rootDir]);
-      const hit = childLists.get(key);
+      const hit = childScans.get(key);
+      if (hit instanceof CrewError) throw hit;
       if (hit) return hit;
-      const walked = currentTapChildren(tap, home, rootDir);
-      childLists.set(key, walked);
-      return walked;
+      try {
+        const walked = currentTapChildren(tap, home, rootDir);
+        childScans.set(key, walked);
+        return walked;
+      } catch (err) {
+        if (isSourceReadFailure(err)) childScans.set(key, err);
+        throw err;
+      }
     },
 
     validate(skillDir: string): CrewError | null {
-      const hit = validations.get(skillDir);
+      const hit = skillLoadErrors.get(skillDir);
       if (hit !== undefined) return hit;
-      const result = validationErrorFor(skillDir);
-      validations.set(skillDir, result);
-      return result;
+      const skillLoadError = skillLoadErrorFor(skillDir);
+      skillLoadErrors.set(skillDir, skillLoadError);
+      return skillLoadError;
     },
   };
 }
 
 /**
- * Full spec validation (§9 step 4) for a discovered child, returning
- * the failure instead of throwing. `loadSkill` is the same validator
- * the install flow uses.
+ * Load and validate a discovered child (§9 step 4), returning expected
+ * skill-load failures. `loadSkill` is the same loader the install flow uses.
  *
- * It reads from disk, so an I/O failure (EACCES, EIO) can surface here
- * as a plain `Error`. Reporting that as `invalid_skill` would blame the
- * skill author for a local filesystem problem, so only `CrewError`s —
- * the validator's own verdicts — are returned; anything else rethrows
- * and is handled as a run-level failure by the caller.
+ * Cache stable `CrewError` codes for validation and source-read failures;
+ * unexpected errors from manifest path inspection must still propagate.
  */
-function validationErrorFor(skillDir: string): CrewError | null {
+function skillLoadErrorFor(skillDir: string): CrewError | null {
   try {
     loadSkill(skillDir);
     return null;
