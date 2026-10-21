@@ -33,14 +33,12 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
   }
   if (o.kind === "updated") {
     const status = updatedRowStatus(o);
-    const color =
-      status === "failed"
-        ? style.red
-        : status === "skipped"
-          ? style.dim
-          : status === "partially updated"
-            ? style.yellow
-            : style.green;
+    const color = {
+      failed: style.red,
+      skipped: style.dim,
+      "partially updated": style.yellow,
+      updated: style.green,
+    }[status];
     const details = targetIssues(o);
     if (status === "updated" || status === "partially updated") {
       details.unshift(style.cyan(shortSha(o.new_sha)));

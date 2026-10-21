@@ -18,7 +18,6 @@ export function updatedRowStatus(
   return outcome.per_target.some((t) => t.kind === "failed") ? "failed" : "skipped";
 }
 
-/** Only failures and safety skips need details beyond the row's revision. */
 export function targetIssues(outcome: UpdatedOutcome): string[] {
   const issues: string[] = [];
   for (const target of outcome.per_target) {
