@@ -21,6 +21,15 @@ export function isSourceDirectory(path: string, followSymlinks = true): boolean 
   }
 }
 
+/** Check search permission for a source directory already identified by the walker. */
+export function assertSourceDirectorySearchable(path: string): void {
+  try {
+    accessSync(path, constants.X_OK);
+  } catch (err) {
+    throw sourceDirectoryFailure(path, err);
+  }
+}
+
 /** List an acquired source, retaining native permission diagnostics. */
 export function listSourceDirectory(path: string): string[] {
   if (!isSourceDirectory(path)) return [];
@@ -38,8 +47,15 @@ export function walkSourceDirectory(path: string, options: WalkOptions): WalkedE
     return walk(path, options);
   } catch (err) {
     if (err instanceof CrewError) throw err;
+    const error = err as NodeJS.ErrnoException | null | undefined;
+    if (
+      typeof error?.path !== "string" ||
+      typeof error.code !== "string" ||
+      typeof error.syscall !== "string"
+    )
+      throw err;
     // Native walker errors identify the directory/entry whose filesystem operation failed.
-    throw sourceDirectoryFailure((err as NodeJS.ErrnoException).path!, err);
+    throw sourceDirectoryFailure(error.path, err);
   }
 }
 
@@ -70,11 +86,13 @@ export function copySourceTree(source: string, destination: string): void {
     const error = err as NodeJS.ErrnoException;
     const path = error.path!;
     // A destination may sit inside the source; its root and descendants remain write failures.
+    const isLstatFailure = error.syscall === "lstat";
+    const isSourceDescendant = isLstatFailure && isInside(source, path);
+    const isDestinationRoot = isSourceDescendant && resolve(path) === resolve(destination);
+    const isDestinationDescendant =
+      isSourceDescendant && !isDestinationRoot && isInside(destination, path);
     const sourceInspectionFailed =
-      error.syscall === "lstat" &&
-      isInside(source, path) &&
-      resolve(path) !== resolve(destination) &&
-      !isInside(destination, path);
+      isSourceDescendant && !isDestinationRoot && !isDestinationDescendant;
     // `copyTree` lists only source directories; destination operations never use scandir.
     if (error.syscall === "scandir" || sourceInspectionFailed)
       throw sourceDirectoryFailure(path, err);
