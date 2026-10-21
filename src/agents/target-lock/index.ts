@@ -1,8 +1,8 @@
 /** Physical adapter-base batches, independent of crew home (§6, §14). */
 import { realpathSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { acquireLock, type HeldLock } from "../../util/advisory-lock.ts";
 import { ensureDir } from "../../util/fs.ts";
+import { prepareTargetSentinel } from "./sentinel.ts";
 
 export interface TargetBase {
   readonly path: string;
@@ -57,7 +57,7 @@ export function withTargetLocks<T>(
   const ordered = [...physical.values()].sort((a, b) => Number(a.dev - b.dev || a.ino - b.ino));
   const held: HeldLock[] = [];
   try {
-    for (const base of ordered) held.push(acquireLock(join(base.path, ".crew-target")));
+    for (const base of ordered) held.push(acquireLock(prepareTargetSentinel(base.path)));
     return fn(failures, unavailable);
   } finally {
     for (const lock of held.reverse()) lock.release();

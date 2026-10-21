@@ -2186,6 +2186,13 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
    rollback and owned cleanup, uninstall/prune/tap removal, owner detach,
    tap promotion/discovery marker rewrites, and source reattribution even
    when the skill's bytes are already installed.
+   - The sentinel must be a regular file and its `.lock` entry, when present,
+     a real directory. Reject other reserved entry types with `usage_error`
+     without following their links; trusted aliases of the base itself remain
+     supported. Publish the unchanged PID/directory-identity owner record by
+     atomic replacement, never by writing through a pre-existing owner link
+     or hardlink. A temporary owner file inside the acquired lock directory
+     is removed on failure or stale reclamation without removing other contents.
    - Resolve trusted adapter-base ancestors physically. Deduplicate aliases
      by the base directory's filesystem device/inode identity and acquire the
      complete required set in ascending numeric `(device, inode)` order;
@@ -2219,7 +2226,14 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
      isolation. Existing stale/live-owner handling and host dependencies apply.
    - Where locks coexist, the order is maintenance → state → clone → target.
      Install source resolution finishes before its target batch. Update
-     acquires targets inside its clone-locked plan before child preflight.
+     refreshes sources once under clone locks before determining or acquiring
+     targets, so source-only fetch/clone work holds no target locks. A recorded
+     project root recreated by that refresh participates in target preparation.
+     Roots still absent after refresh, when the target batch is determined,
+     retain the ordinary missing-project skip through per-entry updates and
+     tap re-expansion for the entire batch, even if they appear later. Do not
+     create a missing project root to prepare targets or admit it dynamically.
+     Acquire targets before child preflight.
      Release targets before any later auto-tap collection or clone deletion;
      never acquire a lower-order lock while holding target locks.
    - Read-only commands and dry runs take no target locks and create no target

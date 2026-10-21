@@ -13,9 +13,20 @@ export function lockOwnerFs(lockPath: string): {
   record(): void;
 } {
   let owned = false;
+  const temporary = `${lockPath}/owner`;
+  const ownerPath = `${lockPath}.owner`;
+  function removeTemporaryRecord(): void {
+    const stat = fs.lstatSync(temporary, { throwIfNoEntry: false });
+    if (stat?.isFile() || stat?.isSymbolicLink()) fs.rmSync(temporary, { force: true });
+  }
   return {
     fs: {
       ...fs,
+      rmdirSync: ((path: fs.PathLike) => {
+        // A crash before atomic publication must not block stale reclamation (§14).
+        if (String(path) === lockPath) removeTemporaryRecord();
+        fs.rmdirSync(path);
+      }) as typeof fs.rmdirSync,
       statSync: ((path: fs.PathLike) => {
         const stat = fs.statSync(path);
         // Our heartbeat must see the real mtime; only contenders use liveness.
@@ -27,7 +38,17 @@ export function lockOwnerFs(lockPath: string): {
     },
     record(): void {
       const stat = fs.statSync(lockPath);
-      fs.writeFileSync(`${lockPath}.owner`, `${process.pid} ${stat.ino} ${stat.birthtimeMs}`);
+      // Preserve ordinary write-permission failures without writing through a hardlink.
+      if (fs.lstatSync(ownerPath, { throwIfNoEntry: false })?.isFile())
+        fs.accessSync(ownerPath, fs.constants.W_OK);
+      try {
+        fs.writeFileSync(temporary, `${process.pid} ${stat.ino} ${stat.birthtimeMs}`, {
+          flag: "wx",
+        });
+        fs.renameSync(temporary, ownerPath);
+      } finally {
+        removeTemporaryRecord();
+      }
       // Leave the sidecar on release: deleting it after rmdir could delete
       // a successor's record. Its directory identity makes old records inert.
       owned = true;

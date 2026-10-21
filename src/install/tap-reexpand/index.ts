@@ -60,6 +60,7 @@ export function reexpandTaps(
   selection: ReexpandSelection | null,
   installOne: InstallNewChild,
   dryRun: boolean = false,
+  missingProjectRoots?: ReadonlySet<string>,
 ): TapReexpandResult {
   const added: StateEntry[] = [];
   const updated: StateEntry[] = [];
@@ -117,7 +118,11 @@ export function reexpandTaps(
     const projectRoot = first.project_root ?? null;
     if (
       first.scope === "project" &&
-      !(hasUsableProjectRoot(first) && isDirectory(first.project_root))
+      !(
+        hasUsableProjectRoot(first) &&
+        !missingProjectRoots?.has(first.project_root) &&
+        isDirectory(first.project_root)
+      )
     )
       continue;
 
