@@ -94,14 +94,13 @@ for (const blocked of ["claude-code", "codex", "both"]) {
         expect(row.error?.message).toContain(agent!);
         expect(readFileSync(join(root!, "newbie", "mine"), "utf8")).toBe("user bytes");
       } else {
-        // Remaining target groups are still attempted after an earlier failure.
-        expect(existsSync(join(root!, "newbie", "SKILL.md"))).toBe(true);
-        expect(row.error?.message).toContain(`copies remain for successful targets: ${agent}`);
+        // Successful new copies are removed when any target group fails.
+        expect(existsSync(join(root!, "newbie"))).toBe(false);
       }
     }
     for (const root of [claudeRoot, codexRoot])
       expect(readFileSync(join(root, "alpha", "SKILL.md"), "utf8")).toBe(alphaBytes);
-    expect(row.error?.message?.includes("copies remain")).toBe(blocked !== "both");
+    expect(row.error?.message).not.toContain("copies remain");
     expect(readState(home).installations.some((e) => e.name === "newbie")).toBe(false);
     expect(readState(home).installations.find((e) => e.name === "other")?.agents).toEqual([
       "claude-code",
@@ -112,7 +111,7 @@ for (const blocked of ["claude-code", "codex", "both"]) {
     expect(human.stdout).toContain("newbie");
     expect(human.stdout).toContain("untracked_directory");
     expect(human.stdout).toContain("1 failure");
-    expect(human.stdout.includes("copies remain")).toBe(blocked !== "both");
+    expect(human.stdout).not.toContain("copies remain");
     if (blocked !== "codex") rmSync(join(claudeRoot, "newbie"), { recursive: true });
     if (blocked !== "claude-code") rmSync(join(codexRoot, "newbie"), { recursive: true });
     expect(invoke(home, ["update", "fixture"]).code).toBe(0);
