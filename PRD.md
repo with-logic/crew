@@ -206,6 +206,11 @@ terminal in 8-bit mode reads C1 as an escape sequence — are rendered as
 `\xNN` escapes. An SCP-style remote (`git@host:owner/repo`) keeps its
 user, which names the protocol account rather than a secret (§13).
 
+Human-readable skill metadata follows the same C0, DEL, and C1
+control-character escaping rule before wrapping or styling. This includes
+descriptions, license, compatibility, homepage, and dependencies. JSON
+values and installed skill bytes are unchanged.
+
 ### 5.2 Global flags
 
 Accepted on any command where they apply:
