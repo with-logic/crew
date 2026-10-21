@@ -39,7 +39,7 @@ afterEach(() => {
 
 for (const sourceKind of ["git", "path"] as const) {
   for (const failedAgents of [["codex"], ["claude-code", "codex"]] as const) {
-    test(`C-UPD-10 C-UPD-39 ${sourceKind} failed targets (${failedAgents.join(", ")}) stay retryable`, () => {
+    test(`C-UPD-10 C-UPD-39 C-UPD-42 ${sourceKind} failed targets (${failedAgents.join(", ")}) stay retryable`, () => {
       const home = makeCrewHome();
       const repo = makeTempDir("crew-update-source-");
       const source = makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }), "old bytes");
@@ -100,6 +100,17 @@ for (const sourceKind of ["git", "path"] as const) {
         );
         expect(output).toContain(failedAgents.length === 1 ? "partially updated" : "[fail] demo");
         expect(readState(home)).toEqual(before);
+        expect(human.stderr()).toBe("");
+        const quiet = captureStreams();
+        expect(runCli(["update", "demo", "--quiet"], { home, streams: quiet.streams })).toBe(1);
+        expect(quiet.stdout()).toBe("");
+        for (const agent of failedAgents)
+          expect(quiet.stderr()).toContain(`demo: ${agent}: failed (EACCES):`);
+        expect(quiet.stderr()).toContain("\\x9b");
+        expect(quiet.stderr()).not.toContain("\u009b");
+        expect(readState(home)).toEqual(before);
+        expect(readFileSync(join(codexRoot, "demo", "SKILL.md"), "utf8")).toBe(oldSkill);
+        expect(readFileSync(join(codexRoot, "demo", ".crew.json"), "utf8")).toBe(oldMarker);
       } finally {
         for (const root of blockedRoots) chmodSync(root, 0o755);
       }

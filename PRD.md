@@ -1401,6 +1401,20 @@ already present in that message. Redact credentials throughout the displayed
 diagnostic and escape control characters. Preserve the raw JSON error fields,
 state/retry behavior, and exit codes.
 
+**Quiet failure diagnostics.** When `crew update` (including `--dry-run`)
+or `crew outdated` has a hard failure, `--quiet` suppresses the human
+summary but MUST report diagnostics on stderr for ordinary failed entries,
+failed per-target results, tap re-expansion errors, and refresh failures of
+explicitly selected taps. Include the affected skill, agent or tap, error
+code, and full primary message, preserving rollback and retained recovery
+paths already present. Redact credentials and escape controls throughout.
+Successful and soft-only quiet runs remain silent, including soft
+`tap_error` outcomes (`no_skills_found` or `invalid_ref` without a cleanup
+failure). A hard-failed run may include its existing soft `tap_error` rows
+among its diagnostics without changing their classification. Normal human
+output, raw JSON, failure isolation, exit codes, state, and retries are
+unchanged; JSON mode still emits its payload without human stderr.
+
 **Human per-target results.** When an existing skill's `updated` JSON
 outcome contains failed or safety-skipped targets, human output MUST name
 each affected agent and its error code/message or skip reason. Escape
@@ -2667,6 +2681,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-39 | §10.1 | For an existing skill update containing failed or safety-skipped targets, human output names each affected target. Its aggregate skill row is `partially updated` when any target installed or was already current; otherwise it is `failed` if any target failed, or `skipped`. Totals distinguish partial from full success while counting hard failures. JSON, state/retry behavior, and exit codes are unchanged. |
 | C-UPD-40 | §10.1.1 | If rollback-directory cleanup fails after a new tap child is successfully added, the child remains installed and recorded in state, and cleanup failure alone does not make the run fail. Human output displays the cleanup warning and leftover path; JSON includes the diagnostic in an optional `warnings` array on the successful `added` row. When cleanup succeeds, that row omits `warnings`. |
 | C-UPD-41 | §10.1, §10.1.1 | Normal human output for an existing-entry `failed` outcome in `crew update` and `crew outdated` shows its error code and primary message, including retained recovery paths already present. The whole diagnostic redacts credentials and escapes controls; raw JSON error fields, state/retry behavior, and exit codes remain unchanged. |
+| C-UPD-42 | §5.2, §10.1, §10.1.1 | On a hard-failed run, human `--quiet` update (including dry run) and outdated suppress summaries while sending ordinary failed entries, failed targets, tap re-expansion errors, and explicitly selected tap refresh failures to stderr with affected subjects, error codes, full primary messages, and retained recovery paths. Diagnostics redact credentials and escape controls. Successful and soft-only quiet runs stay silent; a hard-failed run may include existing soft `tap_error` diagnostics without reclassification. Normal human output, raw JSON, isolation, exit codes, state, and retries remain unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
