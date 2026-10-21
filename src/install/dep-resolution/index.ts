@@ -19,6 +19,7 @@
  */
 
 import { join, posix } from "node:path";
+import { CrewError } from "../../core/errors.ts";
 import { tapClonePath } from "../../core/repo-path.ts";
 import type { Config, GitSource, PathSource, SkillMetadata, TapConfig } from "../../core/types.ts";
 import { hasSkillMd, loadSkill, loadSkillName } from "../../skill/load.ts";
@@ -100,8 +101,9 @@ export function findSiblingDep(
 function siblingName(path: string): string | null {
   try {
     return loadSkillName(path);
-  } catch {
-    return null;
+  } catch (err) {
+    if (err instanceof CrewError && err.code === "invalid_skill") return null;
+    throw err;
   }
 }
 
