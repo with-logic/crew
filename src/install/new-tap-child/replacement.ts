@@ -48,7 +48,7 @@ export class ChildReplacement {
     if (this.backup === null && !this.installed) return null;
     try {
       // §10.1.1: a completed publication later removed must stay absent.
-      if (!this.ownsCurrentTarget())
+      if (!this.canSafelyRollback())
         return this.failure("current target changed or is unavailable; left untouched");
       if (this.backup === null) rmrf(this.dest);
       else atomicReplace(this.backup, this.dest);
@@ -58,7 +58,7 @@ export class ChildReplacement {
     }
   }
 
-  private ownsCurrentTarget(): boolean {
+  private canSafelyRollback(): boolean {
     let current: Stats;
     try {
       current = lstatSync(this.dest);

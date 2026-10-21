@@ -25,7 +25,7 @@ function invoke(home: string, args: string[]) {
 }
 
 for (const json of [false, true]) {
-  test(`C-UPD-38 successful cleanup warning reaches ${json ? "JSON" : "human"} output`, () => {
+  test(`C-UPD-40 successful cleanup warning reaches ${json ? "JSON" : "human"} output`, () => {
     const home = makeCrewHome();
     const root = join(makeTempDir(), "controls\n\r\x1b\x7f\x85");
     mkdirSync(root);

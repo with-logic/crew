@@ -154,3 +154,37 @@ test("C-UPD-38 cleanup diagnostics escape controls and redact credentials at the
     replacement.cleanup();
   }
 });
+
+test("C-UPD-38 an uninspectable destination retains its publication and complete prior backup", () => {
+  const { root, dest, replacement } = prior();
+  writeFileSync(join(dest, ".crew.json"), '{"prior":true}');
+  const priorBytes = readFileSync(join(dest, "SKILL.md"));
+  const priorMarker = readFileSync(join(dest, ".crew.json"));
+  const priorInode = lstatSync(dest).ino;
+  const staging = stage();
+  replacement.moveAsideForReplacement(staging);
+  const temporary = readdirSync(root).find((name) => name.startsWith(".crew-rollback-"))!;
+  const backup = join(root, temporary, "prior");
+  renameSync(staging, dest);
+  replacement.installed = true;
+  const publishedBytes = readFileSync(join(dest, "SKILL.md"));
+  const publishedMarker = readFileSync(join(dest, ".crew.json"));
+  const publishedInode = lstatSync(dest).ino;
+  let failure: string | null = null;
+  chmodSync(root, 0o000);
+  try {
+    failure = replacement.rollback();
+    expect(replacement.cleanup()).toBeNull();
+  } finally {
+    chmodSync(root, 0o755);
+  }
+  expect(failure).toContain(dest);
+  expect(failure).toContain("EACCES");
+  expect(failure).toContain(`prior copy retained at \`${backup}\``);
+  expect(readFileSync(join(dest, "SKILL.md"))).toEqual(publishedBytes);
+  expect(readFileSync(join(dest, ".crew.json"))).toEqual(publishedMarker);
+  expect(lstatSync(dest).ino).toBe(publishedInode);
+  expect(readFileSync(join(backup, "SKILL.md"))).toEqual(priorBytes);
+  expect(readFileSync(join(backup, ".crew.json"))).toEqual(priorMarker);
+  expect(lstatSync(backup).ino).toBe(priorInode);
+});
