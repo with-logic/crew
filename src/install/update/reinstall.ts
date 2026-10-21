@@ -74,10 +74,22 @@ function installGroup(
       });
     }
   } catch (err) {
-    // `installSkillIntoAgents` only raises `CrewError` (safety-check aborts).
+    // §10.1: safety skips are soft; filesystem failures must remain retryable.
     const ce = err as CrewError;
+    const safetySkip =
+      ce.code === "customized" ||
+      ce.code === "untracked_directory" ||
+      ce.code === "inconsistent_marker";
     for (const a of group) {
-      perTarget.push({ agent: a.name, kind: "skipped", reason: ce.code });
+      perTarget.push(
+        safetySkip
+          ? { agent: a.name, kind: "skipped", reason: ce.code }
+          : {
+              agent: a.name,
+              kind: "failed",
+              error: { code: ce.code ?? "usage_error", message: ce.message },
+            },
+      );
     }
   }
 }
