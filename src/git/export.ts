@@ -114,7 +114,6 @@ export function withExportedTree<T>(
   try {
     return fn(tree.rootDir);
   } finally {
-    // Cleanup failures retain their existing propagation behavior.
     tree.cleanup();
   }
 }
