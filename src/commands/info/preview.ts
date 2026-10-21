@@ -11,14 +11,13 @@
  * namespace fallback can search every tap at the requested ref.
  */
 
-import { CrewError } from "../../core/errors.ts";
-import type { Config, LoadedSkill, TapConfig, TapSource } from "../../core/types.ts";
+import type { Config, SkillMetadata, TapConfig, TapSource } from "../../core/types.ts";
 import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-ref/index.ts";
 import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
-import { loadSkill } from "../../skill/load.ts";
+import { loadSkillMetadata } from "../../skill/load.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
 import { expandSkills } from "../../sources/expand.ts";
-import { gistCandidates, isGistTap } from "../../sources/gist.ts";
+import { gistCandidates, isGistTap, noGistSkillsFound } from "../../sources/gist.ts";
 import type { SkillInfo } from "./render.ts";
 
 export interface TapPreview {
@@ -67,18 +66,17 @@ function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
   if (candidate.kind === "skill") {
     return {
       tap: candidate.tap,
-      skills: buildSkillInfosFromDirs([candidate.location], candidate.tap),
+      skills: buildSkillInfosFromPaths([candidate.location], candidate.tap),
     };
   }
-  return { tap: candidate.tap, skills: buildSkillInfosFromDirs(candidate.members, candidate.tap) };
+  return { tap: candidate.tap, skills: buildSkillInfosFromPaths(candidate.members, candidate.tap) };
 }
 
 function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
   if (isGistTap(tap)) {
     const candidates = gistCandidates(dir);
-    if (candidates.length === 0)
-      throw new CrewError("no_skills_found", `no valid gist skills found at \`${dir}\``);
-    return candidates.map((candidate) => skillInfoOf(loadSkill(candidate.path, true)));
+    if (candidates.length === 0) throw noGistSkillsFound(dir);
+    return candidates.map(skillInfoOf);
   }
   const { valid } = expandSkills(dir, {
     recursive: tap.discovery === "recursive",
@@ -87,14 +85,14 @@ function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
   return valid.map(skillInfoOf);
 }
 
-function buildSkillInfosFromDirs(
-  dirs: readonly { readonly path: string }[],
+function buildSkillInfosFromPaths(
+  paths: readonly { readonly path: string }[],
   tap: TapConfig,
 ): SkillInfo[] {
-  return dirs.map((dir) => skillInfoOf(loadSkill(dir.path, isGistTap(tap))));
+  return paths.map((source) => skillInfoOf(loadSkillMetadata(source.path, isGistTap(tap))));
 }
 
-function skillInfoOf(s: LoadedSkill): SkillInfo {
+function skillInfoOf(s: SkillMetadata): SkillInfo {
   return {
     name: s.frontmatter.name,
     description: s.frontmatter.description,

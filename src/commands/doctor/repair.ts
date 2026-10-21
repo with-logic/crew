@@ -13,10 +13,10 @@
  */
 
 import { readConfig, writeConfig } from "../../config/load.ts";
-import type { StateEntry, TapConfig } from "../../core/types.ts";
+import type { StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { garbageCollectStore } from "../../maintenance/gc.ts";
 import { entryKey } from "../../state/identity.ts";
-import { readState, writeState } from "../../state/load.ts";
+import { writeState } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
 import type { MarkerEntry } from "./markers/index.ts";
@@ -42,10 +42,14 @@ function isUnreadableProjectEntry(entry: StateEntry): boolean {
  * lock-free so that the scheduler step can run under the same lock
  * without nesting a second acquisition, which would deadlock.
  */
-export function repairStateUnderLock(markers: readonly MarkerEntry[], home: string): void {
+export function repairStateUnderLock(
+  markers: readonly MarkerEntry[],
+  state: StateFile,
+  home: string,
+): void {
   {
     let config = readConfig(home);
-    let current = readState(home);
+    let current = state;
 
     // Reconstruct missing taps from markers FIRST so state entries can
     // reference them.

@@ -2,10 +2,11 @@
  * Human output rendering for `crew search` (§5.1, §16.6).
  */
 
-import { columns, truncate } from "../../util/format.ts";
+import { skillLabel } from "../../refs/skill-label.ts";
+import { columns, shellQuote, truncate } from "../../util/format.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
-import { knownInstallRef, knownSkillRef, knownTapSource } from "./known.ts";
+import { knownInstallRef, knownTapSource } from "./known.ts";
 import type { KnownSearchHit, SearchHit } from "./types.ts";
 
 const SAME_NAME_NOTE = "same name installed elsewhere";
@@ -109,15 +110,17 @@ function formatKnownSection(
 }
 
 function formatConfiguredRows(hits: readonly SearchHit[], style: Styler, width: number): string[] {
-  const displayName = (h: SearchHit): string =>
-    h.namespace === null ? h.name : `${h.namespace}/${h.name}`;
-  const nameWidth = Math.max(...hits.map((h) => displayName(h).length));
+  const displayHits = hits.map((h) => ({
+    hit: h,
+    displayName: sanitizeLine(skillLabel(h)),
+  }));
+  const nameWidth = Math.max(...displayHits.map(({ displayName }) => displayName.length));
   const descStart = 2 + 1 + 1 + nameWidth + 2;
   const descBudget = Math.max(20, width - descStart);
-  const rows = hits.map((h) => {
+  const rows = displayHits.map(({ hit: h, displayName }) => {
     const mark = searchHitMark(h, style);
     const desc = style.dim(formatSearchDescription(h, descBudget));
-    return [`  ${mark} ${displayName(h)}`, desc];
+    return [`  ${mark} ${displayName}`, desc];
   });
   return columns(rows, 2);
 }
@@ -137,13 +140,14 @@ function searchHitMark(hit: SearchHit, style: Styler): string {
 }
 
 function formatKnownRows(hits: readonly KnownSearchHit[], style: Styler, width: number): string[] {
-  const nameWidth = Math.max(...hits.map((h) => knownSkillRef(h).length));
+  const displayHits = hits.map((h) => ({ hit: h, displayName: sanitizeLine(skillLabel(h)) }));
+  const nameWidth = Math.max(...displayHits.map(({ displayName }) => displayName.length));
   const descStart = 4 + nameWidth + 2;
   const descBudget = Math.max(20, width - descStart);
-  const rows = hits.map((h) => [
-    `    ${knownSkillRef(h)}`,
+  const rows = displayHits.map(({ hit: h, displayName }) => [
+    `    ${displayName}`,
     style.dim(
-      `${truncate(sanitizeLine(h.description), descBudget)} (crew install ${knownInstallRef(h)})`,
+      `${truncate(sanitizeLine(h.description), descBudget)} (crew install ${shellQuote(sanitizeLine(knownInstallRef(h)))})`,
     ),
   ]);
   return columns(rows, 2);

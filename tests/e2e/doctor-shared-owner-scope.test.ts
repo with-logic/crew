@@ -8,6 +8,7 @@ import { ALL_AGENTS } from "../../src/agents/registry.ts";
 import { resetAutoupdatePlatform, setAutoupdatePlatform } from "../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { readState } from "../../src/state/load.ts";
+import { readDoctorMarker } from "../helpers/doctor-marker.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -61,7 +62,7 @@ for (const scope of ["user", "project"] as const) {
     }
     const markerPath = join(cwd, ".agents", "skills", "demo", ".crew.json");
     const bytes = readFileSync(markerPath, "utf8");
-    expect(JSON.parse(bytes)).toMatchObject({ scope, agents: ["amp", "codex"] });
+    expect(readDoctorMarker(markerPath)).toMatchObject({ scope, agents: ["amp", "codex"] });
     const diagnosis = captureStreams();
     runCli(["doctor", "--verify", "--json"], { home, cwd, streams: diagnosis.streams });
     expect(JSON.parse(diagnosis.stdout()).findings).not.toContainEqual(
@@ -108,7 +109,7 @@ test("C-STATE-14 an unrelated adapter cannot authorize a mismatched scope", () =
   writeFileSync(
     markerPath,
     JSON.stringify({
-      ...JSON.parse(readFileSync(markerPath, "utf8")),
+      ...readDoctorMarker(markerPath),
       scope: "user",
     }),
   );
@@ -128,3 +129,45 @@ test("C-STATE-14 an unrelated adapter cannot authorize a mismatched scope", () =
   expect(JSON.parse(checked.stdout()).repairs).toEqual([]);
   expect(paths.map((path) => readFileSync(path))).toEqual(bytes);
 });
+
+for (const scope of ["user", "project"] as const) {
+  test(`C-STATE-14 a listed owner's distinct ${scope} base cannot authorize repeated mismatches`, () => {
+    const home = makeCrewHome();
+    const distinctBase = makeTempDir();
+    codexAdapter.userPath = () => distinctBase;
+    codexAdapter.projectPath = () => distinctBase;
+    const markerPaths: string[] = [];
+    for (const name of ["first", "second"]) {
+      const skill = makeSkill(makeTempDir(), name, skillFrontmatter({ name }));
+      const observedScope = scope === "user" ? "project" : "user";
+      expect(
+        runCli(["install", skill, "--scope", observedScope, "--agent", "amp"], {
+          home,
+          cwd,
+          streams: captureStreams().streams,
+        }),
+      ).toBe(0);
+      const base = observedScope === "user" ? ampAdapter.userPath() : ampAdapter.projectPath(cwd);
+      const markerPath = join(base, name, ".crew.json");
+      const marker = readDoctorMarker(markerPath);
+      writeFileSync(markerPath, JSON.stringify({ ...marker, scope, agents: ["amp", "codex"] }));
+      markerPaths.push(markerPath);
+    }
+    const paths = [join(home, "state.json"), join(home, "config.yaml"), ...markerPaths];
+    const bytes = paths.map((path) => readFileSync(path));
+    const checked = captureStreams();
+    expect(runCli(["doctor", "--repair", "--json"], { home, cwd, streams: checked.streams })).toBe(
+      1,
+    );
+    const result = JSON.parse(checked.stdout());
+    for (const markerPath of markerPaths)
+      expect(result.findings).toContainEqual(
+        expect.objectContaining({
+          code: "marker_invalid",
+          message: expect.stringContaining(markerPath),
+        }),
+      );
+    expect(result.repairs).toEqual([]);
+    expect(paths.map((path) => readFileSync(path))).toEqual(bytes);
+  });
+}
