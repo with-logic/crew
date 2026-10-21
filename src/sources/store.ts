@@ -16,10 +16,11 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { crewHome, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
+import { assertSkillFile } from "../skill/file.ts";
 import { atomicReplace, ensureDir } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { safePath } from "../util/redact.ts";
-import { copySourceTree, hashSourceDirectory } from "./read.ts";
+import { copySourceFile, copySourceTree, hashSourceDirectory } from "./read.ts";
 
 /** Record returned after staging. */
 export interface StoredSkill {
@@ -31,7 +32,7 @@ export interface StoredSkill {
 }
 
 /**
- * Copy `sourceDir` into the store under `<name>@<short-sha>`. If the
+ * Copy a directory or selected gist file into `<name>@<short-sha>`. If the
  * entry already exists with a matching content hash, the existing one
  * is reused.
  */
@@ -41,6 +42,7 @@ export function stageIntoStore(
   resolvedSha: string | null,
   home: string = crewHome(),
   sourceHash?: string,
+  file = false,
 ): StoredSkill {
   // A path source with no SHA uses the hash itself as the short id so
   // different path-installed skills don't collide in the store.
@@ -58,7 +60,10 @@ export function stageIntoStore(
 
   ensureDir(join(storePath, "..")); // parents
   const staging = mkdtempSync(`${storePath}.staging-`);
-  copySourceTree(sourceDir, staging);
+  if (file) {
+    assertSkillFile(sourceDir);
+    copySourceFile(sourceDir, join(staging, "SKILL.md"));
+  } else copySourceTree(sourceDir, staging);
   atomicReplace(staging, storePath);
 
   const contentHash = hashDirectory(storePath);

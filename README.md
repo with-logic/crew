@@ -242,6 +242,8 @@ keeps the standard layouts first and falls back to bounded recursive discovery.
 
 ### Namespaces
 
+GitHub gists work too: install the owner’s gist URL or add it as a tap. Each top-level file with valid skill frontmatter becomes a skill, whatever its filename.
+
 Group related skills into a **namespace** by putting them under one directory
 inside `skills/`:
 

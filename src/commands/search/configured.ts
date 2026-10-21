@@ -7,6 +7,7 @@ import type { TapConfig } from "../../core/types.ts";
 import { indexTap, type SkillLocation } from "../../install/tap-index.ts";
 import { displayText } from "../../refs/display-url.ts";
 import { loadSkill } from "../../skill/load.ts";
+import { isGistTap } from "../../sources/gist.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import { type SearchInstallIndex, searchInstallStatus } from "./install-state.ts";
 import type { ConfiguredSearchResult, SearchHit } from "./types.ts";
@@ -73,7 +74,7 @@ function collectSkillHit(
   hits: SearchHit[],
 ): void {
   try {
-    const skill = loadSkill(loc.path);
+    const skill = loadSkill(loc.path, isGistTap(tap));
     const { name, description } = skill.frontmatter;
     if (!matchesSkill(name, description, query)) return;
     hits.push({

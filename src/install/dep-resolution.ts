@@ -24,7 +24,8 @@ import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkill, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
-import { isDirectory, listDir } from "../util/fs.ts";
+import { gistCandidates, isGistTap } from "../sources/gist.ts";
+import { isSourceDirectory, listSourceDirectory } from "../sources/read.ts";
 import { attributeRef } from "./tap-attribution.ts";
 
 /** Result of finding a dep as a sibling within the parent's tap. */
@@ -64,11 +65,32 @@ export function findSiblingDep(
   // The parent's own directory inside the tap.
   const parentDir = parent.parentDir ?? join(tapRoot, parent.tapRelativePath);
   const siblingParent = join(parentDir, "..");
+  if (isGistTap(parent.tap)) {
+    const matches = gistCandidates(siblingParent).filter(
+      (candidate) => candidate.frontmatter.name === depName,
+    );
+    if (matches.length > 1)
+      throw duplicateSiblingError(
+        depName,
+        parent.tap.name,
+        matches.map((candidate) => ({ dirName: candidate.filename })),
+      );
+    const match = matches[0];
+    return match
+      ? {
+          tap: parent.tap,
+          config,
+          tapRelativePath: match.filename,
+          loaded: loadSkill(match.path, true),
+        }
+      : null;
+  }
   const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
   const matches: { dirName: string; siblingDir: string; loaded: LoadedSkill }[] = [];
-  for (const dirName of listDir(siblingParent)) {
+  for (const dirName of listSourceDirectory(siblingParent)) {
     const siblingDir = join(siblingParent, dirName);
-    if (!(isDirectory(siblingDir, parent.tap.kind === "path") && hasSkillMd(siblingDir))) continue;
+    if (!(isSourceDirectory(siblingDir, parent.tap.kind === "path") && hasSkillMd(siblingDir)))
+      continue;
     if (siblingName(siblingDir) !== depName) continue;
     const loaded = loadSkill(siblingDir);
     matches.push({ dirName, siblingDir, loaded });

@@ -13,14 +13,16 @@ import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
 import { exists, readText } from "../util/fs.ts";
 import { readSourceFile } from "../util/source-read.ts";
+import { assertSkillFile } from "./file.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 import { readFrontmatter } from "./read-frontmatter.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
 /** Load and validate a skill; unreadable bytes are operational failures (§9, §13). */
-export function loadSkill(path: string): LoadedSkill {
-  const skillMdPath = join(path, "SKILL.md");
-  assertManifestIsNotSymlink(skillMdPath, path);
+export function loadSkill(path: string, file = false): LoadedSkill {
+  const skillMdPath = file ? path : join(path, "SKILL.md");
+  if (file) assertSkillFile(path);
+  else assertManifestIsNotSymlink(skillMdPath, path);
   const raw = readSourceFile(skillMdPath, readText);
   const { data } = extractFrontmatter(raw);
   const frontmatter = validateFrontmatter(data);

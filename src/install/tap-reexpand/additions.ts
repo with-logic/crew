@@ -77,9 +77,9 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       tapRelativePath: child.tapRelativePath,
     };
     const sameSource = indexHasSameSource(input.installedIndex, lookup);
-    // §9 step 4: discovery only validates names. Existing same-source aliases
-    // remain duplicates, but new children must validate before ownership errors.
-    const skillLoadError = sameSource ? null : input.cache.validate(child.path);
+    // §9 step 4: directory discovery validates names; gist discovery validates metadata.
+    // New children validate fully before ownership checks; same-source aliases stay duplicates.
+    const skillLoadError = sameSource ? null : input.cache.validate(child.path, input.tap);
     if (skillLoadError) {
       hardFailure = true;
       rows.push(childErrorRow(input, child.name, skillLoadError));

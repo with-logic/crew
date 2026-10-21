@@ -16,6 +16,7 @@ import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { type AcquiredTap, withAcquiredSkillDir } from "../../sources/acquire/index.ts";
+import { isGistTap } from "../../sources/gist.ts";
 import { hashSourceDirectory } from "../../sources/read.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
@@ -23,6 +24,7 @@ import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { peekResolvedSha } from "./peek.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
+import { entryWithGistFilename } from "./source-path.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
@@ -39,7 +41,8 @@ export function updateOneEntry(
   dryRun: boolean = false,
 ): { row: UpdateRow; updatedState: StateFile; bumpHardFailure: boolean } {
   try {
-    const outcome = updateOne(entry, config, home, force, fallbackCwd, dryRun);
+    const selectedEntry = entryWithGistFilename(entry, config);
+    const outcome = updateOne(selectedEntry, config, home, force, fallbackCwd, dryRun);
     const hardFailure =
       outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed");
     let next = state;
@@ -47,7 +50,7 @@ export function updateOneEntry(
     if (outcome.kind === "updated" && !hardFailure) {
       const nonFailedTargets = outcome.per_target.map((t) => t.agent);
       const newEntry = rebuildStateEntry(
-        entry,
+        selectedEntry,
         outcome.new_sha,
         outcome.content_hash,
         nonFailedTargets,
@@ -143,7 +146,7 @@ function updateOne(
   if (peeked !== null && entry.pinned && !force) {
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
-  // Only this entry's own subtree is read, so only it is exported —
+  // Only this entry's own directory or gist file is read and exported —
   // otherwise every entry sharing a whole-repo tap materializes the
   // whole repository again (§10.1).
   return withAcquiredSkillDir(tap, entry.ref, entry.source.path, home, (acquired, skillDir) =>
@@ -175,9 +178,9 @@ function applyUpdate(
     if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
   }
 
-  const loaded = loadSkill(skillDir);
+  const loaded = loadSkill(skillDir, isGistTap(tap));
   if (dryRun) return { kind: "would_update", new_sha: newSha };
-  const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash);
+  const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash, isGistTap(tap));
   const perTarget = reinstallIntoAgents({
     entry,
     tap,

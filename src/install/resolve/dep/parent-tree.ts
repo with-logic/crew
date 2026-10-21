@@ -9,6 +9,7 @@
 
 import type { Config } from "../../../core/types.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
+import { isGistTap } from "../../../sources/gist.ts";
 import { stageIntoStore } from "../../../sources/store.ts";
 import type { SiblingHit } from "../../dep-resolution.ts";
 import type { PendingItem } from "../enqueue.ts";
@@ -28,6 +29,8 @@ export function siblingItems(
           sibling.loaded.frontmatter.name,
           parent.resolvedSha,
           home,
+          undefined,
+          isGistTap(sibling.tap),
         ),
         tap: sibling.tap,
         tapRelativePath: sibling.tapRelativePath,

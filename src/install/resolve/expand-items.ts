@@ -1,9 +1,12 @@
 /**
- * Directory-expansion helpers for the install resolver (§9 step 5).
+ * Source-expansion helpers for the install resolver (§9 step 5).
  */
 
+import { CrewError } from "../../core/errors.ts";
 import type { Source, TapConfig } from "../../core/types.ts";
+import { loadSkill } from "../../skill/load.ts";
 import { expandSkills, type SkippedSkill } from "../../sources/expand.ts";
+import { gistCandidates, isGistTap } from "../../sources/gist.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import type { PendingItem } from "./enqueue.ts";
 
@@ -31,10 +34,20 @@ export function expandSkillsAsItems(
   tracksTap: boolean,
   home: string,
 ): ExpansionItems {
-  const { valid, skipped } = expandSkills(dir, {
-    recursive: tap.discovery === "recursive",
-    followStandardLayoutSymlinks: tap.kind === "path",
-  });
+  const file = isGistTap(tap);
+  const { valid, skipped } = file
+    ? {
+        valid: baseTapPath
+          ? [loadSkill(dir, true)]
+          : gistCandidates(dir).map((candidate) => loadSkill(candidate.path, true)),
+        skipped: [],
+      }
+    : expandSkills(dir, {
+        recursive: tap.discovery === "recursive",
+        followStandardLayoutSymlinks: tap.kind === "path",
+      });
+  if (file && valid.length === 0)
+    throw new CrewError("no_skills_found", `no valid gist skills found at \`${dir}\``);
   const items: PendingItem[] = [];
   for (const l of valid) {
     const subSegment = l.path === dir ? "" : l.path.slice(dir.length + 1);
@@ -43,7 +56,7 @@ export function expandSkillsAsItems(
         ? `${baseTapPath}/${subSegment}`
         : baseTapPath
       : subSegment;
-    const staged = stageIntoStore(l.path, l.frontmatter.name, resolvedSha, home);
+    const staged = stageIntoStore(l.path, l.frontmatter.name, resolvedSha, home, undefined, file);
     items.push({
       loaded: l,
       staged,
