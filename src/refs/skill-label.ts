@@ -1,6 +1,6 @@
-/** Raw namespace-qualified skill references (§8, §16.2.1, §16.6). */
+/** Raw namespace-qualified skill labels (§8, §16.2.1, §16.6). */
 
-export function skillRef(skill: {
+export function skillLabel(skill: {
   readonly name: string;
   readonly namespace: string | null;
 }): string {

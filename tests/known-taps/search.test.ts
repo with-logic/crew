@@ -11,7 +11,7 @@ import {
   searchKnownTaps,
 } from "../../src/known-taps/search.ts";
 import type { KnownTap } from "../../src/known-taps/types.ts";
-import { skillRef } from "../../src/refs/skill-ref.ts";
+import { skillLabel } from "../../src/refs/skill-label.ts";
 
 const registry: readonly KnownTap[] = [
   {
@@ -54,7 +54,7 @@ const registry: readonly KnownTap[] = [
 
 describe("searchKnownTaps", () => {
   test("empty query returns every known skill sorted by tap and label", () => {
-    const labels = searchKnownTaps("", registry).map((h) => skillRef(h.skill));
+    const labels = searchKnownTaps("", registry).map((h) => skillLabel(h.skill));
     expect(labels).toEqual(["prompt-eval", "database/schema-review", "edge-functions"]);
   });
 

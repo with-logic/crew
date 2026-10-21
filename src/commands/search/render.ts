@@ -2,7 +2,7 @@
  * Human output rendering for `crew search` (§5.1, §16.6).
  */
 
-import { skillRef } from "../../refs/skill-ref.ts";
+import { skillLabel } from "../../refs/skill-label.ts";
 import { columns, shellQuote, truncate } from "../../util/format.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
@@ -112,7 +112,7 @@ function formatKnownSection(
 function formatConfiguredRows(hits: readonly SearchHit[], style: Styler, width: number): string[] {
   const displayHits = hits.map((h) => ({
     hit: h,
-    displayName: sanitizeLine(skillRef(h)),
+    displayName: sanitizeLine(skillLabel(h)),
   }));
   const nameWidth = Math.max(...displayHits.map(({ displayName }) => displayName.length));
   const descStart = 2 + 1 + 1 + nameWidth + 2;
@@ -140,7 +140,7 @@ function searchHitMark(hit: SearchHit, style: Styler): string {
 }
 
 function formatKnownRows(hits: readonly KnownSearchHit[], style: Styler, width: number): string[] {
-  const displayHits = hits.map((h) => ({ hit: h, displayName: sanitizeLine(skillRef(h)) }));
+  const displayHits = hits.map((h) => ({ hit: h, displayName: sanitizeLine(skillLabel(h)) }));
   const nameWidth = Math.max(...displayHits.map(({ displayName }) => displayName.length));
   const descStart = 4 + nameWidth + 2;
   const descBudget = Math.max(20, width - descStart);
