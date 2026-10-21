@@ -1235,6 +1235,30 @@ Given one or more skill references on the command line, `crew install` proceeds 
    3. Else, crew walks **exactly one directory level deep** under the resolved location and adds every subdirectory containing a `SKILL.md` to the install set. Deeper nesting is ignored.
    4. If, and only if, the standard cases above find zero skill candidates and the owning tap has `discovery: recursive` (or the user supplied `--recursive` for a direct git/path install), crew performs bounded recursive fallback discovery. It searches descendant directories up to depth 5 for `SKILL.md`, skips hidden directories and common non-source/vendor directories (`.git`, `.hg`, `.svn`, `.crew`, `node_modules`, `vendor`, `dist`, `build`, `coverage`, `.next`), never descends inside a directory once it has found that directory's `SKILL.md`, and records each discovered skill with its POSIX path relative to the tap root. Recursive fallback never runs when a standard layout produced any valid or invalid skill candidate; invalid standard candidates are surfaced as validation failures instead of being bypassed by deeper search.
 
+   **GitHub gist file layout.** For git-kind sources whose host is exactly
+   `gist.github.com`, this layout takes precedence over the directory cases
+   above. Every top-level regular file whose complete frontmatter passes the
+   existing skill validator is a skill, regardless of filename or extension
+   (including `SKILL.md`, `skills`, and `.crew.json`). Directories, symlinks,
+   files without valid frontmatter, and malformed manifests are ignored.
+   The gist candidate file itself is the manifest passed to step 4
+   validation; it does not need to be named `SKILL.md` at its source.
+   A whole-source install includes every valid file; duplicate declared names
+   produce `conflicting_dependencies`. Selected files are copied byte for byte
+   into the store as `SKILL.md`, without other gist files. State `source.path`
+   and marker `path` retain the original filename. Gists remain git-kind taps:
+   search, info, qualified references, ref pinning, updates, and whole-tap
+   additions/removals use the same commands and git SHA semantics. Updating a
+   tracked file rereads that file; a replacement directory or symlink is never
+   interpreted as a directory skill. Existing gist entries with an empty
+   source path represent former root `SKILL.md` installs: updates read that
+   literal file and record `SKILL.md` after a successful reinstall.
+   Bare dependencies on another valid gist
+   file resolve at the parent's captured commit, including without an explicit
+   ref. The existing marker/state schemas and directory hash algorithm stay
+   unchanged. The owner's HTTPS gist page URL uses existing git acquisition;
+   no API client or file-selection syntax is introduced.
+
    A location that produces zero valid skills through the applicable case aborts with `no_skills_found`.
    - Multi-skill expansions are how the user gets every skill in a tap installed at once. Each child becomes an independent state entry attributed to the same tap (`source.tap`); upstream additions to that tap are picked up automatically by `crew update` (§10.1.1).
 6. **Resolve dependencies.** For each skill in the install set, read `metadata.crew.dependencies` and add each to the install set. Continue recursively until no new dependencies appear. Cycles are allowed and terminate naturally (a skill already in the set is not re-added).
@@ -2517,6 +2541,11 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-05f | §9 step 3, §9 step 6 | A dependency resolved as a sibling of a skill installed at `@<ref>` is read from that same commit, and its state entry records that ref. |
 | C-INST-05g | §9 step 3 | A reference whose resolved location is reached through a symlink is rejected; content outside the requested commit is never read or installed. |
 | C-INST-05h | §9 step 3, §13 | A subpath absent at an otherwise-readable commit is `no_skills_found`; a commit that cannot be materialized at all (unreadable object or repository, unwritable scratch location) is `source_unreachable`. |
+| C-GIST-01 | §9 steps 5, 8 | A gist installs every valid top-level file with exact original bytes as SKILL.md and original marker/state paths; unrelated and invalid files are ignored. |
+| C-GIST-02 | §9 step 5 | Filename and extension do not affect gist eligibility, including SKILL.md, skills, and .crew.json; directories and symlinks are ignored; empty valid sets produce no_skills_found and duplicate names conflicting_dependencies. |
+| C-GIST-03 | §9.1, §16.6 | Gist taps support search, info, qualified install, previews, and existing ref pinning. |
+| C-GIST-04 | §10.1 | Gist updates reread tracked files, add whole-tap children, and report source_gone for deleted files while preserving installed copies. |
+| C-GIST-05 | §9 step 6 | Bare gist dependencies use the parent's captured SHA and ref, even if another root advances the shared clone. |
 | C-INST-06 | §9 | `crew install gh:owner/repo` pointed at a repo with a root `SKILL.md` installs one skill. |
 | C-INST-07 | §9 step 5 | `crew install gh:owner/repo` pointed at a repo with no root `SKILL.md` but skill subdirectories installs every valid child one level deep. |
 | C-INST-08 | §9 step 5 | Nested skills more than one level deep are NOT installed by directory expansion. |
