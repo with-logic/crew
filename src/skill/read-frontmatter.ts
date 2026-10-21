@@ -4,13 +4,11 @@ import { isAscii } from "node:buffer";
 import { closeSync, openSync, readSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import type { YamlValue } from "../yaml/parse.ts";
-import { FrontmatterDelimiters } from "./delimiters.ts";
+import { CARRIAGE_RETURN, FrontmatterDelimiterScanner, LINE_FEED } from "./delimiters.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 
 // Small fixed reads bound scanning memory without issuing a syscall for every line.
 const FRONTMATTER_READ_CHUNK_BYTES = 4096;
-const CARRIAGE_RETURN = "\r".charCodeAt(0);
-const LINE_FEED = "\n".charCodeAt(0);
 
 type FrontmatterScanResult =
   | { readonly kind: "complete"; readonly byteEnd: number }
@@ -42,12 +40,11 @@ function scanFrontmatter(fd: number): FrontmatterScanResult {
   const buffer = Buffer.alloc(FRONTMATTER_READ_CHUNK_BYTES);
   const decoder = new StringDecoder("utf8");
   let position = 0;
-  const scan = new FrontmatterDelimiters();
+  const scan = new FrontmatterDelimiterScanner();
   for (;;) {
     const size = readSync(fd, buffer, 0, buffer.length, position);
     if (size === 0) {
       scan.write(decoder.end());
-      scan.end();
       break;
     }
     const chunk = buffer.subarray(0, size);
@@ -59,7 +56,7 @@ function scanFrontmatter(fd: number): FrontmatterScanResult {
     } else scan.write(decoder.write(chunk));
     if (scan.kind === "missing") return { kind: "parser-input", parserInput: "" };
     if (scan.kind === "complete") {
-      let remaining = scan.lineBreaks;
+      let remaining = scan.lineEndingCharactersInLastWrite;
       let end = 0;
       // Decoding preserves CR/LF, so the scanner's closing boundary exists in this byte chunk.
       while (remaining > 0) {
@@ -70,6 +67,13 @@ function scanFrontmatter(fd: number): FrontmatterScanResult {
     }
     position += size;
   }
-  if (scan.kind === "complete") return { kind: "complete", byteEnd: position };
-  return { kind: "parser-input", parserInput: scan.kind === "unclosed" ? "---" : "" };
+  const result = scan.end();
+  switch (result.kind) {
+    case "complete":
+      return { kind: "complete", byteEnd: position };
+    case "unclosed":
+      return { kind: "parser-input", parserInput: "---" };
+    case "missing":
+      return { kind: "parser-input", parserInput: "" };
+  }
 }
