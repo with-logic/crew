@@ -45,26 +45,36 @@ export function buildMarkerIndex(
   for (const e of stateEntries) {
     if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
+  const roots = [...projectRoots];
   for (const adapter of ALL_AGENTS) {
+    const sharedBases = new Map<string, boolean>();
+    const sharesUserBase = (root: string): boolean => {
+      const shared = sharedBases.get(root) ?? sharesScopeBase(adapter, root);
+      sharedBases.set(root, shared);
+      return shared;
+    };
+    let anySharedBase: boolean | undefined;
     const userInventory = scanMarkers(adapter, "user", cwd);
     for (const [key, finding] of userInventory.findings) inventoryFindings.set(key, finding);
     for (const rec of userInventory.records) {
-      if (
-        rec.marker.scope !== "user" &&
-        [...projectRoots].some((root) => sharesScopeBase(adapter, root))
-      )
-        continue;
+      if (rec.marker.scope !== "user") {
+        anySharedBase ??= roots.some(sharesUserBase);
+        if (anySharedBase) continue;
+      }
       const key = `user\0${rec.installDir}`;
       if (seen.has(key)) continue;
       seen.add(key);
       markers.push({ record: rec });
     }
-    for (const root of projectRoots) {
+    for (const root of roots) {
       if (!existsSync(root)) continue;
       const projectInventory = scanMarkers(adapter, "project", root);
       for (const [key, finding] of projectInventory.findings) inventoryFindings.set(key, finding);
+      const projectBaseIsShared =
+        projectInventory.records.some((rec) => rec.marker.scope !== "project") &&
+        sharesUserBase(root);
       for (const rec of projectInventory.records) {
-        if (rec.marker.scope !== "project" && sharesScopeBase(adapter, root)) continue;
+        if (rec.marker.scope !== "project" && projectBaseIsShared) continue;
         const key = `project\0${rec.installDir}`;
         if (seen.has(key)) continue;
         seen.add(key);

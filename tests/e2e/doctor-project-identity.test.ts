@@ -83,7 +83,7 @@ for (const scope of ["user", "project"] as const) {
       expect(installSkill(home, "demo", scope, cwd)).toBe(0);
       const before = readState(home);
       const markerPath = join(redirected.userRoot, "demo", ".crew.json");
-      const marker = readFileSync(markerPath, "utf8");
+      const markerContents = readFileSync(markerPath, "utf8");
       const diagnosis = captureStreams();
       expect(
         runCli(["doctor", "--verify", "--json"], { home, cwd, streams: diagnosis.streams }),
@@ -102,7 +102,7 @@ for (const scope of ["user", "project"] as const) {
       expect(rebuilt).toHaveLength(1);
       expect(rebuilt[0]!.scope).toBe(scope);
       expect(rebuilt[0]!.project_root).toBe(scope === "project" ? cwd : undefined);
-      expect(readFileSync(markerPath, "utf8")).toBe(marker);
+      expect(readFileSync(markerPath, "utf8")).toBe(markerContents);
     });
   }
 }
