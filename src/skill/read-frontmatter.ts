@@ -1,15 +1,16 @@
 /** Read frontmatter metadata without retaining bodies or malformed candidates (§9 step 4). */
 
+import { isAscii } from "node:buffer";
 import { closeSync, openSync, readSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import type { YamlValue } from "../yaml/parse.ts";
+import { FrontmatterDelimiters } from "./delimiters.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 
 // Small fixed reads bound scanning memory without issuing a syscall for every line.
 const FRONTMATTER_READ_CHUNK_BYTES = 4096;
 const CARRIAGE_RETURN = "\r".charCodeAt(0);
 const LINE_FEED = "\n".charCodeAt(0);
-const DASH = "-".charCodeAt(0);
 
 type FrontmatterScanResult =
   | { readonly kind: "complete"; readonly byteEnd: number }
@@ -41,50 +42,34 @@ function scanFrontmatter(fd: number): FrontmatterScanResult {
   const buffer = Buffer.alloc(FRONTMATTER_READ_CHUNK_BYTES);
   const decoder = new StringDecoder("utf8");
   let position = 0;
-  let opened = false;
-  let dashes = 0;
-  let trailingSpace = false;
-  let invalid = false;
+  const scan = new FrontmatterDelimiters();
   for (;;) {
     const size = readSync(fd, buffer, 0, buffer.length, position);
+    if (size === 0) {
+      scan.write(decoder.end());
+      scan.end();
+      break;
+    }
     const chunk = buffer.subarray(0, size);
-    let start = 0;
-    if (opened && invalid && size > 0) {
-      // An invalid delimiter line cannot recover before CR/LF; UTF-8 never embeds those bytes.
-      const cr = chunk.indexOf(CARRIAGE_RETURN);
-      const lf = chunk.indexOf(LINE_FEED);
-      start = Math.min(cr < 0 ? size : cr, lf < 0 ? size : lf);
-      decoder.end();
-    }
-    const text = size === 0 ? `${decoder.end()}\n` : decoder.write(chunk.subarray(start));
-    let lineEnd = 0;
-    for (let i = 0; i < text.length; i++) {
-      const char = text.charCodeAt(i);
-      if (char === CARRIAGE_RETURN || char === LINE_FEED) {
-        lineEnd = buffer.indexOf(char, lineEnd) + 1;
-        const delimiter = dashes === 3 && !invalid;
-        if (opened && delimiter)
-          return { kind: "complete", byteEnd: size === 0 ? position : position + lineEnd };
-        if (!opened && dashes !== 0) {
-          if (!delimiter) return { kind: "parser-input", parserInput: "" };
-          opened = true;
-        }
-        dashes = 0;
-        trailingSpace = false;
-        invalid = false;
-      } else if (text[i]!.trim() === "") trailingSpace ||= dashes > 0;
-      else {
-        const extendsDelimiter = char === DASH && dashes < 3 && !trailingSpace && !invalid;
-        if (extendsDelimiter) dashes++;
-        else {
-          if (!opened) return { kind: "parser-input", parserInput: "" };
-          invalid = true;
-        }
+    if (isAscii(chunk)) {
+      // ASCII cannot complete a pending UTF-8 sequence; flush its replacement character first.
+      const pending = decoder.end();
+      if (pending !== "") scan.write(pending);
+      if (scan.kind === "pending") scan.write(chunk);
+    } else scan.write(decoder.write(chunk));
+    if (scan.kind === "missing") return { kind: "parser-input", parserInput: "" };
+    if (scan.kind === "complete") {
+      let remaining = scan.lineBreaks;
+      let end = 0;
+      // Decoding preserves CR/LF, so the scanner's closing boundary exists in this byte chunk.
+      while (remaining > 0) {
+        if (chunk[end] === CARRIAGE_RETURN || chunk[end] === LINE_FEED) remaining--;
+        end++;
       }
+      return { kind: "complete", byteEnd: position + end };
     }
-    // The synthetic EOF newline above also recognizes a closing delimiter at EOF.
-    if (size === 0) break;
     position += size;
   }
-  return { kind: "parser-input", parserInput: opened ? "---" : "" };
+  if (scan.kind === "complete") return { kind: "complete", byteEnd: position };
+  return { kind: "parser-input", parserInput: scan.kind === "unclosed" ? "---" : "" };
 }

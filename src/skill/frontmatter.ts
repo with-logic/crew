@@ -1,5 +1,5 @@
 /**
- * Extract and parse SKILL.md frontmatter.
+ * Extract and parse SKILL.md frontmatter (§9 step 4).
  *
  * Per the Agent Skills spec, every `SKILL.md` begins with a YAML
  * frontmatter block delimited by `---` lines. The rest of the file is the
@@ -8,6 +8,7 @@
 
 import { CrewError } from "../core/errors.ts";
 import { parseYaml, type YamlValue } from "../yaml/parse.ts";
+import { FrontmatterDelimiters } from "./delimiters.ts";
 
 /** The frontmatter and body of a SKILL.md file. */
 export interface Frontmatter {
@@ -19,33 +20,22 @@ export interface Frontmatter {
 
 /** Extract frontmatter from a raw SKILL.md string. Throws `invalid_skill` if malformed. */
 export function extractFrontmatter(raw: string): Frontmatter {
-  const lines = raw.replace(/\r\n?/g, "\n").split("\n");
-  // Skip leading blank lines; `---` must be on the first non-blank line.
-  let i = 0;
-  while (i < lines.length && lines[i]!.trim() === "") {
-    i++;
-  }
-  if (i >= lines.length || lines[i]!.trim() !== "---") {
+  const scan = new FrontmatterDelimiters();
+  scan.write(raw);
+  if (scan.kind === "pending") scan.end();
+  if (scan.kind === "missing") {
     throw new CrewError(
       "invalid_skill",
       "SKILL.md is missing its YAML frontmatter — the first line should be `---`",
     );
   }
-  const start = i + 1;
-  let end = -1;
-  for (let j = start; j < lines.length; j++) {
-    if (lines[j]!.trim() === "---") {
-      end = j;
-      break;
-    }
-  }
-  if (end < 0) {
+  if (scan.kind === "unclosed") {
     throw new CrewError(
       "invalid_skill",
       "SKILL.md frontmatter never closes — add a `---` line after the last YAML field",
     );
   }
-  const yamlSource = lines.slice(start, end).join("\n");
+  const yamlSource = raw.slice(scan.headerStart, scan.headerEnd).replace(/\r\n?/g, "\n");
   let data: YamlValue;
   try {
     data = parseYaml(yamlSource);
@@ -55,6 +45,8 @@ export function extractFrontmatter(raw: string): Frontmatter {
       `SKILL.md frontmatter isn't valid YAML — ${(err as Error).message}`,
     );
   }
-  const body = lines.slice(end + 1).join("\n");
+  const bodyStart =
+    scan.bodyStart + (raw[scan.bodyStart - 1] === "\r" && raw[scan.bodyStart] === "\n" ? 1 : 0);
+  const body = raw.slice(bodyStart).replace(/\r\n?/g, "\n");
   return { data, body };
 }
