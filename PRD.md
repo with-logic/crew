@@ -1236,6 +1236,8 @@ Given one or more skill references on the command line, `crew install` proceeds 
    existing skill validator is a skill, regardless of filename or extension
    (including `SKILL.md`, `skills`, and `.crew.json`). Directories, symlinks,
    files without valid frontmatter, and malformed manifests are ignored.
+   The gist candidate file itself is the manifest passed to step 4
+   validation; it does not need to be named `SKILL.md` at its source.
    A whole-source install includes every valid file; duplicate declared names
    produce `conflicting_dependencies`. Selected files are copied byte for byte
    into the store as `SKILL.md`, without other gist files. State `source.path`

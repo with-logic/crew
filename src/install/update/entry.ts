@@ -15,7 +15,7 @@ import { cwdForEntry } from "../../agents/adapter.ts";
 import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
-import { type AcquiredTap, withAcquiredSkillDir } from "../../sources/acquire/index.ts";
+import { type AcquiredTap, withAcquiredSkillPath } from "../../sources/acquire/index.ts";
 import { isGistTap } from "../../sources/gist.ts";
 import { hashSourceDirectory } from "../../sources/read.ts";
 import { stageIntoStore } from "../../sources/store.ts";
@@ -149,17 +149,17 @@ function updateOne(
   // Only this entry's own directory or gist file is read and exported —
   // otherwise every entry sharing a whole-repo tap materializes the
   // whole repository again (§10.1).
-  return withAcquiredSkillDir(tap, entry.ref, entry.source.path, home, (acquired, skillDir) =>
-    applyUpdate(entry, acquired, skillDir, tap, home, force, entryCwd, dryRun),
+  return withAcquiredSkillPath(tap, entry.ref, entry.source.path, home, (acquired, sourcePath) =>
+    applyUpdate(entry, acquired, sourcePath, tap, home, force, entryCwd, dryRun),
   );
 }
 
 /** Stage and reinstall one entry from an already-acquired tree. */
 function applyUpdate(
   entry: StateEntry,
-  acquired: AcquiredTap,
+  acquired: Pick<AcquiredTap, "resolvedSha" | "pinned">,
   // Tap re-expansion has already marked missing children `source_gone`.
-  skillDir: string,
+  sourcePath: string,
   tap: TapConfig,
   home: string,
   force: boolean,
@@ -172,13 +172,13 @@ function applyUpdate(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
-  const sourceHash = newSha === null ? hashSourceDirectory(skillDir) : undefined;
+  const sourceHash = newSha === null ? hashSourceDirectory(sourcePath) : undefined;
   if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
     if (newSha !== null) return { kind: "up_to_date" };
     if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
   }
 
-  const loaded = loadSkill(skillDir, isGistTap(tap));
+  const loaded = loadSkill(sourcePath, isGistTap(tap));
   if (dryRun) return { kind: "would_update", new_sha: newSha };
   const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash, isGistTap(tap));
   const perTarget = reinstallIntoAgents({

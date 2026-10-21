@@ -44,7 +44,7 @@ import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
-  /** Materialized tap root, or the narrowed root returned by skill acquisition. */
+  /** Materialized tap root directory. */
   readonly rootDir: string;
   /** Full 40-char SHA for git taps; null for path taps. */
   readonly resolvedSha: string | null;
@@ -131,16 +131,19 @@ export function withAcquiredTap<T>(
  *
  * `fn` receives the skill directory or original gist file, not the tap root.
  */
-export function withAcquiredSkillDir<T>(
+export function withAcquiredSkillPath<T>(
   tap: TapConfig,
   ref: string | null,
   skillPath: string,
   home: string,
-  fn: (acquired: AcquiredTap, skillDir: string) => T,
+  fn: (acquired: Pick<AcquiredTap, "resolvedSha" | "pinned">, sourcePath: string) => T,
 ): T {
   if (ref === null || tap.kind === "path") {
     const acquired = acquireTap(tap, home);
-    return fn(acquired, join(acquired.rootDir, skillPath));
+    return fn(
+      { resolvedSha: acquired.resolvedSha, pinned: acquired.pinned },
+      join(acquired.rootDir, skillPath),
+    );
   }
   migrateTapClone(tap, home);
   const clonePath = tapClonePath(tap, home);
@@ -159,7 +162,7 @@ export function withAcquiredSkillDir<T>(
     sha,
     exportPath,
     home,
-    (skillDir) => fn({ rootDir: skillDir, resolvedSha: sha, pinned }, skillDir),
+    (sourcePath) => fn({ resolvedSha: sha, pinned }, sourcePath),
     { literalPathspec: isGistTap(tap) },
   );
 }

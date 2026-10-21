@@ -4,6 +4,9 @@ import { appendFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeTempDir } from "../../helpers/fixtures.ts";
 
+// Allow startup/allocator noise while rejecting growth proportional to the 64 MiB body.
+const MAX_DISCOVERY_RSS_GROWTH_BYTES = 32 * 1024 * 1024;
+
 const reader = new URL("../../../src/sources/gist.ts", import.meta.url).href;
 const child = `
 import { gistCandidates } from ${JSON.stringify(reader)};
@@ -32,6 +35,8 @@ for (const [label, prefix, chunk, fixtureMiB] of [
     }
     expect(samples[1]!.names).toEqual(samples[0]!.names);
     console.info(`${label}: baseline=${samples[0]!.peakBytes} large=${samples[1]!.peakBytes}`);
-    expect(samples[1]!.peakBytes - samples[0]!.peakBytes).toBeLessThan(32 * 1024 * 1024);
+    expect(samples[1]!.peakBytes - samples[0]!.peakBytes).toBeLessThan(
+      MAX_DISCOVERY_RSS_GROWTH_BYTES,
+    );
   });
 }

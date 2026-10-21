@@ -9,7 +9,7 @@ import type { Config, TapConfig, TapSource } from "../../../core/types.ts";
 import { parseRef } from "../../../refs/parse.ts";
 import { withAcquiredTap } from "../../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
-import { findSiblingDep } from "../../dep-resolution.ts";
+import { findSiblingDep } from "../../dep-resolution/index.ts";
 import { attributeRef } from "../../tap-attribution.ts";
 import { enqueueTapRef, type PendingItem } from "../enqueue.ts";
 import { expandSkillsAsItems, sourceRequestedRef } from "../expand-items.ts";
@@ -61,10 +61,10 @@ export function enqueueDeps(
     // `findSiblingDep` can register an auto tap, so each hit carries the
     // config to carry forward; threading it through the loop is what
     // keeps a batched walk equivalent to resolving one at a time.
-    const parentDir = trees.parentDir(parent);
+    const parentPath = trees.parentPath(parent);
     for (const dep of bare) {
       const sibling = findSiblingDep(
-        { tap: parent.tap, tapRelativePath: parent.tapRelativePath, parentDir },
+        { tap: parent.tap, tapRelativePath: parent.tapRelativePath, parentPath },
         dep.source.name,
         home,
         current,
