@@ -4,9 +4,10 @@
  *
  * `loadSkill` is the boundary between raw filesystem state and validated
  * domain objects. Every code path that wants to install, describe, or hash
- * a skill goes through here first.
+ * a skill goes through here first (§9 step 4).
  */
 
+import { lstatSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
@@ -24,6 +25,7 @@ export function loadSkill(path: string): LoadedSkill {
       { path },
     );
   }
+  assertNoManifestLink(skillMdPath, path);
   const raw = readText(skillMdPath);
   const { data } = extractFrontmatter(raw);
   const frontmatter = validateFrontmatter(data);
@@ -40,6 +42,7 @@ export function loadSkillName(path: string): string {
       { path },
     );
   }
+  assertNoManifestLink(skillMdPath, path);
   const raw = readText(skillMdPath);
   const { data } = extractFrontmatter(raw);
   return validateFrontmatterName(data);
@@ -48,4 +51,12 @@ export function loadSkillName(path: string): string {
 /** True iff `path` contains a `SKILL.md`. Does not validate. */
 export function hasSkillMd(path: string): boolean {
   return exists(join(path, "SKILL.md"));
+}
+
+/** Manifest links cannot supply metadata from outside the skill (§9 step 4). */
+function assertNoManifestLink(manifest: string, path: string): void {
+  if (!lstatSync(manifest).isSymbolicLink()) return;
+  throw new CrewError("invalid_skill", `SKILL.md in \`${path}\` must not be a symbolic link`, {
+    path,
+  });
 }
