@@ -5,7 +5,6 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ALL_AGENTS } from "../../src/agents/registry.ts";
 import { runCli } from "../../src/cli/main.ts";
-import type { UpdateRow } from "../../src/install/update/types.ts";
 import { readState } from "../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import {
@@ -15,7 +14,8 @@ import {
   makeTempDir,
   skillFrontmatter,
 } from "../helpers/fixtures.ts";
-import { snapshotFiles } from "../helpers/snapshot.ts";
+import { snapshot } from "../helpers/snapshot.ts";
+import type { UpdateJson } from "./update-dry-run/helpers.ts";
 
 const originals = ALL_AGENTS.map((adapter) => ({
   adapter,
@@ -36,12 +36,6 @@ afterEach(() => {
   for (const { adapter, userPath, projectPath, detect } of originals)
     Object.assign(adapter, { userPath, projectPath, detect });
 });
-
-function snapshot(root: string): Record<string, Buffer> {
-  const files: Record<string, Buffer> = {};
-  snapshotFiles(root, files, (entry) => entry.relPath);
-  return files;
-}
 
 function fixture(kind: "path" | "git") {
   const home = makeCrewHome();
@@ -103,7 +97,7 @@ for (const kind of ["path", "git"] as const) {
 
       const json = captureStreams();
       expect(runCli([...args, "--json"], { home: f.home, streams: json.streams })).toBe(0);
-      const output = JSON.parse(json.stdout()) as { rows: UpdateRow[] };
+      const output = JSON.parse(json.stdout()) as UpdateJson;
       expect(output.rows.find((row) => row.name === "demo")).toEqual({
         name: "demo",
         scope: "user",
@@ -131,7 +125,8 @@ test("C-UPD-46 soft missing sources remain quiet and JSON takes precedence", () 
     expect(runCli([...args, "--json", "--quiet"], { home: f.home, streams: json.streams })).toBe(0);
     outputs.push(json.stdout());
     expect(json.stderr()).toBe("");
-    expect(JSON.parse(json.stdout()).rows[0].outcome).toEqual({ kind: "source_gone" });
+    const output = JSON.parse(json.stdout()) as UpdateJson;
+    expect(output.rows[0]!.outcome).toEqual({ kind: "source_gone" });
   }
   expect(outputs[0]).toBe(outputs[1]);
   expect(snapshot(join(f.installed, "demo"))).toEqual(f.before.demo);
