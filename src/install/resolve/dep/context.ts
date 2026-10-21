@@ -6,6 +6,7 @@ import { tapClonePath } from "../../../core/repo-path.ts";
 import { createExportedTree, type ExportedTree } from "../../../git/export.ts";
 import type { PendingItem } from "../enqueue.ts";
 
+// Two contexts reuse alternating parents while capping disk use at two repository exports.
 const MAX_RETAINED_TREES = 2;
 
 /** Shared only while one install-set walk owns the captured trees. */
@@ -41,14 +42,14 @@ function parentDir(
   home: string,
   exports: Map<string, ExportedTree>,
 ): string | undefined {
-  if (parent.requestedRef === null || parent.resolvedSha === null || parent.tap.kind !== "git")
-    return undefined;
+  const hasCapturedRevision = parent.requestedRef !== null && parent.resolvedSha !== null;
+  if (!hasCapturedRevision || parent.tap.kind !== "git") return undefined;
   const clone = tapClonePath(parent.tap, home);
   // Widen a skill-root tap to its enclosing directory so siblings remain visible.
   const subpath = parent.tap.subpath;
   const enclosing = subpath.length === 0 ? "" : posix.dirname(subpath);
-  const rootPath = enclosing === "." || enclosing === "/" ? "" : enclosing;
-  const key = JSON.stringify([clone, rootPath, parent.resolvedSha]);
+  const exportSubpath = enclosing === "." || enclosing === "/" ? "" : enclosing;
+  const key = JSON.stringify([clone, exportSubpath, parent.resolvedSha]);
   let tree = exports.get(key);
   // §9 step 3: cache cleaning must not replace captured bytes with live HEAD.
   if (tree !== undefined && !existsSync(tree.rootDir)) {
@@ -63,9 +64,16 @@ function parentDir(
       oldest.cleanup();
       exports.delete(oldestKey);
     }
-    tree = createExportedTree(clone, parent.resolvedSha, rootPath, home);
-    exports.set(key, tree);
+    tree = createExportedTree({
+      clonePath: clone,
+      sha: parent.resolvedSha,
+      subpath: exportSubpath,
+      home,
+    });
   }
+  exports.delete(key);
+  exports.set(key, tree);
+  // Re-enter the subpath's basename inside its enclosing export; whole-repo paths stay relative.
   const rel =
     subpath.length > 0
       ? posix.join(posix.basename(subpath), parent.tapRelativePath)

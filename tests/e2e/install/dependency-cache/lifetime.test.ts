@@ -47,6 +47,26 @@ test("C-INST-05f an evicted revision can be revisited with its original bytes", 
   for (const root of roots) expect(existsSync(root)).toBe(false);
 });
 
+test("C-INST-05f interleaved hits retain the most recently used captured revision", () => {
+  const fixture = revisions();
+  const parents = revisionParents(fixture);
+  const { roots, alive } = captureExports();
+  withDependencyTrees(fixture.home, (trees) => {
+    const first = trees.parentDir(parents[0]!);
+    trees.parentDir(parents[1]!);
+    expect(trees.parentDir(parents[0]!)).toBe(first);
+    trees.parentDir(parents[2]!);
+    expect(existsSync(roots[1]!)).toBe(false);
+    expect(trees.parentDir(parents[0]!)).toBe(first);
+    expect(readFileSync(join(first!, "..", "dependency", "SKILL.md"), "utf8")).toEndWith(
+      "revision 0\n",
+    );
+  });
+  expect(roots).toHaveLength(3);
+  expect(Math.max(...alive)).toBe(2);
+  for (const root of roots) expect(existsSync(root)).toBe(false);
+});
+
 test("C-INST-05f a removed retained export is recreated at its captured revision", () => {
   const fixture = revisions();
   const parents = revisionParents(fixture);

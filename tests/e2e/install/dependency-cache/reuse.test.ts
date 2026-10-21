@@ -5,9 +5,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { runCli } from "../../../../src/cli/main.ts";
+import { readConfig } from "../../../../src/config/load.ts";
 import { storeEntryPath } from "../../../../src/core/paths.ts";
 import { resetGitRunner } from "../../../../src/git/exec.ts";
 import { hashDirectory } from "../../../../src/hash/content.ts";
+import { resolveInstallSet } from "../../../../src/install/resolve/index.ts";
 import { readState } from "../../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../../helpers/env.ts";
 import {
@@ -84,5 +86,56 @@ test("C-INST-05f a same-SHA sibling chain exports its enclosing directory once",
   }
   // One root acquisition, then one enclosing-tree export shared by all three parents.
   expect(roots).toHaveLength(2);
+  for (const root of roots) expect(existsSync(root)).toBe(false);
+});
+
+test("C-INST-05f parents at one SHA keep different enclosing subpaths separate", () => {
+  const repo = makeTempDir("crew-dependency-cache-repo-");
+  const teams = ["red", "blue"];
+  for (const team of teams) {
+    const enclosing = join(repo, "skills", team);
+    makeSkill(
+      enclosing,
+      "parent",
+      skillFrontmatter({ name: `parent-${team}`, dependencies: [`dep-${team}`] }),
+    );
+    makeSkill(
+      enclosing,
+      "dependency",
+      skillFrontmatter({ name: `dep-${team}` }),
+      `${team} captured bytes\n`,
+    );
+  }
+  const { sha } = makeGitRepo(repo);
+  for (const team of teams) {
+    makeSkill(
+      join(repo, "skills", team),
+      "dependency",
+      skillFrontmatter({ name: `dep-${team}` }),
+      `${team} HEAD bytes\n`,
+    );
+  }
+  commitAll(repo, "move both sibling trees past the captured commit");
+  const home = makeCrewHome();
+  const { roots } = captureExports();
+  const result = resolveInstallSet(
+    teams.map((team) => `file://${repo}@${sha}//skills/${team}/parent`),
+    readConfig(home),
+    { home },
+  );
+  for (const team of teams) {
+    const dep = result.skills.find((skill) => skill.name === `dep-${team}`)!;
+    expect(readFileSync(join(dep.storePath, "SKILL.md"), "utf8")).toEndWith(
+      `${team} captured bytes\n`,
+    );
+    expect(dep.resolvedSha).toBe(sha);
+    expect(dep.ref).toBe(sha);
+    expect(dep.pinned).toBe(true);
+    expect(dep.tap.kind).toBe("git");
+    expect(dep.tap.url).toBe(`file://${repo}`);
+    expect(dep.tap.subpath).toBe(`skills/${team}/dependency`);
+    expect(dep.tapRelativePath).toBe("");
+  }
+  expect(roots).toHaveLength(4);
   for (const root of roots) expect(existsSync(root)).toBe(false);
 });

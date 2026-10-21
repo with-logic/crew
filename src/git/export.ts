@@ -110,7 +110,7 @@ export function withExportedTree<T>(
   home: string,
   fn: (rootDir: string) => T,
 ): T {
-  const tree = createExportedTree(clonePath, sha, subpath, home);
+  const tree = createExportedTree({ clonePath, sha, subpath, home });
   try {
     return fn(tree.rootDir);
   } finally {
@@ -124,13 +124,16 @@ export interface ExportedTree {
   readonly cleanup: () => void;
 }
 
+/** Repository coordinates and scratch location for one captured export. */
+export interface ExportOptions {
+  readonly clonePath: string;
+  readonly sha: string;
+  readonly subpath: string;
+  readonly home: string;
+}
+
 /** Retain one checked export within a caller-owned cleanup scope. */
-export function createExportedTree(
-  clonePath: string,
-  sha: string,
-  subpath: string,
-  home: string,
-): ExportedTree {
+export function createExportedTree({ clonePath, sha, subpath, home }: ExportOptions): ExportedTree {
   const dest = makeScratchDir(paths(home).gitCacheDir, sha);
   try {
     exportTreeAt(clonePath, sha, subpath, dest);
