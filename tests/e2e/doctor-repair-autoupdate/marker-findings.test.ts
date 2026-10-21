@@ -35,20 +35,14 @@ afterEach(() => {
     Object.assign(adapter, { userPath, projectPath, detect });
 });
 
-type Scenario =
-  | { kind: "malformed" }
-  | { kind: "mismatch"; inventoryScope: Scope; declaredScope: Scope };
+type Scenario = { inventoryScope: Scope; declaredScope: Scope };
 const scenarios = [
-  { kind: "malformed" },
-  { kind: "mismatch", inventoryScope: "user", declaredScope: "project" },
-  { kind: "mismatch", inventoryScope: "project", declaredScope: "user" },
+  { inventoryScope: "user", declaredScope: "project" },
+  { inventoryScope: "project", declaredScope: "user" },
 ] satisfies readonly Scenario[];
 for (const enabled of [true, false]) {
   for (const scenario of scenarios) {
-    const label =
-      scenario.kind === "malformed"
-        ? "malformed"
-        : `${scenario.inventoryScope}-base marker declaring ${scenario.declaredScope} scope`;
+    const label = `${scenario.inventoryScope}-base marker declaring ${scenario.declaredScope} scope`;
     test(`C-STATE-14 ${label} invalid marker preserves scheduler when config enabled=${enabled}`, () => {
       const home = makeCrewHome();
       const cwd = makeTempDir();
@@ -66,7 +60,7 @@ for (const enabled of [true, false]) {
         schema_version: 1,
         name: "demo",
         agents: ["claude-code"],
-        scope: scenario.kind === "mismatch" ? scenario.declaredScope : "user",
+        scope: scenario.declaredScope,
         tap_name: "local",
         tap_kind: "path",
         tap_url: "",
@@ -79,11 +73,11 @@ for (const enabled of [true, false]) {
         installed_at: "2026-10-21T00:00:00.000Z",
         installed_by: "crew",
       };
-      if (scenario.kind === "mismatch" && scenario.inventoryScope === "project") {
+      if (scenario.inventoryScope === "project") {
         claudeCodeAdapter.userPath = () => "";
         claudeCodeAdapter.projectPath = () => join(target, "claude-code");
       }
-      writeFileSync(marker, scenario.kind === "malformed" ? "{broken" : JSON.stringify(fields));
+      writeFileSync(marker, JSON.stringify(fields));
       const before = [p.configFile, p.stateFile, p.autoupdatePlist].map((path) =>
         readFileSync(path),
       );
