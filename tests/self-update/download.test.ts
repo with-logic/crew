@@ -1,5 +1,5 @@
 /**
- * Tests for the asset-download + binary-swap layer.
+ * Tests for the asset-download + binary-swap layer (§10.3).
  *
  * Both the network fetch (`setAssetDownloader`) and the xattr shell
  * call (`setXattrClearer`) are behind seams, so these tests never
@@ -9,7 +9,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   downloadAssetToTemp,
@@ -54,8 +54,12 @@ describe("downloadAssetToTemp", () => {
       writeFileSync(destPath, "fake-binary-bytes");
     });
     const path = downloadAssetToTemp("https://example.com/crew", 5);
-    expect(existsSync(path)).toBe(true);
-    expect(readFileSync(path, "utf8")).toBe("fake-binary-bytes");
+    try {
+      expect(existsSync(path)).toBe(true);
+      expect(readFileSync(path, "utf8")).toBe("fake-binary-bytes");
+    } finally {
+      rmSync(dirname(path), { recursive: true, force: true });
+    }
   });
 
   test("wraps downloader failures as self_update_unavailable", () => {

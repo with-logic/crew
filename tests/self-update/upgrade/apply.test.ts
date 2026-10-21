@@ -1,11 +1,11 @@
 /**
- * runSelfUpdate happy paths (§17.2): download, verify, swap, and the
+ * runSelfUpdate happy paths (§10.3): download, verify, swap, and the
  * version-check refresh; plus runSelfUpdateCheck.
  */
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { paths } from "../../../src/core/paths.ts";
 import { CREW_VERSION } from "../../../src/core/version.ts";
 import { readVersionCheck } from "../../../src/self-update/check.ts";
@@ -23,6 +23,7 @@ import {
 import { runSelfUpdate, runSelfUpdateCheck } from "../../../src/self-update/upgrade.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { downloaderForBinary, releaseAssets } from "../helpers.ts";
+import { captureDownload } from "./helpers.ts";
 
 // Force `process.platform === "darwin"` for deterministic asset names.
 // The dedicated "platform guard" test below flips to an unsupported
@@ -49,13 +50,7 @@ describe("runSelfUpdate", () => {
     const dest = join(home, "crew-bin");
     writeFileSync(dest, "OLD");
 
-    setReleaseFetcher(() => ({
-      tag: "v99.99.99",
-      assets: releaseAssets(),
-    }));
-    setAssetDownloader(downloaderForBinary("NEW"));
-    setReleaseSignatureVerifier(() => true);
-    setXattrClearer(() => {});
+    const captured = captureDownload();
 
     const result = runSelfUpdate({ home, force: false, execPath: dest });
     expect(result.replaced).toBe(true);
@@ -65,6 +60,7 @@ describe("runSelfUpdate", () => {
     const record = readVersionCheck(home);
     expect(record?.latest_tag).toBe("v99.99.99");
     expect(existsSync(paths(home).versionCheckFile)).toBe(true);
+    expect(existsSync(dirname(captured.assetPath))).toBe(false);
   });
 
   test("downloads the Linux release asset on Linux hosts", () => {
