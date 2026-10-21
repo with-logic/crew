@@ -2,13 +2,13 @@
  * Index one pinned known-tap source for the bundled registry (§16.2.1).
  */
 
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import type { LoadedSkill } from "../../core/types.ts";
 import { cloneRepo } from "../../git/repo/index.ts";
 import { checkoutSha } from "../../git/repo/refs.ts";
 import { hasSkillMd } from "../../skill/load.ts";
 import { expandSkills } from "../../sources/expand.ts";
-import { toPosix } from "../../util/fs.ts";
+import { sourceRelativePath } from "../../sources/path.ts";
 import type { KnownTap, KnownTapSkill } from "../types.ts";
 import type { KnownTapSource } from "./types.ts";
 
@@ -43,7 +43,7 @@ function assertDisplaySafeSource(source: KnownTapSource, clonePath: string): voi
 }
 
 function knownTapSkill(root: string, skill: LoadedSkill): KnownTapSkill {
-  const path = toPosix(relative(root, skill.path));
+  const path = sourceRelativePath(root, skill.path);
   return {
     name: skill.frontmatter.name,
     namespace: namespaceFor(path),
