@@ -76,8 +76,7 @@ function collectSkillHit(
   hits: SearchHit[],
 ): void {
   try {
-    const skill = loadSkill(loc.path);
-    const { name, description } = skill.frontmatter;
+    const { name, description } = loc.frontmatter ?? loadSkill(loc.path).frontmatter;
     if (!matchesSkill(name, description, query)) return;
     hits.push({
       tap: tap.name,

@@ -20,8 +20,8 @@ for (const failures of [1, 2]) {
     let caught: unknown;
     try {
       withDependencyTrees(fixture.home, (trees) => {
-        trees.parentDir(parents[0]!);
-        trees.parentDir(parents[1]!);
+        trees.parentPath(parents[0]!);
+        trees.parentPath(parents[1]!);
         chmodSync(roots[0]!, 0o500);
         if (failures === 2) chmodSync(roots[1]!, 0o500);
         throw primary;

@@ -16,6 +16,7 @@ import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
+import { isGistTap } from "../../sources/gist.ts";
 import { isSourceReadFailure } from "../../util/source-read.ts";
 import { type CurrentTapChild, currentTapChildren } from "../tap-children.ts";
 
@@ -38,7 +39,7 @@ export interface TapScanCache {
    */
   children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[];
   /** Load and validate one child (§9 step 4), memoising validation and source-read errors. */
-  validate(skillDir: string): CrewError | null;
+  validate(sourcePath: string, tap?: TapConfig): CrewError | null;
 }
 
 export function makeTapScanCache(): TapScanCache {
@@ -74,11 +75,11 @@ export function makeTapScanCache(): TapScanCache {
       }
     },
 
-    validate(skillDir: string): CrewError | null {
-      const hit = skillLoadErrors.get(skillDir);
+    validate(sourcePath: string, tap?: TapConfig): CrewError | null {
+      const hit = skillLoadErrors.get(sourcePath);
       if (hit !== undefined) return hit;
-      const skillLoadError = skillLoadErrorFor(skillDir);
-      skillLoadErrors.set(skillDir, skillLoadError);
+      const skillLoadError = skillLoadErrorFor(sourcePath, tap !== undefined && isGistTap(tap));
+      skillLoadErrors.set(sourcePath, skillLoadError);
       return skillLoadError;
     },
   };
@@ -91,9 +92,9 @@ export function makeTapScanCache(): TapScanCache {
  * Cache stable `CrewError` codes for validation and source-read failures;
  * unexpected errors from manifest path inspection must still propagate.
  */
-function skillLoadErrorFor(skillDir: string): CrewError | null {
+function skillLoadErrorFor(sourcePath: string, isGistFile: boolean): CrewError | null {
   try {
-    loadSkill(skillDir);
+    loadSkill(sourcePath, isGistFile);
     return null;
   } catch (err) {
     if (err instanceof CrewError) return err;
