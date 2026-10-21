@@ -1605,6 +1605,26 @@ manually (`crew tap add`) or created automatically by a multi-skill
 install — they're stored identically in `config.yaml` and re-expanded
 identically here.
 
+**Project identity in re-expansion results.** Each `tap_reexpand_rows`
+record carries `name`, `scope`, `tap`, and `kind` (`added`, `would_add`,
+`source_gone`, or `tap_error`), with the existing optional `error` and
+added-only `warnings` fields. A string `project_root` MUST be present iff
+`scope` is `project`, copied from the originating install group's recorded
+project root. User-scope rows MUST omit it. This applies to successful and
+preview additions, validation and rejected-location diagnostics, conflicting
+names, vanished sources, and group acquisition or read failures.
+
+Human update and outdated output identifies each project location using
+`(in <path>)`, shortening the home directory to `~`. Addition summaries
+group by `(tap, scope, project_root)` in encounter order so independent
+projects remain distinguishable. Project addition warnings and re-expansion
+errors, including quiet error diagnostics, carry the same location. Escape
+controls in displayed paths; quiet diagnostics retain their whole-message
+redaction. User-scope row shape and rendering remain unchanged. This result
+contract applies equally to real update, update previews, and outdated;
+source identity, state, markers, retries, classification, and exit codes
+remain unchanged.
+
 **Autoupdate.** The background scheduler (§10.2) runs `crew update`, so
 tap re-expansion is automatic. The expected flow: a user runs
 `crew install @with-logic/skills` once (creating an auto-tap) and
@@ -2738,6 +2758,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-40 | §10.1.1 | If rollback-directory cleanup fails after a new tap child is successfully added, the child remains installed and recorded in state, and cleanup failure alone does not make the run fail. Human output displays the cleanup warning and leftover path; JSON includes the diagnostic in an optional `warnings` array on the successful `added` row. When cleanup succeeds, that row omits `warnings`. |
 | C-UPD-41 | §10.1, §10.1.1 | Normal human output for an existing-entry `failed` outcome in `crew update` and `crew outdated` shows its error code and primary message, including retained recovery paths already present. The whole diagnostic redacts credentials and escapes controls; raw JSON error fields, state/retry behavior, and exit codes remain unchanged. |
 | C-UPD-42 | §5.2, §10.1, §10.1.1 | On a hard-failed run, human `--quiet` update (including dry run) and outdated suppress summaries while sending ordinary failed entries, failed targets, tap re-expansion errors, and explicitly selected tap refresh failures to stderr with affected subjects, error codes, full primary messages, and retained recovery paths. Diagnostics redact credentials and escape controls. Successful and soft-only quiet runs stay silent; a hard-failed run may include existing soft `tap_error` diagnostics without reclassification. Normal human output, raw JSON, isolation, exit codes, state, and retries remain unchanged. |
+| C-UPD-43 | §10.1.1 | Every project-scope tap re-expansion result carries its originating recorded `project_root`; user-scope results omit the field. Real update, preview, and outdated preserve identity for additions, successful-addition warnings, validation and rejected-location errors, conflicting names, vanished sources, and group failures. Human addition summaries remain separate by tap/scope/project root, and project warnings and errors identify the location, including quiet errors, with safe path formatting. Source/state/marker identity, classification, retries, and exit codes are unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |

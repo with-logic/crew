@@ -2,6 +2,7 @@
 
 import { displayText } from "../../refs/display-url.ts";
 import { sanitizeLine } from "../../util/redact.ts";
+import { projectTag } from "./location.ts";
 import type { UpdatePlan } from "./plan.ts";
 
 /** The caller owns the quiet/hard-failure gate; rendering never changes severity or raw rows. */
@@ -30,7 +31,7 @@ export function renderQuietUpdateErrors(
     if (row.kind === "tap_error")
       lines.push(
         failureLine(
-          `${row.name} (from ${row.tap})`,
+          `${row.name}${projectTag(row)} (from ${row.tap})`,
           row.error?.code ?? "unreachable",
           row.error?.message ?? "",
         ),
