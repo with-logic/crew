@@ -8,7 +8,7 @@ import { indexTap, type SkillLocation } from "../../install/tap-index.ts";
 import { displayText } from "../../refs/display-url.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { sanitizeLine } from "../../util/redact.ts";
-import { isSourceReadFailure } from "../../util/source-read.ts";
+import { isSourceReadFailure, sourceReadFailure } from "../../util/source-read.ts";
 import { type SearchInstallIndex, searchInstallStatus } from "./install-state.ts";
 import type { ConfiguredSearchResult, SearchHit } from "./types.ts";
 
@@ -93,11 +93,20 @@ function collectSkillHit(
       ...searchInstallStatus(installIndex, name, tap.name, loc.tapRelativePath),
     });
   } catch (err) {
-    if (isSourceReadFailure(err))
+    const native = err as NodeJS.ErrnoException | null | undefined;
+    const readError =
+      err instanceof Error &&
+      native?.syscall === "lstat" &&
+      typeof native.path === "string" &&
+      typeof native.code === "string" &&
+      native.code !== ""
+        ? sourceReadFailure(native.path, err)
+        : err;
+    if (isSourceReadFailure(readError))
       warnings.push(
         sanitizeLine(
           displayText(
-            `warning: skill \`${loc.name}\` skipped (${err.code}) — ${err.message} (tap \`${tap.name}\`)`,
+            `warning: skill \`${loc.name}\` skipped (${readError.code}) — ${readError.message} (tap \`${tap.name}\`)`,
           ),
         ),
       );
