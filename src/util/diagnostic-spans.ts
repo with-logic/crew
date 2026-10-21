@@ -64,6 +64,7 @@ export function redactDiagnostic(
   const httpStart = firstMalformedHttpStart(text) ?? Number.POSITIVE_INFINITY;
   const redactionStart = Math.min(queryStart, httpStart);
   const visible = text.slice(0, redactionStart);
+  // Original authority context prevents clipping from turning hidden userinfo into a host (§13).
   const spans = schemeSpans(text);
   const parts: string[] = [];
   let cursor = 0;
