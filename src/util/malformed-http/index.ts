@@ -73,7 +73,7 @@ export function firstMalformedHttpStart(text: string, wholeToken = false): numbe
       }
     }
     if (ch === "@" && authorityStart !== undefined) return authorityStart;
-    if ("/\\?#".includes(ch)) authorityStart = undefined;
+    if ("/?#".includes(ch)) authorityStart = undefined;
   }
   return undefined;
 }
