@@ -11,10 +11,10 @@ export function updatedRowStatus(
 ): "updated" | "partially updated" | "failed" | "skipped" {
   const incomplete = outcome.per_target.some((t) => t.kind === "failed" || t.kind === "skipped");
   if (!incomplete) return "updated";
-  const completed = outcome.per_target.some(
+  const hasCompletedTarget = outcome.per_target.some(
     (t) => t.kind === "installed" || t.kind === "up_to_date",
   );
-  if (completed) return "partially updated";
+  if (hasCompletedTarget) return "partially updated";
   return outcome.per_target.some((t) => t.kind === "failed") ? "failed" : "skipped";
 }
 

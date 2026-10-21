@@ -12,7 +12,7 @@
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { shortenHome } from "../../util/format.ts";
-import type { Styler } from "../../util/term.ts";
+import type { Styler, SymbolKind } from "../../util/term.ts";
 import { targetIssues, updatedRowStatus } from "./targets.ts";
 
 export interface RowParts {
@@ -91,10 +91,13 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
 export function symbolFor(row: UpdateRow, style: Styler): string {
   const o = row.outcome;
   if (o.kind === "updated") {
-    const status = updatedRowStatus(o);
-    if (status === "failed") return style.symbol("fail");
-    if (status === "skipped") return style.symbol("muted");
-    return style.symbol(status === "partially updated" ? "warn" : "ok");
+    const symbols = {
+      updated: "ok",
+      "partially updated": "warn",
+      failed: "fail",
+      skipped: "muted",
+    } satisfies Record<ReturnType<typeof updatedRowStatus>, SymbolKind>;
+    return style.symbol(symbols[updatedRowStatus(o)]);
   }
   if (o.kind === "would_update") return style.symbol("ok");
   if (o.kind === "up_to_date") return style.symbol("muted");

@@ -149,10 +149,18 @@ function tally(rows: readonly UpdateRow[], addedCount: number, tapErrorCount: nu
     const k = o.kind;
     if (o.kind === "updated") {
       const status = updatedRowStatus(o);
-      if (status === "updated") t.updated++;
-      else if (status === "partially updated") t.partial++;
-      else if (status === "skipped") t.skipped++;
-      if (o.per_target.some((target) => target.kind === "failed")) t.failed++;
+      const counters = {
+        updated: "updated",
+        "partially updated": "partial",
+        failed: "failed",
+        skipped: "skipped",
+      } satisfies Record<
+        ReturnType<typeof updatedRowStatus>,
+        "updated" | "partial" | "failed" | "skipped"
+      >;
+      t[counters[status]]++;
+      if (status === "partially updated" && o.per_target.some((target) => target.kind === "failed"))
+        t.failed++;
     } else if (k === "would_update") t.updated++;
     else if (k === "up_to_date") t.upToDate++;
     else if (k === "skipped" || k === "missing_project_root") t.skipped++;

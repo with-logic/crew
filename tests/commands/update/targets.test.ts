@@ -69,6 +69,10 @@ for (const { label, targets, status, summary } of cases) {
       formatRowParts({ name: "demo-0", scope: "user", outcome }, makeStyler(false)).status,
     ).toBe(status);
     expect(lines.at(-1)).toBe(summary);
+    if (label === "completed, failed and skipped") {
+      expect(lines[2]).toContain("gemini-cli: failed (EACCES): permission denied");
+      expect(lines[2]).toContain("codex: skipped (customized)");
+    }
     if (status === "failed" || status === "skipped") expect(lines[2]).not.toContain("12345678");
     expect(JSON.stringify(outcome)).toBe(jsonBefore);
   });
