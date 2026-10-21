@@ -34,6 +34,7 @@ export function scanMarkers(
         });
         continue;
       }
+      // Malformed JSON leaves null so the field-validation path reports marker_invalid.
     }
     if (!isDoctorMarker(marker)) {
       findings.set(`marker_invalid\0${path}`, {

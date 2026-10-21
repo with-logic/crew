@@ -124,32 +124,33 @@ test("C-STATE-14 genuinely absent marker can still be reconciled", () => {
   expect(readState(home).installations).toEqual([]);
 });
 
-test("C-STATE-14 invalid required marker fields cannot reconstruct state", () => {
+test.each([
+  ["null", null],
+  ["array", []],
+  ["string", "text"],
+  ["schema version", { schema_version: 2 }],
+  ["empty owner list", { agents: [] }],
+  ["nonstring owner", { agents: [42] }],
+  ["empty owner", { agents: [""] }],
+  ["nonstring name", { name: 42 }],
+  ["empty name", { name: "" }],
+  ["nonstring ref", { ref: 42 }],
+])("C-STATE-14 invalid %s marker cannot reconstruct state", (_label, value) => {
   const { home, marker, original, installation } = installed();
   expect(installation.code).toBe(0);
   const statePath = join(home, "state.json");
   rmSync(statePath);
-  const corrupt = [
-    null,
-    [],
-    "text",
-    { ...original, schema_version: 2 },
-    { ...original, agents: [] },
-    { ...original, agents: [42] },
-    { ...original, agents: [""] },
-    { ...original, name: 42 },
-    { ...original, name: "" },
-    { ...original, ref: 42 },
-  ];
-  for (const value of corrupt) {
-    writeFileSync(marker, JSON.stringify(value));
-    const result = invoke(home, ["doctor", "--repair", "--json"]);
-    expect(result.code).toBe(1);
-    expect(result.json().findings).toContainEqual(
-      expect.objectContaining({ code: "marker_invalid" }),
-    );
-    expect(existsSync(statePath)).toBe(false);
-  }
+  const corrupt =
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? { ...original, ...value }
+      : value;
+  writeFileSync(marker, JSON.stringify(corrupt));
+  const result = invoke(home, ["doctor", "--repair", "--json"]);
+  expect(result.code).toBe(1);
+  expect(result.json().findings).toContainEqual(
+    expect.objectContaining({ code: "marker_invalid" }),
+  );
+  expect(existsSync(statePath)).toBe(false);
 });
 
 for (const scenario of ["malformed", "unreadable"] as const) {

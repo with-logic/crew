@@ -91,12 +91,9 @@ export function renderDoctor(
       // On a repair preview, say per cluster whether this is one of
       // the findings the run would address. The trailing count alone
       // tells the user how many, never which.
+      const wouldRepair = !opts.markerInventoryBlocksRepair && isRepairableCode(code);
       const fixable = opts.dryRun
-        ? style.dim(
-            !opts.markerInventoryBlocksRepair && isRepairableCode(code)
-              ? "  — would be repaired"
-              : "  — needs you",
-          )
+        ? style.dim(wouldRepair ? "  — would be repaired" : "  — needs you")
         : "";
       lines.push(`    ${sym} ${label}${qty}${fixable}`);
       // Show the first few messages; for larger clusters summarise.
