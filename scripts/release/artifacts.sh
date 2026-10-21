@@ -3,7 +3,7 @@
 # Sourcing only defines the function. Run from ROOT with next_version,
 # next_tag and changelog_section set; writes the existing release files.
 
-write_release_artifacts() {
+update_release_metadata() {
 # Bump package.json version without reformatting the rest of the file.
 node -e "
 const fs = require('node:fs');
@@ -63,6 +63,9 @@ if [ -d site/public ]; then
 JSON
 fi
 
+}
+
+regenerate_release_registry() {
 # Refresh the bundled known-tap registry snapshot from the reviewed,
 # commit-pinned manifest. This deliberately does not advance pins from
 # trackingRef; pin refreshes must happen in ordinary reviewed PRs.
@@ -72,6 +75,9 @@ if [ -f known-taps/manifest.json ]; then
   bun run known-taps check
 fi
 
+}
+
+update_release_changelog() {
 # Write/update CHANGELOG.md. If it doesn't exist, create a header
 # first; then prepend the new section below the header.
 if [ ! -f CHANGELOG.md ]; then
@@ -111,4 +117,10 @@ else:
 with open(path, "w", encoding="utf-8") as f:
     f.write(new_body)
 PY
+}
+
+write_release_artifacts() {
+  update_release_metadata
+  regenerate_release_registry
+  update_release_changelog
 }
