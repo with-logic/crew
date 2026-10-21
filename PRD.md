@@ -1267,6 +1267,8 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - **Conflict detection:** if two skills in the install set have the same `name` but come from different tap-relative source paths, or resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
 7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
 8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. If the store entry already exists and its content hash matches, reuse it.
+
+   If staging or publication fails after allocating a private staging directory, remove only that attempt's staging directory and preserve the original failure. If removal also fails, append a diagnostic identifying the retained staging path and cleanup error while preserving the original error's name, exit code, details, and remedy. Escape control characters and redact credentials in the appended diagnostic (§5.2). This cleanup MUST NOT remove source paths, peer staging directories, reused store entries, or published canonical bytes.
 9. **Install into each agent.** For each skill × each agent in the agent set × the scope, run the install algorithm from §7.3. Record per-agent results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, agent) pair does not stop others.
 
    **Skill outcome.** After per-agent installs complete, each attempted skill has one of two outcomes:
@@ -2577,6 +2579,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation). |
 | C-INST-21a | §9 step 9 | Two directly-named roots where one succeeds in ≥1 agent and the other fails in every selected agent: the run exits 1 and both roots appear in the output. |
 | C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
+| C-INST-23 | §9 step 8 | A staging or store publication failure releases only that attempt's private staging directory. If cleanup also fails, the original failure retains its name, exit code, details, and remedy, and reports the retained staging path and cleanup error with §5.2 escaping/redaction. Source paths, peer staging directories, reused entries, and published canonical bytes remain unchanged. |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
 
