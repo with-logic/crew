@@ -134,19 +134,17 @@ test("C-STATE-06 repair preserves physically distinct user and project installs"
   expect(readState(home)).toEqual(before);
 });
 
-for (const scope of ["user", "project"] as const) {
-  test(`C-STATE-14 refuses a ${scope} marker scope mismatch at a distinct base`, () => {
+for (const inventoryScope of ["user", "project"] as const) {
+  const declaredScope = inventoryScope === "user" ? "project" : "user";
+  test(`C-STATE-14 refuses a ${inventoryScope}-base marker declaring ${declaredScope} scope`, () => {
     const home = makeCrewHome();
     const cwd = makeTempDir();
-    expect(installSkill(home, "demo", scope, cwd)).toBe(0);
+    expect(installSkill(home, "demo", inventoryScope, cwd)).toBe(0);
     const before = readState(home);
-    const base = scope === "user" ? redirected.userRoot : join(cwd, ".claude", "skills");
+    const base = inventoryScope === "user" ? redirected.userRoot : join(cwd, ".claude", "skills");
     const markerPath = join(base, "demo", ".crew.json");
     const marker = readDoctorMarker(markerPath);
-    writeFileSync(
-      markerPath,
-      JSON.stringify({ ...marker, scope: scope === "user" ? "project" : "user" }),
-    );
+    writeFileSync(markerPath, JSON.stringify({ ...marker, scope: declaredScope }));
     const paths = [
       join(home, "state.json"),
       join(home, "config.yaml"),

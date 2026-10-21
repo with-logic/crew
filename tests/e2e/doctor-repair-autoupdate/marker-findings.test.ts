@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { ALL_AGENTS } from "../../../src/agents/registry.ts";
 import { setLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
 import { setAutoupdatePlatform } from "../../../src/autoupdate/scheduler.ts";
@@ -44,7 +45,10 @@ const scenarios = [
 ] satisfies readonly Scenario[];
 for (const enabled of [true, false]) {
   for (const scenario of scenarios) {
-    const label = scenario.kind === "malformed" ? "malformed" : scenario.inventoryScope;
+    const label =
+      scenario.kind === "malformed"
+        ? "malformed"
+        : `${scenario.inventoryScope}-base marker declaring ${scenario.declaredScope} scope`;
     test(`C-STATE-14 ${label} invalid marker preserves scheduler when config enabled=${enabled}`, () => {
       const home = makeCrewHome();
       const cwd = makeTempDir();
@@ -76,9 +80,8 @@ for (const enabled of [true, false]) {
         installed_by: "crew",
       };
       if (scenario.kind === "mismatch" && scenario.inventoryScope === "project") {
-        const adapter = ALL_AGENTS.find((candidate) => candidate.name === "claude-code")!;
-        adapter.userPath = () => "";
-        adapter.projectPath = () => join(target, "claude-code");
+        claudeCodeAdapter.userPath = () => "";
+        claudeCodeAdapter.projectPath = () => join(target, "claude-code");
       }
       writeFileSync(marker, scenario.kind === "malformed" ? "{broken" : JSON.stringify(fields));
       const before = [p.configFile, p.stateFile, p.autoupdatePlist].map((path) =>
