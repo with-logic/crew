@@ -3,7 +3,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../src/agents/codex.ts";
@@ -103,4 +103,77 @@ describe("install from a git source (file:// works)", () => {
     // we use a tap with a local git remote.
     expect(true).toBe(true);
   });
+});
+
+describe("git discovery stays inside the materialized tree", () => {
+  for (const location of ["skills", "namespace", "skill", "namespace-skill", "root-child"]) {
+    for (const ref of ["", "@main"]) {
+      test(`C-INST-05g ignores linked ${location} directories at ${ref || "HEAD"}`, () => {
+        const home = makeCrewHome();
+        const repo = makeTempDir("crew-discovery-repo-");
+        const outside = makeTempDir("crew-discovery-outside-");
+        const escaped = makeSkill(outside, "escaped", skillFrontmatter({ name: "escaped" }));
+        let parent = repo;
+        if (location !== "skills" && location !== "root-child") {
+          parent = join(repo, "skills");
+          mkdirSync(parent);
+        }
+        if (location === "namespace-skill") {
+          parent = join(parent, "group");
+          mkdirSync(parent);
+        }
+        symlinkSync(
+          location === "skills" || location === "namespace" ? outside : escaped,
+          join(
+            parent,
+            location === "skills" ? "skills" : location === "namespace" ? "group" : "escaped",
+          ),
+        );
+        makeSkill(
+          location === "namespace-skill" ? join(repo, "skills") : parent,
+          "safe",
+          skillFrontmatter({ name: "safe" }),
+        );
+        makeGitRepo(repo);
+        expect(
+          runCli(["tap", "add", `file://${repo}`, "linked"], {
+            home,
+            streams: captureStreams().streams,
+          }),
+        ).toBe(0);
+        const cap = captureStreams();
+        expect(
+          runCli(["install", `linked${ref}`, "--agent", "claude-code", "--json"], {
+            home,
+            streams: cap.streams,
+          }),
+        ).toBe(0);
+        expect(existsSync(join(redirect.agents["claude-code"]!, "safe", "SKILL.md"))).toBe(true);
+        expect(existsSync(join(redirect.agents["claude-code"]!, "escaped"))).toBe(false);
+        expect(cap.stdout()).not.toContain('"escaped"');
+        const whole = captureStreams();
+        expect(runCli(["info", `linked${ref}`, "--json"], { home, streams: whole.streams })).toBe(
+          0,
+        );
+        expect(
+          JSON.parse(whole.stdout()).skills.map((skill: { name: string }) => skill.name),
+        ).toEqual(["safe"]);
+        const preview = captureStreams();
+        expect(
+          runCli(["info", `linked/escaped${ref}`, "--json"], {
+            home,
+            streams: preview.streams,
+          }),
+        ).toBe(4);
+        const search = captureStreams();
+        expect(
+          runCli(["search", "escaped", "--tap", "linked", "--json"], {
+            home,
+            streams: search.streams,
+          }),
+        ).toBe(0);
+        expect(JSON.parse(search.stdout()).hits).toEqual([]);
+      });
+    }
+  }
 });

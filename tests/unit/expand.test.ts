@@ -9,12 +9,21 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expandSkills } from "../../src/sources/expand.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
 describe("expandSkills", () => {
+  test("C-INST-05g git discovery refuses a linked root while path discovery preserves it", () => {
+    const tmp = makeTempDir("expand-linked-root-");
+    const skill = makeSkill(tmp, "real", skillFrontmatter({ name: "real" }));
+    const linked = join(tmp, "linked");
+    symlinkSync(skill, linked);
+    expect(() => expandSkills(linked, { followSymlinks: false })).toThrow(/no valid skills found/);
+    expect(expandSkills(linked).valid[0]!.frontmatter.name).toBe("real");
+  });
+
   test("root SKILL.md wins even when skills/ subdir exists", () => {
     // A skill's name must match its parent dir, so stage under a
     // normalized subdirectory rather than the tmp root.

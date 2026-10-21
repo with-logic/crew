@@ -68,7 +68,7 @@ export function findSiblingDep(
   const matches: { dirName: string; siblingDir: string; loaded: LoadedSkill }[] = [];
   for (const dirName of listDir(siblingParent)) {
     const siblingDir = join(siblingParent, dirName);
-    if (!(isDirectory(siblingDir) && hasSkillMd(siblingDir))) continue;
+    if (!(isDirectory(siblingDir, parent.tap.kind === "path") && hasSkillMd(siblingDir))) continue;
     if (siblingName(siblingDir) !== depName) continue;
     const loaded = loadSkill(siblingDir);
     matches.push({ dirName, siblingDir, loaded });
