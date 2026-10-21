@@ -19,7 +19,7 @@ import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
-import type { MarkerEntry } from "./markers.ts";
+import type { MarkerEntry } from "./markers/index.ts";
 
 /**
  * True when the entry is project-scope and its recorded root is gone,

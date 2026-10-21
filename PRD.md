@@ -1939,6 +1939,8 @@ off.
 7. If autoupdate is enabled in config, the platform scheduler is actually loaded.
 8. For every project-scope entry, `project_root` exists on disk and a `.crew.json` marker lives under `<project_root>/<adapter-base>/<name>/`. A `project_root` that no longer exists produces a `missing_project_root` finding (warn, not error — the user may have simply moved the project, and the right fix is a `crew uninstall` from their new location).
 
+Markers must be readable JSON objects with the required §7.5 field types, schema version, scope and nonempty agent list. Their tap metadata must pass the same validation as a config tap (§6.1). A missing marker is absent; an unreadable marker produces an error-level `marker_unreadable` finding, and malformed JSON or invalid marker fields produce an error-level `marker_invalid` finding. Findings identify the marker path. An incomplete marker inventory cannot authorize reconstruction or deletion: either finding causes `--repair` to apply no repairs, preserving state, config and the store, and exit 1. Repair previews count zero findings as addressable until these marker problems are corrected.
+
 `--verify` includes check 3 (hash recomputation); without it, check 3 is skipped for speed.
 
 `--repair` attempts to fix:
@@ -2716,6 +2718,7 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-11e | §11.2 | `repairs` appears in `--json` output for any `--repair` run that applies repairs, including as an empty array when an unparseable config prevented applying any; a plain or `--dry-run` run omits the field. |
 | C-STATE-11f | §11.2 | A reconciliation whose confirming scheduler query cannot run is reported as `autoupdate_repair_failed` carrying the platform error, not as a successful repair. An unanswerable query is not a confirmed "not loaded". |
 | C-STATE-12 | §11.2 | `crew doctor --repair --dry-run` reports the findings a repair would address and changes nothing: state, config, and the store are byte-identical afterward. |
+| C-STATE-14 | §11.2 | Unreadable or invalid markers produce path-specific error findings without aborting doctor; repair and repair previews apply no repairs or destructive inference from the incomplete inventory. State, config and store remain unchanged, and the run exits 1. A genuinely missing marker remains repairable drift. |
 | C-STATE-12a | §11.2 | Findings `--repair` cannot fix (`customized`, `agent_missing`, `config_invalid`, `missing_project_root`) are excluded from both the dry-run "would address" count and the post-repair "addressed" count; an unrepairable error-level finding keeps the exit code non-zero after `--repair`. |
 | C-STATE-13 | §6 | `crew cache clean --dry-run` reports the bytes and orphan store entries a clean would free and deletes nothing. |
 

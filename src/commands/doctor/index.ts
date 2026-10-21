@@ -4,7 +4,7 @@
  * Runs integrity checks (from `./checks.ts`) and optionally reconciles
  * recoverable drift via `./repair.ts`. `--repair --dry-run` runs the
  * checks and lists what a repair would address without applying it.
- * Marker-index construction lives in `./markers.ts` and is shared.
+ * Marker-index construction lives in `./markers/index.ts` and is shared.
  */
 
 import { readConfig } from "../../config/load.ts";
@@ -23,7 +23,7 @@ import {
   type Finding,
 } from "./checks.ts";
 import { applyRepairs } from "./coordinator.ts";
-import { buildMarkerIndex } from "./markers.ts";
+import { buildMarkerIndex } from "./markers/index.ts";
 import { renderDoctor } from "./render.ts";
 import { isRepairableCode } from "./repairable.ts";
 
@@ -44,7 +44,10 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
 
   const state = readState(home);
   const stateEntries = state.installations;
-  const markers = buildMarkerIndex(stateEntries, ctx.cwd);
+  const inventoryFindings: Finding[] = [];
+  const markers = buildMarkerIndex(stateEntries, ctx.cwd, inventoryFindings);
+  findings.push(...inventoryFindings);
+  const repairBlocked = inventoryFindings.length > 0;
 
   findings.push(...checkStateMarkerDrift(stateEntries, markers));
   if (verify) findings.push(...checkContentHashDrift(markers));
@@ -61,10 +64,15 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   // An unparseable config still skips the repair entirely: the rebuild
   // rewrites `config.yaml` taps from markers, so running it against a
   // file we could not read would discard whatever the user has there.
-  const applied = repair && !dryRun && config !== null;
+  const applied = repair && !dryRun && config !== null && !repairBlocked;
   const repairs: AutoupdateRepair[] = applied ? applyRepairs(markers, home) : [];
 
-  const human = renderDoctor(findings, { repair, verify, dryRun, applied }, ctx.style, repairs);
+  const human = renderDoctor(
+    findings,
+    { repair, verify, dryRun, applied, repairBlocked },
+    ctx.style,
+    repairs,
+  );
   // A `--repair` run resolves the repairable drift classes, so those
   // findings stop counting against the exit code. Anything repair
   // can't fix (§11.2) still does — otherwise a repair would report

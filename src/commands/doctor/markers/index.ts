@@ -8,33 +8,40 @@
  * again here would be noise.
  *
  * When multiple adapters share an install path (§7.2), the same
- * physical marker would be returned by `listInstalledForAgent` once
+ * physical marker would be returned by `scanMarkers` once
  * per adapter. We dedupe by `(scope, installDir)` so each marker
  * appears exactly once in the index.
  */
 
 import { existsSync } from "node:fs";
-import { listInstalledForAgent } from "../../agents/list.ts";
-import { ALL_AGENTS } from "../../agents/registry.ts";
-import type { StateEntry } from "../../core/types.ts";
-import { hasUsableProjectRoot } from "../../state/validation.ts";
+import type { InstalledSkillRecord } from "../../../agents/adapter.ts";
+import { ALL_AGENTS } from "../../../agents/registry.ts";
+import type { StateEntry } from "../../../core/types.ts";
+import { hasUsableProjectRoot } from "../../../state/validation.ts";
+import type { Finding } from "../checks.ts";
+import { scanMarkers } from "./scan.ts";
 
 export interface MarkerEntry {
-  record: ReturnType<typeof listInstalledForAgent>[number];
+  record: InstalledSkillRecord;
   currentHash?: string;
   /** For project-scope markers, the cwd we walked from — used as `project_root` during --repair. */
   projectRoot?: string;
 }
 
-export function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: string): MarkerEntry[] {
+export function buildMarkerIndex(
+  stateEntries: readonly StateEntry[],
+  cwd: string,
+  findings: Finding[],
+): MarkerEntry[] {
   const markers: MarkerEntry[] = [];
+  const inventoryFindings = new Map<string, Finding>();
   const seen = new Set<string>();
   const projectRoots = new Set<string>([cwd]);
   for (const e of stateEntries) {
     if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
   for (const adapter of ALL_AGENTS) {
-    for (const rec of listInstalledForAgent(adapter, "user", cwd)) {
+    for (const rec of scanMarkers(adapter, "user", cwd, inventoryFindings)) {
       const key = `user\0${rec.installDir}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -42,7 +49,7 @@ export function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: strin
     }
     for (const root of projectRoots) {
       if (!existsSync(root)) continue;
-      for (const rec of listInstalledForAgent(adapter, "project", root)) {
+      for (const rec of scanMarkers(adapter, "project", root, inventoryFindings)) {
         const key = `project\0${rec.installDir}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -50,5 +57,6 @@ export function buildMarkerIndex(stateEntries: readonly StateEntry[], cwd: strin
       }
     }
   }
+  findings.push(...inventoryFindings.values());
   return markers;
 }

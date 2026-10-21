@@ -23,6 +23,8 @@ const CODE_LABELS: Record<string, string> = {
   autoupdate_not_loaded: "autoupdate is enabled but the background updater isn't loaded",
   autoupdate_unexpectedly_loaded: "autoupdate is off but the background updater is still loaded",
   config_invalid: "~/.crew/config.yaml couldn't be parsed",
+  marker_unreadable: "an install marker could not be read; repair is blocked",
+  marker_invalid: "an install marker is invalid; repair is blocked",
 };
 
 const CODE_GROUPS: Record<string, string> = {
@@ -35,13 +37,21 @@ const CODE_GROUPS: Record<string, string> = {
   autoupdate_not_loaded: "Autoupdate",
   autoupdate_unexpectedly_loaded: "Autoupdate",
   config_invalid: "Config",
+  marker_unreadable: "State",
+  marker_invalid: "State",
 };
 
 const GROUP_ORDER = ["Agents", "State", "Autoupdate", "Config", "Storage", "Other"];
 
 export function renderDoctor(
   findings: readonly Finding[],
-  opts: { repair: boolean; verify: boolean; dryRun: boolean; applied: boolean },
+  opts: {
+    repair: boolean;
+    verify: boolean;
+    dryRun: boolean;
+    applied: boolean;
+    repairBlocked?: boolean;
+  },
   style: Styler,
   repairs: readonly AutoupdateRepair[] = [],
 ): string[] {
@@ -82,7 +92,11 @@ export function renderDoctor(
       // the findings the run would address. The trailing count alone
       // tells the user how many, never which.
       const fixable = opts.dryRun
-        ? style.dim(isRepairableCode(code) ? "  — would be repaired" : "  — needs you")
+        ? style.dim(
+            !opts.repairBlocked && isRepairableCode(code)
+              ? "  — would be repaired"
+              : "  — needs you",
+          )
         : "";
       lines.push(`    ${sym} ${label}${qty}${fixable}`);
       // Show the first few messages; for larger clusters summarise.
@@ -97,18 +111,17 @@ export function renderDoctor(
     lines.push("");
   }
 
-  // Drop the last trailing blank.
   if (lines[lines.length - 1] === "") lines.pop();
 
   lines.push("");
   if (opts.dryRun) {
-    const fixable = repairableCount(findings);
+    const fixable = opts.repairBlocked ? 0 : repairableCount(findings);
     lines.push(
       style.dim(
         `Dry run: \`crew doctor --repair\` would address ${plural(fixable, "finding")}. Nothing was changed.`,
       ),
     );
-  } else if (isRepairable(findings)) {
+  } else if (!opts.repairBlocked && isRepairable(findings)) {
     lines.push(style.dim("Run `crew doctor --repair` to fix what's fixable."));
   } else if (errors > 0) {
     // Nothing here is repairable, but an error is not a heads-up —
