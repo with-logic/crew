@@ -12,7 +12,6 @@ import { crewHome } from "../../core/paths.ts";
 import { readState } from "../../state/load.ts";
 import { redactText, sanitizeLine } from "../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
-import type { AutoupdateRepair } from "./autoupdate.ts";
 import {
   checkAgentDetection,
   checkAutoupdateDrift,
@@ -44,11 +43,15 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
 
   const state = readState(home);
   const stateEntries = state.installations;
-  const { markers, findings: inventoryFindings } = buildMarkerIndex(stateEntries, ctx.cwd);
+  const {
+    markers,
+    findings: inventoryFindings,
+    projectRoots: retainedProjectRoots,
+  } = buildMarkerIndex(stateEntries, ctx.cwd);
   findings.push(...inventoryFindings);
-  const markerInventoryBlocksRepair = inventoryFindings.length > 0;
 
-  findings.push(...checkStateMarkerDrift(stateEntries, markers));
+  const initialDrift = checkStateMarkerDrift(stateEntries, markers);
+  findings.push(...initialDrift);
   if (verify) findings.push(...checkContentHashDrift(markers));
   if (config) findings.push(...checkAgentDetection(stateEntries, config));
   findings.push(...checkOrphanStoreEntries(state, home));
@@ -66,9 +69,27 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   const shouldApplyRepairs = repair && !dryRun;
   const configReadable = config !== null;
   // Emitted marker findings leave reconstruction and store cleanup unable to identify every live install.
-  const markerInventoryHasNoFindings = !markerInventoryBlocksRepair;
-  const applied = shouldApplyRepairs && configReadable && markerInventoryHasNoFindings;
-  const repairs: AutoupdateRepair[] = applied ? applyRepairs(markers, home) : [];
+  const markerInventoryHasNoFindings = inventoryFindings.length === 0;
+  const outcome =
+    shouldApplyRepairs && configReadable && markerInventoryHasNoFindings
+      ? applyRepairs({ home, cwd: ctx.cwd, retainedProjectRoots })
+      : { applied: false, findings: [], driftFindings: [], repairs: [] };
+  const { applied, repairs } = outcome;
+  findings.push(...outcome.findings);
+  inventoryFindings.push(...outcome.findings);
+  // Match observations one-for-one across snapshots; distinct projects may share a message (§11.2).
+  const remainingInitialDrift = new Map<string, number>();
+  for (const drift of initialDrift) {
+    const key = JSON.stringify([drift.level, drift.code, drift.message]);
+    remainingInitialDrift.set(key, (remainingInitialDrift.get(key) ?? 0) + 1);
+  }
+  for (const drift of outcome.driftFindings) {
+    const key = JSON.stringify([drift.level, drift.code, drift.message]);
+    const previous = remainingInitialDrift.get(key) ?? 0;
+    if (previous === 0) findings.push(drift);
+    else remainingInitialDrift.set(key, previous - 1);
+  }
+  const markerInventoryBlocksRepair = inventoryFindings.length > 0;
 
   const human = renderDoctor(
     findings,
