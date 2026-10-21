@@ -133,5 +133,7 @@ describe("crew search output", () => {
     const code = runCli(["search"], { home, streams: c.streams });
     expect(code).toBe(0);
     expect(c.stderr()).toContain("offline");
+    expect(c.stderr()).toContain("isn't cloned yet");
+    expect(c.stderr()).toContain("back online");
   });
 });

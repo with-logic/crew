@@ -3,8 +3,9 @@
 import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
+import { isSourceReadFailure } from "../../util/source-read.ts";
 import type { InstalledSourceIndex } from "../installed-lookup.ts";
-import { groupChildrenByName } from "../tap-children.ts";
+import { type CurrentTapChild, groupChildrenByName } from "../tap-children.ts";
 import { collectAdditions } from "./additions.ts";
 import type { TapScanCache } from "./scan-cache.ts";
 import { surveyGroup } from "./survey.ts";
@@ -38,26 +39,21 @@ export function reexpandGroup(input: GroupInput): TapReexpandResult {
   } catch (err) {
     if (acquiredDone) throw err;
     const ce = err as CrewError;
-    return {
-      added: [],
-      updated: [],
-      sourceGone: new Set(),
-      hardFailure: ce.code !== "no_skills_found" && ce.code !== "invalid_ref",
-      rows: input.members.map((m) => ({
-        name: m.name,
-        scope: m.scope,
-        tap: input.tap.name,
-        kind: "tap_error",
-        error: { code: ce.code ?? "source_unreachable", message: ce.message },
-      })),
-    };
+    return failedGroup(input, ce);
   }
 }
 
 function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult {
   const { members, tap, home, projectRoot, cache } = input;
   const first = members[0]!;
-  const children = cache.children(tap, home, acquired.rootDir);
+  let children: readonly CurrentTapChild[];
+  try {
+    children = cache.children(tap, home, acquired.rootDir);
+  } catch (err) {
+    // §10.1: an unreadable manifest cannot establish deletion or stop other groups.
+    if (isSourceReadFailure(err)) return failedGroup(input, err);
+    throw err;
+  }
   const survey = surveyGroup({ members, childrenByName: groupChildrenByName(children), tap });
   const additions = collectAdditions({
     children,
@@ -82,5 +78,21 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
     sourceGone: survey.sourceGone,
     rows: [...survey.rows, ...additions.rows],
     hardFailure: survey.hardFailure || additions.hardFailure,
+  };
+}
+
+function failedGroup(input: GroupInput, error: CrewError): TapReexpandResult {
+  return {
+    added: [],
+    updated: [],
+    sourceGone: new Set(),
+    hardFailure: error.code !== "no_skills_found" && error.code !== "invalid_ref",
+    rows: input.members.map((member) => ({
+      name: member.name,
+      scope: member.scope,
+      tap: input.tap.name,
+      kind: "tap_error",
+      error: { code: error.code ?? "source_unreachable", message: error.message },
+    })),
   };
 }
