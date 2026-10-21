@@ -4,20 +4,18 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "../../../src/cli/args/index.ts";
 import { runCli } from "../../../src/cli/main.ts";
-import type { CommandContext } from "../../../src/commands/types.ts";
 import { planLockedUpdate } from "../../../src/commands/update/locked-plan.ts";
 import { readConfig } from "../../../src/config/load.ts";
 import type { StateEntry } from "../../../src/core/types.ts";
 import { hashSourceDirectory, isSourceDirectory } from "../../../src/sources/read.ts";
 import { readState } from "../../../src/state/load.ts";
-import { walk } from "../../../src/util/fs.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { snapshotFiles } from "../../helpers/snapshot.ts";
 
 export function snapshot(root: string): Record<string, Buffer> {
   const files: Record<string, Buffer> = {};
-  for (const entry of walk(root))
-    if (entry.isFile) files[entry.relPath] = readFileSync(entry.absPath);
+  snapshotFiles(root, files, (entry) => entry.relPath);
   return files;
 }
 
@@ -87,7 +85,7 @@ export function plan(f: Fixture, entry: StateEntry, dryRun: boolean) {
     ctx: {
       flags: parseArgs(["update", ...(dryRun ? ["--dry-run"] : [])]).flags,
       cwd: f.root,
-    } as CommandContext,
+    },
     config: readConfig(f.home),
     home: f.home,
     dryRun,

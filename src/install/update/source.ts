@@ -6,6 +6,7 @@ import { loadSkill } from "../../skill/load.ts";
 import { MissingSkillManifestError } from "../../skill/missing-manifest.ts";
 import { isGistTap } from "../../sources/gist.ts";
 import { hashSourceDirectory, isSourceDirectory } from "../../sources/read.ts";
+import { isMissingSourcePathError, isSourceReadFailure } from "../../util/source-read.ts";
 
 type SourceRead =
   | { readonly kind: "source_gone" }
@@ -33,16 +34,16 @@ export function readUpdateSource(
     return { kind: "ready", loaded: loadSkill(sourcePath, isGistTap(tap)), sourceHash };
   } catch (err) {
     // §10.1: root absence only softens an original source lookup failure, never permission/validation.
-    if (tap.kind === "path" && isLookupFailure(err) && !isSourceDirectory(sourcePath))
-      return { kind: "source_gone" };
+    if (tap.kind !== "path") throw err;
+    if (!isLookupFailure(err)) throw err;
+    if (!isSourceDirectory(sourcePath)) return { kind: "source_gone" };
     throw err;
   }
 }
 
 function isLookupFailure(err: unknown): boolean {
   if (err instanceof MissingSkillManifestError) return true;
-  const native =
-    err instanceof CrewError ? (err.code === "source_unreachable" ? err.cause : null) : err;
-  const code = (native as NodeJS.ErrnoException | null | undefined)?.code;
-  return code === "ENOENT" || code === "ENOTDIR" || code === "ELOOP";
+  if (isSourceReadFailure(err)) return isMissingSourcePathError(err.cause);
+  if (err instanceof CrewError) return false;
+  return isMissingSourcePathError(err);
 }

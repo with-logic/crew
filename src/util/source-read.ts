@@ -7,6 +7,12 @@ export function isSourceReadFailure(err: unknown): err is CrewError {
   return err instanceof CrewError && err.code === "source_unreachable";
 }
 
+/** Native lookup failures that mean a source path is missing, replaced, or cyclic. */
+export function isMissingSourcePathError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException | null | undefined)?.code;
+  return code === "ENOENT" || code === "ENOTDIR" || code === "ELOOP";
+}
+
 /** Run a file reader while preserving validation errors from its parser. */
 export function readSourceFile<T>(path: string, read: (path: string) => T): T {
   try {

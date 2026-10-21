@@ -88,11 +88,15 @@ for (const dryRun of [false, true]) {
       });
       const result = plan(f, entry, dryRun);
       expect(failure).toBeInstanceOf(Error);
-      const error = failure as CrewError;
-      expect(result.rows[0]?.outcome).toEqual({
-        kind: "failed",
-        error: { code: error.code ?? "usage_error", message: error.message },
-      });
+      expect(failure instanceof Error).toBe(true);
+      if (failure instanceof Error)
+        expect(result.rows[0]?.outcome).toEqual({
+          kind: "failed",
+          error: {
+            code: failure instanceof CrewError ? failure.code : "usage_error",
+            message: failure.message,
+          },
+        });
       expect(result.hardFailure).toBe(true);
       expect(f.boundaryChecks).toEqual([{ available: true, hashChanged: true }]);
       expect(afterPlan(f, result, dryRun)).toEqual({
