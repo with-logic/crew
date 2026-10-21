@@ -10,9 +10,12 @@ import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures
 
 const namespace = "ns\x1b[2Jforged\x07\x7f\x85\nend";
 const escapedNamespace = "ns\\x1b[2Jforged\\x07\\x7f\\x85\\x0aend";
-const description = "d".repeat(100);
+const terminalWidth = 100;
+const rowPrefixWidth = 4 + 2;
+const ellipsisWidth = 1;
+const description = "d".repeat(terminalWidth);
 const reference = `${escapedNamespace}/demo`;
-const summary = `${"d".repeat(100 - 6 - reference.length - 1)}…`;
+const summary = `${"d".repeat(terminalWidth - rowPrefixWidth - reference.length - ellipsisWidth)}…`;
 
 afterEach(resetKnownTapsForTest);
 
@@ -31,9 +34,9 @@ test("configured namespace controls are escaped before columns; JSON and source 
     0,
   );
   const human = captureStreams();
-  expect(runCli(["search", "--tap", "local"], { home, streams: human.streams, width: 100 })).toBe(
-    0,
-  );
+  expect(
+    runCli(["search", "--tap", "local"], { home, streams: human.streams, width: terminalWidth }),
+  ).toBe(0);
   const lines = human.stdout().split("\n");
   expect(lines).toContain(`    ${reference}  ${summary}`);
   expect(lines).toContain(`    ${"healthy".padEnd(reference.length)}  ${summary}`);
@@ -86,7 +89,9 @@ test("known-tap namespace and install references are escaped before columns; JSO
     },
   ]);
   const human = captureStreams();
-  expect(runCli(["search", "catalog"], { home, streams: human.streams, width: 100 })).toBe(0);
+  expect(
+    runCli(["search", "catalog"], { home, streams: human.streams, width: terminalWidth }),
+  ).toBe(0);
   const lines = human.stdout().split("\n");
   expect(lines).toContain(`    ${reference}  ${summary} (crew install trusted/${reference})`);
   expect(lines).toContain(
