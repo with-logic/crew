@@ -25,7 +25,11 @@ export interface CopyTreeOptions {
   readonly stripRootMarker?: boolean;
 }
 
-/** Copy everything under `src` into `dest`, creating `dest` if needed. */
+/**
+ * Copy `src` into `dest`, creating it if needed. Refuse destination symlinks at
+ * the root and each directory/file write path: source links are preserved, but
+ * destination links must not redirect writes outside `dest` (§7.3 step 4).
+ */
 export function copyTree(src: string, dest: string, options: CopyTreeOptions = {}): void {
   const stripRootMarker = options.stripRootMarker !== false;
   copyDirInto(src, dest, "", stripRootMarker);
@@ -62,7 +66,7 @@ function copyDirInto(
   }
 }
 
-/** A case-folding destination can alias an earlier copied symlink (§12.1). */
+/** Destination symlinks, including case-folded aliases, must not redirect writes (§7.3 step 4). */
 function rejectDestinationSymlink(path: string): void {
   if (lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink()) {
     throw new CrewError(

@@ -27,8 +27,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
       - name: Refuse case-folded destination symlinks
         run: bun run scripts/check-case-copy.ts
 

@@ -134,7 +134,7 @@ describe("copyTree", () => {
       expect(error).toBeInstanceOf(CrewError);
       expect(error).toMatchObject({
         code: "usage_error",
-        message: expect.stringContaining("Refusing to copy through destination symlink"),
+        message: `Refusing to copy through destination symlink: ${link}`,
         remedy: expect.stringContaining("Rename case-colliding source entries"),
       });
       expect(readFileSync(sentinel, "utf8")).toBe("keep outside bytes");
