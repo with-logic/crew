@@ -13,7 +13,7 @@ import { paths } from "../../../src/core/paths.ts";
 import type { TapConfig } from "../../../src/core/types.ts";
 import { resetGitRunner } from "../../../src/git/exec.ts";
 import { loadSkill } from "../../../src/skill/load.ts";
-import { withAcquiredSkillDir } from "../../../src/sources/acquire/index.ts";
+import { withAcquiredSkillPath } from "../../../src/sources/acquire/index.ts";
 import { GIST_URL, gistFixture } from "../../e2e/gist/helpers.ts";
 import { commitAll } from "../../helpers/fixtures.ts";
 
@@ -42,9 +42,9 @@ for (const filename of [
     writeFileSync(join(f.repo, "unrelated-large.bin"), Buffer.alloc(1024 * 1024, 1));
     const sha = commitAll(f.repo, "unrelated file");
     let exported = "";
-    withAcquiredSkillDir(tap, sha, filename, f.home, (acquired, file) => {
+    withAcquiredSkillPath(tap, sha, filename, f.home, (acquired, file) => {
       exported = file;
-      expect(acquired).toEqual({ rootDir: file, resolvedSha: sha, pinned: true });
+      expect(acquired).toEqual({ resolvedSha: sha, pinned: true });
       expect(readFileSync(file)).toEqual(original);
       expect(loadSkill(file, true).frontmatter.name).toBe("selected");
       expect(readdirSync(dirname(file))).toEqual([filename]);
@@ -58,7 +58,7 @@ test("C-GIST-03 selected ref cleanup also runs when its reader throws", () => {
   const f = gistFixture();
   const error = new Error("reader failed");
   expect(() =>
-    withAcquiredSkillDir(tap, f.sha, "prd.md", f.home, () => {
+    withAcquiredSkillPath(tap, f.sha, "prd.md", f.home, () => {
       throw error;
     }),
   ).toThrow(error);
@@ -78,7 +78,7 @@ for (const replacement of ["missing", "directory", "symlink"]) {
     if (replacement === "symlink") symlinkSync("other.md", join(f.repo, "selected.md"));
     const sha = commitAll(f.repo, "replacement");
     expect(() =>
-      withAcquiredSkillDir(tap, sha, "selected.md", f.home, (_, file) => loadSkill(file, true)),
+      withAcquiredSkillPath(tap, sha, "selected.md", f.home, (_, file) => loadSkill(file, true)),
     ).toThrow(
       expect.objectContaining({
         code: replacement === "missing" ? "no_skills_found" : "invalid_skill",

@@ -16,12 +16,16 @@ export interface SkillFrontmatter {
   };
 }
 
-/** A skill on disk: the directory or gist file, the parsed frontmatter, and its raw SKILL.md. */
-export interface LoadedSkill {
+/** Validated identity at a skill directory or original gist filename (§9). */
+export interface SkillMetadata {
   /** Absolute path to the skill directory or original gist file. */
   readonly path: string;
   /** Parsed frontmatter. */
   readonly frontmatter: SkillFrontmatter;
-  /** Raw SKILL.md bytes. */
+}
+
+/** Full source content; gist filenames are preserved until staging as SKILL.md (§9). */
+export interface LoadedSkill extends SkillMetadata {
+  /** Raw manifest content from SKILL.md or the original gist filename. */
   readonly skillMd: string;
 }

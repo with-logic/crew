@@ -11,7 +11,7 @@ import type { Config } from "../../../core/types.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { isGistTap } from "../../../sources/gist.ts";
 import { stageIntoStore } from "../../../sources/store.ts";
-import type { SiblingHit } from "../../dep-resolution.ts";
+import type { SiblingHit } from "../../dep-resolution/index.ts";
 import type { PendingItem } from "../enqueue.ts";
 
 /** Turn a sibling hit into a pending item attributed to the parent's commit. */

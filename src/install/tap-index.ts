@@ -5,7 +5,7 @@
  *
  * Given a tap, produces:
  *   - `skills`: every declared skill name findable under the tap (root,
- *     skills/<name>, or skills/<namespace>/<name>).
+ *     skills/<name>, skills/<namespace>/<name>, or original top-level gist filenames).
  *   - `namespaces`: every namespace name and its skill children.
  *   - `skipped`: rejected directory locations and their validation diagnostics.
  *
@@ -21,7 +21,7 @@
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { tapClonePath } from "../core/repo-path.ts";
-import type { TapConfig } from "../core/types.ts";
+import type { SkillFrontmatter, TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
@@ -36,6 +36,8 @@ import { findRecursiveSkillDirs } from "../sources/recursive.ts";
 export interface SkillLocation {
   /** Declared skill name from SKILL.md. */
   readonly name: string;
+  /** Validated gist frontmatter, retained without the source body (§9 step 5). */
+  readonly frontmatter?: SkillFrontmatter;
   /** Namespace the skill lives under, or null if at skills/ root or tap root. */
   readonly namespace: string | null;
   /** Absolute path to the skill directory or original gist file on disk. */
@@ -119,6 +121,7 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
     for (const candidate of gistCandidates(root))
       addSkill({
         name: candidate.frontmatter.name,
+        frontmatter: candidate.frontmatter,
         namespace: null,
         path: candidate.path,
         tapRelativePath: candidate.filename,
