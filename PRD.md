@@ -2170,6 +2170,26 @@ of untrusted trailing git prose; separately composed operation prefixes
 and remedy blocks remain available. Redaction MUST scan monotonically
 without repeated suffix searches or an arbitrary input-length cutoff.
 
+Malformed HTTP(S) openers are also credential ambiguities. Recognize
+`http` and `https` case-insensitively as complete scheme names with an
+ASCII colon, including raw C0, DEL, C1, or their visible `\xNN` control
+escapes between scheme letters or around the colon. Ordinary spaces may
+surround the colon but MUST NOT join separated scheme letters. A slash
+or backslash opening run with missing, mixed, whitespace-separated, or
+control-separated separators suppresses the diagnostic from its scheme
+through end-of-input. Existing uninterrupted `://` and extra-forward-slash
+normalization remain unchanged. With no opening separators, an `@` before
+the first `/`, `?`, or `#` authority boundary makes the same suffix
+ambiguous; whitespace, quotes, markup, and raw or escaped controls MUST
+NOT terminate userinfo. Thus `HTTP: contact user@host` may be concealed,
+while `HTTP: request denied` remains readable. Larger scheme names,
+percent-encoded or Unicode-lookalike colons, and ordinary split words
+are outside this recognition rule. Whole-token progress values use the
+same malformed-opener guard; a well-formed structured URL retains its
+existing safe rendering without interpreting its path as another URL.
+These are display rules only: accepted source-reference grammar, SSH
+and SCP behavior, recorded identities, and error names/codes do not change.
+
 **Human-mode error quality.** In human mode, an error message should
 name the offending thing (path, skill, ref, URL) and — whenever a
 reasonable next step exists — point the user at what to try. The stable
@@ -2940,6 +2960,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-06 | §5.2 | `--quiet` suppresses non-error stdout. Error output still reaches stderr. |
 | C-CLI-06a | §5.2 | `--verbose` emits progress lines (git invocations, store staging, per-agent install paths) on stderr and nothing extra on stdout; without the flag those lines are absent, including on the run after a failed `--verbose` run. |
 | C-CLI-06b | §5.2 | `--verbose` output redacts credentials: a URL password, an `https://<token>@host` userinfo token, and sensitive query-parameter values are replaced with `***`, while SSH usernames are preserved. Control characters in echoed values are escaped, newlines included, so an interpolated value cannot forge a second message line. The same redaction applies to source URLs in user-visible errors through every channel: the rendered message, diagnostics quoted from `git`, and the `details` object of a `--json` error payload. |
+| C-CLI-06c | §5.2, §13 | Malformed HTTP(S) diagnostic/progress openers with missing or mixed separators, raw or visible escaped controls, or zero-separator userinfo suppress their ambiguous suffix. Rejected references remain `invalid_ref` (exit 4) in human and JSON output; valid structured URL rendering, SSH/SCP behavior, stable details keys, and ordinary non-ambiguous prose remain unchanged. |
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
 | C-CLI-08a | §5.2 | A non-repeatable flag passed more than once is a `usage_error` (exit 4) naming the flag — boolean (`--json --json`) as well as value (`--scope user --scope project`); the repeatable `--agent` collects every occurrence. |

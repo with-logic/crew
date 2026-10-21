@@ -1,6 +1,7 @@
 /** Monotonic unstructured diagnostic boundaries; ambiguous credential suffixes fail closed (§5.2, §13). */
 
 import { isControlCharacterCode } from "./control-characters.ts";
+import { firstMalformedHttpStart } from "./malformed-http/index.ts";
 
 interface SchemeSpan {
   readonly start: number;
@@ -58,8 +59,11 @@ export function redactDiagnostic(
   renderUrl: (value: string) => string,
   displayableParams: ReadonlySet<string>,
 ): string {
-  const redactionStart = firstUndisplayableQueryValueStart(text, displayableParams);
-  const visible = text.slice(0, redactionStart ?? text.length);
+  const queryStart =
+    firstUndisplayableQueryValueStart(text, displayableParams) ?? Number.POSITIVE_INFINITY;
+  const httpStart = firstMalformedHttpStart(text) ?? Number.POSITIVE_INFINITY;
+  const redactionStart = Math.min(queryStart, httpStart);
+  const visible = text.slice(0, redactionStart);
   const spans = schemeSpans(visible);
   const parts: string[] = [];
   let cursor = 0;
@@ -91,6 +95,6 @@ export function redactDiagnostic(
     parts.push(visible.slice(cursor, span.start), rendered, visible.slice(trimmedEnd, bodyEnd));
     cursor = bodyEnd;
   }
-  parts.push(visible.slice(cursor), redactionStart === undefined ? "" : "***");
+  parts.push(visible.slice(cursor), redactionStart === Number.POSITIVE_INFINITY ? "" : "***");
   return parts.join("");
 }
