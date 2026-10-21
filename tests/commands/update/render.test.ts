@@ -1,9 +1,9 @@
 /** Empty update collection summaries reflect the actual refresh outcome (PRD §10.1). */
 
 import { expect, test } from "bun:test";
-import type { TapRefreshRow } from "../../src/commands/tap/refresh.ts";
-import { renderUpdate } from "../../src/commands/update/render.ts";
-import { makeStyler } from "../../src/util/term.ts";
+import type { TapRefreshRow } from "../../../src/commands/tap/refresh.ts";
+import { renderUpdate } from "../../../src/commands/update/render.ts";
+import { makeStyler } from "../../../src/util/term.ts";
 
 const rows: TapRefreshRow[] = [
   { name: "quiet", url: "", kind: "refreshed" },

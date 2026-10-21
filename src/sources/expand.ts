@@ -26,8 +26,8 @@ import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
-import { isDirectory, listDir } from "../util/fs.ts";
 import { isSourceReadFailure } from "../util/source-read.ts";
+import { isSourceDirectory, listSourceDirectory } from "./read.ts";
 import { findRecursiveSkillDirs } from "./recursive.ts";
 
 /** A skill directory that couldn't be loaded. */
@@ -66,7 +66,7 @@ export interface ExpandOptions {
  */
 export function expandSkills(rootDir: string, options: ExpandOptions = {}): ExpansionResult {
   const followSymlinks = options.followStandardLayoutSymlinks ?? true;
-  if (!isDirectory(rootDir, followSymlinks)) throw noSkillsFound(rootDir);
+  if (!isSourceDirectory(rootDir, followSymlinks)) throw noSkillsFound(rootDir);
   if (hasSkillMd(rootDir)) {
     const valid: LoadedSkill[] = [];
     const skipped: SkippedSkill[] = [];
@@ -74,7 +74,7 @@ export function expandSkills(rootDir: string, options: ExpandOptions = {}): Expa
     return { valid, skipped };
   }
   const skillsDir = join(rootDir, "skills");
-  const result = isDirectory(skillsDir, followSymlinks)
+  const result = isSourceDirectory(skillsDir, followSymlinks)
     ? collectWithNamespaces(skillsDir, followSymlinks)
     : collectSkillChildren(rootDir, followSymlinks);
   if (result.valid.length > 0 || result.skipped.length > 0) return result;
@@ -100,9 +100,9 @@ function noSkillsFound(rootDir: string): CrewError {
 function collectWithNamespaces(skillsDir: string, followSymlinks: boolean): ExpansionResult {
   const valid: LoadedSkill[] = [];
   const skipped: SkippedSkill[] = [];
-  for (const name of listDir(skillsDir)) {
+  for (const name of listSourceDirectory(skillsDir)) {
     const candidate = join(skillsDir, name);
-    if (!isDirectory(candidate, followSymlinks)) continue;
+    if (!isSourceDirectory(candidate, followSymlinks)) continue;
     if (hasSkillMd(candidate)) {
       pushSoft(candidate, valid, skipped);
       continue;
@@ -120,9 +120,9 @@ function collectWithNamespaces(skillsDir: string, followSymlinks: boolean): Expa
 function collectSkillChildren(dir: string, followSymlinks: boolean): ExpansionResult {
   const valid: LoadedSkill[] = [];
   const skipped: SkippedSkill[] = [];
-  for (const name of listDir(dir)) {
+  for (const name of listSourceDirectory(dir)) {
     const candidate = join(dir, name);
-    if (!isDirectory(candidate, followSymlinks)) continue;
+    if (!isSourceDirectory(candidate, followSymlinks)) continue;
     if (!hasSkillMd(candidate)) continue;
     pushSoft(candidate, valid, skipped);
   }
