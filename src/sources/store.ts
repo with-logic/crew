@@ -37,18 +37,18 @@ export interface StoredSkill {
  * is reused.
  */
 export function stageIntoStore(
-  sourceDir: string,
+  sourcePath: string,
   name: string,
   resolvedSha: string | null,
   home: string = crewHome(),
   sourceHash?: string,
-  file = false,
+  isGistFile = false,
 ): StoredSkill {
   // A path source with no SHA uses the hash itself as the short id so
   // different path-installed skills don't collide in the store.
-  // `sourceHash`, when the caller already hashed `sourceDir`, avoids
+  // `sourceHash`, when the caller already hashed `sourcePath`, avoids
   // walking the same unbounded tree twice.
-  const shortSha = shortShaFor(sourceDir, resolvedSha, sourceHash);
+  const shortSha = shortShaFor(sourcePath, resolvedSha, sourceHash);
   const storePath = storeEntryPath(name, shortSha, home);
 
   if (existsSync(storePath)) {
@@ -60,10 +60,10 @@ export function stageIntoStore(
 
   ensureDir(join(storePath, "..")); // parents
   const staging = mkdtempSync(`${storePath}.staging-`);
-  if (file) {
-    assertSkillFile(sourceDir);
-    copySourceFile(sourceDir, join(staging, "SKILL.md"));
-  } else copySourceTree(sourceDir, staging);
+  if (isGistFile) {
+    assertSkillFile(sourcePath);
+    copySourceFile(sourcePath, join(staging, "SKILL.md"));
+  } else copySourceTree(sourcePath, staging);
   atomicReplace(staging, storePath);
 
   const contentHash = hashDirectory(storePath);
@@ -72,17 +72,17 @@ export function stageIntoStore(
 
 /**
  * First 8 chars of a SHA, or of a hash of the source dir for path
- * sources. `sourceHash` lets a caller that already hashed `sourceDir`
+ * sources. `sourceHash` lets a caller that already hashed `sourcePath`
  * skip a second full walk; it must be a `hashDirectory` digest of that
  * same directory.
  */
 export function shortShaFor(
-  sourceDir: string,
+  sourcePath: string,
   resolvedSha: string | null,
   sourceHash?: string,
 ): string {
   if (resolvedSha !== null) return resolvedSha.slice(0, 8);
   // Path source: derive a stable short id from the directory's content hash.
-  const digest = sourceHash ?? hashSourceDirectory(sourceDir); // `sha256:xxxx...`
+  const digest = sourceHash ?? hashSourceDirectory(sourcePath); // `sha256:xxxx...`
   return digest.slice("sha256:".length, "sha256:".length + 8);
 }

@@ -2,11 +2,10 @@
  * Source-expansion helpers for the install resolver (§9 step 5).
  */
 
-import { CrewError } from "../../core/errors.ts";
 import type { Source, TapConfig } from "../../core/types.ts";
-import { loadSkill } from "../../skill/load.ts";
+import { loadSkillMetadata } from "../../skill/load.ts";
 import { expandSkills, type SkippedSkill } from "../../sources/expand.ts";
-import { gistCandidates, isGistTap } from "../../sources/gist.ts";
+import { gistCandidates, isGistTap, noGistSkillsFound } from "../../sources/gist.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import type { PendingItem } from "./enqueue.ts";
 
@@ -16,15 +15,15 @@ interface ExpansionItems {
 }
 
 /**
- * Walk `dir` and produce one PendingItem per skill found.
+ * Walk `sourcePath` and produce one PendingItem per skill found.
  *
  * Each skill is staged into the store here rather than later in the
- * resolver loop: when the reference carried an `@ref`, `dir` is a
+ * resolver loop: when the reference carried an `@ref`, `sourcePath` is a
  * scratch export that is deleted as soon as acquisition scope ends
  * (§9 step 3), so the bytes must be captured while it still exists.
  */
 export function expandSkillsAsItems(
-  dir: string,
+  sourcePath: string,
   tap: TapConfig,
   baseTapPath: string,
   resolvedSha: string | null,
@@ -34,29 +33,33 @@ export function expandSkillsAsItems(
   tracksTap: boolean,
   home: string,
 ): ExpansionItems {
-  const file = isGistTap(tap);
-  const { valid, skipped } = file
+  const isGistFile = isGistTap(tap);
+  const { valid, skipped } = isGistFile
     ? {
-        valid: baseTapPath
-          ? [loadSkill(dir, true)]
-          : gistCandidates(dir).map((candidate) => loadSkill(candidate.path, true)),
+        valid: baseTapPath ? [loadSkillMetadata(sourcePath, true)] : gistCandidates(sourcePath),
         skipped: [],
       }
-    : expandSkills(dir, {
+    : expandSkills(sourcePath, {
         recursive: tap.discovery === "recursive",
         followStandardLayoutSymlinks: tap.kind === "path",
       });
-  if (file && valid.length === 0)
-    throw new CrewError("no_skills_found", `no valid gist skills found at \`${dir}\``);
+  if (isGistFile && valid.length === 0) throw noGistSkillsFound(sourcePath);
   const items: PendingItem[] = [];
   for (const l of valid) {
-    const subSegment = l.path === dir ? "" : l.path.slice(dir.length + 1);
+    const subSegment = l.path === sourcePath ? "" : l.path.slice(sourcePath.length + 1);
     const tapRelativePath = baseTapPath
       ? subSegment
         ? `${baseTapPath}/${subSegment}`
         : baseTapPath
       : subSegment;
-    const staged = stageIntoStore(l.path, l.frontmatter.name, resolvedSha, home, undefined, file);
+    const staged = stageIntoStore(
+      l.path,
+      l.frontmatter.name,
+      resolvedSha,
+      home,
+      undefined,
+      isGistFile,
+    );
     items.push({
       loaded: l,
       staged,

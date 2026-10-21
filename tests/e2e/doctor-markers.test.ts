@@ -9,6 +9,7 @@ import { resetAutoupdatePlatform, setAutoupdatePlatform } from "../../src/autoup
 import { runCli } from "../../src/cli/main.ts";
 import { readConfig } from "../../src/config/load.ts";
 import { readState } from "../../src/state/load.ts";
+import { readDoctorMarker } from "../helpers/doctor-marker.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -53,7 +54,7 @@ function installed(scope: "user" | "project" = "user") {
     scope,
   ]);
   const marker = join(scope === "user" ? target : cwd, "claude-code", "demo", ".crew.json");
-  return { home, marker, installation, original: JSON.parse(readFileSync(marker, "utf8")) };
+  return { home, marker, installation, original: readDoctorMarker(marker) };
 }
 for (const scope of ["user", "project"] as const) {
   for (const scenario of [

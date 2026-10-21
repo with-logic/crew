@@ -19,15 +19,19 @@ interface CachedMetadata {
   readonly frontmatter: SkillFrontmatter | null;
 }
 let metadata: Map<string, CachedMetadata> | undefined;
+let capturedNames: Map<string, Map<string, GistCandidate[]>> | undefined;
 
 /** Keep discoveries within one synchronous command, including nested CLI calls. */
 export function withGistDiscovery<T>(fn: () => T): T {
   const previous = metadata;
+  const previousNames = capturedNames;
   metadata = new Map();
+  capturedNames = new Map();
   try {
     return fn();
   } finally {
     metadata = previous;
+    capturedNames = previousNames;
   }
 }
 
@@ -40,8 +44,23 @@ export function isGistTap(tap: TapConfig): boolean {
   );
 }
 
-/** Inspect metadata only; selected files are loaded later while acquisition is live. */
-export function gistCandidates(root: string): GistCandidate[] {
+/** Inspect metadata only. A named lookup may reuse ONLY an immutable captured root (§9 step 6). */
+export function gistCandidates(root: string, capturedName?: string): GistCandidate[] {
+  if (capturedName !== undefined) {
+    let index = capturedNames?.get(root);
+    if (index === undefined) {
+      index = new Map();
+      for (const candidate of gistCandidates(root)) {
+        const name = candidate.frontmatter.name;
+        const matches = index.get(name);
+        if (matches) matches.push(candidate);
+        else index.set(name, [candidate]);
+      }
+      // Failed discovery never enters the cache; live roots never request a named lookup.
+      capturedNames?.set(root, index);
+    }
+    return index.get(capturedName) ?? [];
+  }
   const candidates: GistCandidate[] = [];
   for (const filename of listSourceDirectory(root)) {
     const path = join(root, filename);
@@ -63,4 +82,9 @@ function candidateMetadata(path: string): SkillFrontmatter | null {
     if (err instanceof CrewError && err.code === "invalid_skill") return null;
     throw err;
   }
+}
+
+/** Shared install and preview diagnostic for an empty gist (§9 step 5). */
+export function noGistSkillsFound(root: string): CrewError {
+  return new CrewError("no_skills_found", `no valid gist skills found at \`${root}\``);
 }

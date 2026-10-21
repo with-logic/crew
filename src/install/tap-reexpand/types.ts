@@ -3,13 +3,22 @@
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 
 /** One re-expansion outcome row. */
-export interface TapReexpandRow {
+interface TapReexpandRowBase {
   readonly name: string;
   readonly scope: Scope;
-  readonly kind: "added" | "would_add" | "source_gone" | "tap_error";
   readonly tap: string;
-  readonly error?: { readonly code: string; readonly message: string };
 }
+
+/** Only successful additions expose non-fatal rollback cleanup diagnostics. */
+export type TapReexpandRow = TapReexpandRowBase &
+  (
+    | { readonly kind: "added"; readonly warnings?: readonly string[]; readonly error?: never }
+    | { readonly kind: "would_add" | "source_gone"; readonly error?: never }
+    | {
+        readonly kind: "tap_error";
+        readonly error: { readonly code: string; readonly message: string };
+      }
+  );
 
 /** Callback to install one newly-detected child skill. */
 export type InstallNewChild = (args: {
@@ -23,6 +32,8 @@ export type InstallNewChild = (args: {
   readonly projectRoot: string | null;
   readonly ref: string | null;
   readonly pinned: boolean;
+  /** Cleanup diagnostics on success; failed additions append these to their error. */
+  readonly onWarning?: (warning: string) => void;
 }) => StateEntry | null;
 
 export interface TapReexpandResult {

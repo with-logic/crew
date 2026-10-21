@@ -7,7 +7,7 @@
  */
 
 import { join } from "node:path";
-import type { Config, LoadedSkill, TapConfig } from "../../core/types.ts";
+import type { Config, SkillMetadata, TapConfig } from "../../core/types.ts";
 import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { StoredSkill } from "../../sources/store.ts";
@@ -24,7 +24,7 @@ import { expandSkillsAsItems } from "./expand-items.ts";
  * path keeps this independent of which root produced the location
  * (§9 step 3).
  */
-function memberDir(
+function memberPath(
   rootDir: string,
   location: { readonly path: string; readonly tapRelativePath: string },
   ref: string | null,
@@ -34,7 +34,7 @@ function memberDir(
 }
 
 export interface PendingItem {
-  readonly loaded: LoadedSkill;
+  readonly loaded: SkillMetadata;
   /** Store entry captured during expansion (see `expandSkillsAsItems`). */
   readonly staged: StoredSkill;
   readonly tap: TapConfig;
@@ -105,7 +105,7 @@ export function enqueueTapRef(
       const run = (acq: AcquiredTap): void => {
         for (const member of candidate.members) {
           const expansion = expandSkillsAsItems(
-            memberDir(acq.rootDir, member, source.ref),
+            memberPath(acq.rootDir, member, source.ref),
             candidate.tap,
             member.tapRelativePath,
             acq.resolvedSha,
@@ -127,7 +127,7 @@ export function enqueueTapRef(
     const skill = candidate as Extract<typeof candidate, { kind: "skill" }>;
     const expand = (acq: AcquiredTap) =>
       expandSkillsAsItems(
-        memberDir(acq.rootDir, skill.location, source.ref),
+        memberPath(acq.rootDir, skill.location, source.ref),
         skill.tap,
         skill.location.tapRelativePath,
         acq.resolvedSha,

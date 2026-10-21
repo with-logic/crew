@@ -4,7 +4,7 @@ import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDoctorMarker } from "../../src/commands/doctor/markers/validate.ts";
 import type { Marker, TapConfig } from "../../src/core/types.ts";
-import { withAcquiredSkillDir } from "../../src/sources/acquire/index.ts";
+import { withAcquiredSkillPath } from "../../src/sources/acquire/index.ts";
 import { assertNoSymlinkEscape } from "../../src/util/symlink-containment.ts";
 import { makeCrewHome } from "../helpers/env.ts";
 import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
@@ -22,7 +22,7 @@ const marker: Marker = {
   path: "",
   ref: null,
   resolved_sha: null,
-  content_hash: "abc",
+  content_hash: `sha256:${"a".repeat(64)}`,
   installed_at: "2026-10-21T00:00:00.000Z",
   installed_by: "crew",
 };
@@ -43,7 +43,7 @@ for (const path of ["/absolute", "../other", "nested/../other", "nul\0name"]) {
       };
       let called = false;
       expect(() =>
-        withAcquiredSkillDir(tap, null, path, makeCrewHome(), () => {
+        withAcquiredSkillPath(tap, null, path, makeCrewHome(), () => {
           called = true;
         }),
       ).toThrow(/source-relative/);
@@ -64,7 +64,7 @@ for (const path of ["", ".", "a//b", "..notes", "literal\\name", "a:b [glob]", "
       registered: true,
     };
     expect(
-      withAcquiredSkillDir(tap, null, path, makeCrewHome(), (_acquired, selected) => selected),
+      withAcquiredSkillPath(tap, null, path, makeCrewHome(), (_acquired, selected) => selected),
     ).toBe(join(root, path));
   });
 }
@@ -87,7 +87,7 @@ test("C-STATE-15 git no-ref acquisition rejects descendant links while local lin
   for (const path of ["linked", "nested/linked", "linked/child"]) {
     let called = false;
     expect(() =>
-      withAcquiredSkillDir(tap, null, path, home, () => {
+      withAcquiredSkillPath(tap, null, path, home, () => {
         called = true;
       }),
     ).toThrow(/symlink/);
@@ -96,7 +96,7 @@ test("C-STATE-15 git no-ref acquisition rejects descendant links while local lin
   const alias = join(makeTempDir(), "alias");
   symlinkSync(root, alias);
   expect(
-    withAcquiredSkillDir(
+    withAcquiredSkillPath(
       { ...tap, kind: "path", path: alias, url: "" },
       null,
       "linked",
@@ -125,7 +125,7 @@ test("C-STATE-15 uninspectable git descendants remain operational source failure
   };
   let called = false;
   expect(() =>
-    withAcquiredSkillDir(tap, null, "plain/child", makeCrewHome(), () => {
+    withAcquiredSkillPath(tap, null, "plain/child", makeCrewHome(), () => {
       called = true;
     }),
   ).toThrow(expect.objectContaining({ code: "source_unreachable" }));
