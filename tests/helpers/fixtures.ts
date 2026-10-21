@@ -7,7 +7,15 @@
  * parse/acquire/install stack is the most faithful test.
  */
 
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readConfig } from "../../src/config/load.ts";
@@ -16,9 +24,30 @@ import { tapClonePath } from "../../src/core/repo-path.ts";
 import { runGit } from "../../src/git/exec.ts";
 import { isDirectory, listDir } from "../../src/util/fs.ts";
 
-/** Create a fresh tmp dir unique per call. */
+const tempDirs = new Set<string>();
+
+/** Create a fresh tmp dir owned by this test runner. */
 export function makeTempDir(prefix: string = "crew-test-"): string {
-  return mkdtempSync(join(tmpdir(), prefix));
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.add(dir);
+  return dir;
+}
+
+/** Restore directory access without following fixture symlinks (§12.1). */
+function makeRemovable(path: string): void {
+  const stat = lstatSync(path, { throwIfNoEntry: false });
+  if (!stat?.isDirectory()) return;
+  chmodSync(path, 0o700);
+  for (const entry of readdirSync(path)) makeRemovable(join(path, entry));
+}
+
+/** Remove only roots allocated by this runner, after all tests finish. */
+export function cleanupTempDirs(): void {
+  for (const dir of tempDirs) {
+    makeRemovable(dir);
+    rmSync(dir, { recursive: true, force: true });
+  }
+  tempDirs.clear();
 }
 
 /** Create a directory containing a `SKILL.md` with the given frontmatter body. */

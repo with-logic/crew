@@ -28,14 +28,18 @@
  *    `./no-network.ts`.
  */
 
-import { afterEach } from "bun:test";
+import { afterAll, afterEach } from "bun:test";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { neutralizeAdaptersExcept } from "./env.ts";
+import { cleanupTempDirs } from "./fixtures.ts";
 import { installNetworkTripwire, takeRemoteGitFailure } from "./no-network.ts";
 
 neutralizeAdaptersExcept([]);
 installNetworkTripwire();
+
+// Module fixtures survive tests; removing thousands of roots can exceed Bun’s 5s hook limit.
+afterAll(cleanupTempDirs, 60_000);
 
 // Turns a violation the code under test swallowed into a failed test.
 // See `takeRemoteGitFailure` for why the tripwire's own throw isn't enough.

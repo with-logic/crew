@@ -6,16 +6,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { makeTempDir } from "../helpers/fixtures.ts";
 
 const INSTALL_SCRIPT = "site/public/install.sh";
 
@@ -67,7 +60,7 @@ type InstallOptions = {
 };
 
 function installEnv(tool: ChecksumTool, options: InstallOptions = {}): InstallEnv {
-  const root = mkdtempSync(join(tmpdir(), "crew-install-checksum-"));
+  const root = makeTempDir("crew-install-checksum-");
   const bin = join(root, "bin");
   const prefix = join(root, "prefix");
   writeFakeTool(bin, "uname", '#!/bin/sh\n[ "$1" = -s ] && echo Linux || echo x86_64\n');
