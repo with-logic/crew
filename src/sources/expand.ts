@@ -141,6 +141,7 @@ function pushSoft(candidate: string, valid: LoadedSkill[], skipped: SkippedSkill
   try {
     valid.push(loadSkill(candidate));
   } catch (err) {
+    if (err instanceof CrewError && err.code === "source_unreachable") throw err;
     // `loadSkill` throws only `CrewError`, whose `code` is typed as
     // a non-null `CrewErrorName`. No fallback needed.
     const ce = err as CrewError;

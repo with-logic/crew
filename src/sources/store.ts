@@ -16,10 +16,10 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { crewHome, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
-import { copyTree } from "../util/copy.ts";
 import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { safePath } from "../util/redact.ts";
+import { copySourceTree, hashSourceDirectory } from "./read.ts";
 
 /** Record returned after staging. */
 export interface StoredSkill {
@@ -58,7 +58,7 @@ export function stageIntoStore(
 
   const staging = `${storePath}.staging-${Date.now()}`;
   if (exists(staging)) rmrf(staging);
-  copyTree(sourceDir, staging, { stripRootMarker: true });
+  copySourceTree(sourceDir, staging);
   ensureDir(join(storePath, "..")); // parents
   atomicReplace(staging, storePath);
 
@@ -79,6 +79,6 @@ export function shortShaFor(
 ): string {
   if (resolvedSha !== null) return resolvedSha.slice(0, 8);
   // Path source: derive a stable short id from the directory's content hash.
-  const digest = sourceHash ?? hashDirectory(sourceDir); // `sha256:xxxx...`
+  const digest = sourceHash ?? hashSourceDirectory(sourceDir); // `sha256:xxxx...`
   return digest.slice("sha256:".length, "sha256:".length + 8);
 }

@@ -5,6 +5,7 @@
 import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { indexTap, type SkillLocation } from "../../install/tap-index.ts";
+import { displayText } from "../../refs/display-url.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { type SearchInstallIndex, searchInstallStatus } from "./install-state.ts";
 import type { ConfiguredSearchResult, SearchHit } from "./types.ts";
@@ -40,6 +41,16 @@ function collectHitsFromTap(
     // retry when online, which never fixes it. Name it for what it is.
     if (err instanceof CrewError && err.code === "invalid_ref") {
       warnings.push(`warning: tap \`${tap.name}\` skipped — ${err.message}`);
+      return;
+    }
+    if (
+      err instanceof CrewError &&
+      err.code === "source_unreachable" &&
+      typeof err.details["path"] === "string"
+    ) {
+      warnings.push(
+        `warning: tap \`${tap.name}\` skipped (${err.code}) — ${displayText(err.message)}`,
+      );
       return;
     }
     warnings.push(

@@ -19,6 +19,7 @@
  */
 
 import { join } from "node:path";
+import { CrewError } from "../core/errors.ts";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
@@ -165,7 +166,8 @@ function maybeRecursiveIndex(
 function skillNameForIndex(path: string): string | null {
   try {
     return loadSkillName(path);
-  } catch {
+  } catch (err) {
+    if (err instanceof CrewError && err.code === "source_unreachable") throw err;
     return null;
   }
 }

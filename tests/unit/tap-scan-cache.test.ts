@@ -33,24 +33,18 @@ describe("tap scan cache validation", () => {
     expect(makeTapScanCache().validate(dir)).toBeNull();
   });
 
-  test("an I/O failure rethrows instead of blaming the skill", () => {
+  test("a manifest I/O failure returns source_unreachable instead of invalid_skill", () => {
     const dir = makeTempDir("crew-scan-eisdir-");
     // `SKILL.md` exists — so the "no SKILL.md" guard passes — but it is a
-    // directory, so reading it raises a raw EISDIR `Error`. Reporting that
-    // as `invalid_skill` would blame the author for a local filesystem
-    // problem, so it must escape as-is for the run to handle.
+    // directory. The read boundary maps EISDIR to an operational error
+    // before frontmatter validation; the cache must retain that code.
     mkdirSync(join(dir, "SKILL.md"));
 
-    let thrown: unknown;
-    try {
-      makeTapScanCache().validate(dir);
-    } catch (err) {
-      thrown = err;
-    }
-
-    expect(thrown).toBeInstanceOf(Error);
-    expect(thrown).not.toBeInstanceOf(CrewError);
-    expect((thrown as NodeJS.ErrnoException).code).toBe("EISDIR");
+    const error = makeTapScanCache().validate(dir);
+    expect(error).toBeInstanceOf(CrewError);
+    expect(error?.code).toBe("source_unreachable");
+    expect(error?.message).toContain("EISDIR");
+    expect(error?.details["path"]).toBe(join(dir, "SKILL.md"));
   });
 
   test("validation is memoised per directory", () => {

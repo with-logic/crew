@@ -1,11 +1,11 @@
 /** Name-only metadata loading preserves discovery validation and parser semantics (§9 step 4). */
 
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
 import { loadSkill, loadSkillName } from "../../src/skill/load.ts";
-import { makeTempDir } from "../helpers/fixtures.ts";
+import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
 function makeSkillDirectory(rawSkillMd: string): string {
   const dir = makeTempDir();
@@ -14,6 +14,19 @@ function makeSkillDirectory(rawSkillMd: string): string {
 }
 
 describe("loadSkillName", () => {
+  test("unreadable SKILL.md is source_unreachable", () => {
+    const skill = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
+    const manifest = join(skill, "SKILL.md");
+    chmodSync(manifest, 0);
+    try {
+      expect(() => loadSkillName(skill)).toThrow(
+        expect.objectContaining({ code: "source_unreachable" }),
+      );
+    } finally {
+      chmodSync(manifest, 0o600);
+    }
+  });
+
   test("missing SKILL.md fails with CrewError", () => {
     const d = makeTempDir();
     expect(() => loadSkillName(d)).toThrow(CrewError);

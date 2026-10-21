@@ -12,7 +12,7 @@
  * snapshot cannot go stale underneath us.
  */
 
-import { CrewError } from "../../core/errors.ts";
+import type { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
@@ -32,10 +32,9 @@ export interface TapScanCache {
    */
   acquire(tap: TapConfig, home: string): AcquiredTapScan;
   /**
-   * Walk a tap's children, memoised. Kept separate from `acquire`
-   * because a filesystem error while walking (an unreadable directory,
-   * say) is a local fault that must propagate, not be reported as the
-   * tap being unreachable.
+   * Walk a tap's children, memoised. Normalized manifest read failures
+   * become group `tap_error` rows. Unclassified directory-walk errors
+   * still propagate separately from acquisition failures.
    */
   children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[];
   /** Full validation (§9 step 4) for one child directory, memoised. */
@@ -84,18 +83,14 @@ export function makeTapScanCache(): TapScanCache {
  * the failure instead of throwing. `loadSkill` is the same validator
  * the install flow uses.
  *
- * It reads from disk, so an I/O failure (EACCES, EIO) can surface here
- * as a plain `Error`. Reporting that as `invalid_skill` would blame the
- * skill author for a local filesystem problem, so only `CrewError`s —
- * the validator's own verdicts — are returned; anything else rethrows
- * and is handled as a run-level failure by the caller.
+ * `loadSkill` reports validation and source-read failures as `CrewError`,
+ * so the cache retains their stable codes without treating I/O as validation.
  */
 function validationErrorFor(skillDir: string): CrewError | null {
   try {
     loadSkill(skillDir);
     return null;
   } catch (err) {
-    if (err instanceof CrewError) return err;
-    throw err;
+    return err as CrewError;
   }
 }
