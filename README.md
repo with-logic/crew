@@ -202,7 +202,7 @@ When a command asks for an installed skill name, you can use the bare name
 
 | Command | What it does |
 |---|---|
-| `crew doctor [--verify] [--repair]` | Check integrity between state, markers, and agent directories. `--repair` fixes recoverable drift without ever touching customized files. |
+| `crew doctor [--verify] [--repair]` | Check integrity between state, markers, and agent directories. `--repair` fixes recoverable drift without ever touching customized files. Unreadable or invalid markers block repair until corrected. |
 | `crew cache clean` | Remove ephemeral caches and unreferenced store entries. |
 | `crew self-update [--check]` | Replace the running binary with the latest verified release. `--check` reports without downloading. |
 

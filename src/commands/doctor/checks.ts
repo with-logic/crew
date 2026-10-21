@@ -14,7 +14,7 @@ import { hashDirectory } from "../../hash/content.ts";
 import { orphanStoreEntries } from "../../maintenance/gc.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
-import type { MarkerEntry } from "./markers.ts";
+import type { MarkerEntry } from "./markers/index.ts";
 
 export interface Finding {
   readonly level: "ok" | "warn" | "error";

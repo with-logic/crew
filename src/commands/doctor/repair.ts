@@ -19,7 +19,8 @@ import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
-import type { MarkerEntry } from "./markers.ts";
+import type { MarkerEntry } from "./markers/index.ts";
+import { markerTapConfig } from "./markers/tap.ts";
 
 /**
  * True when the entry is project-scope and its recorded root is gone,
@@ -52,15 +53,7 @@ export function repairStateUnderLock(markers: readonly MarkerEntry[], home: stri
     for (const m of markers) {
       const marker = m.record.marker;
       if (taps.has(marker.tap_name)) continue;
-      const reconstructed: TapConfig = {
-        name: marker.tap_name,
-        kind: marker.tap_kind,
-        registered: false, // reconstructed taps default to auto
-        url: marker.tap_url,
-        subpath: marker.tap_subpath,
-        path: marker.tap_path,
-        ...(marker.tap_discovery === "recursive" ? { discovery: "recursive" } : {}),
-      };
+      const reconstructed = markerTapConfig(marker);
       taps.set(reconstructed.name, reconstructed);
     }
     config = { ...config, taps: [...taps.values()] };
