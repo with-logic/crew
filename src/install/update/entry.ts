@@ -22,6 +22,7 @@ import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { peekResolvedSha } from "./peek.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
+import { sourceDirectoryExists } from "./source-directory.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
@@ -165,6 +166,7 @@ function applyUpdate(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
+  if (newSha === null && !sourceDirectoryExists(skillDir)) return { kind: "source_gone" };
   const sourceHash = newSha === null ? hashDirectory(skillDir) : undefined;
   if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
     if (newSha !== null) return { kind: "up_to_date" };
