@@ -24,6 +24,7 @@ import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { peekResolvedSha } from "./peek.ts";
 import { reinstallIntoAgents } from "./reinstall.ts";
+import { rowFor } from "./row.ts";
 import { entryWithGistFilename } from "./source-path.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
@@ -86,22 +87,6 @@ export function updateOneEntry(
       bumpHardFailure: true,
     };
   }
-}
-
-/** Build an UpdateRow for a state entry, threading through project_root. */
-function rowFor(entry: StateEntry, outcome: InternalOutcome): UpdateRow {
-  const publicOutcome =
-    outcome.kind === "updated"
-      ? { kind: "updated" as const, new_sha: outcome.new_sha, per_target: outcome.per_target }
-      : outcome;
-  return {
-    name: entry.name,
-    scope: entry.scope,
-    ...(entry.project_root === undefined
-      ? {}
-      : { project_root: String(entry.project_root ?? "(unknown)") }),
-    outcome: publicOutcome,
-  };
 }
 
 function updateOne(
