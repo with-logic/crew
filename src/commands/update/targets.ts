@@ -18,6 +18,7 @@ export function updatedRowStatus(
   return outcome.per_target.some((t) => t.kind === "failed") ? "failed" : "skipped";
 }
 
+/** Return only failed or safety-skipped target diagnostics, sanitizing displayed agent, code, message, and reason values. */
 export function targetIssues(outcome: UpdatedOutcome): string[] {
   const issues: string[] = [];
   for (const target of outcome.per_target) {

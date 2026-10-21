@@ -1,9 +1,10 @@
 /** Truthful human update rows and totals without changing outcomes (§10.1, C-UPD-39). */
 
 import { expect, test } from "bun:test";
-import { renderUpdate } from "../../src/commands/update/render.ts";
-import type { Outcome, PerAgentUpdate } from "../../src/install/update/types.ts";
-import { makeStyler } from "../../src/util/term.ts";
+import { renderUpdate } from "../../../src/commands/update/render.ts";
+import { formatRowParts } from "../../../src/commands/update/rows.ts";
+import type { Outcome, PerAgentUpdate } from "../../../src/install/update/types.ts";
+import { makeStyler } from "../../../src/util/term.ts";
 
 const installed: PerAgentUpdate = { agent: "claude-code", kind: "installed" };
 const current: PerAgentUpdate = { agent: "claude-code", kind: "up_to_date" };
@@ -64,7 +65,9 @@ for (const { label, targets, status, summary } of cases) {
     const outcome: Outcome = { kind: "updated", new_sha: "1234567890", per_target: targets };
     const jsonBefore = JSON.stringify(outcome);
     const lines = render([outcome]);
-    expect(lines[2]).toContain(status);
+    expect(
+      formatRowParts({ name: "demo-0", scope: "user", outcome }, makeStyler(false)).status,
+    ).toBe(status);
     expect(lines.at(-1)).toBe(summary);
     if (status === "failed" || status === "skipped") expect(lines[2]).not.toContain("12345678");
     expect(JSON.stringify(outcome)).toBe(jsonBefore);
