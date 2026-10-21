@@ -1,5 +1,6 @@
 /** Invocation-scoped captured directory trees for dependency resolution (§9 steps 3, 6). */
 
+import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import { tapClonePath } from "../../../core/repo-path.ts";
 import { createExportedTree, type ExportedTree } from "../../../git/export.ts";
@@ -49,6 +50,12 @@ function parentDir(
   const rootPath = enclosing === "." || enclosing === "/" ? "" : enclosing;
   const key = JSON.stringify([clone, rootPath, parent.resolvedSha]);
   let tree = exports.get(key);
+  // §9 step 3: cache cleaning must not replace captured bytes with live HEAD.
+  if (tree !== undefined && !existsSync(tree.rootDir)) {
+    tree.cleanup();
+    exports.delete(key);
+    tree = undefined;
+  }
   if (tree === undefined) {
     if (exports.size === MAX_RETAINED_TREES) {
       const [oldestKey, oldest] = exports.entries().next().value!;

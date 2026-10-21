@@ -47,6 +47,28 @@ test("C-INST-05f an evicted revision can be revisited with its original bytes", 
   for (const root of roots) expect(existsSync(root)).toBe(false);
 });
 
+test("C-INST-05f a removed retained export is recreated at its captured revision", () => {
+  const fixture = revisions();
+  const parents = revisionParents(fixture);
+  const { roots, alive } = captureExports();
+  expect(
+    readFileSync(join(fixture.url.slice("file://".length), "dependency", "SKILL.md"), "utf8"),
+  ).toEndWith("revision 3\n");
+  withDependencyTrees(fixture.home, (trees) => {
+    trees.parentDir(parents[0]!);
+    trees.parentDir(parents[1]!);
+    rmSync(roots[0]!, { recursive: true });
+    const parentDir = trees.parentDir(parents[0]!)!;
+    expect(readFileSync(join(parentDir, "..", "dependency", "SKILL.md"), "utf8")).toEndWith(
+      "revision 0\n",
+    );
+    expect(trees.parentDir(parents[0]!)).toBe(parentDir);
+  });
+  expect(roots).toHaveLength(3);
+  expect(Math.max(...alive)).toBe(2);
+  for (const root of roots) expect(existsSync(root)).toBe(false);
+});
+
 test("throwing from a dependency walk cleans every retained export", () => {
   const fixture = revisions();
   const parents = revisionParents(fixture);
@@ -82,5 +104,33 @@ test("failed eviction still attempts final cleanup of every retained export", ()
   } finally {
     chmodSync(roots[0]!, 0o700);
     rmSync(roots[0]!, { recursive: true, force: true });
+  }
+});
+
+test("failed eviction keeps its export owned for final cleanup", () => {
+  const fixture = revisions();
+  const parents = revisionParents(fixture);
+  const { roots } = captureExports();
+  try {
+    expect(() =>
+      withDependencyTrees(fixture.home, (trees) => {
+        trees.parentDir(parents[0]!);
+        trees.parentDir(parents[1]!);
+        chmodSync(roots[0]!, 0o500);
+        try {
+          trees.parentDir(parents[2]!);
+        } catch (err) {
+          chmodSync(roots[0]!, 0o700);
+          throw err;
+        }
+      }),
+    ).toThrow(/EACCES|EPERM/);
+    expect(roots).toHaveLength(2);
+    for (const root of roots) expect(existsSync(root)).toBe(false);
+  } finally {
+    for (const root of roots) {
+      if (existsSync(root)) chmodSync(root, 0o700);
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });
