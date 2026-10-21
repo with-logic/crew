@@ -78,7 +78,7 @@ describe("git/repo — error translation", () => {
     makeGitRepo(repo);
     commitAll(repo, "init");
     // Clone first so the dest exists.
-    const dest = `${makeTempDir()}-clone`;
+    const dest = join(makeTempDir(), "clone");
     ensureRepo(`file://${repo}`, dest);
     // Now swap the runner so the subsequent `fetch` fails.
     setGitRunner((args, opts) => {
