@@ -55,8 +55,11 @@ function collectHitsFromTap(
       );
       return;
     }
+    const displayedName = sanitizeLine(tap.name);
+    const refreshCommand =
+      displayedName === tap.name ? `crew tap update ${tap.name}` : "crew tap update";
     warnings.push(
-      `warning: tap \`${sanitizeLine(tap.name)}\` isn't cloned yet and couldn't be reached — skipping. run \`crew tap update ${sanitizeLine(tap.name)}\` when you're back online.`,
+      `warning: tap \`${displayedName}\` isn't cloned yet and couldn't be reached — skipping. run \`${refreshCommand}\` when you're back online.`,
     );
     return;
   }
