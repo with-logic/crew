@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { HASH_READ_CHUNK_BYTES } from "../../src/hash/constants.ts";
 import { hashDirectory, sha256OfBytes } from "../../src/hash/content.ts";
 import { makeTempDir } from "../helpers/fixtures.ts";
 
@@ -137,7 +138,14 @@ describe("hashDirectory", () => {
   test("native and caller-supplied reads preserve SHA-256 bytes across chunk boundaries", () => {
     const d = makeTempDir();
     const expected = createHash("sha256");
-    for (const size of [0, 1, 65_535, 65_536, 65_537, 131_089]) {
+    for (const size of [
+      0,
+      1,
+      HASH_READ_CHUNK_BYTES - 1,
+      HASH_READ_CHUNK_BYTES,
+      HASH_READ_CHUNK_BYTES + 1,
+      HASH_READ_CHUNK_BYTES * 2 + 17,
+    ]) {
       const name = `bytes-${String(size).padStart(6, "0")}`;
       const bytes = Buffer.alloc(size);
       for (let i = 0; i < size; i++) bytes[i] = i % 256;
