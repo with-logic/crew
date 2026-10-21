@@ -6,9 +6,15 @@
  * public row shapes so JSON output stays stable.
  */
 
+export type PerAgentSkipReason = "customized" | "untracked_directory" | "inconsistent_marker";
+
 export type PerAgentUpdate =
   | { readonly agent: string; readonly kind: "installed" | "up_to_date" }
-  | { readonly agent: string; readonly kind: "skipped"; readonly reason: string }
+  | {
+      readonly agent: string;
+      readonly kind: "skipped";
+      readonly reason: PerAgentSkipReason;
+    }
   | {
       readonly agent: string;
       readonly kind: "failed";
