@@ -208,8 +208,10 @@ user, which names the protocol account rather than a secret (§13).
 
 Human-readable skill metadata follows the same C0, DEL, and C1
 control-character escaping rule before wrapping or styling. This includes
-descriptions, license, compatibility, homepage, and dependencies. JSON
-values and installed skill bytes are unchanged.
+descriptions, license, compatibility, homepage, and dependencies. Skill
+references in search results, including namespace-qualified names and
+suggested install references, follow the same rule before measuring column
+widths or laying out rows. JSON values and installed skill bytes are unchanged.
 
 ### 5.2 Global flags
 
