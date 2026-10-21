@@ -6,7 +6,6 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   readlinkSync,
   symlinkSync,
@@ -139,7 +138,7 @@ test("C-UPD-38 force replacement restores a root symlink without changing its ta
   expect(readFileSync(join(outside, "SKILL.md"))).toEqual(bytes);
 });
 
-test("C-UPD-38 a failed atomic replacement restores a partially removed prior tree", () => {
+test("C-UPD-38 a failed install rename restores the moved prior tree", () => {
   const { home, args } = fixture();
   const dest = makeSkill(claudeRoot, "newbie", skillFrontmatter({ name: "newbie" }), "prior bytes");
   const locked = join(dest, "locked");
@@ -147,7 +146,7 @@ test("C-UPD-38 a failed atomic replacement restores a partially removed prior tr
   writeFileSync(join(locked, "asset"), "prior asset");
   const staged = stageIntoStore(args.skillDir, "newbie", args.resolvedSha, home);
   const replacement = new ChildReplacement(dest);
-  chmodSync(locked, 0o555);
+  const original = lstatSync(join(dest, "SKILL.md"));
   try {
     expect(() =>
       installSkillIntoAgents({
@@ -162,34 +161,18 @@ test("C-UPD-38 a failed atomic replacement restores a partially removed prior tr
         resolvedSha: args.resolvedSha,
         contentHash: staged.contentHash,
         force: true,
-        beforeReplace: () => replacement.snapshot(),
+        beforeReplace: () => {
+          replacement.moveAsideForReplacement();
+          chmodSync(claudeRoot, 0o555);
+        },
       }),
     ).toThrow("EACCES");
   } finally {
-    chmodSync(locked, 0o755);
+    chmodSync(claudeRoot, 0o755);
   }
   expect(replacement.rollback()).toBeNull();
   replacement.cleanup();
   expect(readFileSync(join(dest, "SKILL.md"), "utf8")).toContain("prior bytes");
   expect(readFileSync(join(locked, "asset"), "utf8")).toBe("prior asset");
-  chmodSync(locked, 0o755);
-});
-
-test("C-UPD-38 snapshot failure cleans the new staging and preserves prior bytes", () => {
-  const { run } = fixture();
-  const prior = makeSkill(
-    claudeRoot,
-    "newbie",
-    skillFrontmatter({ name: "newbie" }),
-    "prior bytes",
-  );
-  chmodSync(join(prior, "SKILL.md"), 0o000);
-  try {
-    expect(() => run(true)).toThrow("EACCES");
-  } finally {
-    chmodSync(join(prior, "SKILL.md"), 0o644);
-  }
-  expect(readdirSync(claudeRoot)).toEqual(["newbie"]);
-  expect(readFileSync(join(prior, "SKILL.md"), "utf8")).toContain("prior bytes");
-  expect(existsSync(join(codexRoot, "newbie"))).toBe(false);
+  expect(lstatSync(join(dest, "SKILL.md")).ino).toBe(original.ino);
 });

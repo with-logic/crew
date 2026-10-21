@@ -102,6 +102,14 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
     }
   }
 
+  for (const row of addedRows) {
+    for (const warning of row.warnings ?? []) {
+      lines.push(
+        `${style.symbol("warn")} ${style.bold(row.name)} ${style.dim(`(from ${row.tap})`)}: ${warning}`,
+      );
+    }
+  }
+
   // Re-expansion errors name the subject and reason (§10.1.1), including
   // tap access, child validation, staging, and target-install failures.
   const errorRows = input.tapReexpandRows.filter((r) => r.kind === "tap_error");

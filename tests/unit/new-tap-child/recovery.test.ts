@@ -24,11 +24,17 @@ afterEach(() => {
   codexAdapter.userPath = originalCodex;
 });
 
-test("C-UPD-38 failed restoration reports recovery data while rolling back healthy targets", () => {
+test("C-UPD-38 later target failure reports recovery data after failed restoration", () => {
   const root = makeTempDir();
   const codexRoot = makeTempDir();
   claudeCodeAdapter.userPath = () => root;
-  codexAdapter.userPath = () => codexRoot;
+  const blocked = join(codexRoot, "file");
+  writeFileSync(blocked, "not a directory");
+  let codexCalls = 0;
+  codexAdapter.userPath = () => {
+    if (++codexCalls === 2) chmodSync(root, 0o555);
+    return blocked;
+  };
   const prior = makeSkill(root, "newbie", skillFrontmatter({ name: "newbie" }), "prior bytes");
   const locked = join(prior, "locked");
   mkdirSync(locked);
@@ -39,7 +45,6 @@ test("C-UPD-38 failed restoration reports recovery data while rolling back healt
     skillFrontmatter({ name: "newbie" }),
     "new bytes",
   );
-  chmodSync(locked, 0o555);
   let error: CrewError | null = null;
   try {
     installNewTapChild(
@@ -70,10 +75,10 @@ test("C-UPD-38 failed restoration reports recovery data while rolling back healt
     expect(err).toBeInstanceOf(CrewError);
     error = err as CrewError;
   } finally {
-    chmodSync(locked, 0o755);
+    chmodSync(root, 0o755);
   }
   expect(error?.code).toBe("usage_error");
-  expect(error?.message).toContain("claude-code");
+  expect(error?.message).toContain("codex");
   expect(error?.message).toContain("rollback");
   expect(error?.message).toContain("prior copy retained at");
   const backup = readdirSync(root).find((name) => name.startsWith(".crew-rollback-"))!;

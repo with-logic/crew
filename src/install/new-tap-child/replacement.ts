@@ -1,8 +1,9 @@
 /** Reversible replacements for one newly discovered tap child (§10.1.1). */
 
-import { cpSync, lstatSync, mkdtempSync, renameSync } from "node:fs";
+import { lstatSync, mkdtempSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { rmrf } from "../../util/fs.ts";
+import { atomicReplace, rmrf } from "../../util/fs.ts";
+import { redactText, sanitizeLine } from "../../util/redact.ts";
 
 /** A receipt for one physical target; shared adapters have one receipt. */
 export class ChildReplacement {
@@ -17,8 +18,8 @@ export class ChildReplacement {
     this.dest = dest;
   }
 
-  /** Runs only after installer safety/no-op checks, immediately before replacement. */
-  snapshot(): void {
+  /** Move the live destination aside after safety/no-op checks, immediately before replacement. */
+  moveAsideForReplacement(): void {
     try {
       lstatSync(this.dest);
     } catch (err) {
@@ -27,12 +28,7 @@ export class ChildReplacement {
     }
     this.temporary = mkdtempSync(join(dirname(this.dest), ".crew-rollback-"));
     const backup = join(this.temporary, "prior");
-    cpSync(this.dest, backup, {
-      recursive: true,
-      dereference: false,
-      verbatimSymlinks: true,
-      preserveTimestamps: true,
-    });
+    renameSync(this.dest, backup);
     this.backup = backup;
   }
 
@@ -40,8 +36,8 @@ export class ChildReplacement {
   rollback(): string | null {
     if (this.backup === null && !this.installed) return null;
     try {
-      rmrf(this.dest);
-      if (this.backup !== null) renameSync(this.backup, this.dest);
+      if (this.backup === null) rmrf(this.dest);
+      else atomicReplace(this.backup, this.dest);
       return null;
     } catch (err) {
       this.retainBackup = true;
@@ -51,12 +47,13 @@ export class ChildReplacement {
   }
 
   /** Backup housekeeping must not mask a failure or invalidate a successful install. */
-  cleanup(): void {
-    if (this.temporary === null || this.retainBackup) return;
+  cleanup(): string | null {
+    if (this.temporary === null || this.retainBackup) return null;
     try {
       rmrf(this.temporary);
+      return null;
     } catch {
-      // The install/state outcome is already settled; leave only this owned backup.
+      return sanitizeLine(redactText(`could not remove rollback directory \`${this.temporary}\``));
     }
   }
 }

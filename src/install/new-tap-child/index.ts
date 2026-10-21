@@ -4,8 +4,9 @@
  * Stages the child into the store, runs the install algorithm for
  * every target the rest of the tap was installed into, and returns a
  * fresh state entry only when every applicable target group succeeds.
- * Target-group failures restore changed copies and name affected targets.
- * Staging errors can occur earlier; failed children remain retryable in state.
+ * Target-group failures attempt rollback and name affected targets; failed
+ * restoration retains and reports the prior copy at a recovery path.
+ * Failed children have no state entry; later non-dry-run re-expansion retries them.
  */
 
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
@@ -30,6 +31,7 @@ export function installNewTapChild(
     /** The ref the group tracks, and whether it is immutable (§11.1). */
     readonly ref: string | null;
     readonly pinned: boolean;
+    readonly onWarning?: (warning: string) => void;
   },
   force: boolean,
   home: string,
@@ -70,7 +72,7 @@ export function installNewTapChild(
         resolvedSha: args.resolvedSha,
         contentHash: staged.contentHash,
         force,
-        beforeReplace: () => replacement.snapshot(),
+        beforeReplace: () => replacement.moveAsideForReplacement(),
       });
       replacement.installed = outcome.kind === "installed";
       for (const a of group) successfulTargets.push(a.name);
@@ -87,7 +89,12 @@ export function installNewTapChild(
       if (failure) failures.push(failure);
     }
   }
-  for (const replacement of replacements) replacement.cleanup();
+  for (const replacement of replacements) {
+    const warning = replacement.cleanup();
+    if (warning === null) continue;
+    if (firstFailure) failures.push(warning);
+    else args.onWarning?.(warning);
+  }
   if (firstFailure) throw new CrewError(firstFailure.code, failures.join("; "));
   if (successfulTargets.length === 0) return null;
   return {

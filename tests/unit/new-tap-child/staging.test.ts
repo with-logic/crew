@@ -41,7 +41,7 @@ test("C-UPD-38 failed staging cleanup preserves the primary snapshot error", () 
       force: true,
       beforeReplace: () => {
         chmodSync(root, 0o555);
-        replacement.snapshot();
+        replacement.moveAsideForReplacement();
       },
     });
   } catch (err) {
@@ -50,7 +50,9 @@ test("C-UPD-38 failed staging cleanup preserves the primary snapshot error", () 
     chmodSync(root, 0o755);
   }
   expect(error?.message).toContain("EACCES");
-  expect(error?.message).toContain(".crew-rollback-");
-  expect(readdirSync(root).filter((name) => name.startsWith(".crew-staging-"))).toHaveLength(1);
+  const staging = readdirSync(root).filter((name) => name.startsWith(".crew-staging-"));
+  expect(staging).toHaveLength(1);
+  expect(error?.message).toContain("could not remove staging directory");
+  expect(error?.message).toContain(join(root, staging[0]!));
   expect(readFileSync(join(dest, "SKILL.md"), "utf8")).toContain("prior bytes");
 });

@@ -1478,7 +1478,12 @@ On every `crew update` run, for each group of state entries sharing
    replacements: remove copies newly created by the attempt and restore
    replaced copies, including their markers and symlinks. Leave targets
    that were not changed alone. If restoration fails, report the failure
-   and retain any prior copy at the reported recovery path.
+   and retain any prior copy at the reported recovery path. If cleanup of an
+   owned rollback directory fails, report its leftover path without changing
+   the install outcome: append the diagnostic to a failed child’s error, or
+   include it in an optional `warnings` array on the successful `added`
+   re-expansion row in JSON and display it in human output. Omit `warnings`
+   when cleanup succeeds.
 3. For each skill in state attributed to this tap whose directory is
    **no longer present** under the resolved root: reports `source_gone`
    and leaves the local install untouched (per the upstream-deletion

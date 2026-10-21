@@ -8,6 +8,7 @@ export interface TapReexpandRow {
   readonly scope: Scope;
   readonly kind: "added" | "would_add" | "source_gone" | "tap_error";
   readonly tap: string;
+  readonly warnings?: readonly string[];
   readonly error?: { readonly code: string; readonly message: string };
 }
 
@@ -23,6 +24,7 @@ export type InstallNewChild = (args: {
   readonly projectRoot: string | null;
   readonly ref: string | null;
   readonly pinned: boolean;
+  readonly onWarning?: (warning: string) => void;
 }) => StateEntry | null;
 
 export interface TapReexpandResult {

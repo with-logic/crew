@@ -1,7 +1,15 @@
 /** New-child replacement receipts preserve recovery data through real failures (§10.1.1). */
 
 import { expect, test } from "bun:test";
-import { chmodSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { ChildReplacement } from "../../../src/install/new-tap-child/replacement.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
@@ -16,7 +24,7 @@ test("C-UPD-38 an unsuccessful new receipt never removes a different writer's co
   const root = makeTempDir();
   const dest = join(root, "newbie");
   const replacement = new ChildReplacement(dest);
-  replacement.snapshot();
+  replacement.moveAsideForReplacement();
   mkdirSync(dest);
   writeFileSync(join(dest, "mine"), "other writer");
   expect(replacement.rollback()).toBeNull();
@@ -24,11 +32,11 @@ test("C-UPD-38 an unsuccessful new receipt never removes a different writer's co
   expect(readFileSync(join(dest, "mine"), "utf8")).toBe("other writer");
 });
 
-test("C-UPD-38 failed snapshot access aborts before replacing prior bytes", () => {
+test("C-UPD-38 failed move-aside access aborts before replacing prior bytes", () => {
   const { root, dest, replacement } = prior();
   chmodSync(root, 0o000);
   try {
-    expect(() => replacement.snapshot()).toThrow("EACCES");
+    expect(() => replacement.moveAsideForReplacement()).toThrow("EACCES");
   } finally {
     chmodSync(root, 0o755);
   }
@@ -37,23 +45,30 @@ test("C-UPD-38 failed snapshot access aborts before replacing prior bytes", () =
   expect(readFileSync(join(dest, "SKILL.md"), "utf8")).toContain("prior bytes");
 });
 
-test("C-UPD-38 an incomplete snapshot is discarded without touching the original", () => {
+test("C-UPD-38 replacement moves unreadable prior bytes without duplicating their inode", () => {
   const { root, dest, replacement } = prior();
+  const original = lstatSync(join(dest, "SKILL.md"));
   chmodSync(join(dest, "SKILL.md"), 0o000);
+  replacement.moveAsideForReplacement();
+  const temporary = readdirSync(root).find((name) => name.startsWith(".crew-rollback-"))!;
+  const moved = join(root, temporary, "prior", "SKILL.md");
   try {
-    expect(() => replacement.snapshot()).toThrow("EACCES");
+    expect(existsSync(dest)).toBe(false);
+    expect(lstatSync(moved).ino).toBe(original.ino);
+    expect(lstatSync(moved).mode & 0o777).toBe(0);
   } finally {
-    chmodSync(join(dest, "SKILL.md"), 0o644);
+    chmodSync(moved, 0o644);
   }
   expect(replacement.rollback()).toBeNull();
-  replacement.cleanup();
+  expect(replacement.cleanup()).toBeNull();
   expect(readdirSync(root)).toEqual(["newbie"]);
-  expect(readFileSync(join(dest, "SKILL.md"), "utf8")).toContain("prior bytes");
+  expect(lstatSync(join(dest, "SKILL.md")).ino).toBe(original.ino);
 });
 
 test("C-UPD-38 failed restoration retains and reports the complete backup", () => {
   const { root, dest, replacement } = prior();
-  replacement.snapshot();
+  replacement.moveAsideForReplacement();
+  mkdirSync(dest, { recursive: true });
   writeFileSync(join(dest, "SKILL.md"), "replacement bytes");
   chmodSync(root, 0o555);
   try {
@@ -85,15 +100,39 @@ test("C-UPD-38 failure removing a new copy reports rollback without claiming a b
 
 test("C-UPD-38 backup cleanup failure cannot change a successful outcome", () => {
   const { root, dest, replacement } = prior();
-  replacement.snapshot();
+  replacement.moveAsideForReplacement();
+  mkdirSync(dest, { recursive: true });
   writeFileSync(join(dest, "SKILL.md"), "success bytes");
+  const temporary = readdirSync(root).find((name) => name.startsWith(".crew-rollback-"))!;
   chmodSync(root, 0o555);
   try {
-    expect(() => replacement.cleanup()).not.toThrow();
+    const warning = replacement.cleanup();
+    expect(warning).toContain("could not remove rollback directory");
+    expect(warning).toContain(join(root, temporary));
     expect(readFileSync(join(dest, "SKILL.md"), "utf8")).toBe("success bytes");
   } finally {
     chmodSync(root, 0o755);
   }
   replacement.cleanup();
   expect(readdirSync(root)).toEqual(["newbie"]);
+});
+
+test("C-UPD-38 cleanup diagnostics escape controls and redact credentials at their producer", () => {
+  const root = join(makeTempDir(), "controls\n\r\x1b\x7f\x85", "?token=cleanup-secret");
+  const dest = makeSkill(root, "newbie", skillFrontmatter({ name: "newbie" }));
+  const replacement = new ChildReplacement(dest);
+  replacement.moveAsideForReplacement();
+  chmodSync(root, 0o555);
+  try {
+    const warning = replacement.cleanup()!;
+    expect(warning).toContain("could not remove rollback directory");
+    expect(warning).toContain("controls\\x0a\\x0d\\x1b\\x7f\\x85");
+    for (const control of ["\n", "\r", "\x1b", "\x7f", "\x85"])
+      expect(warning).not.toContain(control);
+    expect(warning).not.toContain("cleanup-secret");
+    expect(warning).toContain("token=***");
+  } finally {
+    chmodSync(root, 0o755);
+    replacement.cleanup();
+  }
 });
