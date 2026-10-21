@@ -24,6 +24,8 @@ import { tapClonePath } from "../../src/core/repo-path.ts";
 import { runGit } from "../../src/git/exec.ts";
 import { isDirectory, listDir } from "../../src/util/fs.ts";
 
+export const FIXTURE_TIMEOUT_MS = 60_000;
+
 const tempDirs = new Set<string>();
 
 /** Create a fresh tmp dir owned by this test runner. */
@@ -37,7 +39,7 @@ export function makeTempDir(prefix: string = "crew-test-"): string {
 function makeRemovable(path: string): void {
   const stat = lstatSync(path, { throwIfNoEntry: false });
   if (!stat?.isDirectory()) return;
-  chmodSync(path, 0o700);
+  if ((stat.mode & 0o700) !== 0o700) chmodSync(path, 0o700);
   for (const entry of readdirSync(path)) makeRemovable(join(path, entry));
 }
 
