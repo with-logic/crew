@@ -23,6 +23,7 @@ import type { StateEntry } from "../../../core/types.ts";
 import { hasUsableProjectRoot } from "../../../state/validation.ts";
 import { redactText, sanitizeLine } from "../../../util/redact.ts";
 import type { Finding } from "../checks.ts";
+import { inventoryDirectory } from "./filesystem.ts";
 import { scanMarkers } from "./scan.ts";
 
 export interface MarkerEntry {
@@ -47,7 +48,7 @@ export function buildMarkerIndex(
   for (const e of stateEntries) {
     if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
-  const roots = [...projectRoots];
+  const roots = [...projectRoots].filter((root) => inventoryDirectory(root, inventoryFindings));
   for (const adapter of ALL_AGENTS) {
     const sharedBases = new Map<string, boolean>();
     const sharesUserBase = (root: string): boolean => {
@@ -71,7 +72,6 @@ export function buildMarkerIndex(
       markers.push({ record: rec });
     }
     for (const root of roots) {
-      if (!existsSync(root)) continue;
       const projectInventory = scanMarkers(adapter, "project", root);
       for (const [key, finding] of projectInventory.findings) inventoryFindings.set(key, finding);
       const projectBaseIsShared =

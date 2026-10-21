@@ -2,10 +2,10 @@
 import { join } from "node:path";
 import { type AgentAdapter, baseFor, type InstalledSkillRecord } from "../../../agents/adapter.ts";
 import type { Scope } from "../../../core/types.ts";
-import { isDirectory, listDir } from "../../../util/fs.ts";
 import { readJson } from "../../../util/json.ts";
 import { redactText, sanitizeLine } from "../../../util/redact.ts";
 import type { Finding } from "../checks.ts";
+import { inventoryDirectory, inventoryNames } from "./filesystem.ts";
 import { isDoctorMarker } from "./validate.ts";
 
 /**
@@ -21,9 +21,9 @@ export function scanMarkers(
   const records: InstalledSkillRecord[] = [];
   const findings = new Map<string, Finding>();
   if (base === "") return { records, findings };
-  for (const name of listDir(base)) {
+  for (const name of inventoryNames(base, findings)) {
     const installDir = join(base, name);
-    if (!isDirectory(installDir)) continue;
+    if (!inventoryDirectory(installDir, findings)) continue;
     const path = join(installDir, ".crew.json");
     let marker: unknown = null;
     try {
