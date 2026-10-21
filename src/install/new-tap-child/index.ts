@@ -4,17 +4,18 @@
  * Stages the child into the store, runs the install algorithm for
  * every target the rest of the tap was installed into, and returns a
  * fresh state entry only when every applicable target group succeeds.
- * Target-group failures name affected targets; staging errors can occur earlier.
- * Failed children have no state entry, so later re-expansion retries them.
+ * Target-group failures restore changed copies and name affected targets.
+ * Staging errors can occur earlier; failed children remain retryable in state.
  */
 
-import { type AgentAdapter, baseFor } from "../agents/adapter.ts";
-import { installSkillIntoAgents } from "../agents/install.ts";
-import { agentByName } from "../agents/registry.ts";
-import { CrewError, normalizeLocalError } from "../core/errors.ts";
-import type { Scope, StateEntry, TapConfig } from "../core/types.ts";
-import { stageIntoStore } from "../sources/store.ts";
-import { nowIso } from "../util/time.ts";
+import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
+import { installSkillIntoAgents } from "../../agents/install.ts";
+import { agentByName } from "../../agents/registry.ts";
+import { CrewError, normalizeLocalError } from "../../core/errors.ts";
+import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
+import { stageIntoStore } from "../../sources/store.ts";
+import { nowIso } from "../../util/time.ts";
+import { ChildReplacement } from "./replacement.ts";
 
 export function installNewTapChild(
   args: {
@@ -52,9 +53,12 @@ export function installNewTapChild(
   }
   const failures: string[] = [];
   let firstFailure: CrewError | null = null;
-  for (const group of groups.values()) {
+  const replacements: ChildReplacement[] = [];
+  for (const [dest, group] of groups) {
+    const replacement = new ChildReplacement(dest);
+    replacements.push(replacement);
     try {
-      installSkillIntoAgents({
+      const outcome = installSkillIntoAgents({
         agents: group,
         scope: args.scope,
         cwd: childCwd,
@@ -66,7 +70,9 @@ export function installNewTapChild(
         resolvedSha: args.resolvedSha,
         contentHash: staged.contentHash,
         force,
+        beforeReplace: () => replacement.snapshot(),
       });
+      replacement.installed = outcome.kind === "installed";
       for (const a of group) successfulTargets.push(a.name);
     } catch (err) {
       const ce = normalizeLocalError(err);
@@ -76,10 +82,13 @@ export function installNewTapChild(
   }
   // §10.1.1: a partial state entry would hide the failed targets on retry.
   if (firstFailure) {
-    if (successfulTargets.length > 0)
-      failures.push(`copies remain for successful targets: ${successfulTargets.join(", ")}`);
-    throw new CrewError(firstFailure.code, failures.join("; "));
+    for (const replacement of replacements.reverse()) {
+      const failure = replacement.rollback();
+      if (failure) failures.push(failure);
+    }
   }
+  for (const replacement of replacements) replacement.cleanup();
+  if (firstFailure) throw new CrewError(firstFailure.code, failures.join("; "));
   if (successfulTargets.length === 0) return null;
   return {
     name: args.skillName,

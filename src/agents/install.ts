@@ -38,6 +38,8 @@ export interface InstallInput {
   readonly resolvedSha: string | null;
   readonly contentHash: string;
   readonly force: boolean;
+  /** Internal receipt hook, after safety checks and staging, before replacement. */
+  readonly beforeReplace?: (dest: string) => void;
 }
 
 /** Outcome of one physical install (one `dest`). */
@@ -136,6 +138,7 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
     };
     writeJson(join(staging, ".crew.json"), marker);
 
+    input.beforeReplace?.(dest);
     atomicReplace(staging, dest);
   } catch (err) {
     try {
