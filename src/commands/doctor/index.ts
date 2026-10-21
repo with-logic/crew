@@ -65,8 +65,9 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   // file we could not read would discard whatever the user has there.
   const shouldApplyRepairs = repair && !dryRun;
   const configReadable = config !== null;
-  const markerInventoryComplete = !markerInventoryBlocksRepair;
-  const applied = shouldApplyRepairs && configReadable && markerInventoryComplete;
+  // Emitted marker findings leave reconstruction and store cleanup unable to identify every live install.
+  const markerInventoryHasNoFindings = !markerInventoryBlocksRepair;
+  const applied = shouldApplyRepairs && configReadable && markerInventoryHasNoFindings;
   const repairs: AutoupdateRepair[] = applied ? applyRepairs(markers, home) : [];
 
   const human = renderDoctor(

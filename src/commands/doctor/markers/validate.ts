@@ -1,7 +1,7 @@
 /** Validate parsed marker values before doctor trusts them to rebuild state/config (§7.5, §11.2). */
-import { parseTapEntry } from "../../../config/taps.ts";
 import type { Marker } from "../../../core/types.ts";
 import { validateFrontmatterName } from "../../../skill/validate.ts";
+import { type MarkerTapMetadata, markerTapConfig } from "./tap.ts";
 
 const MARKER_SCHEMA_VERSION: Marker["schema_version"] = 1;
 const STRING_FIELDS = {
@@ -43,16 +43,7 @@ export function isDoctorMarker(value: unknown): value is Marker {
   }
   try {
     validateFrontmatterName({ name: marker["name"] as string });
-    parseTapEntry({
-      name: marker["tap_name"] as string,
-      kind: marker["tap_kind"] as string,
-      url: marker["tap_url"] as string,
-      subpath: marker["tap_subpath"] as string,
-      path: marker["tap_path"] as string,
-      ...(marker["tap_discovery"] === undefined
-        ? {}
-        : { discovery: marker["tap_discovery"] as string }),
-    });
+    markerTapConfig(marker as MarkerTapMetadata);
     return true;
   } catch {
     return false;

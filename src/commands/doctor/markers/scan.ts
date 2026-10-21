@@ -8,6 +8,10 @@ import { redactText, sanitizeLine } from "../../../util/redact.ts";
 import type { Finding } from "../checks.ts";
 import { isDoctorMarker } from "./validate.ts";
 
+/**
+ * Return valid records and path-keyed findings for one adapter/scope. Missing
+ * markers (ENOENT) are omitted; unreadable/invalid markers emit findings that block repair.
+ */
 export function scanMarkers(
   adapter: AgentAdapter,
   scope: Scope,

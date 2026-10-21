@@ -2718,9 +2718,9 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-11e | §11.2 | `repairs` appears in `--json` output for any `--repair` run that applies repairs, including as an empty array when an unparseable config prevented applying any; a plain or `--dry-run` run omits the field. |
 | C-STATE-11f | §11.2 | A reconciliation whose confirming scheduler query cannot run is reported as `autoupdate_repair_failed` carrying the platform error, not as a successful repair. An unanswerable query is not a confirmed "not loaded". |
 | C-STATE-12 | §11.2 | `crew doctor --repair --dry-run` reports the findings a repair would address and changes nothing: state, config, and the store are byte-identical afterward. |
-| C-STATE-14 | §11.2 | Unreadable or invalid markers produce path-specific error findings without aborting doctor; repair and repair previews apply no repairs or destructive inference from the incomplete inventory. State, config and store remain unchanged, and the run exits 1. A genuinely missing marker remains repairable drift. |
 | C-STATE-12a | §11.2 | Findings `--repair` cannot fix (`customized`, `agent_missing`, `config_invalid`, `missing_project_root`) are excluded from both the dry-run "would address" count and the post-repair "addressed" count; an unrepairable error-level finding keeps the exit code non-zero after `--repair`. |
 | C-STATE-13 | §6 | `crew cache clean --dry-run` reports the bytes and orphan store entries a clean would free and deletes nothing. |
+| C-STATE-14 | §11.2 | Unreadable or invalid markers produce path-specific error findings without aborting doctor; repair and repair previews apply no repairs or destructive inference from the incomplete inventory. State, config and store remain unchanged, and the run exits 1. A genuinely missing marker remains repairable drift. |
 
 #### C-AUTO: Autoupdate (§10.2)
 

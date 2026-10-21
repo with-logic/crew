@@ -28,6 +28,10 @@ export interface MarkerEntry {
   projectRoot?: string;
 }
 
+/**
+ * Return deduplicated markers and findings across user and known project inventories.
+ * Absent markers add neither result; any emitted finding prevents repair from this inventory.
+ */
 export function buildMarkerIndex(
   stateEntries: readonly StateEntry[],
   cwd: string,
