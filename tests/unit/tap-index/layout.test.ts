@@ -87,9 +87,7 @@ describe("indexTap", () => {
 
     const idx = indexTap(pathTap(root), "/unused");
     expect([...idx.skills.keys()]).toEqual(["good"]);
-    expect(idx.skipped).toMatchObject([
-      { path: join(skillsDir, "bad"), tapRelativePath: "skills/bad", code: "invalid_skill" },
-    ]);
+    expect(idx.skipped).toMatchObject([{ path: join(skillsDir, "bad"), code: "invalid_skill" }]);
   });
 
   test("skills/ with namespace dir: skill + namespace indexed", () => {

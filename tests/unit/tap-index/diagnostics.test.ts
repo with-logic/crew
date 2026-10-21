@@ -11,12 +11,7 @@ function pathTap(path: string): TapConfig {
   return { name: "local", kind: "path", path, url: "", subpath: "", registered: true };
 }
 
-for (const [relative, namespace] of [
-  ["", null],
-  ["bad", null],
-  ["skills/team/bad", "team"],
-  ["products/deep/bad", null],
-] as const) {
+for (const relative of ["", "bad", "skills/team/bad", "products/deep/bad"]) {
   test(`C-TAP-08d rejected name at ${relative || "root"} retains its location`, () => {
     const root = makeTempDir();
     const dir = makeSkill(root, relative || ".", skillFrontmatter({ name: "BAD_NAME" }));
@@ -27,12 +22,11 @@ for (const [relative, namespace] of [
     expect(index.skipped).toEqual([
       {
         path: dir,
-        tapRelativePath: relative,
-        namespace,
         code: "invalid_skill",
-        message: expect.stringContaining("BAD_NAME"),
+        message: expect.stringContaining("`name` has invalid characters"),
       },
     ]);
+    expect(index.skipped[0]!.message).not.toContain("BAD_NAME");
   });
 }
 
@@ -52,15 +46,11 @@ test("C-TAP-08d malformed and linked manifests retain diagnostics beside healthy
     expect.arrayContaining([
       {
         path: linked,
-        tapRelativePath: "linked",
-        namespace: null,
         code: "invalid_skill",
         message: expect.stringContaining("must not be a symbolic link"),
       },
       {
         path: malformed,
-        tapRelativePath: "malformed",
-        namespace: null,
         code: "invalid_skill",
         message: expect.stringContaining("isn't valid YAML"),
       },
@@ -70,13 +60,13 @@ test("C-TAP-08d malformed and linked manifests retain diagnostics beside healthy
 
 test("C-TAP-22b invalid standard candidates prevent recursive fallback", () => {
   const root = makeTempDir();
-  makeSkill(root, "bad", "name: BAD_NAME");
+  const bad = makeSkill(root, "bad", "name: BAD_NAME");
   makeSkill(root, "products/deep/hidden", skillFrontmatter({ name: "hidden" }));
 
   const index = indexTap({ ...pathTap(root), discovery: "recursive" }, "/unused");
 
   expect(index.skills.size).toBe(0);
-  expect(index.skipped).toMatchObject([{ tapRelativePath: "bad", code: "invalid_skill" }]);
+  expect(index.skipped).toMatchObject([{ path: bad, code: "invalid_skill" }]);
 });
 
 test("C-GIST-02 owning gist layout still ignores invalid files without diagnostics", () => {
