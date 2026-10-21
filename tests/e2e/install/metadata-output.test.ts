@@ -39,12 +39,17 @@ test("local info escapes metadata while JSON retains original field values", () 
   );
   const json = captureStreams();
   expect(runCli(["info", skill, "--json"], { home, streams: json.streams })).toBe(0);
-  expect(JSON.parse(json.stdout()).skills[0]).toMatchObject({
-    description: raw,
-    license: raw,
-    compatibility: raw,
-    homepage: raw,
-    dependencies: [raw],
+  const payload: unknown = JSON.parse(json.stdout());
+  expect(payload).toMatchObject({
+    skills: [
+      {
+        description: raw,
+        license: raw,
+        compatibility: raw,
+        homepage: raw,
+        dependencies: [raw],
+      },
+    ],
   });
   const human = captureStreams();
   expect(runCli(["info", skill], { home, streams: human.streams })).toBe(0);
@@ -72,7 +77,8 @@ test("local install, reinstall, and installed info escape descriptions without c
   );
   const json = captureStreams();
   expect(runCli(["info", "demo", "--json"], { home, streams: json.streams })).toBe(0);
-  expect(JSON.parse(json.stdout()).description).toBe(raw);
+  const payload: unknown = JSON.parse(json.stdout());
+  expect(payload).toMatchObject({ description: raw });
 });
 
 test("local invalid skill diagnostics escape metadata before wrapping", () => {
