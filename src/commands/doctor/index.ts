@@ -12,7 +12,6 @@ import { crewHome } from "../../core/paths.ts";
 import { readState } from "../../state/load.ts";
 import { redactText, sanitizeLine } from "../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
-import type { AutoupdateRepair } from "./autoupdate.ts";
 import {
   checkAgentDetection,
   checkAutoupdateDrift,
@@ -46,7 +45,6 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   const stateEntries = state.installations;
   const { markers, findings: inventoryFindings } = buildMarkerIndex(stateEntries, ctx.cwd);
   findings.push(...inventoryFindings);
-  const markerInventoryBlocksRepair = inventoryFindings.length > 0;
 
   findings.push(...checkStateMarkerDrift(stateEntries, markers));
   if (verify) findings.push(...checkContentHashDrift(markers));
@@ -66,9 +64,15 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   const shouldApplyRepairs = repair && !dryRun;
   const configReadable = config !== null;
   // Emitted marker findings leave reconstruction and store cleanup unable to identify every live install.
-  const markerInventoryHasNoFindings = !markerInventoryBlocksRepair;
-  const applied = shouldApplyRepairs && configReadable && markerInventoryHasNoFindings;
-  const repairs: AutoupdateRepair[] = applied ? applyRepairs(markers, home) : [];
+  const markerInventoryHasNoFindings = inventoryFindings.length === 0;
+  const outcome =
+    shouldApplyRepairs && configReadable && markerInventoryHasNoFindings
+      ? applyRepairs(home, ctx.cwd)
+      : { applied: false, findings: [], repairs: [] };
+  const { applied, repairs } = outcome;
+  findings.push(...outcome.findings);
+  inventoryFindings.push(...outcome.findings);
+  const markerInventoryBlocksRepair = inventoryFindings.length > 0;
 
   const human = renderDoctor(
     findings,

@@ -14,21 +14,36 @@
  */
 
 import { readConfig } from "../../config/load.ts";
+import { readState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { type AutoupdateRepair, repairAutoupdateDrift } from "./autoupdate.ts";
-import { checkAutoupdateDrift } from "./checks.ts";
-import type { MarkerEntry } from "./markers/index.ts";
+import { checkAutoupdateDrift, type Finding } from "./checks.ts";
+import { buildMarkerIndex } from "./markers/index.ts";
 import { repairStateUnderLock } from "./repair.ts";
+
+/** Whether reconstruction ran, along with fresh inventory diagnostics and scheduler outcomes. */
+export interface RepairOutcome {
+  readonly applied: boolean;
+  readonly findings: readonly Finding[];
+  readonly repairs: readonly AutoupdateRepair[];
+}
 
 /**
  * Apply every repair §11.2 permits and report what the scheduler step
  * did. Read-only doctor runs never call this — acquiring the lock
  * would create `state.json` on a fresh home (§14).
  */
-export function applyRepairs(markers: readonly MarkerEntry[], home: string): AutoupdateRepair[] {
+export function applyRepairs(home: string, cwd: string): RepairOutcome {
   return withStateLock(() => {
+    // §11.1/§14: a concurrent uninstall may have removed markers after the initial checks.
+    const { markers, findings } = buildMarkerIndex(readState(home).installations, cwd);
+    if (findings.length > 0) return { applied: false, findings, repairs: [] };
     repairStateUnderLock(markers, home);
     const fresh = readConfig(home);
-    return repairAutoupdateDrift(checkAutoupdateDrift(fresh), fresh, home);
+    return {
+      applied: true,
+      findings,
+      repairs: repairAutoupdateDrift(checkAutoupdateDrift(fresh), fresh, home),
+    };
   }, home);
 }
