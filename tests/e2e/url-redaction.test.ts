@@ -84,10 +84,48 @@ describe("credential query values never reach CLI output", () => {
         ).toBe(5);
         const output = capture.stdout() + capture.stderr();
         expect(output).not.toContain(SECRET);
-        if (json) expect(JSON.parse(capture.stdout()).error.name).toBe("source_unreachable");
+        if (json) {
+          const error = JSON.parse(capture.stdout()).error;
+          expect(error.name).toBe("source_unreachable");
+          expect(Object.keys(error).sort()).toEqual(["details", "message", "name"]);
+          expect(Object.keys(error.details)).toEqual(["url"]);
+        } else {
+          expect(output).toContain("Next step");
+          expect(output).toContain("Homecrew couldn't reach the source");
+        }
         expect(output).toContain(`${parameter}=***`);
-        expect(output).toContain("does not appear to be a git repository");
+        expect(output).toContain("couldn't clone");
       }
     },
   );
 });
+
+test.each([" ", "\n", "\r", "\t"])(
+  "C-REF-28 real local Git error masks %j suffix including raw JSON details",
+  (separator) => {
+    const url = `file://${makeTempDir()}/missing.git?token=${separator}${SECRET}`;
+    for (const json of [false, true]) {
+      const capture = captureStreams();
+      expect(
+        runCli(["tap", "add", url, "creds", ...(json ? ["--json"] : [])], {
+          home: makeCrewHome(),
+          streams: capture.streams,
+        }),
+      ).toBe(5);
+      const output = capture.stdout() + capture.stderr();
+      expect(output).not.toContain(SECRET);
+      expect(output).toContain("couldn't clone");
+      expect(output).toContain("token=***");
+      if (json) {
+        const error = JSON.parse(capture.stdout()).error;
+        expect(error.name).toBe("source_unreachable");
+        expect(Object.keys(error.details)).toEqual(["url"]);
+        expect(error.details.url).not.toContain(SECRET);
+        expect(error.details.url).toBe(`${url.slice(0, url.indexOf("?token="))}?token=***`);
+      } else {
+        expect(output).toContain("Next step");
+        expect(output).toContain("Homecrew couldn't reach the source");
+      }
+    }
+  },
+);
