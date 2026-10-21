@@ -6,12 +6,14 @@
  * public row shapes so JSON output stays stable.
  */
 
-export interface PerAgentUpdate {
-  readonly agent: string;
-  readonly kind: "installed" | "up_to_date" | "skipped" | "failed";
-  readonly error?: { code: string; message: string };
-  readonly reason?: string;
-}
+export type PerAgentUpdate =
+  | { readonly agent: string; readonly kind: "installed" | "up_to_date" }
+  | { readonly agent: string; readonly kind: "skipped"; readonly reason: string }
+  | {
+      readonly agent: string;
+      readonly kind: "failed";
+      readonly error: { code: string; message: string };
+    };
 
 export type Outcome =
   | { kind: "up_to_date" }

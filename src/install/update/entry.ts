@@ -44,12 +44,12 @@ export function updateOneEntry(
     let next = state;
     // §10.1: one revision covers all targets; retain it until failed targets can retry.
     if (outcome.kind === "updated" && !hardFailure) {
-      const successfulTargets = outcome.per_target.map((t) => t.agent);
+      const nonFailedTargets = outcome.per_target.map((t) => t.agent);
       const newEntry = rebuildStateEntry(
         entry,
         outcome.new_sha,
         outcome.content_hash,
-        successfulTargets,
+        nonFailedTargets,
       );
       next = upsertEntry(state, newEntry);
     }
