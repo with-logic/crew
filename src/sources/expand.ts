@@ -60,10 +60,11 @@ export interface ExpandOptions {
 
 /**
  * Expand `rootDir` into loaded skills plus any skipped children.
- * Validation failures (at any level) are recorded in `skipped`
- * rather than thrown — the caller decides exit code and output.
- * `no_skills_found` is still thrown when neither a valid skill nor
- * a validation failure is present (zero candidates).
+ * Directory validation failures (at any level) are recorded in
+ * `skipped` rather than thrown — the caller decides exit code and
+ * output. Gist files that fail validation are silently filtered out.
+ * Directory sources with no candidates, or gists with no valid files,
+ * throw `no_skills_found`.
  */
 export function expandSkills(rootDir: string, options: ExpandOptions = {}): ExpansionResult {
   if (options.gist) {

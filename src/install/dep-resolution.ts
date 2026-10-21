@@ -45,12 +45,15 @@ export interface SiblingHit {
  * must be discovered there, not in the live clone: staging HEAD's bytes
  * while recording the parent's SHA would make state describe a
  * provenance the content doesn't have (§9 step 3).
+ * `gistSiblings` is scoped to one parent's dependency batch, so cached
+ * paths never outlive that parent's materialized tree.
  */
 export function findSiblingDep(
   parent: { tap: TapConfig; tapRelativePath: string; parentDir?: string | undefined },
   depName: string,
   home: string,
   config: Config,
+  gistSiblings: Map<string, readonly LoadedSkill[]> = new Map(),
 ): SiblingHit | null {
   const tapClone = tapClonePath(parent.tap, home);
   const tapRoot = tapRootDir(tapClone, parent.tap);
@@ -68,7 +71,12 @@ export function findSiblingDep(
   const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
   const matches: { dirName: string; siblingDir: string; loaded: LoadedSkill }[] = [];
   if (isGistTap(parent.tap)) {
-    for (const loaded of scanGist(siblingParent)) {
+    let siblings = gistSiblings.get(siblingParent);
+    if (siblings === undefined) {
+      siblings = scanGist(siblingParent);
+      gistSiblings.set(siblingParent, siblings);
+    }
+    for (const loaded of siblings) {
       if (loaded.frontmatter.name === depName) {
         matches.push({ dirName: basename(loaded.path), siblingDir: loaded.path, loaded });
       }

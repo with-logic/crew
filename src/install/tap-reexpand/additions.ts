@@ -77,7 +77,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
     };
     if (indexHasSameSource(input.installedIndex, lookup)) continue;
 
-    // §9 step 4: discovery only validated the declared name, so a child
+    // §9 step 4: directory discovery only validated the declared name, so a child
     // can reach here with (say) no `description`. Validate in full
     // before reporting or installing, so the preview and the real run
     // agree and an invalid child never lands on disk.

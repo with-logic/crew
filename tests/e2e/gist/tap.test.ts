@@ -45,12 +45,18 @@ test("C-GIST-04 registers, searches, previews, and installs declared names", () 
       .hits.map((hit: { name: string }) => hit.name)
       .sort(),
   ).toEqual(["build", "prd"]);
-  for (const reference of ["snippets", "snippets/build", GIST_URL]) {
+  for (const [reference, expectedNames] of [
+    ["snippets", ["build", "prd"]],
+    ["snippets/build", ["build"]],
+    [GIST_URL, ["build", "prd"]],
+  ] as const) {
     const info = cli(["info", reference, "--json"]);
     expect(info.code).toBe(0);
-    expect(JSON.parse(info.stdout).skills.map((skill: { name: string }) => skill.name)).toContain(
-      "build",
-    );
+    expect(
+      JSON.parse(info.stdout)
+        .skills.map((skill: { name: string }) => skill.name)
+        .sort(),
+    ).toEqual(expectedNames);
   }
   expect(cli(["install", "snippets/build", "--agent", "claude-code"]).code).toBe(0);
   expect(readFileSync(join(dest, "build", "SKILL.md"), "utf8")).toBe(bytes);

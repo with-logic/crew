@@ -6,7 +6,7 @@
  * `./parent-tree.ts`.
  */
 
-import type { Config, TapConfig, TapSource } from "../../../core/types.ts";
+import type { Config, LoadedSkill, TapConfig, TapSource } from "../../../core/types.ts";
 import { parseRef } from "../../../refs/parse.ts";
 import { withAcquiredTap } from "../../../sources/acquire/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
@@ -63,12 +63,14 @@ export function enqueueDeps(
     // keeps a batched walk equivalent to resolving one at a time.
     const found = withParentSkillDir(parent, home, (parentDir) => {
       const hits: PendingItem[] = [];
+      const gistSiblings = new Map<string, readonly LoadedSkill[]>();
       for (const dep of bare) {
         const sibling = findSiblingDep(
           { tap: parent.tap, tapRelativePath: parent.tapRelativePath, parentDir },
           dep.source.name,
           home,
           current,
+          gistSiblings,
         );
         // A miss falls through to the cross-tap search below, which
         // does not need the parent's tree.

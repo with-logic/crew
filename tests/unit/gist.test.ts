@@ -63,7 +63,14 @@ test("C-GIST-03 validates every filename and ignores invalid files, directories,
 test("C-GIST-03 empty valid set produces no_skills_found", () => {
   const root = makeTempDir();
   writeFileSync(join(root, "README"), "readme");
-  expect(() => expandSkills(root, { gist: true })).toThrow("no valid skills found");
+  let caught: unknown;
+  try {
+    expandSkills(root, { gist: true });
+  } catch (error) {
+    caught = error;
+  }
+  expect(caught).toBeInstanceOf(CrewError);
+  expect((caught as CrewError).code).toBe("no_skills_found");
 });
 
 test("C-GIST-03 explicit file mode rejects directories, symlinks, and special files", () => {
