@@ -93,7 +93,7 @@ test("known-tap namespace and install references are escaped before columns; JSO
     runCli(["search", "catalog"], { home, streams: human.streams, width: terminalWidth }),
   ).toBe(0);
   const lines = human.stdout().split("\n");
-  expect(lines).toContain(`    ${reference}  ${summary} (crew install trusted/${reference})`);
+  expect(lines).toContain(`    ${reference}  ${summary} (crew install 'trusted/${reference}')`);
   expect(lines).toContain(
     `    ${"healthy".padEnd(reference.length)}  ${summary} (crew install trusted/healthy)`,
   );
