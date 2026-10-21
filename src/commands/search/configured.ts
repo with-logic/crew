@@ -41,7 +41,7 @@ function collectHitsFromTap(
     // reporting it as "couldn't be reached" would tell the user to
     // retry when online, which never fixes it. Name it for what it is.
     if (err instanceof CrewError && err.code === "invalid_ref") {
-      warnings.push(`warning: tap \`${tap.name}\` skipped — ${err.message}`);
+      warnings.push(`warning: tap \`${sanitizeLine(tap.name)}\` skipped — ${err.message}`);
       return;
     }
     // Source-file read failures carry their local path; acquisition failures do not.
@@ -56,7 +56,7 @@ function collectHitsFromTap(
       return;
     }
     warnings.push(
-      `warning: tap \`${tap.name}\` isn't cloned yet and couldn't be reached — skipping. run \`crew tap update ${tap.name}\` when you're back online.`,
+      `warning: tap \`${sanitizeLine(tap.name)}\` isn't cloned yet and couldn't be reached — skipping. run \`crew tap update ${sanitizeLine(tap.name)}\` when you're back online.`,
     );
     return;
   }
