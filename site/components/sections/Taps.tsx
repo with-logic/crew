@@ -1,3 +1,5 @@
+/** Tap layouts and team setup explained (§9 step 5, §16.1). */
+
 import { Button } from "../primitives/Button";
 import { Acc, Cmt, CodeBlock, Key, Ok, Prompt } from "../primitives/CodeBlock";
 import { Container } from "../primitives/Container";
@@ -46,6 +48,9 @@ export function Taps() {
               root. For trusted repos with non-standard nesting,{" "}
               <code>crew tap add --recursive</code> keeps those standard layouts first and falls
               back to bounded recursive discovery.
+            </p>
+            <p className={styles.note}>
+              GitHub gist URLs work too: each valid top-level file becomes a skill.
             </p>
             <p className={styles.note}>
               Group related skills into <strong>namespaces</strong>: <code>skills/marketing/*</code>

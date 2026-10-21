@@ -232,6 +232,8 @@ acme-skills/
 
 Any top-level directory with a valid `SKILL.md` is a skill; the install name
 comes from the `name` field inside `SKILL.md`. Everything else is ignored.
+GitHub gists work too: `crew install https://gist.github.com/<owner>/<id>` turns each valid top-level skill file into its own installed `SKILL.md`.
+
 Prefer to keep skills under a `skills/` directory? That works too — if
 `skills/` exists at the root, Homecrew indexes its children instead of the root.
 For trusted repos that don't follow either layout, `crew tap add --recursive`

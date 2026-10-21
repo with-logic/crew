@@ -12,7 +12,7 @@
  *     longer referenced by state or any marker.
  */
 
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { crewHome, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
@@ -31,7 +31,7 @@ export interface StoredSkill {
 }
 
 /**
- * Copy `sourceDir` into the store under `<name>@<short-sha>`. If the
+ * Stage a source directory, or a gist file as SKILL.md, under `<name>@<short-sha>`. If the
  * entry already exists with a matching content hash, the existing one
  * is reused.
  */
@@ -41,6 +41,7 @@ export function stageIntoStore(
   resolvedSha: string | null,
   home: string = crewHome(),
   sourceHash?: string,
+  file = false,
 ): StoredSkill {
   // A path source with no SHA uses the hash itself as the short id so
   // different path-installed skills don't collide in the store.
@@ -49,7 +50,7 @@ export function stageIntoStore(
   const shortSha = shortShaFor(sourceDir, resolvedSha, sourceHash);
   const storePath = storeEntryPath(name, shortSha, home);
 
-  if (existsSync(storePath)) {
+  if (existsSync(storePath) && (!file || isNormalizedFile(storePath, sourceDir))) {
     progress(`reusing store entry ${safePath(name)}@${shortSha}`);
     const existingHash = hashDirectory(storePath);
     return { storePath, contentHash: existingHash, shortSha, reused: true };
@@ -58,12 +59,27 @@ export function stageIntoStore(
 
   const staging = `${storePath}.staging-${Date.now()}`;
   if (exists(staging)) rmrf(staging);
-  copyTree(sourceDir, staging, { stripRootMarker: true });
+  if (file) {
+    ensureDir(staging);
+    copyFileSync(sourceDir, join(staging, "SKILL.md"));
+  } else copyTree(sourceDir, staging, { stripRootMarker: true });
   ensureDir(join(storePath, "..")); // parents
   atomicReplace(staging, storePath);
 
   const contentHash = hashDirectory(storePath);
   return { storePath, contentHash, shortSha, reused: false };
+}
+
+/** §9 step 8: legacy directory entries cannot bypass gist file normalization. */
+function isNormalizedFile(storePath: string, sourceFile: string): boolean {
+  const entries = readdirSync(storePath, { withFileTypes: true });
+  const manifest = entries[0];
+  return (
+    entries.length === 1 &&
+    manifest?.name === "SKILL.md" &&
+    manifest.isFile() &&
+    readFileSync(join(storePath, "SKILL.md")).equals(readFileSync(sourceFile))
+  );
 }
 
 /**

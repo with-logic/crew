@@ -1,3 +1,5 @@
+/** Tap command help and supported source layouts (§16.1, §9 step 5). */
+
 import type { CommandHelp } from "./types.ts";
 
 export const tapHelp: CommandHelp = {
@@ -81,7 +83,7 @@ export const tapHelp: CommandHelp = {
     {
       heading: "What a tap looks like",
       body: [
-        "A tap is just a git repo (or a local folder) where each subfolder with a `SKILL.md` is a skill. The `name` field inside `SKILL.md` is the install name. No manifest, no registry, no setup. If you can put it on GitHub, you can share it.",
+        "A directory tap is a git repo (or a local folder) where skills have a `SKILL.md` at their root. The `name` field inside `SKILL.md` is the install name. No manifest, no registry, no setup. If you can put it on GitHub, you can share it.",
         "Usually, skills live at the root of the repo:",
         {
           literal: true,
@@ -113,7 +115,8 @@ export const tapHelp: CommandHelp = {
           ],
         },
         "Once the tap is in place you use its skills the same way either way — `crew install python-testing`, or `crew install backend-skills/python-testing` if you want to be specific.",
-        "README, LICENSE, CI configs, whatever else you keep in the repo is fine — Homecrew only looks for subfolders with a `SKILL.md`.",
+        "README, LICENSE, CI configs, whatever else you keep in a directory tap is fine — Homecrew discovers skills through their `SKILL.md` files.",
+        "A GitHub gist tap uses top-level regular files instead: every file with valid skill frontmatter becomes a skill under its declared `name`, regardless of filename or extension. Other files, directories, and symlinks are ignored.",
       ],
     },
     {

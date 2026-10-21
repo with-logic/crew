@@ -1,7 +1,8 @@
 /**
  * Directory expansion (§9 step 5).
  *
- * Three cases, checked in order:
+ * Gists use fully validated top-level files (§8.2). Other sources use
+ * three directory cases, checked in order:
  *   1. Root `SKILL.md` → one skill.
  *   2. Root `skills/` subdirectory present → walk under `skills/`:
  *      - Each immediate child with a `SKILL.md` is a skill.
@@ -27,6 +28,7 @@ import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
+import { scanGist } from "./gist.ts";
 import { findRecursiveSkillDirs } from "./recursive.ts";
 
 /** A skill directory that couldn't be loaded. */
@@ -47,6 +49,8 @@ export interface ExpansionResult {
 
 /** Options that affect multi-skill discovery. */
 export interface ExpandOptions {
+  /** Use GitHub gist's top-level file layout (§8.2). */
+  readonly gist?: boolean;
   /**
    * If standard expansion finds no candidates, search recursively for
    * skill-shaped directories.
@@ -56,12 +60,20 @@ export interface ExpandOptions {
 
 /**
  * Expand `rootDir` into loaded skills plus any skipped children.
- * Validation failures (at any level) are recorded in `skipped`
- * rather than thrown — the caller decides exit code and output.
- * `no_skills_found` is still thrown when neither a valid skill nor
- * a validation failure is present (zero candidates).
+ * Directory validation failures (at any level) are recorded in
+ * `skipped` rather than thrown — the caller decides exit code and
+ * output. Gist files that fail validation are silently filtered out.
+ * Directory sources with no candidates, or gists with no valid files,
+ * throw `no_skills_found`.
  */
 export function expandSkills(rootDir: string, options: ExpandOptions = {}): ExpansionResult {
+  if (options.gist) {
+    const valid = scanGist(rootDir);
+    if (valid.length > 0) return { valid, skipped: [] };
+    throw new CrewError("no_skills_found", `no valid skills found at \`${rootDir}\``, {
+      path: rootDir,
+    });
+  }
   if (hasSkillMd(rootDir)) {
     const valid: LoadedSkill[] = [];
     const skipped: SkippedSkill[] = [];

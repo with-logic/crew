@@ -18,12 +18,13 @@
  * so state paths remain relative to the tap that owns them.
  */
 
-import { join, posix } from "node:path";
+import { basename, join, posix } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkill, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
+import { isGistTap, scanGist } from "../sources/gist.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
 import { attributeRef } from "./tap-attribution.ts";
 
@@ -35,6 +36,9 @@ export interface SiblingHit {
   readonly loaded: LoadedSkill;
 }
 
+/** Root → declared name → all matches, preserving duplicate-name errors (§9 step 6). */
+export type GistSiblingCache = Map<string, ReadonlyMap<string, readonly LoadedSkill[]>>;
+
 /**
  * Look for `depName` as a sibling skill of `parentTapPath`. Returns
  * null if not found (the dep walker will try cross-tap resolution next).
@@ -44,12 +48,15 @@ export interface SiblingHit {
  * must be discovered there, not in the live clone: staging HEAD's bytes
  * while recording the parent's SHA would make state describe a
  * provenance the content doesn't have (§9 step 3).
+ * `gistSiblings` shares a declared-name index for each materialized root
+ * throughout one install-set resolution, within the tree's cleanup scope.
  */
 export function findSiblingDep(
   parent: { tap: TapConfig; tapRelativePath: string; parentDir?: string | undefined },
   depName: string,
   home: string,
   config: Config,
+  gistSiblings: GistSiblingCache = new Map(),
 ): SiblingHit | null {
   const tapClone = tapClonePath(parent.tap, home);
   const tapRoot = tapRootDir(tapClone, parent.tap);
@@ -66,13 +73,17 @@ export function findSiblingDep(
   const siblingParent = join(parentDir, "..");
   const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
   const matches: { dirName: string; siblingDir: string; loaded: LoadedSkill }[] = [];
-  for (const dirName of listDir(siblingParent)) {
-    const siblingDir = join(siblingParent, dirName);
-    if (!(isDirectory(siblingDir) && hasSkillMd(siblingDir))) continue;
-    if (siblingName(siblingDir) !== depName) continue;
-    const loaded = loadSkill(siblingDir);
-    matches.push({ dirName, siblingDir, loaded });
-  }
+  if (isGistTap(parent.tap)) {
+    for (const loaded of gistMatches(siblingParent, depName, gistSiblings))
+      matches.push({ dirName: basename(loaded.path), siblingDir: loaded.path, loaded });
+  } else
+    for (const dirName of listDir(siblingParent)) {
+      const siblingDir = join(siblingParent, dirName);
+      if (!(isDirectory(siblingDir) && hasSkillMd(siblingDir))) continue;
+      if (siblingName(siblingDir) !== depName) continue;
+      const loaded = loadSkill(siblingDir);
+      matches.push({ dirName, siblingDir, loaded });
+    }
   if (matches.length === 0) return null;
   if (matches.length > 1) throw duplicateSiblingError(depName, parent.tap.name, matches);
 
@@ -91,6 +102,22 @@ export function findSiblingDep(
     config,
   );
   return { tap: attrib.tap, config: attrib.config, tapRelativePath: "", loaded: match.loaded };
+}
+
+function gistMatches(root: string, name: string, cache: GistSiblingCache): readonly LoadedSkill[] {
+  let index = cache.get(root);
+  if (index === undefined) {
+    const names = new Map<string, LoadedSkill[]>();
+    for (const loaded of scanGist(root)) {
+      const name = loaded.frontmatter.name;
+      const matches = names.get(name) ?? [];
+      matches.push(loaded);
+      names.set(name, matches);
+    }
+    index = names;
+    cache.set(root, index);
+  }
+  return index.get(name) ?? [];
 }
 
 function siblingName(path: string): string | null {

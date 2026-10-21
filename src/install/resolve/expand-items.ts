@@ -3,7 +3,9 @@
  */
 
 import type { Source, TapConfig } from "../../core/types.ts";
+import { loadSkill } from "../../skill/load.ts";
 import { expandSkills, type SkippedSkill } from "../../sources/expand.ts";
+import { isGistTap } from "../../sources/gist.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import type { PendingItem } from "./enqueue.ts";
 
@@ -31,7 +33,11 @@ export function expandSkillsAsItems(
   tracksTap: boolean,
   home: string,
 ): ExpansionItems {
-  const { valid, skipped } = expandSkills(dir, { recursive: tap.discovery === "recursive" });
+  const gist = isGistTap(tap);
+  const { valid, skipped } =
+    gist && baseTapPath.length > 0
+      ? { valid: [loadSkill(dir, true)], skipped: [] }
+      : expandSkills(dir, { recursive: tap.discovery === "recursive", gist });
   const items: PendingItem[] = [];
   for (const l of valid) {
     const subSegment = l.path === dir ? "" : l.path.slice(dir.length + 1);
@@ -40,7 +46,7 @@ export function expandSkillsAsItems(
         ? `${baseTapPath}/${subSegment}`
         : baseTapPath
       : subSegment;
-    const staged = stageIntoStore(l.path, l.frontmatter.name, resolvedSha, home);
+    const staged = stageIntoStore(l.path, l.frontmatter.name, resolvedSha, home, undefined, gist);
     items.push({
       loaded: l,
       staged,

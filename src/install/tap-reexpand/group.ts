@@ -1,8 +1,11 @@
 /** Walk one tracked tap revision and collect re-expansion outcomes (§10.1.1). */
 
+import { lstatSync } from "node:fs";
+import { join } from "node:path";
 import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
+import { isGistTap } from "../../sources/gist.ts";
 import type { InstalledSourceIndex } from "../installed-lookup.ts";
 import { groupChildrenByName } from "../tap-children.ts";
 import { collectAdditions } from "./additions.ts";
@@ -58,7 +61,20 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
   const { members, tap, home, projectRoot, cache } = input;
   const first = members[0]!;
   const children = cache.children(tap, home, acquired.rootDir);
-  const survey = surveyGroup({ members, childrenByName: groupChildrenByName(children), tap });
+  const childrenByName = groupChildrenByName(children);
+  if (isGistTap(tap)) {
+    // §10.1: a recorded file that fails validation still needs a per-entry failure.
+    for (const member of members) {
+      if (childrenByName.has(member.name)) continue;
+      const path = join(acquired.rootDir, member.source.path);
+      if (!lstatSync(path, { throwIfNoEntry: false })?.isFile()) continue;
+      if (cache.validate(path, true)?.code !== "invalid_skill") continue;
+      childrenByName.set(member.name, [
+        { name: member.name, path, tapRelativePath: member.source.path },
+      ]);
+    }
+  }
+  const survey = surveyGroup({ members, childrenByName, tap });
   const additions = collectAdditions({
     children,
     conflictedNames: survey.conflictedNames,
