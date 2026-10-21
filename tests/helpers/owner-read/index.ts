@@ -12,9 +12,8 @@ export function ownerReadChild(kind: string): {
   const target = join(makeTempDir(), "target");
   const result = Bun.spawnSync(
     [
-      "python3",
-      join(import.meta.dir, "controller.py"),
       process.execPath,
+      join(import.meta.dir, "controller.ts"),
       resolve(import.meta.dir, "../../../src/util/advisory-lock.ts"),
       target,
       kind,
