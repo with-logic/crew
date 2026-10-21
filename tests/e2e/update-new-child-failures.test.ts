@@ -111,7 +111,7 @@ for (const blocked of ["claude-code", "codex", "both"]) {
     expect(human.stdout).toContain("newbie");
     expect(human.stdout).toContain("untracked_directory");
     expect(human.stdout).toContain("1 failure");
-    expect(human.stdout.includes("copies remain")).toBe(blocked !== "both");
+    expect(human.stdout).not.toContain("copies remain");
     if (blocked !== "codex") rmSync(join(claudeRoot, "newbie"), { recursive: true });
     if (blocked !== "claude-code") rmSync(join(codexRoot, "newbie"), { recursive: true });
     expect(invoke(home, ["update", "fixture"]).code).toBe(0);
