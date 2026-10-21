@@ -5,6 +5,7 @@ import { chmodSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { runCli } from "../../src/cli/main.ts";
+import type { UpdateRow } from "../../src/install/update/types.ts";
 import { readState } from "../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
@@ -39,8 +40,8 @@ function fixture() {
   return { home, root, skill, healthy, setupCodes };
 }
 
-interface UpdateData {
-  rows: { name: string; outcome: { kind: string; error?: { message: string } } }[];
+interface UpdateJson {
+  readonly rows: readonly UpdateRow[];
 }
 
 describe("unresolvable recorded path sources", () => {
@@ -67,7 +68,7 @@ describe("unresolvable recorded path sources", () => {
         const capture = captureStreams();
         const args = ["update", "--json", ...(dryRun ? ["--dry-run"] : [])];
         expect(runCli(args, { home, streams: capture.streams })).toBe(0);
-        const data = JSON.parse(capture.stdout()) as UpdateData;
+        const data = JSON.parse(capture.stdout()) as UpdateJson;
         expect(data.rows.find((row) => row.name === "demo")?.outcome.kind).toBe("source_gone");
         expect(data.rows.find((row) => row.name === "healthy")?.outcome.kind).toBe(
           dryRun ? "would_update" : "updated",
@@ -84,22 +85,25 @@ describe("unresolvable recorded path sources", () => {
   }
 
   test("C-UPD-16c permission errors remain hard failures rather than source_gone", () => {
-    const { home, root, setupCodes } = fixture();
+    const { home, skill, setupCodes } = fixture();
     expect(setupCodes).toEqual([0, 0]);
     const before = readState(home);
     const markerPath = join(target, "demo", ".crew.json");
     const marker = readFileSync(markerPath);
-    chmodSync(root, 0o000);
+    chmodSync(skill, 0o000);
     try {
       const capture = captureStreams();
       expect(runCli(["update", "demo", "--json"], { home, streams: capture.streams })).toBe(1);
-      const data = JSON.parse(capture.stdout()) as UpdateData;
-      expect(data.rows[0]?.outcome.kind).toBe("failed");
-      expect(data.rows[0]?.outcome.error?.message).toContain("EACCES");
+      const data = JSON.parse(capture.stdout()) as UpdateJson;
+      const outcome = data.rows[0]!.outcome;
+      expect(outcome.kind).toBe("failed");
+      if (outcome.kind !== "failed") throw new Error("Expected a failed update outcome");
+      expect(outcome.error.code).toBe("source_unreachable");
+      expect(outcome.error.message).toContain("EACCES");
       expect(readState(home)).toEqual(before);
       expect(readFileSync(markerPath)).toEqual(marker);
     } finally {
-      chmodSync(root, 0o755);
+      chmodSync(skill, 0o755);
     }
   });
 });

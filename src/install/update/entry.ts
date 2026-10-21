@@ -155,7 +155,6 @@ function updateOne(
 function applyUpdate(
   entry: StateEntry,
   acquired: AcquiredTap,
-  // Tap re-expansion has already marked missing children `source_gone`.
   skillDir: string,
   tap: TapConfig,
   home: string,
@@ -169,6 +168,8 @@ function applyUpdate(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
+  // §10.1: re-expansion handles removed children of tracked whole-tap installs;
+  // individual path sources rely on this directory check.
   if (newSha === null && !isSourceDirectory(skillDir)) return { kind: "source_gone" };
   const sourceHash = newSha === null ? hashSourceDirectory(skillDir) : undefined;
   if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
