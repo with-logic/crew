@@ -2,10 +2,9 @@
  * Per-group survey of a tap's current children during re-expansion
  * (§10.1.1 step 2).
  *
- * Split from `./index.ts` (200-line cap). Given the children a tap now
- * exposes and the entries installed from it, decide three things:
- * which names are ambiguous upstream, which installed entries have
- * vanished, and which have merely moved.
+ * Split from `./index.ts` (200-line cap). Survey current children and rejected
+ * locations against installed entries: report validation errors and ambiguous
+ * names, distinguish vanished entries, and identify relocations.
  */
 
 import type { StateEntry, TapConfig } from "../../core/types.ts";

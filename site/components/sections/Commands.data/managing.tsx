@@ -49,7 +49,7 @@ export const MANAGING: CommandGroup = {
           still refresh, but nothing you have installed is touched. If a local skill directory
           disappears during source inspection, update keeps the installed copy and continues;
           invalid manifests and permission failures still report errors. Invalid manifests in
-          directory taps are reported with their source path and reason while healthy skills
+          whole-tap updates are reported with their source path and reason while healthy skills
           continue updating. Existing copies stay intact when upstream becomes invalid. If adding a
           new tap skill fails for an agent, update reports the target and reason and rolls back
           copies still owned by that attempt. Targets detected as changed by another writer are
