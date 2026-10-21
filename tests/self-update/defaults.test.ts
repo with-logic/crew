@@ -1,6 +1,6 @@
 /**
  * Tests for the default (unstubbed) subprocess implementations of the
- * release fetcher, asset downloader, and xattr clearer. These modules
+ * release fetcher, asset downloader, and xattr clearer (§10.3). These modules
  * have seams so most tests don't touch real processes; these tests
  * exist to exercise the default paths by monkey-patching
  * `Bun.spawnSync` — matching the pattern used by
@@ -8,8 +8,8 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { downloadAssetToTemp, installBinary } from "../../src/self-update/download.ts";
 import { fetchRelease } from "../../src/self-update/github.ts";
 import { makeCrewHome } from "../helpers/env.ts";
@@ -92,7 +92,6 @@ describe("defaultFetcher (github.ts)", () => {
 
 describe("defaultDownloader (download.ts)", () => {
   test("writes downloaded bytes to the temp path", () => {
-    const home = makeCrewHome();
     // Actual curl call: fake it by intercepting spawnSync and writing
     // the file ourselves.
     stubSpawnSync((args) => {
@@ -105,9 +104,12 @@ describe("defaultDownloader (download.ts)", () => {
       return result(0);
     });
     const p = downloadAssetToTemp("https://example.com/asset", 5, 9);
-    expect(existsSync(p)).toBe(true);
-    expect(readFileSync(p, "utf8")).toBe("bytes");
-    void home;
+    try {
+      expect(existsSync(p)).toBe(true);
+      expect(readFileSync(p, "utf8")).toBe("bytes");
+    } finally {
+      rmSync(dirname(p), { recursive: true, force: true });
+    }
   });
 
   test("non-zero curl exit raises self_update_unavailable", () => {
