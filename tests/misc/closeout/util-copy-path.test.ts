@@ -77,7 +77,6 @@ describe("copyTree", () => {
     writeFileSync(join(src, "real.txt"), "hi");
     symlinkSync("real.txt", join(src, "link"));
     copyTree(src, join(dest, "sub"));
-    const { lstatSync } = require("node:fs");
     const st = lstatSync(join(dest, "sub", "link"));
     expect(st.isSymbolicLink()).toBe(true);
   });
@@ -101,7 +100,7 @@ describe("copyTree", () => {
     expect(existsSync(join(dest, "a", "b", "c.txt"))).toBe(true);
   });
 
-  test.each(["root", "directory", "file", "dangling"])(
+  test.each(["root", "directory", "file", "dangling"] as const)(
     "refuses a destination %s symlink without changing its target",
     (kind) => {
       const src = makeTempDir();
@@ -110,20 +109,33 @@ describe("copyTree", () => {
       const sentinel = join(outside, "payload");
       writeFileSync(sentinel, "keep outside bytes");
       const link = join(dest, "entry");
-      let target = outside;
+      const targets = {
+        root: outside,
+        directory: outside,
+        file: sentinel,
+        dangling: join(outside, "missing"),
+      } satisfies Record<typeof kind, string>;
+      const target = targets[kind];
       if (kind === "root") {
         writeFileSync(join(src, "payload"), "replacement");
       } else if (kind === "directory") {
         mkdirSync(join(src, "entry"));
         writeFileSync(join(src, "entry", "payload"), "replacement");
-      } else {
+      } else if (kind === "file" || kind === "dangling") {
         writeFileSync(join(src, "entry"), "replacement");
-        target = kind === "file" ? sentinel : join(outside, "missing");
       }
       symlinkSync(target, link);
-      const copy = () => copyTree(src, kind === "root" ? link : dest);
-      expect(copy).toThrow(CrewError);
-      expect(copy).toThrow("Refusing to copy through destination symlink");
+      let error: unknown;
+      try {
+        copyTree(src, kind === "root" ? link : dest);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(CrewError);
+      expect(error).toMatchObject({
+        code: "usage_error",
+        message: expect.stringContaining("Refusing to copy through destination symlink"),
+      });
       expect(readFileSync(sentinel, "utf8")).toBe("keep outside bytes");
       expect(existsSync(join(outside, "missing"))).toBe(false);
       expect(lstatSync(link).isSymbolicLink()).toBe(true);
@@ -181,7 +193,6 @@ describe("symlink hashing in store", () => {
     symlinkSync("real.txt", join(skillDir, "link.txt"));
     const code = runCli(["install", skillDir], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
-    const { lstatSync } = require("node:fs");
     expect(lstatSync(join(ccRoot, "demo", "link.txt")).isSymbolicLink()).toBe(true);
   });
 });
