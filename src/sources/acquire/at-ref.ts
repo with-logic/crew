@@ -9,14 +9,15 @@
  * resolve. That means every candidate tap has to be materialized at the
  * ref before the name is matched against any of them.
  *
- * Taps that cannot supply the ref are simply absent from the result
- * rather than fatal: a bare name searches the whole tap set, and a tap
+ * Ordinary ref-unavailable failures omit a tap from the result; failed
+ * export cleanup remains fatal. A bare name searches the whole tap set, and a tap
  * that never had this ref cannot contribute a candidate. Resolution
  * then reports `invalid_ref` naming the searched taps, which is the
  * right answer — not `ref_not_found` for an unrelated tap.
  */
 
 import type { TapConfig } from "../../core/types.ts";
+import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { withAcquiredTap } from "./index.ts";
 
 /**
@@ -43,9 +44,8 @@ export function withTapsAtRef<T>(
     // A path tap has no commits, so a ref cannot narrow it; it keeps its
     // usual root and needs no export.
     if (tap.kind === "path") return step(i + 1);
-    // `reached` distinguishes "this tap could not supply the ref" from
-    // "the inner callback threw". Only the former is recoverable; the
-    // latter is the caller's error and must propagate untouched.
+    // `reached` distinguishes acquisition from callback failure; callback
+    // failures and any export-cleanup failure propagate unchanged (§13).
     let reached = false;
     try {
       return withAcquiredTap(tap, ref, home, (acquired) => {
@@ -54,8 +54,8 @@ export function withTapsAtRef<T>(
         return step(i + 1);
       });
     } catch (err) {
-      if (reached) throw err;
-      // This tap cannot supply the ref; carry on without it.
+      if (reached || (err instanceof Error && hasExportCleanupFailure(err))) throw err;
+      // An ordinary unavailable ref permits resolution from the remaining taps.
       unavailable.set(tap.name, err);
       return step(i + 1);
     }

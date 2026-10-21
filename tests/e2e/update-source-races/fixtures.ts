@@ -11,13 +11,10 @@ import { hashSourceDirectory, isSourceDirectory } from "../../../src/sources/rea
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { snapshotFiles } from "../../helpers/snapshot.ts";
+import { snapshot } from "../../helpers/snapshot.ts";
 
-export function snapshot(root: string): Record<string, Buffer> {
-  const files: Record<string, Buffer> = {};
-  snapshotFiles(root, files, (entry) => entry.relPath);
-  return files;
-}
+// Preserve the existing fixture import path while sharing its byte snapshot (§10.1).
+export { snapshot } from "../../helpers/snapshot.ts";
 
 export function fixture(target: string) {
   const home = makeCrewHome();
