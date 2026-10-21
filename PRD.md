@@ -1207,7 +1207,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
 
    **The materialized tree is a boundary.** The resolved location MUST be reached without traversing a symlink. A repository can commit a symlink at the very path a reference names; following it would read content from outside the requested commit — potentially from anywhere on the host filesystem.
 4. **Validate each candidate skill** against the Agent Skills specification:
-   - `SKILL.md` exists at the expected location.
+   - `SKILL.md` exists at the expected location and is not a symbolic link. Reject a symbolic-link manifest with `invalid_skill` before reading its contents, including when the link points inside the skill directory. Name-only indexing uses the same rule.
    - Frontmatter parses as YAML.
    - `name` matches `[a-z0-9][a-z0-9-]*`, length 1–64, no leading/trailing hyphen, and no consecutive hyphens. It MAY begin with a digit and need not match the parent directory name.
    - `description` is present, non-empty, length ≤ 1024 characters.
@@ -2422,6 +2422,7 @@ Implementations and test suites refer to criteria by ID.
 | C-SPEC-12 | §9 | Validation errors name the offending field in the human-readable message. |
 | C-SPEC-13 | §9 | No file is written to any agent when validation fails. |
 | C-SPEC-14 | §9 | A skill whose `name` begins with a digit passes validation if the rest of the name is otherwise valid. |
+| C-SPEC-15 | §9 | A symbolic-link `SKILL.md` is rejected with `invalid_skill` before full or name-only metadata loading; no files are installed into an agent. Absolute, relative, and internal links are all rejected. |
 
 #### C-INST: Install (§9)
 

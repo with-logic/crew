@@ -4,9 +4,10 @@
  *
  * `loadSkill` is the boundary between raw filesystem state and validated
  * domain objects. Every code path that wants to install, describe, or hash
- * a skill goes through here first.
+ * a skill goes through here first (§9 step 4).
  */
 
+import { lstatSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
@@ -17,13 +18,7 @@ import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 /** Load and validate the skill at `path`. Throws `invalid_skill` on any failure. */
 export function loadSkill(path: string): LoadedSkill {
   const skillMdPath = join(path, "SKILL.md");
-  if (!exists(skillMdPath)) {
-    throw new CrewError(
-      "invalid_skill",
-      `no SKILL.md in \`${path}\` — every skill directory needs one`,
-      { path },
-    );
-  }
+  assertManifestIsNotSymlink(skillMdPath, path);
   const raw = readText(skillMdPath);
   const { data } = extractFrontmatter(raw);
   const frontmatter = validateFrontmatter(data);
@@ -33,13 +28,7 @@ export function loadSkill(path: string): LoadedSkill {
 /** Load only the declared skill name from `SKILL.md`, for tap indexing. */
 export function loadSkillName(path: string): string {
   const skillMdPath = join(path, "SKILL.md");
-  if (!exists(skillMdPath)) {
-    throw new CrewError(
-      "invalid_skill",
-      `no SKILL.md in \`${path}\` — every skill directory needs one`,
-      { path },
-    );
-  }
+  assertManifestIsNotSymlink(skillMdPath, path);
   const raw = readText(skillMdPath);
   const { data } = extractFrontmatter(raw);
   return validateFrontmatterName(data);
@@ -48,4 +37,22 @@ export function loadSkillName(path: string): string {
 /** True iff `path` contains a `SKILL.md`. Does not validate. */
 export function hasSkillMd(path: string): boolean {
   return exists(join(path, "SKILL.md"));
+}
+
+/** Require a manifest at the expected path; reject every symlink, including internal links (§9 step 4). */
+function assertManifestIsNotSymlink(manifestPath: string, skillDirectory: string): void {
+  const manifest = lstatSync(manifestPath, { throwIfNoEntry: false });
+  if (!manifest) {
+    throw new CrewError(
+      "invalid_skill",
+      `no SKILL.md in \`${skillDirectory}\` — every skill directory needs one`,
+      { path: skillDirectory },
+    );
+  }
+  if (!manifest.isSymbolicLink()) return;
+  throw new CrewError(
+    "invalid_skill",
+    `SKILL.md in \`${skillDirectory}\` must not be a symbolic link`,
+    { path: skillDirectory },
+  );
 }
