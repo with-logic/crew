@@ -25,6 +25,9 @@ import { reinstallIntoAgents } from "./reinstall.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
+/** Preserve the input state on hard failure so every target can retry (§10.1).
+ * `bumpHardFailure` reports that failure; successful target copies remain installed.
+ */
 export function updateOneEntry(
   entry: StateEntry,
   state: StateFile,
@@ -36,11 +39,12 @@ export function updateOneEntry(
 ): { row: UpdateRow; updatedState: StateFile; bumpHardFailure: boolean } {
   try {
     const outcome = updateOne(entry, config, home, force, fallbackCwd, dryRun);
+    const hardFailure =
+      outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed");
     let next = state;
-    if (outcome.kind === "updated") {
-      const successfulTargets = outcome.per_target
-        .filter((t) => t.kind !== "failed")
-        .map((t) => t.agent);
+    // §10.1: one revision covers all targets; retain it until failed targets can retry.
+    if (outcome.kind === "updated" && !hardFailure) {
+      const successfulTargets = outcome.per_target.map((t) => t.agent);
       const newEntry = rebuildStateEntry(
         entry,
         outcome.new_sha,
@@ -52,8 +56,7 @@ export function updateOneEntry(
     return {
       row: rowFor(entry, outcome),
       updatedState: next,
-      bumpHardFailure:
-        outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed"),
+      bumpHardFailure: hardFailure,
     };
   } catch (err) {
     const ce = err as CrewError;
