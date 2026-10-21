@@ -5,12 +5,23 @@ import { StringDecoder } from "node:string_decoder";
 import type { YamlValue } from "../yaml/parse.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
 
+// Small fixed reads bound scanning memory without issuing a syscall for every line.
+const FRONTMATTER_READ_CHUNK_BYTES = 4096;
+const CARRIAGE_RETURN = "\r".charCodeAt(0);
+const LINE_FEED = "\n".charCodeAt(0);
+const DASH = "-".charCodeAt(0);
+
+type FrontmatterScanResult =
+  | { readonly kind: "complete"; readonly byteEnd: number }
+  | { readonly kind: "parser-input"; readonly parserInput: "" | "---" };
+
 /** Parse only a proven complete header, keeping the existing parser's errors and semantics. */
 export function readFrontmatter(path: string): YamlValue {
   const fd = openSync(path, "r");
   try {
-    const extent = frontmatterExtent(fd);
-    if (typeof extent === "string") return extractFrontmatter(extent).data;
+    const scan = scanFrontmatter(fd);
+    if (scan.kind === "parser-input") return extractFrontmatter(scan.parserInput).data;
+    const extent = scan.byteEnd;
     const prefix = Buffer.alloc(extent);
     let offset = 0;
     let size: number;
@@ -25,9 +36,9 @@ export function readFrontmatter(path: string): YamlValue {
   }
 }
 
-/** Return an exclusive byte end, or synthetic inputs preserving missing/unclosed parser errors. */
-function frontmatterExtent(fd: number): number | "" | "---" {
-  const buffer = Buffer.alloc(4096);
+/** Find a complete header's byte end, or inputs preserving missing/unclosed parser errors. */
+function scanFrontmatter(fd: number): FrontmatterScanResult {
+  const buffer = Buffer.alloc(FRONTMATTER_READ_CHUNK_BYTES);
   const decoder = new StringDecoder("utf8");
   let position = 0;
   let opened = false;
@@ -36,31 +47,44 @@ function frontmatterExtent(fd: number): number | "" | "---" {
   let invalid = false;
   for (;;) {
     const size = readSync(fd, buffer, 0, buffer.length, position);
-    const text = size === 0 ? `${decoder.end()}\n` : decoder.write(buffer.subarray(0, size));
+    const chunk = buffer.subarray(0, size);
+    let start = 0;
+    if (opened && invalid && size > 0) {
+      // An invalid delimiter line cannot recover before CR/LF; UTF-8 never embeds those bytes.
+      const cr = chunk.indexOf(CARRIAGE_RETURN);
+      const lf = chunk.indexOf(LINE_FEED);
+      start = Math.min(cr < 0 ? size : cr, lf < 0 ? size : lf);
+      decoder.end();
+    }
+    const text = size === 0 ? `${decoder.end()}\n` : decoder.write(chunk.subarray(start));
     let lineEnd = 0;
     for (let i = 0; i < text.length; i++) {
       const char = text.charCodeAt(i);
-      if (char === 13 || char === 10) {
+      if (char === CARRIAGE_RETURN || char === LINE_FEED) {
         lineEnd = buffer.indexOf(char, lineEnd) + 1;
         const delimiter = dashes === 3 && !invalid;
-        if (opened && delimiter) return size === 0 ? position : position + lineEnd;
+        if (opened && delimiter)
+          return { kind: "complete", byteEnd: size === 0 ? position : position + lineEnd };
         if (!opened && dashes !== 0) {
-          if (!delimiter) return "";
+          if (!delimiter) return { kind: "parser-input", parserInput: "" };
           opened = true;
         }
         dashes = 0;
         trailingSpace = false;
         invalid = false;
       } else if (text[i]!.trim() === "") trailingSpace ||= dashes > 0;
-      else if (char === 45 && dashes < 3 && !trailingSpace && !invalid) dashes++;
       else {
-        if (!opened) return "";
-        invalid = true;
+        const extendsDelimiter = char === DASH && dashes < 3 && !trailingSpace && !invalid;
+        if (extendsDelimiter) dashes++;
+        else {
+          if (!opened) return { kind: "parser-input", parserInput: "" };
+          invalid = true;
+        }
       }
     }
     // The synthetic EOF newline above also recognizes a closing delimiter at EOF.
     if (size === 0) break;
     position += size;
   }
-  return opened ? "---" : "";
+  return { kind: "parser-input", parserInput: opened ? "---" : "" };
 }
