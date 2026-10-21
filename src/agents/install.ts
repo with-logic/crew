@@ -112,30 +112,43 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
   // Stage + atomic rename so a crash never leaves a half-copied directory.
   const staging = join(dirname(dest), `.crew-staging-${basename(dest)}-${Date.now()}`);
   if (exists(staging)) rmrf(staging);
-  copyTree(input.storePath, staging, { stripRootMarker: true });
+  try {
+    copyTree(input.storePath, staging, { stripRootMarker: true });
 
-  const agents = mergeAdapters(priorAdapters, incomingAdapters);
-  const marker: Marker = {
-    schema_version: 1,
-    name: input.skillName,
-    agents,
-    tap_name: input.tap.name,
-    tap_kind: input.tap.kind,
-    tap_url: input.tap.url,
-    tap_subpath: input.tap.subpath,
-    tap_path: input.tap.path,
-    ...(input.tap.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
-    path: input.tapRelativePath,
-    ref: input.ref,
-    resolved_sha: input.resolvedSha,
-    content_hash: input.contentHash,
-    scope: input.scope,
-    installed_at: nowIso(),
-    installed_by: CREW_INSTALLED_BY,
-  };
-  writeJson(join(staging, ".crew.json"), marker);
+    const agents = mergeAdapters(priorAdapters, incomingAdapters);
+    const marker: Marker = {
+      schema_version: 1,
+      name: input.skillName,
+      agents,
+      tap_name: input.tap.name,
+      tap_kind: input.tap.kind,
+      tap_url: input.tap.url,
+      tap_subpath: input.tap.subpath,
+      tap_path: input.tap.path,
+      ...(input.tap.discovery === "recursive" ? { tap_discovery: "recursive" } : {}),
+      path: input.tapRelativePath,
+      ref: input.ref,
+      resolved_sha: input.resolvedSha,
+      content_hash: input.contentHash,
+      scope: input.scope,
+      installed_at: nowIso(),
+      installed_by: CREW_INSTALLED_BY,
+    };
+    writeJson(join(staging, ".crew.json"), marker);
 
-  atomicReplace(staging, dest);
+    atomicReplace(staging, dest);
+  } catch (err) {
+    try {
+      rmrf(staging);
+    } catch {
+      // Cleanup must not replace the operation failure (§7.3).
+      const failure =
+        err instanceof Error ? err : new CrewError("usage_error", String(err), { cause: err });
+      failure.message += `; could not remove staging directory \`${safePath(staging)}\``;
+      throw failure;
+    }
+    throw err;
+  }
   return { kind: "installed" };
 }
 
