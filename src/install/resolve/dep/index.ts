@@ -1,9 +1,8 @@
 /**
  * Dependency enqueueing for the install resolver (§9 step 6).
  *
- * This file owns the walk over a parent's dependency list; reading the
- * parent's own tree (and turning a sibling hit into an item) lives in
- * `./parent-tree.ts`.
+ * This file owns the walk over a parent's dependency list. Captured
+ * trees live in `./context.ts`; sibling staging lives in `./parent-tree.ts`.
  */
 
 import type { Config, TapConfig, TapSource } from "../../../core/types.ts";
@@ -14,7 +13,8 @@ import { findSiblingDep } from "../../dep-resolution.ts";
 import { attributeRef } from "../../tap-attribution.ts";
 import { enqueueTapRef, type PendingItem } from "../enqueue.ts";
 import { expandSkillsAsItems, sourceRequestedRef } from "../expand-items.ts";
-import { siblingItems, withParentSkillDir } from "./parent-tree.ts";
+import type { DependencyTrees } from "./context.ts";
+import { siblingItems } from "./parent-tree.ts";
 
 /**
  * Resolve and enqueue items for every dependency of one parent.
@@ -22,9 +22,8 @@ import { siblingItems, withParentSkillDir } from "./parent-tree.ts";
  * Batched deliberately. A parent installed at an explicit ref has its
  * siblings read at the parent's commit (§9 step 3), which means
  * exporting that commit; doing it per dependency re-exports the same
- * tree once for each edge. One export serves them all, and the export's
- * lifetime still ends with this call, so nothing outlives the scratch
- * directory.
+ * tree once for each edge. The install-set context shares captured trees
+ * across parents and owns their cleanup.
  *
  * What matters here is whether the parent carries a ref at all, not
  * whether that ref is `pinned` (§11.1): a parent at `@<branch>` is
@@ -38,6 +37,7 @@ export function enqueueDeps(
   cwd: string,
   home: string,
   requireTap: (tap: TapConfig) => void,
+  trees: DependencyTrees,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const items: PendingItem[] = [];
   const skipped: SkippedSkill[] = [];
@@ -61,27 +61,23 @@ export function enqueueDeps(
     // `findSiblingDep` can register an auto tap, so each hit carries the
     // config to carry forward; threading it through the loop is what
     // keeps a batched walk equivalent to resolving one at a time.
-    const found = withParentSkillDir(parent, home, (parentDir) => {
-      const hits: PendingItem[] = [];
-      for (const dep of bare) {
-        const sibling = findSiblingDep(
-          { tap: parent.tap, tapRelativePath: parent.tapRelativePath, parentDir },
-          dep.source.name,
-          home,
-          current,
-        );
-        // A miss falls through to the cross-tap search below, which
-        // does not need the parent's tree.
-        if (sibling) {
-          requireTap(sibling.tap);
-          const produced = siblingItems(sibling, parent, home);
-          hits.push(...produced.items);
-          current = produced.config;
-        } else unresolved.push(dep.raw);
-      }
-      return hits;
-    });
-    items.push(...found);
+    const parentDir = trees.parentDir(parent);
+    for (const dep of bare) {
+      const sibling = findSiblingDep(
+        { tap: parent.tap, tapRelativePath: parent.tapRelativePath, parentDir },
+        dep.source.name,
+        home,
+        current,
+      );
+      // A miss falls through to the cross-tap search below, which
+      // does not need the parent's tree.
+      if (sibling) {
+        requireTap(sibling.tap);
+        const produced = siblingItems(sibling, parent, home);
+        items.push(...produced.items);
+        current = produced.config;
+      } else unresolved.push(dep.raw);
+    }
   }
 
   for (const depRef of [...unresolved, ...others]) {

@@ -20,6 +20,7 @@ import { withDiscoveredTapLocks } from "../../sources/discovered-tap-locks.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
 import { topoSort } from "../topo.ts";
+import { type DependencyTrees, withDependencyTrees } from "./dep/context.ts";
 import { enqueueDeps } from "./dep/index.ts";
 import type { PendingItem } from "./enqueue.ts";
 import { enqueueRoot, sameInstallSetSource, sourceLabel } from "./root.ts";
@@ -65,7 +66,9 @@ export function resolveInstallSet(
 ): ResolveResult {
   const home = options.home ?? crewHome();
   return withDiscoveredTapLocks(startingConfig.taps, home, (requireTap) =>
-    resolveLockedInstallSet(refs, startingConfig, options, requireTap),
+    withDependencyTrees(home, (trees) =>
+      resolveLockedInstallSet(refs, startingConfig, options, requireTap, trees),
+    ),
   );
 }
 
@@ -74,6 +77,7 @@ function resolveLockedInstallSet(
   startingConfig: Config,
   options: Partial<ResolveOptions>,
   requireTap: (tap: TapConfig) => void,
+  trees: DependencyTrees,
 ): ResolveResult {
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
@@ -143,7 +147,7 @@ function resolveLockedInstallSet(
     // commit is exported once for all of them, not once per edge.
     const deps = item.loaded.frontmatter.metadata?.crew?.dependencies ?? [];
     if (deps.length > 0) {
-      const enqueued = enqueueDeps(deps, item, config, cwd, home, requireTap);
+      const enqueued = enqueueDeps(deps, item, config, cwd, home, requireTap, trees);
       config = enqueued.config;
       skipped.push(...enqueued.skipped);
       for (const depItem of enqueued.items) {
