@@ -1771,6 +1771,16 @@ the latest-release URL (used by tests and private forks).
    update notice doesn't nag the user about a version they already
    installed.
 
+After consuming the downloaded binary, remove its temporary directory,
+including when verification, replacement, or version recording fails.
+A cleanup failure MUST preserve the completed update or original failure.
+On success, report a non-fatal warning identifying the retained directory
+and cleanup error on stderr (including with `--quiet`), or in an optional
+`cleanup_warning` field with `--json`; omit that field when cleanup succeeds.
+On failure, append the secondary cleanup diagnostic to the original error
+message while preserving its name, exit code, and details. Escape control
+characters in the diagnostic (§5.2).
+
 **Flags.**
 
 - `--check` — query the release feed and print whether an update is
