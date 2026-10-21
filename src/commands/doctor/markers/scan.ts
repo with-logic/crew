@@ -2,7 +2,8 @@
 import { join } from "node:path";
 import { type AgentAdapter, baseFor, type InstalledSkillRecord } from "../../../agents/adapter.ts";
 import type { Scope } from "../../../core/types.ts";
-import { isDirectory, listDir, readText } from "../../../util/fs.ts";
+import { isDirectory, listDir } from "../../../util/fs.ts";
+import { readJson } from "../../../util/json.ts";
 import { redactText, sanitizeLine } from "../../../util/redact.ts";
 import type { Finding } from "../checks.ts";
 import { isDoctorMarker } from "./validate.ts";
@@ -20,30 +21,28 @@ export function scanMarkers(
     const installDir = join(base, name);
     if (!isDirectory(installDir)) continue;
     const path = join(installDir, ".crew.json");
-    let text: string;
+    let marker: unknown = null;
     try {
-      text = readText(path);
+      marker = readJson<unknown>(path);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
-      findings.set(`marker_unreadable\0${path}`, {
-        level: "error",
-        code: "marker_unreadable",
-        message: sanitizeLine(redactText(`${path}: ${(err as Error).message}`)),
-      });
-      continue;
-    }
-    let marker: unknown;
-    try {
-      marker = JSON.parse(text);
-    } catch {
-      marker = null;
+      if (!(err instanceof SyntaxError)) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+        findings.set(`marker_unreadable\0${path}`, {
+          level: "error",
+          code: "marker_unreadable",
+          message: sanitizeLine(redactText(`${path}: ${(err as Error).message}`)),
+        });
+        continue;
+      }
     }
     if (!isDoctorMarker(marker)) {
       findings.set(`marker_invalid\0${path}`, {
         level: "error",
         code: "marker_invalid",
         message: sanitizeLine(
-          redactText(`${path}: invalid marker; correct its JSON and required fields before repair`),
+          redactText(
+            `${path}: invalid marker; correct its JSON, field types, field values and tap metadata before repair`,
+          ),
         ),
       });
       continue;

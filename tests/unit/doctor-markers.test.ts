@@ -32,3 +32,21 @@ for (const key of Object.keys(marker)) {
     expect(isDoctorMarker({ ...marker, [key]: {} })).toBe(false);
   });
 }
+
+test("C-STATE-14 valid git metadata passes the doctor guard", () => {
+  expect(
+    isDoctorMarker({
+      ...marker,
+      tap_kind: "git",
+      tap_url: "https://example.com/skills.git",
+      tap_path: "",
+      ref: "main",
+      resolved_sha: "a".repeat(40),
+      tap_discovery: "recursive",
+    }),
+  ).toBe(true);
+});
+
+test("C-STATE-14 a valid tap name does not mask an invalid tap kind", () => {
+  expect(isDoctorMarker({ ...marker, tap_kind: "bogus" })).toBe(false);
+});

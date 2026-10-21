@@ -1,4 +1,4 @@
-/** Validate marker bytes before doctor trusts them to rebuild state/config (§7.5, §11.2). */
+/** Validate parsed marker values before doctor trusts them to rebuild state/config (§7.5, §11.2). */
 import { parseTapEntry } from "../../../config/taps.ts";
 import type { Marker } from "../../../core/types.ts";
 import { validateFrontmatterName } from "../../../skill/validate.ts";

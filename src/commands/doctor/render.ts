@@ -50,7 +50,7 @@ export function renderDoctor(
     verify: boolean;
     dryRun: boolean;
     applied: boolean;
-    repairBlocked?: boolean;
+    markerInventoryBlocksRepair?: boolean;
   },
   style: Styler,
   repairs: readonly AutoupdateRepair[] = [],
@@ -93,7 +93,7 @@ export function renderDoctor(
       // tells the user how many, never which.
       const fixable = opts.dryRun
         ? style.dim(
-            !opts.repairBlocked && isRepairableCode(code)
+            !opts.markerInventoryBlocksRepair && isRepairableCode(code)
               ? "  — would be repaired"
               : "  — needs you",
           )
@@ -115,13 +115,13 @@ export function renderDoctor(
 
   lines.push("");
   if (opts.dryRun) {
-    const fixable = opts.repairBlocked ? 0 : repairableCount(findings);
+    const fixable = opts.markerInventoryBlocksRepair ? 0 : repairableCount(findings);
     lines.push(
       style.dim(
         `Dry run: \`crew doctor --repair\` would address ${plural(fixable, "finding")}. Nothing was changed.`,
       ),
     );
-  } else if (!opts.repairBlocked && isRepairable(findings)) {
+  } else if (!opts.markerInventoryBlocksRepair && isRepairable(findings)) {
     lines.push(style.dim("Run `crew doctor --repair` to fix what's fixable."));
   } else if (errors > 0) {
     // Nothing here is repairable, but an error is not a heads-up —

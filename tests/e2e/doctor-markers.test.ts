@@ -41,70 +41,79 @@ function invoke(home: string, args: string[]) {
   const code = runCli(args, { home, cwd, streams: cap.streams });
   return { code, text: cap.stdout(), stderr: cap.stderr(), json: () => JSON.parse(cap.stdout()) };
 }
-function installed() {
+function installed(scope: "user" | "project" = "user") {
   const home = makeCrewHome();
   const source = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
-  const installation = invoke(home, ["install", source, "--agent", "claude-code"]);
-  const marker = join(target, "claude-code", "demo", ".crew.json");
+  const installation = invoke(home, [
+    "install",
+    source,
+    "--agent",
+    "claude-code",
+    "--scope",
+    scope,
+  ]);
+  const marker = join(scope === "user" ? target : cwd, "claude-code", "demo", ".crew.json");
   return { home, marker, installation, original: JSON.parse(readFileSync(marker, "utf8")) };
 }
-for (const scenario of [
-  "unreadable",
-  "malformed",
-  "missing-agents",
-  "invalid-scope",
-  "bad-tap",
-  "bad-discovery",
-] as const) {
-  test(`C-STATE-14 ${scenario} marker reports findings and preserves repair inputs`, () => {
-    const { home, marker, original, installation } = installed();
-    expect(installation.code).toBe(0);
-    const orphan = join(home, "store", "orphan@12345678");
-    mkdirSync(orphan);
-    if (scenario === "unreadable") chmodSync(marker, 0);
-    else if (scenario === "malformed") writeFileSync(marker, "{broken");
-    else {
-      const fields = {
-        "missing-agents": { agents: null },
-        "invalid-scope": { scope: "bogus" },
-        "bad-tap": { tap_name: "invalid/name", tap_kind: "bogus" },
-        "bad-discovery": { tap_discovery: "bogus" },
-      };
-      writeFileSync(marker, JSON.stringify({ ...original, ...fields[scenario] }));
-    }
-    const state = readFileSync(join(home, "state.json"), "utf8");
-    const config = readFileSync(join(home, "config.yaml"), "utf8");
-    try {
-      for (const flags of [[], ["--repair"], ["--repair", "--dry-run"]]) {
-        const result = invoke(home, ["doctor", ...flags, "--json"]);
-        expect(result.code).toBe(1);
-        const data = result.json();
-        expect(data.findings).toContainEqual(
-          expect.objectContaining({
-            level: "error",
-            code: scenario === "unreadable" ? "marker_unreadable" : "marker_invalid",
-          }),
-        );
-        expect(
-          data.findings.some((finding: { message: string }) => finding.message.includes(marker)),
-        ).toBe(true);
-        if (flags.length === 1) expect(data.repairs).toEqual([]);
+for (const scope of ["user", "project"] as const) {
+  for (const scenario of [
+    "unreadable",
+    "malformed",
+    "missing-agents",
+    "invalid-scope",
+    "bad-tap",
+    "bad-discovery",
+  ] as const) {
+    test(`C-STATE-14 ${scope} ${scenario} marker reports findings and preserves repair inputs`, () => {
+      const { home, marker, original, installation } = installed(scope);
+      expect(installation.code).toBe(0);
+      const orphan = join(home, "store", "orphan@12345678");
+      mkdirSync(orphan);
+      if (scenario === "unreadable") chmodSync(marker, 0);
+      else if (scenario === "malformed") writeFileSync(marker, "{broken");
+      else {
+        const fields = {
+          "missing-agents": { agents: null },
+          "invalid-scope": { scope: "bogus" },
+          "bad-tap": { tap_name: "invalid/name", tap_kind: "bogus" },
+          "bad-discovery": { tap_discovery: "bogus" },
+        };
+        writeFileSync(marker, JSON.stringify({ ...original, ...fields[scenario] }));
       }
-      const quiet = invoke(home, ["doctor", "--repair", "--quiet"]);
-      expect(quiet.code).toBe(1);
-      expect(quiet.text).toBe("");
-      expect(quiet.stderr).toContain(marker);
-      const human = invoke(home, ["doctor", "--repair", "--dry-run"]);
-      expect(human.text).toContain("would address 0 findings");
-      expect(human.text).not.toContain("would be repaired");
-      expect(readFileSync(join(home, "state.json"), "utf8")).toBe(state);
-      expect(readFileSync(join(home, "config.yaml"), "utf8")).toBe(config);
-      expect(readConfig(home).taps.length).toBeGreaterThan(0);
-      expect(existsSync(orphan)).toBe(true);
-    } finally {
-      if (scenario === "unreadable") chmodSync(marker, 0o600);
-    }
-  });
+      const state = readFileSync(join(home, "state.json"), "utf8");
+      const config = readFileSync(join(home, "config.yaml"), "utf8");
+      try {
+        for (const flags of [[], ["--repair"], ["--repair", "--dry-run"]]) {
+          const result = invoke(home, ["doctor", ...flags, "--json"]);
+          expect(result.code).toBe(1);
+          const data = result.json();
+          expect(data.findings).toContainEqual(
+            expect.objectContaining({
+              level: "error",
+              code: scenario === "unreadable" ? "marker_unreadable" : "marker_invalid",
+            }),
+          );
+          expect(
+            data.findings.some((finding: { message: string }) => finding.message.includes(marker)),
+          ).toBe(true);
+          if (flags.length === 1) expect(data.repairs).toEqual([]);
+        }
+        const quiet = invoke(home, ["doctor", "--repair", "--quiet"]);
+        expect(quiet.code).toBe(1);
+        expect(quiet.text).toBe("");
+        expect(quiet.stderr).toContain(marker);
+        const human = invoke(home, ["doctor", "--repair", "--dry-run"]);
+        expect(human.text).toContain("would address 0 findings");
+        expect(human.text).not.toContain("would be repaired");
+        expect(readFileSync(join(home, "state.json"), "utf8")).toBe(state);
+        expect(readFileSync(join(home, "config.yaml"), "utf8")).toBe(config);
+        expect(readConfig(home).taps.length).toBeGreaterThan(0);
+        expect(existsSync(orphan)).toBe(true);
+      } finally {
+        if (scenario === "unreadable") chmodSync(marker, 0o600);
+      }
+    });
+  }
 }
 test("C-STATE-14 genuinely absent marker can still be reconciled", () => {
   const { home, marker, installation } = installed();
@@ -127,6 +136,7 @@ test("C-STATE-14 invalid required marker fields cannot reconstruct state", () =>
     { ...original, schema_version: 2 },
     { ...original, agents: [] },
     { ...original, agents: [42] },
+    { ...original, agents: [""] },
     { ...original, name: 42 },
     { ...original, name: "" },
     { ...original, ref: 42 },

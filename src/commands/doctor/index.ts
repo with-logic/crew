@@ -46,7 +46,7 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   const stateEntries = state.installations;
   const { markers, findings: inventoryFindings } = buildMarkerIndex(stateEntries, ctx.cwd);
   findings.push(...inventoryFindings);
-  const repairBlocked = inventoryFindings.length > 0;
+  const markerInventoryBlocksRepair = inventoryFindings.length > 0;
 
   findings.push(...checkStateMarkerDrift(stateEntries, markers));
   if (verify) findings.push(...checkContentHashDrift(markers));
@@ -63,24 +63,24 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   // An unparseable config still skips the repair entirely: the rebuild
   // rewrites `config.yaml` taps from markers, so running it against a
   // file we could not read would discard whatever the user has there.
-  const repairRequested = repair && !dryRun;
+  const shouldApplyRepairs = repair && !dryRun;
   const configReadable = config !== null;
-  const markerInventoryComplete = !repairBlocked;
-  const applied = repairRequested && configReadable && markerInventoryComplete;
+  const markerInventoryComplete = !markerInventoryBlocksRepair;
+  const applied = shouldApplyRepairs && configReadable && markerInventoryComplete;
   const repairs: AutoupdateRepair[] = applied ? applyRepairs(markers, home) : [];
 
   const human = renderDoctor(
     findings,
-    { repair, verify, dryRun, applied, repairBlocked },
+    { repair, verify, dryRun, applied, markerInventoryBlocksRepair },
     ctx.style,
     repairs,
   );
-  // A `--repair` run resolves the repairable drift classes, so those
+  // Applied repairs resolve repairable drift, so only then do those
   // findings stop counting against the exit code. Anything repair
   // can't fix (§11.2) still does — otherwise a repair would report
   // success while a real problem remains — as does a repair that was
   // attempted and failed. Without `--repair` (or on a dry run, or when
-  // an unparseable config skipped the repair), every error counts.
+  // config or marker-inventory errors skipped repair), every error counts.
   const blocking = findings.filter(
     (f) => f.level === "error" && !(applied && isRepairableCode(f.code)),
   );
@@ -91,8 +91,8 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
     human,
     ...(ctx.flags.quiet
       ? {
-          stderr: [...inventoryFindings, ...failedRepairs].map((finding) =>
-            sanitizeLine(redactText(finding.message)),
+          stderr: [...inventoryFindings, ...failedRepairs].map((diagnostic) =>
+            sanitizeLine(redactText(diagnostic.message)),
           ),
         }
       : {}),
