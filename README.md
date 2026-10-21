@@ -436,7 +436,9 @@ phones home.
 **How does `crew update` know when to skip a skill?** Skills pinned to an
 exact SHA are skipped unless `--force`. Skills pinned to a tag are
 re-resolved: if the tag moved and `--force` is given, the new commit is
-installed. Everything else updates to whatever the ref resolves to now.
+installed. If no recorded agent supports the install's scope, the skill is
+skipped. Its recorded revision stays unchanged until at least one target completes
+without a hard target failure, so an update with no completed targets can retry.
 If a local skill directory disappears during source inspection, update keeps
 the installed copy and continues. Invalid manifests and permission failures
 still report errors.
