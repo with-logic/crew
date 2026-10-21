@@ -9,10 +9,10 @@ import {
   setAutoupdatePlatform,
 } from "../../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../../src/cli/main.ts";
-import type { Scope } from "../../../src/core/types.ts";
 import { readState, writeState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { uninstallInChild } from "./uninstall.ts";
 
 const originals = ALL_AGENTS.map((adapter) => ({
   adapter,
@@ -38,33 +38,6 @@ afterEach(() => {
   resetAutoupdatePlatform();
 });
 
-// Fail a hung child well before the state lock's 30-second acquisition timeout.
-const CHILD_TIMEOUT_MS = 10_000;
-
-function uninstallInChild({ home, scope }: { readonly home: string; readonly scope: Scope }) {
-  const script = `
-    import { join } from "node:path";
-    import { ALL_AGENTS } from ${JSON.stringify(new URL("../../../src/agents/registry.ts", import.meta.url).href)};
-    import { runCli } from ${JSON.stringify(new URL("../../../src/cli/main.ts", import.meta.url).href)};
-    const { home, target, cwd, scope } = JSON.parse(process.argv[1]);
-    for (const adapter of ALL_AGENTS) {
-      adapter.userPath = () => join(target, adapter.name);
-      adapter.projectPath = (root) => join(root, adapter.name);
-      adapter.detect = () => adapter.name === "claude-code";
-    }
-    process.exitCode = runCli(["uninstall", "demo", "--scope", scope, "--json"], { home, cwd });
-  `;
-  const child = Bun.spawnSync(
-    [process.execPath, "--eval", script, JSON.stringify({ home, target, cwd, scope })],
-    { stdout: "pipe", stderr: "pipe", timeout: CHILD_TIMEOUT_MS },
-  );
-  return {
-    exitCode: child.exitCode,
-    stderr: child.stderr.toString(),
-    stdout: child.stdout.toString(),
-  };
-}
-
 for (const scope of ["user", "project"] as const) {
   test(`C-STATE-06 repair does not resurrect a ${scope} install uninstalled after initial marker scan`, () => {
     const home = makeCrewHome();
@@ -87,7 +60,7 @@ for (const scope of ["user", "project"] as const) {
     // detect runs after the initial marker scan, so the child invalidates that inventory.
     claudeCodeAdapter.detect = () => {
       claudeCodeAdapter.detect = () => true;
-      expect(uninstallInChild({ home, scope })).toEqual({
+      expect(uninstallInChild({ home, target, cwd, scope })).toEqual({
         exitCode: 0,
         stderr: "",
         stdout: expect.any(String),

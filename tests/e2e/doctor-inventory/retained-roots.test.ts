@@ -16,6 +16,7 @@ import {
   statefulLaunchctl,
   useSchedulerSeams,
 } from "../doctor-repair-autoupdate/helpers.ts";
+import { uninstallInChild } from "./uninstall.ts";
 
 useSchedulerSeams();
 const originals = ALL_AGENTS.map((adapter) => ({
@@ -24,8 +25,6 @@ const originals = ALL_AGENTS.map((adapter) => ({
   projectPath: adapter.projectPath,
   detect: adapter.detect,
 }));
-// Fail a hung child well before the state lock's 30-second acquisition timeout.
-const CHILD_TIMEOUT_MS = 10_000;
 let target: string;
 beforeEach(() => {
   target = makeTempDir();
@@ -40,26 +39,6 @@ afterEach(() => {
   for (const { adapter, userPath, projectPath, detect } of originals)
     Object.assign(adapter, { userPath, projectPath, detect });
 });
-
-function uninstallInChild(input: { readonly home: string; readonly cwd: string }) {
-  const script = `
-    import { join } from "node:path";
-    import { ALL_AGENTS } from ${JSON.stringify(new URL("../../../src/agents/registry.ts", import.meta.url).href)};
-    import { runCli } from ${JSON.stringify(new URL("../../../src/cli/main.ts", import.meta.url).href)};
-    const { home, target, cwd } = JSON.parse(process.argv[1]);
-    for (const adapter of ALL_AGENTS) {
-      adapter.userPath = () => join(target, adapter.name);
-      adapter.projectPath = (root) => join(root, adapter.name);
-      adapter.detect = () => adapter.name === "claude-code";
-    }
-    process.exitCode = runCli(["uninstall", "demo", "--scope", "project", "--json"], { home, cwd });
-  `;
-  const child = Bun.spawnSync(
-    [process.execPath, "--eval", script, JSON.stringify({ ...input, target })],
-    { stdout: "pipe", stderr: "pipe", timeout: CHILD_TIMEOUT_MS },
-  );
-  return { exitCode: child.exitCode, stderr: child.stderr.toString() };
-}
 
 for (const invalid of [false, true]) {
   test(`C-STATE-06 C-STATE-14 retained root ${invalid ? "blocks late invalid markers" : "reconstructs a valid orphan"} after last-entry uninstall`, () => {
@@ -97,7 +76,11 @@ for (const invalid of [false, true]) {
     // detect runs after the initial marker scan, letting a real uninstall invalidate that inventory.
     claudeCodeAdapter.detect = () => {
       claudeCodeAdapter.detect = () => true;
-      expect(uninstallInChild({ home, cwd })).toEqual({ exitCode: 0, stderr: "" });
+      expect(uninstallInChild({ home, target, cwd, scope: "project" })).toEqual({
+        exitCode: 0,
+        stderr: "",
+        stdout: expect.any(String),
+      });
       expect(readState(home).installations).toEqual([]);
       expect(existsSync(demoMarker)).toBe(false);
       if (invalid) writeFileSync(marker, "{broken");
