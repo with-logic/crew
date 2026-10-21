@@ -40,7 +40,7 @@ export function installNewTapChild(
 ): StateEntry | null {
   const childCwd = args.scope === "project" ? (args.projectRoot ?? fallbackCwd) : fallbackCwd;
   const staged = stageIntoStore(args.skillDir, args.skillName, args.resolvedSha, home);
-  const successfulTargets: string[] = [];
+  const successfulAgents: string[] = [];
   // Group adapters by resolved install path (path sharing, §7.2) so
   // shared-path targets install once but both get marked successful.
   const groups = new Map<string, AgentAdapter[]>();
@@ -76,7 +76,7 @@ export function installNewTapChild(
         beforeReplace: (staging) => replacement.moveAsideForReplacement(staging),
       });
       replacement.installed = outcome.kind === "installed";
-      for (const a of group) successfulTargets.push(a.name);
+      for (const a of group) successfulAgents.push(a.name);
     } catch (err) {
       const ce = normalizeLocalError(err);
       firstFailure ??= ce;
@@ -97,7 +97,7 @@ export function installNewTapChild(
     else args.onWarning?.(warning);
   }
   if (firstFailure) throw new CrewError(firstFailure.code, failures.join("; "));
-  if (successfulTargets.length === 0) return null;
+  if (successfulAgents.length === 0) return null;
   return {
     name: args.skillName,
     source: { tap: args.tap.name, path: args.tapRelativePath },
@@ -110,7 +110,7 @@ export function installNewTapChild(
     content_hash: staged.contentHash,
     scope: args.scope,
     installed_at: nowIso(),
-    agents: successfulTargets,
+    agents: successfulAgents,
     pinned: args.pinned,
     explicit: true,
     // Tap re-expansion only fires for whole-tap groups, so a child
