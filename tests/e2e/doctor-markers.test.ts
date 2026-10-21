@@ -115,9 +115,17 @@ for (const scope of ["user", "project"] as const) {
     });
   }
 }
-test("C-STATE-14 genuinely absent marker can still be reconciled", () => {
-  const { home, marker, installation } = installed();
+test("C-STATE-14 genuinely absent shared-path marker can still be reconciled", () => {
+  const { home, marker, original, installation } = installed();
   expect(installation.code).toBe(0);
+  codexAdapter.userPath = claudeCodeAdapter.userPath;
+  codexAdapter.detect = () => true;
+  expect(invoke(home, ["install", original.tap_path, "--agent", "codex"]).code).toBe(0);
+  expect(invoke(home, ["doctor", "--verify", "--json"]).json().findings).toEqual([]);
+  rmSync(join(home, "state.json"));
+  expect(invoke(home, ["doctor", "--repair"]).code).toBe(0);
+  expect(readState(home).installations).toHaveLength(1);
+  expect(readState(home).installations[0]!.agents).toEqual(["claude-code", "codex"]);
   rmSync(marker);
   const result = invoke(home, ["doctor", "--repair", "--json"]);
   expect(result.code).toBe(0);

@@ -16,10 +16,12 @@
  */
 
 import { existsSync, realpathSync } from "node:fs";
+import { join } from "node:path";
 import type { AgentAdapter, InstalledSkillRecord } from "../../../agents/adapter.ts";
 import { ALL_AGENTS } from "../../../agents/registry.ts";
 import type { StateEntry } from "../../../core/types.ts";
 import { hasUsableProjectRoot } from "../../../state/validation.ts";
+import { redactText, sanitizeLine } from "../../../util/redact.ts";
 import type { Finding } from "../checks.ts";
 import { scanMarkers } from "./scan.ts";
 
@@ -59,7 +61,8 @@ export function buildMarkerIndex(
     for (const rec of userInventory.records) {
       if (rec.marker.scope !== "user") {
         anySharedBase ??= roots.some(sharesUserBase);
-        if (anySharedBase) continue;
+        if (!anySharedBase) inventoryFindings.set(...scopeMismatchFinding(rec));
+        continue;
       }
       const key = `user\0${rec.installDir}`;
       if (seen.has(key)) continue;
@@ -74,7 +77,10 @@ export function buildMarkerIndex(
         projectInventory.records.some((rec) => rec.marker.scope !== "project") &&
         sharesUserBase(root);
       for (const rec of projectInventory.records) {
-        if (rec.marker.scope !== "project" && projectBaseIsShared) continue;
+        if (rec.marker.scope !== "project") {
+          if (!projectBaseIsShared) inventoryFindings.set(...scopeMismatchFinding(rec));
+          continue;
+        }
         const key = `project\0${rec.installDir}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -96,4 +102,21 @@ function sharesScopeBase(adapter: AgentAdapter, root: string): boolean {
     existsSync(projectBase) &&
     realpathSync(userBase) === realpathSync(projectBase)
   );
+}
+
+/** A declared scope cannot authorize reconstruction at a physically distinct base (§11.2). */
+function scopeMismatchFinding(record: InstalledSkillRecord): [string, Finding] {
+  const path = join(record.installDir, ".crew.json");
+  return [
+    `marker_invalid\0${path}`,
+    {
+      level: "error",
+      code: "marker_invalid",
+      message: sanitizeLine(
+        redactText(
+          `${path}: marker scope ${record.marker.scope} disagrees with its ${record.scope} adapter base; correct the marker or install location before repair`,
+        ),
+      ),
+    },
+  ];
 }
