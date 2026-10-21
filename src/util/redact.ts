@@ -31,6 +31,9 @@
  * the `safe*` / `redact*` helpers before it reaches a stream.
  */
 
+import { isControlCharacterCode } from "./control-characters.ts";
+import { redactDiagnostic } from "./diagnostic-spans.ts";
+
 /**
  * Query parameters whose values are safe to print. Everything else is
  * masked.
@@ -61,9 +64,7 @@ export function sanitizeLine(text: string): string {
   let out = "";
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
-    const isC0 = code < 0x20 || code === 0x7f;
-    const isC1 = code >= 0x80 && code <= 0x9f;
-    if (isC0 || isC1) {
+    if (isControlCharacterCode(code)) {
       out += `\\x${code.toString(16).padStart(2, "0")}`;
       continue;
     }
@@ -151,26 +152,10 @@ export function safePath(path: string): string {
  * (`fatal: unable to access 'https://host/r.git?token=s/': …`), and we
  * pass that through verbatim in `source_unreachable` messages. Scanning
  * for URL-shaped substrings is what stops the secret escaping that way.
+ * Ambiguous credential suffixes are suppressed through end-of-input (§13).
  */
 export function redactText(text: string, renderUrl = redactUrl): string {
-  // Match an http(s)/ssh/git URL up to the first character that can't be
-  // part of one. Trailing punctuation (quote, comma, period) is excluded
-  // so we don't swallow the prose around it.
-  const withUrls = text.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s'"<>`]+/gi, (m) => {
-    // Git often quotes the URL and appends a slash; redact the URL body
-    // and leave whatever punctuation followed it in place.
-    const trailing = m.match(/[.,;:)\]]+$/)?.[0] ?? "";
-    const body = trailing.length > 0 ? m.slice(0, -trailing.length) : m;
-    return renderUrl(body) + trailing;
-  });
-  // Git strips file:// before echoing a failing path (§13); its query
-  // must obey the same allow-list even when no scheme remains.
-  return withUrls.replace(/\?[^\s'"<>`]+/g, (match) => {
-    const trailing = match.match(/[.,;:)\]]+$/)?.[0] ?? "";
-    const body = trailing.length > 0 ? match.slice(0, -trailing.length) : match;
-    const base = "https://x.invalid/";
-    return redactUrl(new URL(body, base).toString()).slice(base.length) + trailing;
-  });
+  return redactDiagnostic(text, renderUrl, DISPLAYABLE_PARAMS);
 }
 
 /**

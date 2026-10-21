@@ -91,7 +91,7 @@ describe("update: missing skill at new revision", () => {
     const code = runCli(["update"], { home, streams: c.streams });
     // C-UPD-12: exit 0 (soft outcome) — the local install is preserved.
     expect(code).toBe(0);
-    expect(c.stdout()).toContain("removed upstream");
+    expect(c.stdout()).toContain("source no longer available");
     // C-UPD-13: the state entry is preserved untouched.
     const { readState } =
       require("../../../src/state/load.ts") as typeof import("../../../src/state/load.ts");
