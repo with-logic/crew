@@ -31,6 +31,8 @@ cd "$ROOT"
 source "$ROOT/scripts/next-version.sh"
 
 source "$ROOT/scripts/release/arguments.sh"
+source "$ROOT/scripts/release/notes.sh"
+source "$ROOT/scripts/release/artifacts.sh"
 parse_release_arguments "$@"
 
 # ---------- 1. Safety checks ----------------------------------------------
@@ -104,115 +106,7 @@ if git ls-remote --exit-code --tags origin "${next_tag}" >/dev/null 2>&1; then
   exit 1
 fi
 
-# ---------- 3. Gather changes since last tag ------------------------------
-
-last_tag="$(git describe --tags --abbrev=0 2>/dev/null || echo "")"
-if [ -n "$last_tag" ]; then
-  commit_range="${last_tag}..HEAD"
-  range_label="since ${last_tag}"
-else
-  commit_range="HEAD"
-  range_label="from the entire history"
-fi
-
-commit_log="$(git log --format='%H%n%s%n%b%n----' ${commit_range})"
-diff_stat="$(git diff --stat ${commit_range} || true)"
-
-if [ -z "$commit_log" ]; then
-  echo "error: no commits ${range_label} — nothing to release" >&2
-  exit 1
-fi
-
-# ---------- 4. Ask Claude for a structured summary ------------------------
-
-echo "==> Asking Claude to summarize changes ${range_label}"
-
-schema='{
-  "type": "object",
-  "properties": {
-    "pr_body": {
-      "type": "string",
-      "description": "Markdown body for the release PR. Summarize user-facing changes grouped by category (Added / Changed / Fixed / Removed). Skip internal refactors unless they affect users. No heading levels above ## — the PR already has a title."
-    },
-    "changelog": {
-      "type": "string",
-      "description": "A new CHANGELOG.md section in Keep a Changelog format. Start with `## [VERSION] — YYYY-MM-DD` on its own line, then Added / Changed / Fixed / Removed subsections as appropriate. No surrounding prose, no trailing blank lines."
-    }
-  },
-  "required": ["pr_body", "changelog"]
-}'
-
-today="$(date +%Y-%m-%d)"
-
-prompt="You are drafting the release notes for version ${next_version} of \`crew\`, a package manager for Agent Skills (the SKILL.md-based standard from agentskills.io). You install skills into every agent coder on a user's Mac (Claude Code, Codex, Cursor, Gemini CLI, Goose, GitHub Copilot, and many more).
-
-Below are the commits ${range_label}. Summarize them as release notes. Keep the voice crisp and user-focused: what changed from the user's perspective, not mechanical one-line-per-commit dumps. Group by Added / Changed / Fixed / Removed. Skip purely internal refactors, test tweaks, and tooling changes unless they affect what users see or how they install.
-
-Version: ${next_version}
-Date: ${today}
-
-Commits (most recent first, separated by '----'):
-${commit_log}
-
-Diff stat:
-${diff_stat}
-
-Return a JSON object matching the provided schema. Do not wrap it in markdown fences."
-
-# --bare disables hooks, CLAUDE.md auto-discovery, and other ambient
-# context so the prompt is deterministic. `--json-schema` forces the
-# response to match our schema. We deliberately do NOT redirect stderr
-# here — if claude writes a diagnostic, the user should see it.
-response="$(
-  printf '%s\n' "$prompt" | claude -p \
-    --bare \
-    --no-session-persistence \
-    --output-format json \
-    --json-schema "$schema" \
-    --model sonnet \
-    --max-budget-usd 1.00
-)"
-
-if [ -z "$response" ]; then
-  echo "error: claude returned no output" >&2
-  exit 1
-fi
-
-# Claude reports logical failures (auth, budget, refusal) as a
-# top-level `{ "is_error": true, "result": "..." }` envelope and still
-# exits 0. Some Claude CLI versions wrap the result envelope in an
-# event array, so normalize to the final envelope before inspecting it.
-envelope="$(echo "$response" | jq -c 'if type == "array" then .[-1] else . end')"
-if [ "$(echo "$envelope" | jq -r 'if type == "object" then (.is_error // false) else false end')" = "true" ]; then
-  echo "error: claude reported an error:" >&2
-  echo "  $(echo "$envelope" | jq -r '.result // "(no result field)"')" >&2
-  exit 1
-fi
-
-# With `--json-schema` and `--output-format json`, claude returns a
-# result envelope and parks the schema-conforming object at top-level
-# `.structured_output`. (Earlier versions of this script walked a
-# stream-json event log — that shape never matched under --output-format
-# json and produced a cryptic jq error.)
-inner="$(echo "$envelope" | jq -c '.structured_output')"
-if [ -z "$inner" ] || [ "$inner" = "null" ]; then
-  echo "error: claude response missing structured output" >&2
-  echo "--- raw response ---" >&2
-  echo "$response" >&2
-  exit 1
-fi
-
-pr_body="$(echo "$inner" | jq -r '.pr_body')"
-changelog_section="$(echo "$inner" | jq -r '.changelog')"
-
-if [ -z "$pr_body" ] || [ "$pr_body" = "null" ]; then
-  echo "error: claude response missing pr_body" >&2
-  exit 1
-fi
-if [ -z "$changelog_section" ] || [ "$changelog_section" = "null" ]; then
-  echo "error: claude response missing changelog" >&2
-  exit 1
-fi
+generate_release_notes
 
 # ---------- 5. Update files -----------------------------------------------
 
@@ -232,113 +126,7 @@ fi
 echo "==> Creating branch ${branch}"
 git checkout -q -b "$branch"
 
-# Bump package.json version without reformatting the rest of the file.
-node -e "
-const fs = require('node:fs');
-const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-pkg.version = '${next_version}';
-fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-"
-
-# Update the CREW_VERSION constant used by --version and markers.
-if [ -f src/core/version.ts ]; then
-  # Replace the string literal after CREW_VERSION = "..."
-  perl -i -pe 's/(CREW_VERSION\s*=\s*")[^"]*(")/${1}'"${next_version}"'${2}/' src/core/version.ts
-fi
-
-# Update the PRD's `Version:` line so the spec stays in sync with the
-# implementation. The PRD ships alongside the CLI — one version number
-# for both.
-if [ -f PRD.md ]; then
-  perl -i -pe 's/^Version:.*$/Version: '"${next_version}"'/' PRD.md
-fi
-
-# Regenerate the site's latest-version.json. This file is served at
-# https://crew.logic.inc/latest-version.json and is the fast-path
-# endpoint that the 24h update-available notice pings (§10.4). Points
-# the asset URLs at the new release's GitHub downloads.
-if [ -d site/public ]; then
-  cat > site/public/latest-version.json <<JSON
-{
-  "tag_name": "${next_tag}",
-  "assets": [
-    {
-      "name": "crew-macos-arm64",
-      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/crew-macos-arm64"
-    },
-    {
-      "name": "crew-macos-x64",
-      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/crew-macos-x64"
-    },
-    {
-      "name": "crew-linux-arm64",
-      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/crew-linux-arm64"
-    },
-    {
-      "name": "crew-linux-x64",
-      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/crew-linux-x64"
-    },
-    {
-      "name": "SHA256SUMS",
-      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/SHA256SUMS"
-    },
-    {
-      "name": "SHA256SUMS.sig",
-      "browser_download_url": "https://github.com/with-logic/crew/releases/download/${next_tag}/SHA256SUMS.sig"
-    }
-  ]
-}
-JSON
-fi
-
-# Refresh the bundled known-tap registry snapshot from the reviewed,
-# commit-pinned manifest. This deliberately does not advance pins from
-# trackingRef; pin refreshes must happen in ordinary reviewed PRs.
-if [ -f known-taps/manifest.json ]; then
-  echo "==> Regenerating known-tap registry"
-  bun run known-taps build
-  bun run known-taps check
-fi
-
-# Write/update CHANGELOG.md. If it doesn't exist, create a header
-# first; then prepend the new section below the header.
-if [ ! -f CHANGELOG.md ]; then
-  cat > CHANGELOG.md <<'HEADER'
-# Changelog
-
-All notable changes to crew are documented in this file. The format
-is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and crew adheres to [Semantic Versioning](https://semver.org/).
-
-HEADER
-fi
-
-# Insert the new section after the header block (the first blank line
-# following the `# Changelog` heading). We keep the rest of the file
-# verbatim so older entries stay put.
-python3 - <<PY
-import re
-
-path = "CHANGELOG.md"
-with open(path, "r", encoding="utf-8") as f:
-    body = f.read()
-
-section = """${changelog_section}""".rstrip() + "\n\n"
-
-# Find the first blank line after the `# Changelog` heading and
-# splice the new section in there.
-m = re.search(r"^# Changelog.*?\n\n", body, flags=re.S | re.M)
-if not m:
-    # Fallback: prepend the section (shouldn't happen — the header
-    # template above always contains a blank line after the title).
-    new_body = section + body
-else:
-    idx = m.end()
-    new_body = body[:idx] + section + body[idx:]
-
-with open(path, "w", encoding="utf-8") as f:
-    f.write(new_body)
-PY
+write_release_artifacts
 
 echo "==> Committing version bump + changelog"
 git add package.json CHANGELOG.md

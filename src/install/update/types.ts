@@ -8,6 +8,11 @@
 
 export type PerAgentSkipReason = "customized" | "untracked_directory" | "inconsistent_marker";
 
+export type UpdateSkipReason =
+  | "pinned to exact SHA"
+  | "pinned to tag; upstream moved"
+  | "no applicable agent targets";
+
 export type PerAgentUpdate =
   | { readonly agent: string; readonly kind: "installed" | "up_to_date" }
   | {
@@ -31,7 +36,7 @@ export type Outcome =
    * installed skill, marker, store entry, or `state.json` was written.
    */
   | { kind: "would_update"; new_sha: string | null }
-  | { kind: "skipped"; reason: string }
+  | { kind: "skipped"; reason: UpdateSkipReason }
   | { kind: "source_gone" }
   /** §10.1: the entry's tap is no longer in config. Soft; install is kept. */
   | { kind: "tap_missing"; tap: string }
