@@ -24,7 +24,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { readFileSync, readlinkSync } from "node:fs";
+import { closeSync, openSync, readlinkSync, readSync } from "node:fs";
 import { walk } from "../util/fs.ts";
 
 /**
@@ -34,10 +34,7 @@ import { walk } from "../util/fs.ts";
  * @param readFile - regular-file reader; traversal and symlink reads retain native errors.
  * @returns `sha256:<64 hex chars>` — always 71 characters total.
  */
-export function hashDirectory(
-  dir: string,
-  readFile: (path: string) => Buffer = readFileSync,
-): string {
+export function hashDirectory(dir: string, readFile?: (path: string) => Buffer): string {
   type Tuple = { relPath: string; fileSha: string };
   const tuples: Tuple[] = [];
 
@@ -53,7 +50,7 @@ export function hashDirectory(
     if (e.isSymlink) {
       fileSha = sha256OfBytes(Buffer.from(readlinkSync(e.absPath), "utf8"));
     } else {
-      fileSha = sha256OfBytes(readFile(e.absPath));
+      fileSha = readFile ? sha256OfBytes(readFile(e.absPath)) : sha256OfFile(e.absPath);
     }
     tuples.push({ relPath: e.relPath, fileSha });
   }
@@ -69,6 +66,23 @@ export function hashDirectory(
     acc.update(Buffer.from([0x0a]));
   }
   return `sha256:${acc.digest("hex")}`;
+}
+
+/** Hash regular-file bytes with bounded memory; caller-supplied readers retain their own policy. */
+function sha256OfFile(path: string): string {
+  const file = openSync(path, "r");
+  try {
+    const bytes = Buffer.allocUnsafe(64 * 1024);
+    const hash = createHash("sha256");
+    for (;;) {
+      const length = readSync(file, bytes, 0, bytes.length, null);
+      if (length === 0) break;
+      hash.update(bytes.subarray(0, length));
+    }
+    return hash.digest("hex");
+  } finally {
+    closeSync(file);
+  }
 }
 
 /** SHA-256 of a byte buffer as lowercase hex. */

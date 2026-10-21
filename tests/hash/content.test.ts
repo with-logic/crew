@@ -1,7 +1,16 @@
 /** Content-hash compatibility and conformance (§12.1). */
 
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, renameSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { hashDirectory, sha256OfBytes } from "../../src/hash/content.ts";
 import { makeTempDir } from "../helpers/fixtures.ts";
@@ -123,5 +132,21 @@ describe("hashDirectory", () => {
     expect(sha256OfBytes(Buffer.from("abc"))).toBe(
       "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
     );
+  });
+
+  test("native and caller-supplied reads preserve SHA-256 bytes across chunk boundaries", () => {
+    const d = makeTempDir();
+    const expected = createHash("sha256");
+    for (const size of [0, 1, 65_535, 65_536, 65_537, 131_089]) {
+      const name = `bytes-${String(size).padStart(6, "0")}`;
+      const bytes = Buffer.alloc(size);
+      for (let i = 0; i < size; i++) bytes[i] = i % 256;
+      writeFileSync(join(d, name), bytes);
+      const fileSha = createHash("sha256").update(bytes).digest("hex");
+      expected.update(`${name}\0${fileSha}\n`);
+    }
+    const digest = `sha256:${expected.digest("hex")}`;
+    expect(hashDirectory(d)).toBe(digest);
+    expect(hashDirectory(d, readFileSync)).toBe(digest);
   });
 });
