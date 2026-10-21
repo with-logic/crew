@@ -72,20 +72,25 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
   }
 
   // §10.1 step 2b: re-expand taps before walking per-skill updates.
+  const reexpandSelection = reexpandSelectionFor(subjects, initialSelected);
   const reexpanded = reexpandTaps(
     current,
     config,
     home,
-    reexpandSelectionFor(subjects, initialSelected),
+    reexpandSelection,
     (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
     dryRun,
   );
   tapReexpandRows.push(...reexpanded.rows);
   if (reexpanded.hardFailure) hardFailure = true;
-  const selectedIdentities = new Set(initialSelected.map(entryIdentity));
   for (const entry of reexpanded.updated) {
     // §10.1: surveying a tap does not select its unrelated installed members.
-    if (selectedIdentities.has(entryIdentity(entry))) current = upsertEntry(current, entry);
+    if (
+      reexpandSelection === null ||
+      reexpandSelection.memberIdentities.has(entryIdentity(entry))
+    ) {
+      current = upsertEntry(current, entry);
+    }
   }
   for (const entry of reexpanded.added) {
     current = upsertEntry(current, entry);

@@ -1,6 +1,6 @@
 /**
  * Bounds on what `crew update <selector>` re-expansion installs and
- * keeps selected (PRD §10.1, §10.1.1, C-UPD-05/24/36/37).
+ * keeps selected (PRD §10.1, §10.1.1, C-UPD-05/24/27/36/37).
  *
  * Re-expansion groups are keyed by `(tap, scope, project_root)`, so the
  * group behind a namespace selector spans the whole tap. Two things
@@ -13,7 +13,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
+import type { Marker } from "../../../src/core/types.ts";
 import { readState } from "../../../src/state/load.ts";
+import { readJson } from "../../../src/util/json.ts";
 import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { buildNamespacedTap, bump, freshHome, installedBody, run } from "./helpers.ts";
 
@@ -97,8 +99,11 @@ describe("crew update entry identity across relocation", () => {
   });
 });
 
-for (const selector of ["alpha", "acme/one"]) {
-  test(`C-UPD-05 ${selector} preserves an unselected sibling's relocated state`, () => {
+for (const [selector, criterion] of [
+  ["alpha", "C-UPD-05"],
+  ["acme/one", "C-UPD-27"],
+] as const) {
+  test(`${criterion} ${selector} preserves an unselected sibling's relocated state`, () => {
     const home = freshHome();
     const repo = buildNamespacedTap("upd-coll-relocation-", { one: ["alpha"], two: ["beta"] });
     expect(run(home, ["tap", "add", `file://${repo}`, "acme"]).code).toBe(0);
@@ -137,7 +142,7 @@ for (const selector of ["alpha", "acme/one"]) {
     expect(beta.source.path).toBe("skills/moved/beta");
     expect(beta.resolved_sha).toBe(newSha);
     expect(body("beta")).toContain("beta-v2");
-    expect(JSON.parse(readFileSync(betaMarkerPath, "utf8")).path).toBe(beta.source.path);
+    expect(readJson<Marker>(betaMarkerPath).path).toBe(beta.source.path);
   });
 }
 
