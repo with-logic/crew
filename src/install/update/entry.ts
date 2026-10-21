@@ -25,6 +25,9 @@ import { reinstallIntoAgents } from "./reinstall.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
 
+/** Preserve the input state on hard failure so every target can retry (§10.1).
+ * `bumpHardFailure` reports that failure; successful target copies remain installed.
+ */
 export function updateOneEntry(
   entry: StateEntry,
   state: StateFile,

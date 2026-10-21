@@ -1,7 +1,7 @@
 /** Per-target update failures retain the retry baseline (§10.1, §11.1). */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../src/agents/codex.ts";
@@ -25,7 +25,8 @@ let codexRoot: string;
 
 beforeEach(() => {
   claudeRoot = makeTempDir("crew-update-claude-");
-  codexRoot = makeTempDir("crew-update-codex-");
+  codexRoot = join(makeTempDir("crew-update-codex-"), "codex-\u009b");
+  mkdirSync(codexRoot);
   claudeCodeAdapter.userPath = () => claudeRoot;
   claudeCodeAdapter.detect = () => true;
   codexAdapter.userPath = () => codexRoot;
@@ -64,6 +65,11 @@ for (const sourceKind of ["git", "path"] as const) {
           const capture = captureStreams();
           expect(runCli(["update", "demo", "--json"], { home, streams: capture.streams })).toBe(1);
           const outcome = JSON.parse(capture.stdout()).rows[0].outcome;
+          expect(capture.stdout()).not.toContain("\u009b");
+          expect(
+            outcome.per_target.find((target: { agent: string }) => target.agent === "codex").error
+              .message,
+          ).toContain("\\x9b");
           expect(outcome.kind).toBe("updated");
           for (const agent of failedAgents) {
             expect(outcome.per_target).toContainEqual({
