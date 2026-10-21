@@ -1,5 +1,5 @@
 /**
- * Per-skill update logic for `crew update` (§10.1).
+ * Per-skill update logic for `crew update` (§10.1, §14).
  *
  * Given one state entry, look up its tap, acquire it, and either:
  *   - report `up_to_date` if the resolved SHA / content hash hasn't moved;
@@ -12,6 +12,7 @@
 
 import { existsSync } from "node:fs";
 import { cwdForEntry } from "../../agents/adapter.ts";
+import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
@@ -40,10 +41,19 @@ export function updateOneEntry(
   force: boolean,
   fallbackCwd: string,
   dryRun: boolean = false,
+  baseFailures?: TargetBaseFailures,
 ): { row: UpdateRow; updatedState: StateFile; bumpHardFailure: boolean } {
   try {
     const selectedEntry = entryWithGistFilename(entry, config);
-    const outcome = updateOne(selectedEntry, config, home, force, fallbackCwd, dryRun);
+    const outcome = updateOne(
+      selectedEntry,
+      config,
+      home,
+      force,
+      fallbackCwd,
+      dryRun,
+      baseFailures,
+    );
     const hardFailure =
       outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed");
     let next = state;
@@ -96,6 +106,7 @@ function updateOne(
   force: boolean,
   fallbackCwd: string,
   dryRun: boolean,
+  baseFailures?: TargetBaseFailures,
 ): InternalOutcome {
   if (
     entry.scope === "project" &&
@@ -135,7 +146,7 @@ function updateOne(
   // otherwise every entry sharing a whole-repo tap materializes the
   // whole repository again (§10.1).
   return withAcquiredSkillPath(tap, entry.ref, entry.source.path, home, (acquired, sourcePath) =>
-    applyUpdate(entry, acquired, sourcePath, tap, home, force, entryCwd, dryRun),
+    applyUpdate(entry, acquired, sourcePath, tap, home, force, entryCwd, dryRun, baseFailures),
   );
 }
 
@@ -149,6 +160,7 @@ function applyUpdate(
   force: boolean,
   entryCwd: string,
   dryRun: boolean,
+  baseFailures?: TargetBaseFailures,
 ): InternalOutcome {
   const newSha = acquired.resolvedSha;
 
@@ -176,6 +188,7 @@ function applyUpdate(
     newSha,
     force,
     entryCwd,
+    ...(baseFailures ? { baseFailures } : {}),
   });
   return {
     kind: "updated",

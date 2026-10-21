@@ -1,5 +1,5 @@
 /**
- * Target uninstall operations (§7.4).
+ * Target uninstall operations (§7.4, §14).
  *
  * Multiple adapters may share one install directory, so uninstall removes only
  * the requesting adapters' marker ownership unless this was the last owner.
@@ -28,6 +28,8 @@ export interface UninstallInput {
    * optional: omitting it would silently select the destructive path.
    */
   readonly dryRun: boolean;
+  /** Bases unavailable when this mutation batch was prepared (§14). */
+  readonly unavailableBases?: ReadonlySet<string>;
 }
 
 /**
@@ -52,6 +54,7 @@ export type UninstallOutcome =
 export function uninstallSkillFromAgents(input: UninstallInput): UninstallOutcome {
   const base = baseFor(input.agents[0]!, input.scope, input.cwd);
   const dest = join(base, input.skillName);
+  if (input.unavailableBases?.has(base)) return missingInstall(input, dest, base);
   if (!existsSync(dest)) return missingInstall(input, dest, base);
   const marker = tryReadJson<Marker>(join(dest, ".crew.json"));
   if (!marker) return untrackedInstall(input, dest);

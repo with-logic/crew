@@ -302,9 +302,10 @@ overwrite anything it didn't install itself.
 - **Detects your edits.** On re-install, Homecrew re-hashes the destination. If
   you've customized a managed skill, the install is refused — unless you pass
   `--force`.
-- **Concurrency-safe.** Every write takes an advisory lock on
-  `state.json.lock`. The background autoupdater and your interactive shell
-  can't stomp on each other.
+- **Concurrency-safe.** A state lock coordinates writes within each crew
+  home. Shared target locks coordinate installs and marker changes at each
+  physical agent skill directory, including when the background updater and
+  your shell use different `CREW_HOME` roots.
 - **Reproducible versions.** Tags and branches resolve to full 40-char commit
   SHAs at install time. The SHA — not the tag — is what's recorded.
 - **Owns only `~/.crew/`.** Homecrew writes to its own directory and to each

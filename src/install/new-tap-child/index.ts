@@ -1,5 +1,5 @@
 /**
- * Install a newly-detected tap child (§10.1.1 step 2).
+ * Install a newly-detected tap child (§10.1.1 step 2, §14).
  *
  * Stages the child into the store, runs the install algorithm for
  * every target the rest of the tap was installed into, and returns a
@@ -12,6 +12,7 @@
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
 import { installSkillIntoAgents } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
+import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import { CrewError, normalizeLocalError } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import { isGistTap } from "../../sources/gist.ts";
@@ -38,6 +39,7 @@ export function installNewTapChild(
   force: boolean,
   home: string,
   fallbackCwd: string,
+  baseFailures?: TargetBaseFailures,
 ): StateEntry | null {
   const childCwd = args.scope === "project" ? (args.projectRoot ?? fallbackCwd) : fallbackCwd;
   const staged = stageIntoStore(
@@ -81,6 +83,7 @@ export function installNewTapChild(
         resolvedSha: args.resolvedSha,
         contentHash: staged.contentHash,
         force,
+        ...(baseFailures ? { baseFailures } : {}),
         beforeReplace: (staging) => replacement.moveAsideForReplacement(staging),
       });
       replacement.installed = outcome.kind === "installed";

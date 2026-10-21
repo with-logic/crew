@@ -1,5 +1,5 @@
 /**
- * Per-agent reinstall for `crew update` (§10.1 step 3e).
+ * Per-agent reinstall for `crew update` (§10.1 step 3e, §14).
  *
  * Once an entry's new commit is staged into the store, this module runs
  * the install algorithm for every (agent, scope) pair the entry is
@@ -10,6 +10,7 @@
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
 import { installSkillIntoAgents } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
+import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import type { PerAgentUpdate } from "./types.ts";
@@ -22,6 +23,7 @@ export interface ReinstallInput {
   readonly newSha: string | null;
   readonly force: boolean;
   readonly entryCwd: string;
+  readonly baseFailures?: TargetBaseFailures;
 }
 
 /** Reinstall one staged entry into every agent it is recorded against. */
@@ -66,6 +68,7 @@ function installGroup(
       resolvedSha: newSha,
       contentHash,
       force,
+      ...(input.baseFailures ? { baseFailures: input.baseFailures } : {}),
     });
     for (const a of group) {
       perTarget.push({

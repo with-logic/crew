@@ -1,5 +1,5 @@
 /**
- * `crew uninstall <selector>... | --all` (§7.4).
+ * `crew uninstall <selector>... | --all` (§7.4, §14).
  *
  * Selectors name installed skills, taps, or namespaces; `--all` selects
  * every skill at the target scope behind a confirmation.
@@ -31,6 +31,7 @@
  */
 
 import { ALL_AGENTS, agentByName } from "../../agents/registry.ts";
+import { withTargetLocks } from "../../agents/target-lock/index.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateFile } from "../../core/types.ts";
@@ -44,6 +45,7 @@ import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
 import { selectedTargets } from "./select.ts";
 import { findOrphan } from "./state.ts";
+import { uninstallTargetBases } from "./target-set.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
   const all = Boolean(ctx.flags.extras["all"]);
@@ -102,19 +104,35 @@ function runUninstall(
   const targets = ctx.flags.extras["all"]
     ? allTargets(ctx, state)
     : selectedTargets(ctx, state, readConfig(ctx.home));
-  for (const target of targets) {
-    const subject = target.subject;
-    const { updatedState, rec, meta } = removeOne(state, subject, ctx, false, agentFilter);
-    if (target.kind === "collection") rec.collection = target.collection;
-    state = updatedState;
-    records.push(rec);
-    removedRoots.push(...meta.fullyRemovedRoots);
-  }
-  if (prune && removedRoots.length > 0) {
-    state = pruneOrphans(state, ctx, records, new Set(removedRoots));
-  }
-  const exitCode = records.some((rec) => rec.failures.length > 0) ? 1 : 0;
-  return { state, records, exitCode };
+  const remove = (unavailableBases?: ReadonlySet<string>) => {
+    for (const target of targets) {
+      const subject = target.subject;
+      const { updatedState, rec, meta } = removeOne(
+        state,
+        subject,
+        ctx,
+        false,
+        agentFilter,
+        false,
+        unavailableBases,
+      );
+      if (target.kind === "collection") rec.collection = target.collection;
+      state = updatedState;
+      records.push(rec);
+      removedRoots.push(...meta.fullyRemovedRoots);
+    }
+    if (prune && removedRoots.length > 0) {
+      state = pruneOrphans(state, ctx, records, new Set(removedRoots), unavailableBases);
+    }
+    const exitCode = records.some((rec) => rec.failures.length > 0) ? 1 : 0;
+    return { state, records, exitCode };
+  };
+  return ctx.flags.dryRun
+    ? remove()
+    : withTargetLocks(
+        uninstallTargetBases(state, targets, prune, ctx.cwd),
+        (_failures, unavailable) => remove(unavailable),
+      );
 }
 
 /**
@@ -155,6 +173,7 @@ function pruneOrphans(
   ctx: CommandContext,
   records: UninstallRecord[],
   roots: ReadonlySet<string | null>,
+  unavailableBases?: ReadonlySet<string>,
 ): StateFile {
   let current = state;
   const attempted = new Set<string>();
@@ -162,7 +181,15 @@ function pruneOrphans(
   while (orphan) {
     attempted.add(entryKey(orphan));
     const subject = { raw: orphan.name, name: orphan.name, entries: [orphan] };
-    const { updatedState, rec } = removeOne(current, subject, ctx, true, null);
+    const { updatedState, rec } = removeOne(
+      current,
+      subject,
+      ctx,
+      true,
+      null,
+      false,
+      unavailableBases,
+    );
     records.push(rec);
     current = updatedState;
     orphan = findOrphan(current, ctx.flags.scope, roots, attempted);

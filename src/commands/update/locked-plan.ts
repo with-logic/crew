@@ -1,5 +1,5 @@
 /**
- * The part of `crew update`'s plan that touches tap clones (§10.1,
+ * The part of `crew update`'s plan that touches tap clones (§14, §10.1,
  * §10.1.1), run with every relevant clone lock held.
  *
  * Split from `./plan.ts` (200-line cap). `./plan.ts` owns selection and
@@ -7,6 +7,7 @@
  * locks: refresh, re-expansion, and the per-entry update walk.
  */
 
+import { type TargetBaseFailures, withTargetLocks } from "../../agents/target-lock/index.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { installNewTapChild } from "../../install/new-tap-child/index.ts";
 import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand/index.ts";
@@ -19,6 +20,7 @@ import type { CommandContext } from "../types.ts";
 import type { UpdatePlan, UpdateSelector } from "./plan.ts";
 import type { CollectionSummary } from "./render.ts";
 import { entriesAfterReexpansion, reexpandSelectionFor, withTransitive } from "./selection.ts";
+import { updateTargetBases } from "./target-set.ts";
 
 /** Inputs to the locked half of the plan, after selection has run. */
 export interface LockedPlanInput {
@@ -41,6 +43,12 @@ export interface LockedPlanInput {
 }
 
 export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
+  if (input.dryRun) return runTargetBatch(input);
+  // §14: source clone locks are already held; acquisition stays outside per-entry catches.
+  return withTargetLocks(updateTargetBases(input), (failures) => runTargetBatch(input, failures));
+}
+
+function runTargetBatch(input: LockedPlanInput, baseFailures?: TargetBaseFailures): UpdatePlan {
   const { ctx, config, home, dryRun, taps, transitiveSources, subjects, initialSelected } = input;
   const rows: UpdateRow[] = [];
   const tapReexpandRows: TapReexpandRow[] = [];
@@ -78,7 +86,7 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
     config,
     home,
     reexpandSelection,
-    (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
+    (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd, baseFailures),
     dryRun,
   );
   tapReexpandRows.push(...reexpanded.rows);
@@ -124,6 +132,7 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
       ctx.flags.force,
       ctx.cwd,
       dryRun,
+      baseFailures,
     );
     current = updatedState;
     rows.push(withTransitive(row, transitiveSources));
