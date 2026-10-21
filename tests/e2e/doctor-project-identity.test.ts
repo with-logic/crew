@@ -1,23 +1,40 @@
 /** Doctor drift and repair use the complete install identity (§11.1, §11.2). */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { ALL_AGENTS } from "../../src/agents/registry.ts";
 import { resetAutoupdatePlatform, setAutoupdatePlatform } from "../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { readState, writeState } from "../../src/state/load.ts";
+import { readDoctorMarker } from "../helpers/doctor-marker.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeTempDir } from "../helpers/fixtures.ts";
 import { installSkill, redirectClaudeCode, restoreClaudeCode } from "../helpers/scoped-install.ts";
 
+const otherAdapters = ALL_AGENTS.filter((adapter) => adapter !== claudeCodeAdapter).map(
+  (adapter) => ({
+    adapter,
+    userPath: adapter.userPath,
+    projectPath: adapter.projectPath,
+    detect: adapter.detect,
+  }),
+);
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
   redirected = redirectClaudeCode();
+  for (const { adapter } of otherAdapters) {
+    adapter.userPath = () => "";
+    adapter.projectPath = () => "";
+    adapter.detect = () => false;
+  }
   setAutoupdatePlatform("freebsd");
 });
 afterEach(() => {
   restoreClaudeCode(redirected.originals);
+  for (const { adapter, userPath, projectPath, detect } of otherAdapters)
+    Object.assign(adapter, { userPath, projectPath, detect });
   resetAutoupdatePlatform();
 });
 
@@ -64,7 +81,7 @@ test("C-STATE-06 repair reconstructs another project and merges agents only ther
       .sort(),
   ).toEqual([first, second].sort());
   const markerPath = join(second, ".claude", "skills", "demo", ".crew.json");
-  const marker = JSON.parse(readFileSync(markerPath, "utf8"));
+  const marker = readDoctorMarker(markerPath);
   writeFileSync(markerPath, JSON.stringify({ ...marker, agents: ["claude-code", "codex"] }));
   runCli(["doctor", "--repair"], { home, cwd: second, streams: captureStreams().streams });
   const after = readState(home).installations;
@@ -117,22 +134,57 @@ test("C-STATE-06 repair preserves physically distinct user and project installs"
   expect(readState(home)).toEqual(before);
 });
 
-for (const scope of ["user", "project"] as const) {
-  test(`C-STATE-06 preserves existing ${scope} state for a scope mismatch at a distinct base`, () => {
+for (const inventoryScope of ["user", "project"] as const) {
+  const declaredScope = inventoryScope === "user" ? "project" : "user";
+  test(`C-STATE-14 refuses a ${inventoryScope}-base marker declaring ${declaredScope} scope`, () => {
     const home = makeCrewHome();
     const cwd = makeTempDir();
-    expect(installSkill(home, "demo", scope, cwd)).toBe(0);
+    expect(installSkill(home, "demo", inventoryScope, cwd)).toBe(0);
     const before = readState(home);
-    const base = scope === "user" ? redirected.userRoot : join(cwd, ".claude", "skills");
+    const base = inventoryScope === "user" ? redirected.userRoot : join(cwd, ".claude", "skills");
     const markerPath = join(base, "demo", ".crew.json");
-    const marker: unknown = JSON.parse(readFileSync(markerPath, "utf8"));
-    writeFileSync(
+    const marker = readDoctorMarker(markerPath);
+    writeFileSync(markerPath, JSON.stringify({ ...marker, scope: declaredScope }));
+    const paths = [
+      join(home, "state.json"),
+      join(home, "config.yaml"),
       markerPath,
-      JSON.stringify({ ...(marker as object), scope: scope === "user" ? "project" : "user" }),
-    );
-    expect(runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams })).toBe(
-      0,
-    );
-    expect(readState(home)).toEqual(before);
+      join(base, "demo", "SKILL.md"),
+    ];
+    const bytes = paths.map((path) => readFileSync(path));
+    for (const flags of [[], ["--verify"], ["--repair"], ["--repair", "--dry-run"]]) {
+      for (const json of [true, false]) {
+        const cap = captureStreams();
+        expect(
+          runCli(["doctor", ...flags, ...(json ? ["--json"] : [])], {
+            home,
+            cwd,
+            streams: cap.streams,
+          }),
+        ).toBe(1);
+        if (json) {
+          const result = JSON.parse(cap.stdout());
+          expect(result.findings).toContainEqual(
+            expect.objectContaining({
+              level: "error",
+              code: "marker_invalid",
+              message: expect.stringContaining(markerPath),
+            }),
+          );
+          if (flags.length === 1 && flags[0] === "--repair") expect(result.repairs).toEqual([]);
+        } else {
+          expect(cap.stdout()).toContain("an install marker is invalid; repair is blocked");
+          if (flags.includes("--dry-run"))
+            expect(cap.stdout()).toContain("would address 0 findings");
+        }
+        expect(paths.map((path) => readFileSync(path))).toEqual(bytes);
+        expect(readState(home)).toEqual(before);
+      }
+    }
+    rmSync(paths[0]!);
+    const cap = captureStreams();
+    expect(runCli(["doctor", "--repair", "--json"], { home, cwd, streams: cap.streams })).toBe(1);
+    expect(existsSync(paths[0]!)).toBe(false);
+    expect(paths.slice(1).map((path) => readFileSync(path))).toEqual(bytes.slice(1));
   });
 }

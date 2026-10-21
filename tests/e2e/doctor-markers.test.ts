@@ -9,6 +9,7 @@ import { resetAutoupdatePlatform, setAutoupdatePlatform } from "../../src/autoup
 import { runCli } from "../../src/cli/main.ts";
 import { readConfig } from "../../src/config/load.ts";
 import { readState } from "../../src/state/load.ts";
+import { readDoctorMarker } from "../helpers/doctor-marker.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -53,7 +54,7 @@ function installed(scope: "user" | "project" = "user") {
     scope,
   ]);
   const marker = join(scope === "user" ? target : cwd, "claude-code", "demo", ".crew.json");
-  return { home, marker, installation, original: JSON.parse(readFileSync(marker, "utf8")) };
+  return { home, marker, installation, original: readDoctorMarker(marker) };
 }
 for (const scope of ["user", "project"] as const) {
   for (const scenario of [
@@ -115,9 +116,17 @@ for (const scope of ["user", "project"] as const) {
     });
   }
 }
-test("C-STATE-14 genuinely absent marker can still be reconciled", () => {
-  const { home, marker, installation } = installed();
+test("C-STATE-14 genuinely absent shared-path marker can still be reconciled", () => {
+  const { home, marker, original, installation } = installed();
   expect(installation.code).toBe(0);
+  codexAdapter.userPath = claudeCodeAdapter.userPath;
+  codexAdapter.detect = () => true;
+  expect(invoke(home, ["install", original.tap_path, "--agent", "codex"]).code).toBe(0);
+  expect(invoke(home, ["doctor", "--verify", "--json"]).json().findings).toEqual([]);
+  rmSync(join(home, "state.json"));
+  expect(invoke(home, ["doctor", "--repair"]).code).toBe(0);
+  expect(readState(home).installations).toHaveLength(1);
+  expect(readState(home).installations[0]!.agents).toEqual(["claude-code", "codex"]);
   rmSync(marker);
   const result = invoke(home, ["doctor", "--repair", "--json"]);
   expect(result.code).toBe(0);
