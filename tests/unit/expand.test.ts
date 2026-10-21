@@ -1,16 +1,12 @@
 /**
  * Unit tests for `expandSkills` (§9 step 5).
- *
- * The e2e tests in tests/e2e/install/ cover the happy paths by
- * running the full install flow. These tests exercise `expandSkills`
- * directly to hit each branch of the three-case decision tree —
- * especially the `skills/`-subdir branch and its zero-children error
- * path.
+ * Exercises standard-layout and recursive discovery boundaries.
  */
 
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { CrewError } from "../../src/core/errors.ts";
 import { expandSkills } from "../../src/sources/expand.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
@@ -20,7 +16,14 @@ describe("expandSkills", () => {
     const skill = makeSkill(tmp, "real", skillFrontmatter({ name: "real" }));
     const linked = join(tmp, "linked");
     symlinkSync(skill, linked);
-    expect(() => expandSkills(linked, { followSymlinks: false })).toThrow(/no valid skills found/);
+    let failure: unknown;
+    try {
+      expandSkills(linked, { followStandardLayoutSymlinks: false });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(CrewError);
+    expect(failure).toMatchObject({ code: "no_skills_found" });
     expect(expandSkills(linked).valid[0]!.frontmatter.name).toBe("real");
   });
 

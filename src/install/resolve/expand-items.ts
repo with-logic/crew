@@ -33,7 +33,7 @@ export function expandSkillsAsItems(
 ): ExpansionItems {
   const { valid, skipped } = expandSkills(dir, {
     recursive: tap.discovery === "recursive",
-    followSymlinks: tap.kind === "path",
+    followStandardLayoutSymlinks: tap.kind === "path",
   });
   const items: PendingItem[] = [];
   for (const l of valid) {

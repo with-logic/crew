@@ -49,11 +49,11 @@ export interface ExpansionResult {
 export interface ExpandOptions {
   /**
    * If standard expansion finds no candidates, search recursively for
-   * skill-shaped directories.
+   * skill-shaped directories. This fallback always excludes linked descendant directories.
    */
   readonly recursive?: boolean;
   /** Git discovery excludes directory symlinks to stay in the materialized tree (§9 step 3). */
-  readonly followSymlinks?: boolean;
+  readonly followStandardLayoutSymlinks?: boolean;
 }
 
 /**
@@ -64,7 +64,7 @@ export interface ExpandOptions {
  * a validation failure is present (zero candidates).
  */
 export function expandSkills(rootDir: string, options: ExpandOptions = {}): ExpansionResult {
-  const followSymlinks = options.followSymlinks ?? true;
+  const followSymlinks = options.followStandardLayoutSymlinks ?? true;
   if (!isDirectory(rootDir, followSymlinks)) throw noSkillsFound(rootDir);
   if (hasSkillMd(rootDir)) {
     const valid: LoadedSkill[] = [];

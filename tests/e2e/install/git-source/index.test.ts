@@ -5,18 +5,20 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
-import { codexAdapter } from "../../../src/agents/codex.ts";
-import { geminiCliAdapter } from "../../../src/agents/gemini-cli.ts";
-import { runCli } from "../../../src/cli/main.ts";
-import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
+import { codexAdapter } from "../../../../src/agents/codex.ts";
+import { geminiCliAdapter } from "../../../../src/agents/gemini-cli.ts";
+import { runCli } from "../../../../src/cli/main.ts";
+import { captureStreams, makeCrewHome } from "../../../helpers/env.ts";
 import {
   commitAll,
   makeGitRepo,
   makeSkill,
   makeTempDir,
   skillFrontmatter,
-} from "../../helpers/fixtures.ts";
+} from "../../../helpers/fixtures.ts";
+
+import { LINKED_LAYOUTS } from "./layouts.ts";
 
 type Redirectable = {
   userPath: () => string;
@@ -106,34 +108,17 @@ describe("install from a git source (file:// works)", () => {
 });
 
 describe("git discovery stays inside the materialized tree", () => {
-  for (const location of ["skills", "namespace", "skill", "namespace-skill", "root-child"]) {
+  for (const layout of LINKED_LAYOUTS) {
     for (const ref of ["", "@main"]) {
-      test(`C-INST-05g ignores linked ${location} directories at ${ref || "HEAD"}`, () => {
+      test(`C-INST-05g ignores linked ${layout.label} directories at ${ref || "HEAD"}`, () => {
         const home = makeCrewHome();
         const repo = makeTempDir("crew-discovery-repo-");
         const outside = makeTempDir("crew-discovery-outside-");
-        const escaped = makeSkill(outside, "escaped", skillFrontmatter({ name: "escaped" }));
-        let parent = repo;
-        if (location !== "skills" && location !== "root-child") {
-          parent = join(repo, "skills");
-          mkdirSync(parent);
-        }
-        if (location === "namespace-skill") {
-          parent = join(parent, "group");
-          mkdirSync(parent);
-        }
-        symlinkSync(
-          location === "skills" || location === "namespace" ? outside : escaped,
-          join(
-            parent,
-            location === "skills" ? "skills" : location === "namespace" ? "group" : "escaped",
-          ),
-        );
-        makeSkill(
-          location === "namespace-skill" ? join(repo, "skills") : parent,
-          "safe",
-          skillFrontmatter({ name: "safe" }),
-        );
+        makeSkill(outside, "escaped", skillFrontmatter({ name: "escaped" }));
+        const parent = join(repo, layout.symlinkParent);
+        mkdirSync(parent, { recursive: true });
+        symlinkSync(join(outside, layout.target), join(parent, layout.name));
+        makeSkill(join(repo, layout.safeSkillParent), "safe", skillFrontmatter({ name: "safe" }));
         makeGitRepo(repo);
         expect(
           runCli(["tap", "add", `file://${repo}`, "linked"], {
@@ -176,4 +161,28 @@ describe("git discovery stays inside the materialized tree", () => {
       });
     }
   }
+});
+
+test("path tap follows a linked standard-layout skill for whole-tap install and info", () => {
+  const home = makeCrewHome();
+  const source = makeTempDir("crew-path-linked-source-");
+  const outside = makeTempDir("crew-path-linked-outside-");
+  const skill = makeSkill(outside, "linked-skill", skillFrontmatter({ name: "linked-skill" }));
+  mkdirSync(join(source, "skills"));
+  symlinkSync(skill, join(source, "skills", "linked-skill"));
+  expect(runCli(["tap", "add", source, "local"], { home, streams: captureStreams().streams })).toBe(
+    0,
+  );
+  expect(
+    runCli(["install", "local", "--agent", "claude-code"], {
+      home,
+      streams: captureStreams().streams,
+    }),
+  ).toBe(0);
+  expect(existsSync(join(redirect.agents["claude-code"]!, "linked-skill", "SKILL.md"))).toBe(true);
+  const info = captureStreams();
+  expect(runCli(["info", "local", "--json"], { home, streams: info.streams })).toBe(0);
+  expect(JSON.parse(info.stdout()).skills.map((entry: { name: string }) => entry.name)).toEqual([
+    "linked-skill",
+  ]);
 });
