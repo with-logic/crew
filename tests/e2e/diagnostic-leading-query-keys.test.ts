@@ -69,6 +69,7 @@ for (const key of ["?version", "?ref", "?service"]) {
           expect(error.name).toBe("source_unreachable");
           expect(Object.keys(error).sort()).toEqual(["details", "message", "name"]);
           expect(Object.keys(error.details)).toEqual(["url"]);
+          expect(error.details.url).toBe(`${url.slice(0, url.indexOf("=GIT_SECRET"))}=***`);
         } else {
           expect(output).toContain("source_unreachable");
           expect(output).toContain("Next step");

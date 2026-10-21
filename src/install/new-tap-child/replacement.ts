@@ -80,6 +80,7 @@ export class ChildReplacement {
     this.retainBackup = true;
     const recovery =
       this.backup === null ? "" : `prior copy retained at \`${this.backup}\`; target `;
+    // §13: keep recovery guidance before the untrusted path, which may trigger suffix redaction.
     return sanitizeLine(redactText(`rollback ${recovery}\`${this.dest}\`: ${reason}`));
   }
 

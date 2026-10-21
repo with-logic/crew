@@ -47,7 +47,12 @@ function schemeSpans(text: string): SchemeSpan[] {
   return spans;
 }
 
-/** Render unambiguous URL spans with bounded monotonic scans and disjoint output slices (§13). */
+/**
+ * Render URL spans with bounded monotonic scans and disjoint output slices (§13).
+ * An undisplayable query value suppresses the remaining diagnostic, starting at that value.
+ * Adjacent :// openers in one space-delimited token suppress the suffix from the first URL.
+ * A renderUrl result of "***" is a truncation sentinel: suppress that URL and everything after it.
+ */
 export function redactDiagnostic(
   text: string,
   renderUrl: (value: string) => string,

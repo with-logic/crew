@@ -121,6 +121,7 @@ test.each([" ", "\n", "\r", "\t"])(
         expect(error.name).toBe("source_unreachable");
         expect(Object.keys(error.details)).toEqual(["url"]);
         expect(error.details.url).not.toContain(SECRET);
+        expect(error.details.url).toBe(`${url.slice(0, url.indexOf("?token="))}?token=***`);
       } else {
         expect(output).toContain("Next step");
         expect(output).toContain("Homecrew couldn't reach the source");

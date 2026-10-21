@@ -31,6 +31,9 @@ test.each([" ", "\n", "\r", "\t"])(
           expect(error.name).toBe("source_unreachable");
           expect(Object.keys(error).sort()).toEqual(["details", "message", "name"]);
           expect(Object.keys(error.details)).toEqual(["path"]);
+          expect(error.details.path).toBe(
+            `${source.slice(0, source.indexOf("?token="))}?token=***`,
+          );
         } else {
           expect(output).toContain("Next step");
           expect(output).toContain("Check that the source directory can be listed and searched");
