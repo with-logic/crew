@@ -9,6 +9,8 @@
  * label-assembly rules in `./index.ts`.
  */
 
+import { sanitizeLine } from "../../util/redact.ts";
+
 /**
  * Render a URL for display. The result identifies the remote; it is not
  * a URL to clone with, because any credential it carried is gone.
@@ -46,12 +48,7 @@ export function displayUrl(url: string): string {
  * a control sequence introducer exactly as `ESC [` is.
  */
 export function safeLabel(label: string): string {
-  let out = "";
-  for (const ch of label) {
-    const code = ch.codePointAt(0)!;
-    out += isControl(code) ? `\\x${code.toString(16).padStart(2, "0")}` : ch;
-  }
-  return out;
+  return sanitizeLine(label);
 }
 
 /**
@@ -73,9 +70,4 @@ function firstIndexOf(s: string, needles: readonly string[]): number {
     if (i >= 0 && (best < 0 || i < best)) best = i;
   }
   return best;
-}
-
-/** C0 (`0x00`–`0x1f`), DEL (`0x7f`), and C1 (`0x80`–`0x9f`). */
-function isControl(code: number): boolean {
-  return code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f);
 }
