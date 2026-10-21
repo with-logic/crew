@@ -81,7 +81,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
     // can reach here with (say) no `description`. Validate in full
     // before reporting or installing, so the preview and the real run
     // agree and an invalid child never lands on disk.
-    const skillLoadError = input.cache.validate(child.path);
+    const skillLoadError = input.cache.validate(child.path, input.tap);
     if (skillLoadError) {
       hardFailure = true;
       rows.push({

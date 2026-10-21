@@ -36,6 +36,7 @@ import { ensureClone } from "../../git/repo/index.ts";
 import { classifyRef, resolveRef } from "../../git/repo/refs.ts";
 import { displayUrl } from "../../refs/display-url.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
+import { isGistTap } from "../gist.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
 import { isSourceDirectory } from "../read.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
@@ -127,7 +128,7 @@ export function withAcquiredTap<T>(
  * the skill's own path makes that cost proportional to what is read
  * (§10.1).
  *
- * `fn` receives the skill directory itself, not the tap root.
+ * `fn` receives the skill directory or original gist file, not the tap root.
  */
 export function withAcquiredSkillDir<T>(
   tap: TapConfig,
@@ -146,6 +147,11 @@ export function withAcquiredSkillDir<T>(
   const sha = resolveRefFetchingIfNeeded(clonePath, ref);
   const kind = classifyRef(clonePath, ref);
   const pinned = kind === "sha" || kind === "tag";
+  if (isGistTap(tap))
+    return withExportedTree(clonePath, sha, tap.subpath, home, (rootDir) => {
+      const file = join(rootDir, skillPath);
+      return fn({ rootDir: file, resolvedSha: sha, pinned }, file);
+    });
   const exportPath =
     skillPath.length === 0
       ? tap.subpath

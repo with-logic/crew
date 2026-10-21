@@ -16,6 +16,7 @@ import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { type AcquiredTap, withAcquiredSkillDir } from "../../sources/acquire/index.ts";
+import { isGistTap } from "../../sources/gist.ts";
 import { hashSourceDirectory } from "../../sources/read.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
@@ -174,9 +175,9 @@ function applyUpdate(
     if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
   }
 
-  const loaded = loadSkill(skillDir);
+  const loaded = loadSkill(skillDir, isGistTap(tap));
   if (dryRun) return { kind: "would_update", new_sha: newSha };
-  const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash);
+  const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash, isGistTap(tap));
   const perTarget = reinstallIntoAgents({
     entry,
     tap,

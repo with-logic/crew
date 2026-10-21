@@ -16,7 +16,7 @@ import { withResolutionRoots } from "../resolve-ref/roots.ts";
 import { expandSkillsAsItems } from "./expand-items.ts";
 
 /**
- * Where a candidate's skill directory lives in the acquired tree.
+ * Where a candidate's directory or gist file lives in the acquired tree.
  *
  * Without a ref, `resolveTapRef` indexed the live clone and
  * `location.path` is absolute inside it. With a ref, resolution already

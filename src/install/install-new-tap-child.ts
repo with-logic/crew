@@ -13,6 +13,7 @@ import { installSkillIntoAgents } from "../agents/install.ts";
 import { agentByName } from "../agents/registry.ts";
 import { CrewError, normalizeLocalError } from "../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../core/types.ts";
+import { isGistTap } from "../sources/gist.ts";
 import { stageIntoStore } from "../sources/store.ts";
 import { nowIso } from "../util/time.ts";
 
@@ -35,7 +36,14 @@ export function installNewTapChild(
   fallbackCwd: string,
 ): StateEntry | null {
   const childCwd = args.scope === "project" ? (args.projectRoot ?? fallbackCwd) : fallbackCwd;
-  const staged = stageIntoStore(args.skillDir, args.skillName, args.resolvedSha, home);
+  const staged = stageIntoStore(
+    args.skillDir,
+    args.skillName,
+    args.resolvedSha,
+    home,
+    undefined,
+    isGistTap(args.tap),
+  );
   const successfulTargets: string[] = [];
   // Group adapters by resolved install path (path sharing, §7.2) so
   // shared-path targets install once but both get marked successful.

@@ -24,6 +24,7 @@ import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
+import { gistCandidates, isGistTap } from "../sources/gist.ts";
 import { migrateTapClone } from "../sources/migrate-clones.ts";
 import { sourceRelativePath } from "../sources/path.ts";
 import { isSourceDirectory, listSourceDirectory } from "../sources/read.ts";
@@ -36,7 +37,7 @@ export interface SkillLocation {
   readonly name: string;
   /** Namespace the skill lives under, or null if at skills/ root or tap root. */
   readonly namespace: string | null;
-  /** Absolute path to the skill's directory on disk. */
+  /** Absolute path to the skill directory or original gist file on disk. */
   readonly path: string;
   /**
    * Path RELATIVE to the tap root, POSIX-style. Empty when the skill
@@ -92,6 +93,16 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
 
   const followSymlinks = tap.kind === "path";
   if (!isSourceDirectory(root, followSymlinks)) return { skills, namespaces };
+  if (isGistTap(tap)) {
+    for (const candidate of gistCandidates(root))
+      addSkill({
+        name: candidate.frontmatter.name,
+        namespace: null,
+        path: candidate.path,
+        tapRelativePath: candidate.filename,
+      });
+    return { skills, namespaces };
+  }
   if (hasSkillMd(root)) {
     const skillName = skillNameForIndex(root);
     if (skillName !== null)

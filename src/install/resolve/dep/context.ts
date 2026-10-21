@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import { tapClonePath } from "../../../core/repo-path.ts";
 import { createExportedTree, type ExportedTree } from "../../../git/export.ts";
+import { isGistTap } from "../../../sources/gist.ts";
 import type { PendingItem } from "../enqueue.ts";
 
 // Two contexts reuse alternating parents while capping disk use at two repository exports.
@@ -42,7 +43,8 @@ function parentDir(
   home: string,
   exports: Map<string, ExportedTree>,
 ): string | undefined {
-  const hasCapturedRevision = parent.requestedRef !== null && parent.resolvedSha !== null;
+  const hasCapturedRevision =
+    (parent.requestedRef !== null || isGistTap(parent.tap)) && parent.resolvedSha !== null;
   if (!hasCapturedRevision || parent.tap.kind !== "git") return undefined;
   const clone = tapClonePath(parent.tap, home);
   // Widen a skill-root tap to its enclosing directory so siblings remain visible.
