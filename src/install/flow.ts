@@ -4,8 +4,8 @@
  * This module ties the pieces together:
  *
  *   1. Parse each ref → acquire → validate → expand → resolve deps
- *      (in `./resolve.ts`).
- *   2. Compute the active target set (in `./target-set.ts`).
+ *      (in `./resolve/index.ts`).
+ *   2. Compute the active target set (in `./agent-set.ts`).
  *   3. Detect "already installed" and "name conflict" against the current
  *      state (§5.4; in `./duplicate-rules/index.ts`).
  *   4. Perform the installs (in `./perform/index.ts`).
