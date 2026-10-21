@@ -437,6 +437,9 @@ phones home.
 exact SHA are skipped unless `--force`. Skills pinned to a tag are
 re-resolved: if the tag moved and `--force` is given, the new commit is
 installed. Everything else updates to whatever the ref resolves to now.
+If a local skill directory disappears during source inspection, update keeps
+the installed copy and continues. Invalid manifests and permission failures
+still report errors.
 
 **What about Linux? Windows?** Linux is supported for x86_64 and ARM64 hosts.
 Windows is future work because agent paths, scheduler integration, and binary
