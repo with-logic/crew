@@ -22,6 +22,7 @@ import { ALL_AGENTS } from "../../../agents/registry.ts";
 import type { Scope, StateEntry } from "../../../core/types.ts";
 import { hasUsableProjectRoot } from "../../../state/validation.ts";
 import type { Finding } from "../checks.ts";
+import { inventoryDirectory } from "./filesystem.ts";
 import { invalidMarkerFinding } from "./findings.ts";
 import { scanMarkers } from "./scan.ts";
 
@@ -51,6 +52,7 @@ export function buildMarkerIndex(
     if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
   const roots = [...projectRoots];
+  const inventoryRoots = roots.filter((root) => inventoryDirectory(root, inventoryFindings));
   const otherOwningScopeBase = cachedOtherOwningScopeBase(roots, sameBase);
   for (const adapter of ALL_AGENTS) {
     const sharesUserBase = (root: string): boolean =>
@@ -70,8 +72,7 @@ export function buildMarkerIndex(
       seen.add(key);
       markers.push({ record: rec });
     }
-    for (const root of roots) {
-      if (!existsSync(root)) continue;
+    for (const root of inventoryRoots) {
       const projectInventory = scanMarkers(adapter, "project", root);
       for (const [key, finding] of projectInventory.findings) inventoryFindings.set(key, finding);
       const projectBaseIsShared =
