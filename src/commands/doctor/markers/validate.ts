@@ -1,6 +1,7 @@
 /** Validate parsed marker values before doctor trusts them to rebuild state/config (§7.5, §11.2). */
 import type { Marker } from "../../../core/types.ts";
 import { validateFrontmatterName } from "../../../skill/validate.ts";
+import { assertRecordedSourcePath } from "../../../sources/path.ts";
 import { type MarkerTapMetadata, markerTapConfig } from "./tap.ts";
 
 const MARKER_SCHEMA_VERSION: Marker["schema_version"] = 1;
@@ -42,6 +43,7 @@ export function isDoctorMarker(value: unknown): value is Marker {
     if (marker[key] !== null && typeof marker[key] !== "string") return false;
   }
   try {
+    assertRecordedSourcePath(marker["path"] as string);
     validateFrontmatterName({ name: marker["name"] as string });
     markerTapConfig(marker as MarkerTapMetadata);
     return true;
