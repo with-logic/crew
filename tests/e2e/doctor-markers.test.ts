@@ -39,7 +39,7 @@ afterEach(() => {
 function invoke(home: string, args: string[]) {
   const cap = captureStreams();
   const code = runCli(args, { home, cwd, streams: cap.streams });
-  return { code, text: cap.stdout(), json: () => JSON.parse(cap.stdout()) };
+  return { code, text: cap.stdout(), stderr: cap.stderr(), json: () => JSON.parse(cap.stdout()) };
 }
 function installed() {
   const home = makeCrewHome();
@@ -90,6 +90,10 @@ for (const scenario of [
         ).toBe(true);
         if (flags.length === 1) expect(data.repairs).toEqual([]);
       }
+      const quiet = invoke(home, ["doctor", "--repair", "--quiet"]);
+      expect(quiet.code).toBe(1);
+      expect(quiet.text).toBe("");
+      expect(quiet.stderr).toContain(marker);
       const human = invoke(home, ["doctor", "--repair", "--dry-run"]);
       expect(human.text).toContain("would address 0 findings");
       expect(human.text).not.toContain("would be repaired");
@@ -102,7 +106,7 @@ for (const scenario of [
     }
   });
 }
-test("genuinely absent marker can still be reconciled", () => {
+test("C-STATE-14 genuinely absent marker can still be reconciled", () => {
   const { home, marker, installation } = installed();
   expect(installation.code).toBe(0);
   rmSync(marker);

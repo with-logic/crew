@@ -31,8 +31,7 @@ export interface MarkerEntry {
 export function buildMarkerIndex(
   stateEntries: readonly StateEntry[],
   cwd: string,
-  findings: Finding[],
-): MarkerEntry[] {
+): { markers: MarkerEntry[]; findings: Finding[] } {
   const markers: MarkerEntry[] = [];
   const inventoryFindings = new Map<string, Finding>();
   const seen = new Set<string>();
@@ -41,7 +40,9 @@ export function buildMarkerIndex(
     if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
   for (const adapter of ALL_AGENTS) {
-    for (const rec of scanMarkers(adapter, "user", cwd, inventoryFindings)) {
+    const userInventory = scanMarkers(adapter, "user", cwd);
+    for (const [key, finding] of userInventory.findings) inventoryFindings.set(key, finding);
+    for (const rec of userInventory.records) {
       const key = `user\0${rec.installDir}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -49,7 +50,9 @@ export function buildMarkerIndex(
     }
     for (const root of projectRoots) {
       if (!existsSync(root)) continue;
-      for (const rec of scanMarkers(adapter, "project", root, inventoryFindings)) {
+      const projectInventory = scanMarkers(adapter, "project", root);
+      for (const [key, finding] of projectInventory.findings) inventoryFindings.set(key, finding);
+      for (const rec of projectInventory.records) {
         const key = `project\0${rec.installDir}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -57,6 +60,5 @@ export function buildMarkerIndex(
       }
     }
   }
-  findings.push(...inventoryFindings.values());
-  return markers;
+  return { markers, findings: [...inventoryFindings.values()] };
 }

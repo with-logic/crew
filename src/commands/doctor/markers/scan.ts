@@ -11,11 +11,11 @@ export function scanMarkers(
   adapter: AgentAdapter,
   scope: Scope,
   cwd: string,
-  findings: Map<string, Finding>,
-): InstalledSkillRecord[] {
+): { records: InstalledSkillRecord[]; findings: Map<string, Finding> } {
   const base = baseFor(adapter, scope, cwd);
-  if (base === "") return [];
   const records: InstalledSkillRecord[] = [];
+  const findings = new Map<string, Finding>();
+  if (base === "") return { records, findings };
   for (const name of listDir(base)) {
     const installDir = join(base, name);
     if (!isDirectory(installDir)) continue;
@@ -51,5 +51,5 @@ export function scanMarkers(
     if (marker.agents.includes(adapter.name))
       records.push({ adapter: adapter.name, scope, installDir, marker });
   }
-  return records;
+  return { records, findings };
 }

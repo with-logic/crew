@@ -44,8 +44,7 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
 
   const state = readState(home);
   const stateEntries = state.installations;
-  const inventoryFindings: Finding[] = [];
-  const markers = buildMarkerIndex(stateEntries, ctx.cwd, inventoryFindings);
+  const { markers, findings: inventoryFindings } = buildMarkerIndex(stateEntries, ctx.cwd);
   findings.push(...inventoryFindings);
   const repairBlocked = inventoryFindings.length > 0;
 
@@ -64,7 +63,10 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
   // An unparseable config still skips the repair entirely: the rebuild
   // rewrites `config.yaml` taps from markers, so running it against a
   // file we could not read would discard whatever the user has there.
-  const applied = repair && !dryRun && config !== null && !repairBlocked;
+  const repairRequested = repair && !dryRun;
+  const configReadable = config !== null;
+  const markerInventoryComplete = !repairBlocked;
+  const applied = repairRequested && configReadable && markerInventoryComplete;
   const repairs: AutoupdateRepair[] = applied ? applyRepairs(markers, home) : [];
 
   const human = renderDoctor(
@@ -88,7 +90,11 @@ export function doctorCommand(ctx: CommandContext): CommandOutput {
     exitCode,
     human,
     ...(ctx.flags.quiet
-      ? { stderr: failedRepairs.map((r) => sanitizeLine(redactText(r.message))) }
+      ? {
+          stderr: [...inventoryFindings, ...failedRepairs].map((finding) =>
+            sanitizeLine(redactText(finding.message)),
+          ),
+        }
       : {}),
     // §11.2: `repairs` describes what a repair did, so it appears on
     // every `--repair` response — including one where an unparseable
