@@ -6,7 +6,7 @@ import type { TapConfig } from "../../core/types.ts";
 import { knownTapIsConfigured } from "../../known-taps/configured.ts";
 import { knownTapSource } from "../../known-taps/format.ts";
 import { searchKnownTaps } from "../../known-taps/search.ts";
-import { skillRef } from "./reference.ts";
+import { skillLabel } from "../../refs/skill-label.ts";
 import type { KnownSearchHit } from "./types.ts";
 
 export function collectKnownHits(
@@ -31,7 +31,7 @@ export function collectKnownHits(
 }
 
 export function knownInstallRef(hit: KnownSearchHit): string {
-  return `${hit.tap}/${skillRef(hit)}`;
+  return `${hit.tap}/${skillLabel(hit)}`;
 }
 
 export { knownTapSource };

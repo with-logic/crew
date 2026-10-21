@@ -5,6 +5,7 @@
 import type { TapSource } from "../../../core/types.ts";
 import { sameNullableText, sameText } from "../../../known-taps/text.ts";
 import type { KnownTap, KnownTapSkill } from "../../../known-taps/types.ts";
+import { skillLabel } from "../../../refs/skill-label.ts";
 
 export interface KnownInstallSuggestion {
   readonly tap: KnownTap;
@@ -99,7 +100,7 @@ function skillSuggestion(
   skill: KnownTapSkill,
   ref: string | null,
 ): KnownInstallSuggestion {
-  const label = skill.namespace === null ? skill.name : `${skill.namespace}/${skill.name}`;
+  const label = skillLabel(skill);
   return { tap, skill, installRef: `${tap.name}/${label}${ref === null ? "" : `@${ref}`}` };
 }
 

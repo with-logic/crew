@@ -30,14 +30,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 source "$ROOT/scripts/next-version.sh"
 
-DRY_RUN=false
-RELEASE_TARGET="patch"
-for arg in "$@"; do
-  case "$arg" in
-    --dry-run) DRY_RUN=true ;;
-    *) validate_release_target "$arg"; RELEASE_TARGET="$arg" ;;
-  esac
-done
+source "$ROOT/scripts/release/arguments.sh"
+parse_release_arguments "$@"
 
 # ---------- 1. Safety checks ----------------------------------------------
 
