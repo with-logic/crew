@@ -15,7 +15,7 @@
  */
 
 import { lstatSync, type Stats } from "node:fs";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { toPosix } from "./fs.ts";
 
@@ -40,7 +40,7 @@ export function assertNoSymlinkEscape(root: string, target: string, describe: st
   // to climb, so a leading `..` means it escaped. An absolute result
   // means the two share no common base at all (different drives).
   const rel = relative(rootAbs, targetAbs);
-  if (rel.startsWith("..") || isAbsolute(rel)) {
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new CrewError(
       "invalid_ref",
       `${describe} resolves outside the source, which would read content that isn't part of it`,
