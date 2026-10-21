@@ -13,6 +13,7 @@ import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
 import { exists, readText } from "../util/fs.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
+import { readFrontmatter } from "./read-frontmatter.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
 /** Load and validate the skill at `path`. Throws `invalid_skill` on any failure. */
@@ -29,9 +30,7 @@ export function loadSkill(path: string): LoadedSkill {
 export function loadSkillName(path: string): string {
   const skillMdPath = join(path, "SKILL.md");
   assertManifestIsNotSymlink(skillMdPath, path);
-  const raw = readText(skillMdPath);
-  const { data } = extractFrontmatter(raw);
-  return validateFrontmatterName(data);
+  return validateFrontmatterName(readFrontmatter(skillMdPath));
 }
 
 /** True iff `path` contains a `SKILL.md`. Does not validate. */
