@@ -15,8 +15,8 @@ function queryBoundary(text: string, displayableParams: ReadonlySet<string>): nu
       keyStart = i + 1;
       readingKey = true;
     } else if (ch === "=" && readingKey) {
-      // The appended '=' guarantees one key, including an empty key.
-      const key = new URLSearchParams(`${text.slice(keyStart, i)}=`).keys().next().value!;
+      // URLSearchParams strips one leading '?'; supply our own so the raw key survives (§13).
+      const key = new URLSearchParams(`?${text.slice(keyStart, i)}=`).keys().next().value!;
       if (!displayableParams.has(key.toLowerCase())) return i + 1;
       readingKey = false;
     }
