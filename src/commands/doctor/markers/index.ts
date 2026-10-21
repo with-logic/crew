@@ -15,8 +15,8 @@
  * so an alias reached through the other scope must not relabel it.
  */
 
-import { existsSync } from "node:fs";
-import type { InstalledSkillRecord } from "../../../agents/adapter.ts";
+import { existsSync, realpathSync } from "node:fs";
+import type { AgentAdapter, InstalledSkillRecord } from "../../../agents/adapter.ts";
 import { ALL_AGENTS } from "../../../agents/registry.ts";
 import type { StateEntry } from "../../../core/types.ts";
 import { hasUsableProjectRoot } from "../../../state/validation.ts";
@@ -49,7 +49,11 @@ export function buildMarkerIndex(
     const userInventory = scanMarkers(adapter, "user", cwd);
     for (const [key, finding] of userInventory.findings) inventoryFindings.set(key, finding);
     for (const rec of userInventory.records) {
-      if (rec.marker.scope !== "user") continue;
+      if (
+        rec.marker.scope !== "user" &&
+        [...projectRoots].some((root) => sharesScopeBase(adapter, root))
+      )
+        continue;
       const key = `user\0${rec.installDir}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -60,7 +64,7 @@ export function buildMarkerIndex(
       const projectInventory = scanMarkers(adapter, "project", root);
       for (const [key, finding] of projectInventory.findings) inventoryFindings.set(key, finding);
       for (const rec of projectInventory.records) {
-        if (rec.marker.scope !== "project") continue;
+        if (rec.marker.scope !== "project" && sharesScopeBase(adapter, root)) continue;
         const key = `project\0${rec.installDir}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -69,4 +73,17 @@ export function buildMarkerIndex(
     }
   }
   return { markers, findings: [...inventoryFindings.values()] };
+}
+
+/** Scope labels disambiguate only an actual shared physical base (§11.1). */
+function sharesScopeBase(adapter: AgentAdapter, root: string): boolean {
+  const userBase = adapter.userPath();
+  const projectBase = adapter.projectPath(root);
+  return (
+    userBase !== "" &&
+    projectBase !== "" &&
+    existsSync(userBase) &&
+    existsSync(projectBase) &&
+    realpathSync(userBase) === realpathSync(projectBase)
+  );
 }

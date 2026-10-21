@@ -116,3 +116,23 @@ test("C-STATE-06 repair preserves physically distinct user and project installs"
   expect(runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams })).toBe(0);
   expect(readState(home)).toEqual(before);
 });
+
+for (const scope of ["user", "project"] as const) {
+  test(`C-STATE-06 preserves existing ${scope} state for a scope mismatch at a distinct base`, () => {
+    const home = makeCrewHome();
+    const cwd = makeTempDir();
+    expect(installSkill(home, "demo", scope, cwd)).toBe(0);
+    const before = readState(home);
+    const base = scope === "user" ? redirected.userRoot : join(cwd, ".claude", "skills");
+    const markerPath = join(base, "demo", ".crew.json");
+    const marker: unknown = JSON.parse(readFileSync(markerPath, "utf8"));
+    writeFileSync(
+      markerPath,
+      JSON.stringify({ ...(marker as object), scope: scope === "user" ? "project" : "user" }),
+    );
+    expect(runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams })).toBe(
+      0,
+    );
+    expect(readState(home)).toEqual(before);
+  });
+}
