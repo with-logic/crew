@@ -6,10 +6,7 @@
  * shallow discovery separate from the update orchestration.
  */
 
-import { CrewError } from "../core/errors.ts";
 import type { TapConfig } from "../core/types.ts";
-import { hasSkillMd, loadSkillName } from "../skill/load.ts";
-import { isGistTap } from "../sources/gist.ts";
 import { isSourceDirectory } from "../sources/read.ts";
 import { indexTap, type RejectedTapSkill } from "./tap-index.ts";
 
@@ -32,10 +29,6 @@ export function currentTapChildren(
   const children: CurrentTapChild[] = [];
   const skipped: RejectedTapSkill[] = [];
   if (!isSourceDirectory(rootDir, tap.kind === "path")) return { children, skipped };
-  if (!isGistTap(tap) && hasSkillMd(rootDir)) {
-    pushLoaded(children, skipped, rootDir);
-    return { children, skipped };
-  }
   // `rootDir` is the caller's already-materialized root — the scratch
   // export of the group's ref, when it tracks one. Indexing the live
   // clone instead would discover children that don't exist at that
@@ -59,17 +52,4 @@ export function groupChildrenByName(
     else byName.set(child.name, [child]);
   }
   return byName;
-}
-
-function pushLoaded(children: CurrentTapChild[], skipped: RejectedTapSkill[], path: string): void {
-  try {
-    children.push({ name: loadSkillName(path), path, tapRelativePath: "" });
-  } catch (err) {
-    if (!(err instanceof CrewError) || err.code !== "invalid_skill") throw err;
-    skipped.push({
-      path,
-      code: err.code,
-      message: err.message,
-    });
-  }
 }
