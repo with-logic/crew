@@ -1,5 +1,5 @@
 /**
- * Human-friendly output for `crew update`.
+ * Human-friendly output for `crew update` (§5.1, §10.1.1).
  *
  * Renders tap warnings, aligned per-skill rows, tap additions, and totals.
  * Row-level formatting lives in `./rows.ts`.
@@ -8,6 +8,7 @@
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { columns, plural } from "../../util/format.ts";
+import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
 import { formatRowParts, groupByTap, nameCell } from "./rows.ts";
@@ -112,7 +113,7 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
     lines.push(
       `${style.symbol("fail")} ${style.bold(r.name)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
     );
-    if (r.error?.message) lines.push(style.dim(`  ${r.error.message}`));
+    if (r.error?.message) lines.push(style.dim(`  ${sanitizeLine(r.error.message)}`));
   }
 
   const totals = tally(input.rows, addedRows.length, errorRows.length);

@@ -7,6 +7,7 @@
  * (`--dry-run`) or install it.
  */
 
+import { CrewError } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import { isGistTap } from "../../sources/gist.ts";
 import {
@@ -103,22 +104,60 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       });
       continue;
     }
-    const entry = input.installOne({
-      skillDir: child.path,
-      skillName: child.name,
-      tapRelativePath: child.tapRelativePath,
-      scope: input.scope,
-      tap: input.tap,
-      agents: input.agents,
-      resolvedSha: input.resolvedSha,
-      projectRoot: input.projectRoot,
-      ref: input.ref,
-      pinned: input.pinned,
-    });
-    if (entry) {
-      added.push(entry);
-      noteInstalled(input.installedIndex, lookup);
-      rows.push({ name: child.name, scope: input.scope, tap: input.tap.name, kind: "added" });
+    try {
+      const { entry, perTarget } = input.installOne({
+        skillDir: child.path,
+        skillName: child.name,
+        tapRelativePath: child.tapRelativePath,
+        scope: input.scope,
+        tap: input.tap,
+        agents: input.agents,
+        resolvedSha: input.resolvedSha,
+        projectRoot: input.projectRoot,
+        ref: input.ref,
+        pinned: input.pinned,
+      });
+      if (entry) {
+        added.push(entry);
+        noteInstalled(input.installedIndex, lookup);
+        rows.push({
+          name: child.name,
+          scope: input.scope,
+          tap: input.tap.name,
+          kind: "added",
+          per_target: perTarget,
+        });
+      } else {
+        hardFailure = true;
+        const failed = perTarget.filter((target) => target.kind === "failed");
+        rows.push({
+          name: child.name,
+          scope: input.scope,
+          tap: input.tap.name,
+          kind: "tap_error",
+          per_target: perTarget,
+          error: {
+            code: failed[0]?.error.code ?? "no_agents",
+            message:
+              failed.length === 0
+                ? "No applicable agents for this child"
+                : failed.map((target) => `${target.agent}: ${target.error.message}`).join("; "),
+          },
+        });
+      }
+    } catch (err) {
+      const cause = err as Error;
+      hardFailure = true;
+      rows.push({
+        name: child.name,
+        scope: input.scope,
+        tap: input.tap.name,
+        kind: "tap_error",
+        error: {
+          code: err instanceof CrewError ? err.code : "source_unreachable",
+          message: cause.message,
+        },
+      });
     }
   }
 

@@ -73,7 +73,9 @@ describe("reexpandTaps", () => {
 
     chmodSync(path, 0);
     try {
-      expect(() => reexpandTaps(state, config, home, null, () => null)).toThrow();
+      expect(() =>
+        reexpandTaps(state, config, home, null, () => ({ entry: null, perTarget: [] })),
+      ).toThrow();
     } finally {
       chmodSync(path, 0o755);
     }

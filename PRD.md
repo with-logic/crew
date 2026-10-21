@@ -206,6 +206,12 @@ terminal in 8-bit mode reads C1 as an escape sequence — are rendered as
 `\xNN` escapes. An SCP-style remote (`git@host:owner/repo`) keeps its
 user, which names the protocol account rather than a secret (§13).
 
+Human-readable skill metadata and source-derived error text follow the
+same control-character escaping rule before wrapping or styling. This
+includes descriptions, license, compatibility, homepage, dependencies,
+and filenames embedded in errors. JSON values and installed skill bytes
+are unchanged.
+
 ### 5.2 Global flags
 
 Accepted on any command where they apply:
@@ -1466,6 +1472,17 @@ On every `crew update` run, for each group of state entries sharing
    `description`, over-long fields, …) MUST be reported as a per-child
    failure carrying `invalid_skill` and MUST NOT be installed, in both
    real and `--dry-run` runs. The run exits 1.
+   Target installation failures are reported per child with the failed
+   agents, error code, and message, and make the run exit 1 while other
+   children continue. A new child is committed to state only after all
+   its targets succeed. On failure, crew removes only copies newly
+   created for that child during this attempt, preserves destinations
+   that existed before the attempt, and leaves the child unrecorded so
+   a later update retries it.
+   JSON rows for attempted child installations include `per_target`
+   outcomes with `agent` and `kind` (`installed`, `up_to_date`,
+   `failed`, or `rolled_back`); failed outcomes include
+   `error: { code, message }`.
 3. For each skill in state attributed to this tap whose directory is
    **no longer present** under the resolved root: reports `source_gone`
    and leaves the local install untouched (per the upstream-deletion
@@ -2580,6 +2597,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-18f | §10.1.1 | `crew outdated [<selector>...]` behaves as `crew update --dry-run`: identical `--json` payload (`dry_run: true`, `would_update` / `would_add` kinds), identical exit code, and the same write boundary — tap clones refresh, while installed skills, markers, store entries, and `state.json` are unchanged. Human output lists only rows that would change and prints a single "up to date" line when none would. |
 | C-UPD-18g | §10.1.1, §14 | `crew outdated` against a home with no `state.json` leaves it absent, and never acquires the state lock. |
 | C-UPD-18h | §10.1.1 | When a tap refresh or re-expansion fails, `crew outdated` reports the results as possibly stale rather than printing an unqualified "up to date", even if every locally-known row is up to date. |
+| C-UPD-18i | §10.1.1 | A new child's target failure reports the failed agents and reason, exits 1, and does not stop other children. No state entry is recorded; only copies newly created for that child during the attempt are rolled back, existing destinations survive, and a later update retries the child. |
 | C-UPD-19 | §10.1 | `crew update` with no args fetches every configured tap (`git fetch` + fast-forward) before walking per-skill updates, so `crew search` reflects upstream changes without requiring the user to reinstall from the tap first. |
 | C-UPD-23 | §10.1 / §16.6 | `crew update <selector>...` restricts fetching to taps that back the selected entries (and any taps reached via the dependency closure of step 2). Taps hosting only unrelated skills are NOT fetched. |
 | C-UPD-24 | §10.1 | `crew update <selector>...` includes each selected entry's transitive dependency closure (as determined by `required_by` in state) in the update set. Entries pulled in that way are reported alongside the selected entries, marked as transitively required in `--json` output. |
