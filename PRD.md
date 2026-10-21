@@ -225,7 +225,7 @@ Accepted on any command where they apply:
 - `--dry-run` — describe what would happen without changing any installed state: no skill, marker, store entry, config, or `state.json` is written. A command MAY still refresh its own read caches where that is how it learns what would change (`crew update --dry-run` fetches tap clones — §10.1.1); any such exception MUST be stated in that command's section.
 - `--json` — emit machine-readable output. Required on `list`, `search`, `info`, `agents`, `autoupdate status`. Optional on all other commands; when provided, humans-readable output is suppressed and a structured result is emitted.
 - `--quiet` — suppress non-error output. Error output still goes to stderr.
-- `--verbose` — emit progress details to stderr: every `git` (and scheduler) subprocess invocation, tap clone/fetch, store staging, and per-agent install/uninstall step, one line each. Lines go to stderr only, so `--verbose --json` still leaves a clean JSON payload on stdout. Without the flag, none of these lines are emitted. Credentials MUST NOT appear in this output: a URL's password, an `https://<token>@host/…` userinfo token, and the value of a sensitive query parameter (`token`, `access_token`, `private_token`, `api_key`, `apikey`, `password`) are each replaced with `***`. SSH userinfo (`git@host`) is a username, not a secret, and is preserved. Control characters in any echoed value are escaped so crafted input cannot forge or reposition output — including a newline, which would otherwise open its own line and forge what reads as a second message; only line breaks an implementation composes itself as layout are preserved. The same redaction applies wherever a source URL can appear in a user-visible error, through every channel: the rendered message, any diagnostic quoted from `git` (which repeats the remote verbatim), and the `details` object of a `--json` error payload. Error `details` keys remain stable per §13; only their values are redacted.
+- `--verbose` — emit progress details to stderr: every `git` (and scheduler) subprocess invocation, tap clone/fetch, store staging, and per-agent install/uninstall step, one line each. Lines go to stderr only, so `--verbose --json` still leaves a clean JSON payload on stdout. Without the flag, none of these lines are emitted. Credentials MUST NOT appear in this output: a URL's password, an `https://<token>@host/…` userinfo token, and the value of a sensitive query parameter (`token`, `access_token`, `private_token`, `api_key`, `apikey`, `password`) are each replaced with `***`. SSH userinfo (`git@host`) is a username, not a secret, and is preserved. Control characters in any echoed value are escaped so crafted input cannot forge or reposition output — including a newline, which would otherwise open its own line and forge what reads as a second message; only line breaks an implementation composes itself as layout are preserved. The same redaction applies wherever a source URL can appear in a user-visible error, through every channel: the rendered message, any diagnostic quoted from `git` (which repeats the remote verbatim), and the `details` object of a `--json` error payload. Error `details` keys remain stable per §13; only their values are redacted. Unstructured diagnostics follow §13's fail-closed ambiguity policy; preserving trailing prose never takes precedence over credential confidentiality.
 - `--yes` — answer "yes" to any confirmation prompt.
 - `--force` — override safety checks as defined in §7 and §10. Never overrides spec validation failures or two-skills-same-name conflicts.
 
@@ -2145,6 +2145,30 @@ mode, while `details` keys survive so the machine contract above holds.
 Implementations SHOULD also render a safe form at construction sites
 that compose a URL into a sentence, because a redacted URL reads better
 there than a scrub of the finished text.
+
+**Ambiguous diagnostic boundaries.** A whole URL supplied as a separate
+value has a known boundary; its non-sensitive transport parameters
+(`service`, `ref`, `version`, case-insensitive) remain readable. Free-text
+diagnostics, including bare query tails echoed by git and filesystem
+paths, have no trusted interpolation boundaries. Once a query parameter
+outside that allowlist reaches `=`, replace its value and the entire
+remaining diagnostic input with `***`. Quotes, markup, whitespace
+(including literal spaces and raw or escaped controls), suffix punctuation,
+later parameters, and trailing prose MUST NOT be restored from that suffix.
+Decode parameter names as URL query keys before applying the allowlist.
+
+An unstructured URL authority containing quote/markup, whitespace,
+controls, or backslashes is ambiguous too: replace from its scheme start
+through end-of-input with `***`, rather than treating those characters as
+trusted credential terminators. Authority boundaries follow URL grammar
+(`/`, `?`, `#`, or actual end-of-input). A URL renderer MUST NOT consume an
+adjacent scheme opener as part of another URL, including when controls
+between them were already escaped; suppress the ambiguous suffix from the
+first involved scheme. Ordinary prose and multiline layout without these
+credential ambiguities remain readable. This intentionally permits loss
+of untrusted trailing git prose; separately composed operation prefixes
+and remedy blocks remain available. Redaction MUST scan monotonically
+without repeated suffix searches or an arbitrary input-length cutoff.
 
 **Human-mode error quality.** In human mode, an error message should
 name the offending thing (path, skill, ref, URL) and — whenever a

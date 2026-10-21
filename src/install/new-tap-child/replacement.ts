@@ -78,8 +78,10 @@ export class ChildReplacement {
 
   private failure(reason: string): string {
     this.retainBackup = true;
-    const recovery = this.backup === null ? "" : `; prior copy retained at \`${this.backup}\``;
-    return sanitizeLine(redactText(`rollback \`${this.dest}\`: ${reason}${recovery}`));
+    const recovery =
+      this.backup === null ? "" : `prior copy retained at \`${this.backup}\`; target `;
+    // §13: keep recovery guidance before the untrusted path, which may trigger suffix redaction.
+    return sanitizeLine(redactText(`rollback ${recovery}\`${this.dest}\`: ${reason}`));
   }
 
   /** Backup housekeeping must not mask a failure or invalidate a successful install. */
