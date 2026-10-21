@@ -8,7 +8,8 @@
  *     `~/.crew/repos/` (§6). No fetch by default (network policy:
  *     §16.6); the install flow that fetches does so explicitly via
  *     `refreshTaps` before calling here.
- *   - kind=path → just verify the directory exists.
+ *   - kind=path → verify the source is a searchable directory;
+ *     inaccessible roots fail with `source_unreachable`.
  *
  * The result tells the caller where on disk to walk for skills, and
  * (for git taps) the resolved SHA to record on every state entry.
@@ -35,14 +36,15 @@ import { withExportedTree } from "../../git/export.ts";
 import { ensureClone } from "../../git/repo/index.ts";
 import { classifyRef, resolveRef } from "../../git/repo/refs.ts";
 import { displayUrl } from "../../refs/display-url.ts";
-import { isDirectory } from "../../util/fs.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
+import { isGistTap } from "../gist.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
+import { isSourceDirectory } from "../read.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
-  /** Materialized tap root, or the narrowed root returned by skill acquisition. */
+  /** Materialized tap root directory. */
   readonly rootDir: string;
   /** Full 40-char SHA for git taps; null for path taps. */
   readonly resolvedSha: string | null;
@@ -55,13 +57,13 @@ export interface AcquiredTap {
 
 /**
  * Materialize a tap on disk. Throws `source_unreachable` when the clone
- * cannot be obtained, `no_skills_found` when the subpath doesn't exist,
- * and `invalid_ref` when the stored subpath escapes the clone (see
- * `tapRootDir`).
+ * cannot be obtained or a path root/git subpath is inaccessible,
+ * `no_skills_found` when that path is missing or isn't a directory,
+ * and `invalid_ref` when the stored subpath escapes the clone (see `tapRootDir`).
  */
 export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredTap {
   if (tap.kind === "path") {
-    if (!isDirectory(tap.path)) {
+    if (!isSourceDirectory(tap.path)) {
       throw new CrewError(
         "no_skills_found",
         `tap \`${tap.name}\` points at \`${tap.path}\` which isn't a directory`,
@@ -78,7 +80,7 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
   const sha = resolveRef(clonePath, "@");
   // `tapRootDir` proves containment (lexical + symlink) as it resolves.
   const rootDir = tapRootDir(clonePath, tap);
-  if (!isDirectory(rootDir)) {
+  if (!isSourceDirectory(rootDir, false)) {
     throw new CrewError(
       "no_skills_found",
       `tap \`${tap.name}\` subpath \`${tap.subpath}\` doesn't exist in ${displayUrl(tap.url)} at ${sha.slice(0, 8)}`,
@@ -118,7 +120,7 @@ export function withAcquiredTap<T>(
 }
 
 /**
- * Acquire only ONE skill's subtree of a tap at `ref`.
+ * Acquire only ONE skill directory or literal gist file from a tap at `ref`.
  *
  * `crew update` reads exactly `<tap root>/<entry source path>` per entry.
  * For a whole-repo tap (`subpath` empty) the general `withAcquiredTap`
@@ -127,18 +129,21 @@ export function withAcquiredTap<T>(
  * the skill's own path makes that cost proportional to what is read
  * (§10.1).
  *
- * `fn` receives the skill directory itself, not the tap root.
+ * `fn` receives the skill directory or original gist file, not the tap root.
  */
-export function withAcquiredSkillDir<T>(
+export function withAcquiredSkillPath<T>(
   tap: TapConfig,
   ref: string | null,
   skillPath: string,
   home: string,
-  fn: (acquired: AcquiredTap, skillDir: string) => T,
+  fn: (acquired: Pick<AcquiredTap, "resolvedSha" | "pinned">, sourcePath: string) => T,
 ): T {
   if (ref === null || tap.kind === "path") {
     const acquired = acquireTap(tap, home);
-    return fn(acquired, join(acquired.rootDir, skillPath));
+    return fn(
+      { resolvedSha: acquired.resolvedSha, pinned: acquired.pinned },
+      join(acquired.rootDir, skillPath),
+    );
   }
   migrateTapClone(tap, home);
   const clonePath = tapClonePath(tap, home);
@@ -152,8 +157,13 @@ export function withAcquiredSkillDir<T>(
       : tap.subpath.length > 0
         ? posix.join(tap.subpath, skillPath)
         : skillPath;
-  return withExportedTree(clonePath, sha, exportPath, home, (skillDir) =>
-    fn({ rootDir: skillDir, resolvedSha: sha, pinned }, skillDir),
+  return withExportedTree(
+    clonePath,
+    sha,
+    exportPath,
+    home,
+    (sourcePath) => fn({ resolvedSha: sha, pinned }, sourcePath),
+    { literalPathspec: isGistTap(tap) },
   );
 }
 
