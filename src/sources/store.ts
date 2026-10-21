@@ -12,11 +12,11 @@
  *     longer referenced by state or any marker.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { crewHome, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
-import { atomicReplace, ensureDir, exists, rmrf } from "../util/fs.ts";
+import { atomicReplace, ensureDir } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { safePath } from "../util/redact.ts";
 import { copySourceTree, hashSourceDirectory } from "./read.ts";
@@ -56,10 +56,9 @@ export function stageIntoStore(
   }
   progress(`staging ${safePath(name)}@${shortSha} into ${safePath(storePath)}`);
 
-  const staging = `${storePath}.staging-${Date.now()}`;
-  if (exists(staging)) rmrf(staging);
-  copySourceTree(sourceDir, staging);
   ensureDir(join(storePath, "..")); // parents
+  const staging = mkdtempSync(`${storePath}.staging-`);
+  copySourceTree(sourceDir, staging);
   atomicReplace(staging, storePath);
 
   const contentHash = hashDirectory(storePath);

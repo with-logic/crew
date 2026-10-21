@@ -208,8 +208,10 @@ user, which names the protocol account rather than a secret (§13).
 
 Human-readable skill metadata follows the same C0, DEL, and C1
 control-character escaping rule before wrapping or styling. This includes
-descriptions, license, compatibility, homepage, and dependencies. JSON
-values and installed skill bytes are unchanged.
+descriptions, license, compatibility, homepage, and dependencies. Skill
+references in search results, including namespace-qualified names and
+suggested install references, follow the same rule before measuring column
+widths or laying out rows. JSON values and installed skill bytes are unchanged.
 
 ### 5.2 Global flags
 
@@ -1389,6 +1391,19 @@ between resolution and targeting:
 
 **Error isolation.** Every skill is processed independently. A failure — network error, fetch error, spec validation error on a newly pulled version, customized install detected, dependency resolution failure, target install failure — is recorded against that skill and does not stop processing of the rest. Exit code is 0 if all skills were either up-to-date, updated successfully, or cleanly skipped as customized. Exit code is 1 if any skill encountered a hard failure (network, fetch, validation).
 
+**Human per-target results.** When an existing skill's `updated` JSON
+outcome contains failed or safety-skipped targets, human output MUST name
+each affected agent and its error code/message or skip reason. Escape
+control characters in these diagnostics. The human row says `partially
+updated` if at least one target was installed or already current and at
+least one target failed or skipped. With no completed target, it says
+`failed` if any target failed, otherwise `skipped`; it MUST NOT claim an
+update succeeded. Totals count partial rows separately from fully updated
+rows, count all-skipped rows as skips, and count each row with a hard
+target failure as one failure, including partial rows. Clean safety skips
+remain soft. These presentation rules do not change JSON outcomes, exit
+codes, or the state/retry rules.
+
 **Upstream deletion does not remove local installs.** If an installed
 skill's source still resolves (the repo or tap is reachable) but the
 specific skill is no longer present — the directory was deleted
@@ -1462,6 +1477,19 @@ On every `crew update` run, for each group of state entries sharing
    `source.tap` pointing at this tap. This is how `crew install
    @with-logic/skills` + autoupdate picks up new skills as the team
    adds them, with no follow-up `crew install`.
+   Before copying or reporting `would_add`, enforce §5.4 against state
+   at the same scope/project root and markers at every intended physical
+   target. A different canonical source produces a per-child
+   `name_conflict`, including with `--force`; preserve its bytes, marker,
+   and state, and continue other children. A missing state tap or a
+   present marker whose source metadata cannot be read or validated
+   cannot establish shared ownership and also produces `name_conflict`.
+   For a new child without a same-source state identity, full §9 step 4
+   validation precedes ownership checks: invalid frontmatter produces
+   `invalid_skill` even when a conflicting owner exists.
+   Same-source tap aliases remain duplicates, but cannot hide another
+   conflicting owner at that location. A directory without a marker
+   retains the existing `untracked_directory`/`--force` rules (§13).
    Child discovery reads only the declared `name`, so validation here
    is mandatory: a child whose frontmatter is invalid (missing
    `description`, over-long fields, …) MUST be reported as a per-child
@@ -1772,6 +1800,16 @@ the latest-release URL (used by tests and private forks).
 9. Record the new version in the version-check file (§10.4) so the
    update notice doesn't nag the user about a version they already
    installed.
+
+After consuming the downloaded binary, remove its temporary directory,
+including when verification, replacement, or version recording fails.
+A cleanup failure MUST preserve the completed update or original failure.
+On success, report a non-fatal warning identifying the retained directory
+and cleanup error on stderr (including with `--quiet`), or in an optional
+`cleanup_warning` field with `--json`; omit that field when cleanup succeeds.
+On failure, append the secondary cleanup diagnostic to the original error
+message while preserving its name, exit code, and details. Escape control
+characters in the diagnostic (§5.2).
 
 **Flags.**
 
@@ -2615,6 +2653,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-36 | §10.1, §10.1.1 | A namespace selector bounds re-expansion additions to that namespace: a child added upstream under a different namespace of the same tap is not installed. Naming the tap installs both. |
 | C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. |
 | C-UPD-38 | §10.1.1 | A new tap child whose target installation fails produces a per-child `tap_error` naming failed targets and reasons, exits 1, and is absent from state until every applicable target group succeeds. Remaining target groups, other children, and existing entries still process; the next non-dry-run update that re-expands the affected tap group retries the child. Replacements observed as still owned by the attempt are rolled back to their prior bytes, markers, and symlinks, and owned new copies are removed; targets detected as changed, removed, unreadable, or carrying a non-regular marker are preserved with lost ownership and any retained recovery path reported. Failed publication may restore a prior copy into an absent destination; completed publication later removed stays absent. Restoration failures report the problem and any retained recovery path. |
+| C-UPD-39 | §10.1 | For an existing skill update containing failed or safety-skipped targets, human output names each affected target. Its aggregate skill row is `partially updated` when any target installed or was already current; otherwise it is `failed` if any target failed, or `skipped`. Totals distinguish partial from full success while counting hard failures. JSON, state/retry behavior, and exit codes are unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |

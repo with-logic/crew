@@ -65,6 +65,7 @@ function doUpgrade(ctx: CommandContext, tag: string | undefined): CommandOutput 
   }
   return {
     exitCode: 0,
+    ...(result.cleanupWarning === undefined ? {} : { stderr: [result.cleanupWarning] }),
     human: [
       `${ctx.style.symbol("ok")} ${ctx.style.bold(`Upgraded Homecrew: ${result.currentVersion} → ${result.latestTag}`)}`,
       ctx.style.dim("  The new version takes effect on your next `crew` invocation."),
@@ -73,6 +74,7 @@ function doUpgrade(ctx: CommandContext, tag: string | undefined): CommandOutput 
       current_version: result.currentVersion,
       latest_tag: result.latestTag,
       replaced: true,
+      ...(result.cleanupWarning === undefined ? {} : { cleanup_warning: result.cleanupWarning }),
     },
   };
 }

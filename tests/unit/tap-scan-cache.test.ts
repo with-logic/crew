@@ -59,7 +59,7 @@ describe("tap scan cache child discovery", () => {
     ]);
   });
 
-  test("a native traversal failure is not cached and a repaired root is scanned", () => {
+  test("an inaccessible source directory is cached for the affected tap and root", () => {
     const root = makeTempDir("crew-scan-unreadable-root-");
     makeSkill(root, "demo", skillFrontmatter({ name: "demo" }));
     const tap: TapConfig = {
@@ -74,12 +74,17 @@ describe("tap scan cache child discovery", () => {
     chmodSync(root, 0);
     try {
       expect(() => cache.children(tap, "/unused", root)).toThrow(
-        expect.objectContaining({ code: "EACCES" }),
+        expect.objectContaining({ code: "source_unreachable" }),
       );
     } finally {
       chmodSync(root, 0o755);
     }
-    expect(cache.children(tap, "/unused", root).map((child) => child.name)).toEqual(["demo"]);
+    expect(() => cache.children(tap, "/unused", root)).toThrow(
+      expect.objectContaining({ code: "source_unreachable" }),
+    );
+    expect(
+      cache.children({ ...tap, name: "repaired" }, "/unused", root).map((child) => child.name),
+    ).toEqual(["demo"]);
   });
 });
 

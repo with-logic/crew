@@ -59,7 +59,7 @@ describe("reexpandTaps", () => {
     expect(result.rows[0]).toMatchObject({ name: "missing", kind: "source_gone" });
   });
 
-  test("tap expansion rethrows filesystem errors", () => {
+  test("tap expansion isolates inaccessible source directories", () => {
     const home = makeCrewHome();
     const path = makeTempDir("crew-unreadable-reexpand-");
     const tap = pathTap(path);
@@ -73,7 +73,14 @@ describe("reexpandTaps", () => {
 
     chmodSync(path, 0);
     try {
-      expect(() => reexpandTaps(state, config, home, null, () => null)).toThrow();
+      const result = reexpandTaps(state, config, home, null, () => null);
+      expect(result.rows[0]).toMatchObject({
+        name: "missing",
+        kind: "tap_error",
+        error: { code: "source_unreachable" },
+      });
+      expect(result.hardFailure).toBe(true);
+      expect(result.sourceGone.size).toBe(0);
     } finally {
       chmodSync(path, 0o755);
     }

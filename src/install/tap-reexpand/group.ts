@@ -3,6 +3,7 @@
 import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
+import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { isSourceReadFailure } from "../../util/source-read.ts";
 import type { InstalledSourceIndex } from "../installed-lookup.ts";
 import { type CurrentTapChild, groupChildrenByName } from "../tap-children.ts";
@@ -50,7 +51,7 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
   try {
     children = cache.children(tap, home, acquired.rootDir);
   } catch (err) {
-    // §10.1: an unreadable manifest cannot establish deletion or stop other groups.
+    // §10.1: an inaccessible source cannot establish deletion or stop other groups.
     if (isSourceReadFailure(err)) return failedGroup(input, err);
     throw err;
   }
@@ -82,11 +83,13 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
 }
 
 function failedGroup(input: GroupInput, error: CrewError): TapReexpandResult {
+  const hasCleanupFailure = hasExportCleanupFailure(error);
+  const isSoftSourceError = error.code === "no_skills_found" || error.code === "invalid_ref";
   return {
     added: [],
     updated: [],
     sourceGone: new Set(),
-    hardFailure: error.code !== "no_skills_found" && error.code !== "invalid_ref",
+    hardFailure: hasCleanupFailure || !isSoftSourceError,
     rows: input.members.map((member) => ({
       name: member.name,
       scope: member.scope,

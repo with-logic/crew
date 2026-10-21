@@ -33,9 +33,8 @@ export interface TapScanCache {
    */
   acquire(tap: TapConfig, home: string): AcquiredTapScan;
   /**
-   * Walk a tap's children, memoising results and normalized manifest read failures
-   * that become group `tap_error` rows. Unclassified directory-walk errors
-   * still propagate separately from acquisition failures.
+   * Walk a tap's children, memoising results and normalized source-read failures
+   * that become group `tap_error` rows, including directory discovery failures.
    */
   children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[];
   /** Load and validate one child (§9 step 4), memoising validation and source-read errors. */
