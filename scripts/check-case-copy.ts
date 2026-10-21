@@ -63,7 +63,7 @@ try {
     }
     deepStrictEqual(readdirSync(source), ["B", "b"]);
     throws(
-      () => copyTree(source, destination),
+      () => copyTree(source, destination, { destinationRoot: root }),
       (error: unknown) => error instanceof CrewError && error.code === "usage_error",
     );
     strictEqual(readFileSync(sentinel, "utf8"), "keep outside bytes");

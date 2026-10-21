@@ -50,7 +50,9 @@ test("ordinary target copying keeps its native source read error", () => {
   const destination = makeTempDir();
   chmodSync(manifest, 0);
   try {
-    expect(() => copyTree(skill, destination)).toThrow(expect.objectContaining({ code: "EACCES" }));
+    expect(() => copyTree(skill, destination, { destinationRoot: destination })).toThrow(
+      expect.objectContaining({ code: "EACCES" }),
+    );
   } finally {
     chmodSync(manifest, 0o600);
   }
@@ -83,7 +85,8 @@ test("staging a resolved git source identifies a nonlistable source directory", 
         remedy: expect.stringContaining("source directory"),
       }),
     );
-    expect(() => copyTree(skill, makeTempDir())).toThrow(
+    const destination = makeTempDir();
+    expect(() => copyTree(skill, destination, { destinationRoot: destination })).toThrow(
       expect.objectContaining({ code: "EACCES" }),
     );
   } finally {
@@ -107,7 +110,8 @@ test("resolved git staging normalizes source lstat failure inside an unsearchabl
         remedy: expect.stringContaining("source directory"),
       }),
     );
-    expect(() => copyTree(skill, makeTempDir())).toThrow(
+    const destination = makeTempDir();
+    expect(() => copyTree(skill, destination, { destinationRoot: destination })).toThrow(
       expect.objectContaining({ code: "EACCES", syscall: "lstat", path: file }),
     );
   } finally {

@@ -164,7 +164,7 @@ describe("search — sort across multiple hits in same tap (search.ts:51)", () =
   });
 });
 
-describe("search — invalid skill in a tap is silently skipped (search.ts:46)", () => {
+describe("search — invalid skill in a tap does not break healthy hits (§16.6)", () => {
   test("corrupt SKILL.md in a tap doesn't break search", () => {
     const home = makeCrewHome();
     const repo = makeTempDir();
@@ -186,7 +186,7 @@ describe("search — invalid skill in a tap is silently skipped (search.ts:46)",
     const code = runCli(["search", "--json", "works"], { home, streams: c.streams });
     expect(code).toBe(0);
     const parsed = JSON.parse(c.stdout()) as { hits: { name: string }[] };
-    // The valid skill is returned; the bad one is silently ignored.
+    // The valid skill is returned; the bad one is omitted from hits.
     expect(parsed.hits.some((h) => h.name === "ok-skill")).toBe(true);
     expect(parsed.hits.some((h) => h.name === "bad")).toBe(false);
   });

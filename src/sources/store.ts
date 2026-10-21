@@ -14,7 +14,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { crewHome, storeEntryPath } from "../core/paths.ts";
+import { crewHome, paths, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
 import { assertSkillFile } from "../skill/file.ts";
 import { atomicReplace, ensureDir } from "../util/fs.ts";
@@ -64,7 +64,7 @@ export function stageIntoStore(
     if (isGistFile) {
       assertSkillFile(sourcePath);
       copySourceFile(sourcePath, join(staging, "SKILL.md"));
-    } else copySourceTree(sourcePath, staging);
+    } else copySourceTree(sourcePath, staging, paths(home).storeDir);
     atomicReplace(staging, storePath);
   });
 

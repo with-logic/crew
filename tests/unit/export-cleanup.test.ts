@@ -1,13 +1,14 @@
 /** Primary export failures survive real scratch cleanup failures (§9 step 3, §13). */
 
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { writeError } from "../../src/cli/output.ts";
 import { CrewError } from "../../src/core/errors.ts";
 import { paths } from "../../src/core/paths.ts";
 import { resetGitRunner, setGitRunner } from "../../src/git/exec.ts";
 import { createExportedTree, withExportedTree } from "../../src/git/export.ts";
+import { hasExportCleanupFailure } from "../../src/util/export-cleanup.ts";
 import { sanitizeLine } from "../../src/util/redact.ts";
 import { makeStyler } from "../../src/util/term.ts";
 import { captureStreams } from "../helpers/env.ts";
@@ -128,4 +129,57 @@ test("real git classification survives scratch-index and export cleanup failures
   expect(error.message).toContain(index.slice(0, -".crew-export-index".length));
   expect(existsSync(index)).toBe(true);
   expect(existsSync(index.slice(0, -".crew-export-index".length))).toBe(true);
+});
+
+test("native spawn error identity survives real scratch-index and export cleanup failures", () => {
+  const home = makeTempDir("crew-export-native-cleanup-home-");
+  const clonePath = join(makeTempDir("crew-export-native-cleanup-clone-"), "missing");
+  const cache = paths(home).gitCacheDir;
+  let index = "";
+  let root = "";
+  let original: unknown;
+  let nativeFields: {
+    code: string | undefined;
+    path: string | undefined;
+    syscall: string | undefined;
+  } = { code: undefined, path: undefined, syscall: undefined };
+  const previous = setGitRunner((args, options) => {
+    try {
+      return previous(args, options);
+    } catch (err) {
+      original = err;
+      const native = err as NodeJS.ErrnoException;
+      nativeFields = { code: native.code, path: native.path, syscall: native.syscall };
+      index = options.env!["GIT_INDEX_FILE"]!;
+      root = index.slice(0, -".crew-export-index".length);
+      writeFileSync(index, "retained native scratch index");
+      writeFileSync(join(root, "owned"), "export bytes");
+      chmodSync(root, 0o500);
+      chmodSync(cache, 0o500);
+      throw err;
+    }
+  });
+  let caught: unknown;
+  try {
+    createExportedTree({ clonePath, sha: "0".repeat(40), subpath: "", home });
+  } catch (err) {
+    caught = err;
+  } finally {
+    chmodSync(cache, 0o700);
+    if (root) chmodSync(root, 0o700);
+  }
+  expect(caught).toBe(original);
+  expect(caught).not.toBeInstanceOf(TypeError);
+  const error = caught as NodeJS.ErrnoException;
+  expect({ code: error.code, path: error.path, syscall: error.syscall }).toEqual(nativeFields);
+  expect(error.code).toBe("ENOENT");
+  expect(error.path).toBe("git");
+  expect(error.syscall).toMatch(/spawn/);
+  expect(error.message).toContain("ENOENT");
+  expect(error.message).toMatch(/EACCES|EPERM/);
+  expect(hasExportCleanupFailure(error)).toBe(true);
+  expect(error.message).toContain(index);
+  expect(error.message).toContain(root);
+  expect(readFileSync(index, "utf8")).toBe("retained native scratch index");
+  expect(readFileSync(join(root, "owned"), "utf8")).toBe("export bytes");
 });
