@@ -1391,6 +1391,19 @@ between resolution and targeting:
 
 **Error isolation.** Every skill is processed independently. A failure — network error, fetch error, spec validation error on a newly pulled version, customized install detected, dependency resolution failure, target install failure — is recorded against that skill and does not stop processing of the rest. Exit code is 0 if all skills were either up-to-date, updated successfully, or cleanly skipped as customized. Exit code is 1 if any skill encountered a hard failure (network, fetch, validation).
 
+**Human per-target results.** When an existing skill's `updated` JSON
+outcome contains failed or safety-skipped targets, human output MUST name
+each affected agent and its error code/message or skip reason. Escape
+control characters in these diagnostics. The human row says `partially
+updated` if at least one target was installed or already current and at
+least one target failed or skipped. With no completed target, it says
+`failed` if any target failed, otherwise `skipped`; it MUST NOT claim an
+update succeeded. Totals count partial rows separately from fully updated
+rows, count all-skipped rows as skips, and count each row with a hard
+target failure as one failure, including partial rows. Clean safety skips
+remain soft. These presentation rules do not change JSON outcomes, exit
+codes, or the state/retry rules.
+
 **Upstream deletion does not remove local installs.** If an installed
 skill's source still resolves (the repo or tap is reachable) but the
 specific skill is no longer present — the directory was deleted
@@ -2625,6 +2638,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-36 | §10.1, §10.1.1 | A namespace selector bounds re-expansion additions to that namespace: a child added upstream under a different namespace of the same tap is not installed. Naming the tap installs both. |
 | C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. |
 | C-UPD-38 | §10.1.1 | A new tap child whose target installation fails produces a per-child `tap_error` naming failed targets and reasons and disclosing successful targets whose copies remain on disk. It exits 1 and is absent from state until every applicable target group succeeds. Remaining target groups, other children, and existing entries still process; the next non-dry-run update that re-expands the affected tap group retries the child. |
+| C-UPD-39 | §10.1 | For an existing skill update containing failed or safety-skipped targets, human output names each affected target. Its aggregate skill row is `partially updated` when any target installed or was already current; otherwise it is `failed` if any target failed, or `skipped`. Totals distinguish partial from full success while counting hard failures. JSON, state/retry behavior, and exit codes are unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
