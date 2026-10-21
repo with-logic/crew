@@ -25,11 +25,14 @@ test("fresh staging preserves source links, strips the root marker, and reuses c
   writeFileSync(join(source, ".crew.json"), "untrusted source marker");
   symlinkSync(outside, join(source, "link"));
   const sourceHash = hashDirectory(source);
+  const hashPrefixLength = "sha256:".length;
+  const shortShaLength = 8;
+  const expectedShortSha = sourceHash.slice(hashPrefixLength, hashPrefixLength + shortShaLength);
   const stored = stageIntoStore(source, "demo", null, home, sourceHash);
   expect(stored).toEqual({
-    storePath: join(home, "store", `demo@${sourceHash.slice(7, 15)}`),
+    storePath: join(home, "store", `demo@${expectedShortSha}`),
     contentHash: sourceHash,
-    shortSha: sourceHash.slice(7, 15),
+    shortSha: expectedShortSha,
     reused: false,
   });
   expect(existsSync(join(stored.storePath, ".crew.json"))).toBe(false);
