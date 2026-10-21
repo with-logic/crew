@@ -28,7 +28,11 @@ export function inventoryNames(path: string, findings: Map<string, Finding>): st
 }
 
 /** Retain the failed path and original diagnostic without leaking terminal controls or credentials. */
-function inventoryReadFailure(path: string, err: unknown, findings: Map<string, Finding>): void {
+export function inventoryReadFailure(
+  path: string,
+  err: unknown,
+  findings: Map<string, Finding>,
+): void {
   findings.set(`marker_unreadable\0${path}`, {
     level: "error",
     code: "marker_unreadable",

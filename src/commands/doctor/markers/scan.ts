@@ -5,7 +5,7 @@ import type { Scope } from "../../../core/types.ts";
 import { readJson } from "../../../util/json.ts";
 import { redactText, sanitizeLine } from "../../../util/redact.ts";
 import type { Finding } from "../checks.ts";
-import { inventoryDirectory, inventoryNames } from "./filesystem.ts";
+import { inventoryDirectory, inventoryNames, inventoryReadFailure } from "./filesystem.ts";
 import { isDoctorMarker } from "./validate.ts";
 
 /**
@@ -31,11 +31,7 @@ export function scanMarkers(
     } catch (err) {
       if (!(err instanceof SyntaxError)) {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
-        findings.set(`marker_unreadable\0${path}`, {
-          level: "error",
-          code: "marker_unreadable",
-          message: sanitizeLine(redactText(`${path}: ${(err as Error).message}`)),
-        });
+        inventoryReadFailure(path, err, findings);
         continue;
       }
       // Malformed JSON leaves null so the field-validation path reports marker_invalid.
