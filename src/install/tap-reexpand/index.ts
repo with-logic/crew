@@ -22,6 +22,7 @@
  * install callback is never invoked.
  */
 
+import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { entryIdentity } from "../../state/collections/index.ts";
@@ -63,6 +64,7 @@ export function reexpandTaps(
   dryRun: boolean = false,
   missingProjectRoots?: ReadonlySet<string>,
   prepared?: PreparedSources,
+  baseFailures?: TargetBaseFailures,
 ): TapReexpandResult {
   const added: StateEntry[] = [];
   const updated: StateEntry[] = [];
@@ -139,6 +141,7 @@ export function reexpandTaps(
       dryRun,
       namespaces: selection?.namespaces ?? null,
       ...(prepared ? { prepared } : {}),
+      ...(baseFailures ? { baseFailures } : {}),
     });
     rows.push(...result.rows);
     updated.push(...result.updated);

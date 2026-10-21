@@ -103,6 +103,7 @@ function runTargetBatch(
     dryRun,
     missingProjectRoots,
     prepared,
+    baseFailures,
   );
   tapReexpandRows.push(...reexpanded.rows);
   if (reexpanded.hardFailure) hardFailure = true;

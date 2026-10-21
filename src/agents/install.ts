@@ -39,7 +39,7 @@ export interface InstallInput {
   readonly resolvedSha: string | null;
   readonly contentHash: string;
   readonly force: boolean;
-  /** A failed absent-base preparation cannot become an unlocked write later (§14). */
+  /** Failed base preparation/admission cannot become an unlocked read or write later (§14). */
   readonly baseFailures?: TargetBaseFailures;
   /** Internal receipt hook with the completed staging path, before destination replacement. */
   readonly beforeReplace?: (staging: string) => void;

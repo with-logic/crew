@@ -2270,15 +2270,28 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
      the creation failure for that base's ordinary target-attempt position,
      preventing any later unlocked write even if the directory appears.
      Source validation/staging and other targets retain their existing
-     precedence, partial-success and rollback behavior. Inspection or lock
-     acquisition failures on existing directories are never silently skipped.
+     precedence, partial-success and rollback behavior. For an install-only
+     base, an initial sentinel-open or lock-directory-mkdir failure with
+     `EACCES`, `EPERM`, or `EROFS` is likewise retained for its ordinary
+     target attempt. Every lexical alias of that physical base receives the
+     original failure; no target ownership/marker reads or writes may occur
+     there during the batch, even if permissions later change. These failed
+     existing bases are distinct from absent bases skipped by metadata scans.
+     A metadata or removal request makes its physical base strict, including
+     when another request installs there through the same path or an alias:
+     its admission failures abort the batch rather than omit required work.
+     Base inspection, owner inspection/publication, reserved-entry type errors,
+     and all other acquisition failures remain fatal.
    - Determine every required base for one mutation/rollback batch up front.
      Acquire the entire set before target safety/source/marker reads used to
      decide mutations, and retain it through publication, rollback and owned
      cleanup. Re-read marker inventories under exclusion; never replay an
      unlocked marker snapshot. Do not dynamically extend or nest held target
-     sets. If acquisition fails, release earlier locks and mutate no targets
-     in that batch. Each attempted lock has the existing 30 s timeout;
+     sets. If admission fails fatally, release earlier locks and mutate no
+     targets in that batch. Retained install-only permission failures exclude
+     those bases from every target-dependent read/write; acquire the entire
+     remaining set before processing ordinary target attempts. Each attempted
+     lock has the existing 30 s timeout;
      contention produces `state_locked`, exit 7, outside per-target failure
      isolation. Existing stale/live-owner handling and host dependencies apply.
    - Where locks coexist, the order is maintenance → state → clone → target.
