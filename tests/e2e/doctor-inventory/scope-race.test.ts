@@ -20,6 +20,8 @@ const originals = ALL_AGENTS.map((adapter) => ({
   projectPath: adapter.projectPath,
   detect: adapter.detect,
 }));
+// Allow Bun startup and a real uninstall on CI while bounding a stuck child.
+const UNINSTALL_CHILD_TIMEOUT_MS = 10_000;
 let target: string;
 let project: string;
 let shared: string;
@@ -94,7 +96,7 @@ test("C-STATE-14 repair preserves a project owner when a user alias is uninstall
       expect(existsSync(join(home, "state.json.lock"))).toBe(false);
       const result = Bun.spawnSync(
         [process.execPath, "--eval", child, JSON.stringify({ home, target, project, shared })],
-        { stdout: "pipe", stderr: "pipe", timeout: 10_000 },
+        { stdout: "pipe", stderr: "pipe", timeout: UNINSTALL_CHILD_TIMEOUT_MS },
       );
       expect(result.exitCode).toBe(0);
       expect(result.stderr.toString()).toBe("");

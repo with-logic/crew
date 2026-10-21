@@ -51,6 +51,7 @@ export function buildMarkerIndex(
     if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
   const roots = [...projectRoots];
+  const otherOwningScopeBase = cachedOtherOwningScopeBase(roots, sameBase);
   for (const adapter of ALL_AGENTS) {
     const sharesUserBase = (root: string): boolean =>
       sameBase(adapter.userPath(), adapter.projectPath(root));
@@ -60,7 +61,7 @@ export function buildMarkerIndex(
     for (const rec of userInventory.records) {
       if (rec.marker.scope !== "user") {
         anySharedBase ??= roots.some(sharesUserBase);
-        if (!(anySharedBase || hasOtherOwningScopeBase(rec, roots, sameBase)))
+        if (!(anySharedBase || otherOwningScopeBase(rec)))
           inventoryFindings.set(...scopeMismatchFinding(rec));
         continue;
       }
@@ -78,7 +79,7 @@ export function buildMarkerIndex(
         sharesUserBase(root);
       for (const rec of projectInventory.records) {
         if (rec.marker.scope !== "project") {
-          if (!(projectBaseIsShared || hasOtherOwningScopeBase(rec, roots, sameBase)))
+          if (!(projectBaseIsShared || otherOwningScopeBase(rec)))
             inventoryFindings.set(...scopeMismatchFinding(rec));
           continue;
         }
@@ -112,13 +113,11 @@ function hasOtherOwningScopeBase(
 
 /** Resolve aliases only when a mismatched observation needs physical identity (§11.1). */
 function samePhysicalBase(first: string, second: string): boolean {
-  return (
-    first !== "" &&
-    second !== "" &&
-    existsSync(first) &&
-    existsSync(second) &&
-    realpathSync(first) === realpathSync(second)
-  );
+  const nonemptyPaths = first !== "" && second !== "";
+  if (!nonemptyPaths) return false;
+  const pathsExist = existsSync(first) && existsSync(second);
+  if (!pathsExist) return false;
+  return realpathSync(first) === realpathSync(second);
 }
 
 /** A declared scope cannot authorize reconstruction at a physically distinct base (§11.2). */
@@ -139,5 +138,26 @@ function cachedPhysicalBaseComparison(): (first: string, second: string) => bool
     const same = samePhysicalBase(first, second);
     pairs.set(key, same);
     return same;
+  };
+}
+
+/** Reuse owner-scope traversal for markers with the same observed inventory identity. */
+function cachedOtherOwningScopeBase(
+  roots: readonly string[],
+  sameBase: (first: string, second: string) => boolean,
+): (record: InstalledSkillRecord) => boolean {
+  const results = new Map<string, boolean>();
+  return (record) => {
+    const key = JSON.stringify([
+      dirname(record.installDir),
+      record.marker.scope,
+      record.adapter,
+      [...record.marker.agents].sort(),
+    ]);
+    const cached = results.get(key);
+    if (cached !== undefined) return cached;
+    const matches = hasOtherOwningScopeBase(record, roots, sameBase);
+    results.set(key, matches);
+    return matches;
   };
 }
