@@ -2,6 +2,11 @@
 
 import { CrewError } from "../core/errors.ts";
 
+/** Identify normalized source reads that discovery must not treat as invalid skills. */
+export function isSourceReadFailure(err: unknown): err is CrewError {
+  return err instanceof CrewError && err.code === "source_unreachable";
+}
+
 /** Run a file reader while preserving validation errors from its parser. */
 export function readSourceFile<T>(path: string, read: (path: string) => T): T {
   try {

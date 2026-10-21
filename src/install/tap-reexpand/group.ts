@@ -1,8 +1,9 @@
 /** Walk one tracked tap revision and collect re-expansion outcomes (§10.1.1). */
 
-import { CrewError } from "../../core/errors.ts";
+import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
+import { isSourceReadFailure } from "../../util/source-read.ts";
 import type { InstalledSourceIndex } from "../installed-lookup.ts";
 import { type CurrentTapChild, groupChildrenByName } from "../tap-children.ts";
 import { collectAdditions } from "./additions.ts";
@@ -50,8 +51,7 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
     children = cache.children(tap, home, acquired.rootDir);
   } catch (err) {
     // §10.1: an unreadable manifest cannot establish deletion or stop other groups.
-    if (err instanceof CrewError && err.code === "source_unreachable")
-      return failedGroup(input, err);
+    if (isSourceReadFailure(err)) return failedGroup(input, err);
     throw err;
   }
   const survey = surveyGroup({ members, childrenByName: groupChildrenByName(children), tap });

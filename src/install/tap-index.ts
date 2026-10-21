@@ -19,7 +19,6 @@
  */
 
 import { join } from "node:path";
-import { CrewError } from "../core/errors.ts";
 import { tapClonePath } from "../core/repo-path.ts";
 import type { TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
@@ -29,6 +28,7 @@ import { migrateTapClone } from "../sources/migrate-clones.ts";
 import { sourceRelativePath } from "../sources/path.ts";
 import { findRecursiveSkillDirs } from "../sources/recursive.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
+import { isSourceReadFailure } from "../util/source-read.ts";
 
 /** Location of one skill inside a tap. */
 export interface SkillLocation {
@@ -167,7 +167,7 @@ function skillNameForIndex(path: string): string | null {
   try {
     return loadSkillName(path);
   } catch (err) {
-    if (err instanceof CrewError && err.code === "source_unreachable") throw err;
+    if (isSourceReadFailure(err)) throw err;
     return null;
   }
 }

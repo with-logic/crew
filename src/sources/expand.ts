@@ -27,6 +27,7 @@ import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { isDirectory, listDir } from "../util/fs.ts";
+import { isSourceReadFailure } from "../util/source-read.ts";
 import { findRecursiveSkillDirs } from "./recursive.ts";
 
 /** A skill directory that couldn't be loaded. */
@@ -141,7 +142,7 @@ function pushSoft(candidate: string, valid: LoadedSkill[], skipped: SkippedSkill
   try {
     valid.push(loadSkill(candidate));
   } catch (err) {
-    if (err instanceof CrewError && err.code === "source_unreachable") throw err;
+    if (isSourceReadFailure(err)) throw err;
     // `loadSkill` throws only `CrewError`, whose `code` is typed as
     // a non-null `CrewErrorName`. No fallback needed.
     const ce = err as CrewError;

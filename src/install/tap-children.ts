@@ -6,10 +6,10 @@
  * shallow discovery separate from the update orchestration.
  */
 
-import { CrewError } from "../core/errors.ts";
 import type { TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { isDirectory } from "../util/fs.ts";
+import { isSourceReadFailure } from "../util/source-read.ts";
 import { indexTap } from "./tap-index.ts";
 
 export interface CurrentTapChild {
@@ -58,7 +58,7 @@ function pushLoaded(children: CurrentTapChild[], path: string, tapRelativePath: 
   try {
     children.push({ name: loadSkillName(path), path, tapRelativePath });
   } catch (err) {
-    if (err instanceof CrewError && err.code === "source_unreachable") throw err;
+    if (isSourceReadFailure(err)) throw err;
     // Skip invalid names; same as tap indexing/search behavior.
   }
 }

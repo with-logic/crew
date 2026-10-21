@@ -8,11 +8,80 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
+import type { TapConfig } from "../../src/core/types.ts";
 import { makeTapScanCache } from "../../src/install/tap-reexpand/scan-cache.ts";
-import { makeTempDir } from "../helpers/fixtures.ts";
+import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
+
+describe("tap scan cache child discovery", () => {
+  test("an unreadable manifest caches the same error only for its tap and root", () => {
+    const root = makeTempDir("crew-scan-children-");
+    const skill = makeSkill(root, "demo", skillFrontmatter({ name: "demo" }));
+    const manifest = join(skill, "SKILL.md");
+    const tap: TapConfig = {
+      name: "t",
+      kind: "path",
+      registered: true,
+      url: "",
+      subpath: "",
+      path: root,
+    };
+    const cache = makeTapScanCache();
+    let firstError: unknown;
+    chmodSync(manifest, 0);
+    try {
+      cache.children(tap, "/unused", root);
+    } catch (err) {
+      firstError = err;
+    } finally {
+      chmodSync(manifest, 0o600);
+    }
+    expect(firstError).toBeInstanceOf(CrewError);
+    expect(firstError).toMatchObject({ code: "source_unreachable" });
+    let cachedError: unknown;
+    try {
+      cache.children(tap, "/unused", root);
+    } catch (err) {
+      cachedError = err;
+    }
+    expect(cachedError).toBe(firstError);
+
+    const otherTap = { ...tap, name: "other" };
+    const children = cache.children(otherTap, "/unused", root);
+    expect(children.map((child) => child.name)).toEqual(["demo"]);
+    expect(cache.children(otherTap, "/unused", root)).toBe(children);
+    const otherRoot = makeTempDir("crew-scan-other-root-");
+    makeSkill(otherRoot, "second", skillFrontmatter({ name: "second" }));
+    expect(cache.children(tap, "/unused", otherRoot).map((child) => child.name)).toEqual([
+      "second",
+    ]);
+  });
+
+  test("a native traversal failure is not cached and a repaired root is scanned", () => {
+    const root = makeTempDir("crew-scan-unreadable-root-");
+    makeSkill(root, "demo", skillFrontmatter({ name: "demo" }));
+    const tap: TapConfig = {
+      name: "t",
+      kind: "path",
+      registered: true,
+      url: "",
+      subpath: "",
+      path: root,
+    };
+    const cache = makeTapScanCache();
+    chmodSync(root, 0);
+    try {
+      expect(() => cache.children(tap, "/unused", root)).toThrow(
+        expect.objectContaining({ code: "EACCES" }),
+      );
+    } finally {
+      chmodSync(root, 0o755);
+    }
+    expect(cache.children(tap, "/unused", root).map((child) => child.name)).toEqual(["demo"]);
+  });
+});
 
 describe("tap scan cache validation", () => {
   test("a spec violation is returned as a CrewError, not thrown", () => {

@@ -16,6 +16,7 @@ import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
+import { isSourceReadFailure } from "../../util/source-read.ts";
 import { type CurrentTapChild, currentTapChildren } from "../tap-children.ts";
 
 /** One tap's acquired clone location. */
@@ -32,8 +33,8 @@ export interface TapScanCache {
    */
   acquire(tap: TapConfig, home: string): AcquiredTapScan;
   /**
-   * Walk a tap's children, memoised. Normalized manifest read failures
-   * become group `tap_error` rows. Unclassified directory-walk errors
+   * Walk a tap's children, memoising results and normalized manifest read failures
+   * that become group `tap_error` rows. Unclassified directory-walk errors
    * still propagate separately from acquisition failures.
    */
   children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[];
@@ -43,7 +44,7 @@ export interface TapScanCache {
 
 export function makeTapScanCache(): TapScanCache {
   const acquisitions = new Map<string, AcquiredTapScan>();
-  const childLists = new Map<string, readonly CurrentTapChild[]>();
+  const childScans = new Map<string, readonly CurrentTapChild[] | CrewError>();
   const skillLoadErrors = new Map<string, CrewError | null>();
 
   return {
@@ -61,11 +62,17 @@ export function makeTapScanCache(): TapScanCache {
 
     children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[] {
       const key = JSON.stringify([tap.name, rootDir]);
-      const hit = childLists.get(key);
+      const hit = childScans.get(key);
+      if (hit instanceof CrewError) throw hit;
       if (hit) return hit;
-      const walked = currentTapChildren(tap, home, rootDir);
-      childLists.set(key, walked);
-      return walked;
+      try {
+        const walked = currentTapChildren(tap, home, rootDir);
+        childScans.set(key, walked);
+        return walked;
+      } catch (err) {
+        if (isSourceReadFailure(err)) childScans.set(key, err);
+        throw err;
+      }
     },
 
     validate(skillDir: string): CrewError | null {

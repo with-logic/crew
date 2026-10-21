@@ -7,6 +7,7 @@ import type { TapConfig } from "../../core/types.ts";
 import { indexTap, type SkillLocation } from "../../install/tap-index.ts";
 import { displayText } from "../../refs/display-url.ts";
 import { loadSkill } from "../../skill/load.ts";
+import { sanitizeLine } from "../../util/redact.ts";
 import { type SearchInstallIndex, searchInstallStatus } from "./install-state.ts";
 import type { ConfiguredSearchResult, SearchHit } from "./types.ts";
 
@@ -50,7 +51,7 @@ function collectHitsFromTap(
       typeof err.details["path"] === "string";
     if (isSourceReadFailure) {
       warnings.push(
-        `warning: tap \`${tap.name}\` skipped (${err.code}) — ${displayText(err.message)}`,
+        `warning: tap \`${sanitizeLine(tap.name)}\` skipped (${err.code}) — ${displayText(err.message)}`,
       );
       return;
     }
