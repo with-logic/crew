@@ -131,3 +131,42 @@ describe("displayDetails", () => {
     expect(out["count"]).toBe(2);
   });
 });
+
+describe("apostrophes inside credential values", () => {
+  test.each([
+    ["https://user:'quote-secret@host/repo", "https://***@host/repo"],
+    [
+      "https://host/repo?token='quote-secret&ref=main&version=1",
+      "https://host/repo?token=***&ref=main&version=1",
+    ],
+    ["/repo?token='quote-secret&ref=main", "/repo?token=***&ref=main"],
+  ])("C-REF-28 redacts quoted %s without losing surrounding prose", (url, expected) => {
+    const rendered = displayText(`before\nfatal: '${url}': denied${ESC}`);
+    expect(rendered).not.toContain("quote-secret");
+    expect(rendered).toBe(`before\nfatal: '${expected}': denied\\x1b`);
+  });
+});
+
+describe("delimiter characters inside credential values", () => {
+  for (const delimiter of ['"', "<", ">", "`"]) {
+    test.each([
+      [`https://user:${delimiter}delimiter-secret@host/repo`, "https://***@host/repo"],
+      [
+        `https://host/repo?token=${delimiter}delimiter-secret&ref=main&version=1`,
+        "https://host/repo?token=***&ref=main&version=1",
+      ],
+      [`/repo?token=${delimiter}delimiter-secret&ref=main`, "/repo?token=***&ref=main"],
+    ])("C-REF-28 redacts complete %s tokens inside surrounding punctuation", (url, expected) => {
+      for (const [open, close] of [
+        ["'", "'"],
+        ['"', '"'],
+        ["<", ">"],
+        ["`", "`"],
+      ]) {
+        const rendered = displayText(`before\nfatal: ${open}${url}${close}: denied${ESC}`);
+        expect(rendered).not.toContain("delimiter-secret");
+        expect(rendered).toBe(`before\nfatal: ${open}${expected}${close}: denied\\x1b`);
+      }
+    });
+  }
+});

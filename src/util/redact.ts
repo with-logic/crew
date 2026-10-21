@@ -153,20 +153,20 @@ export function safePath(path: string): string {
  * for URL-shaped substrings is what stops the secret escaping that way.
  */
 export function redactText(text: string, renderUrl = redactUrl): string {
-  // Match an http(s)/ssh/git URL up to the first character that can't be
-  // part of one. Trailing punctuation (quote, comma, period) is excluded
-  // so we don't swallow the prose around it.
-  const withUrls = text.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s'"<>`]+/gi, (m) => {
+  // Quotes and markup delimiters can occur inside credentials; scan
+  // a complete non-whitespace token before trimming surrounding prose.
+  // Parsing and redaction below handle the complete URL or query.
+  const withUrls = text.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s]+/gi, (m) => {
     // Git often quotes the URL and appends a slash; redact the URL body
     // and leave whatever punctuation followed it in place.
-    const trailing = m.match(/[.,;:)\]]+$/)?.[0] ?? "";
+    const trailing = m.match(/['"<>`.,;:)\]]+$/)?.[0] ?? "";
     const body = trailing.length > 0 ? m.slice(0, -trailing.length) : m;
     return renderUrl(body) + trailing;
   });
   // Git strips file:// before echoing a failing path (§13); its query
   // must obey the same allow-list even when no scheme remains.
-  return withUrls.replace(/\?[^\s'"<>`]+/g, (match) => {
-    const trailing = match.match(/[.,;:)\]]+$/)?.[0] ?? "";
+  return withUrls.replace(/\?[^\s]+/g, (match) => {
+    const trailing = match.match(/['"<>`.,;:)\]]+$/)?.[0] ?? "";
     const body = trailing.length > 0 ? match.slice(0, -trailing.length) : match;
     const base = "https://x.invalid/";
     return redactUrl(new URL(body, base).toString()).slice(base.length) + trailing;
