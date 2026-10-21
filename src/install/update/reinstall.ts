@@ -24,12 +24,14 @@ export interface ReinstallInput {
   readonly force: boolean;
   readonly entryCwd: string;
   readonly baseFailures?: TargetBaseFailures;
+  readonly targetGroups: Iterable<readonly AgentAdapter[]>;
 }
 
-/** Reinstall one staged entry into every agent it is recorded against. */
-export function reinstallIntoAgents(input: ReinstallInput): PerAgentUpdate[] {
-  const { entry, entryCwd } = input;
-  const perTarget: PerAgentUpdate[] = [];
+/** Resolve recorded targets for both update applicability and reinstallation (§10.1). */
+export function groupRecordedTargets(
+  entry: StateEntry,
+  entryCwd: string,
+): ReadonlyMap<string, readonly AgentAdapter[]> {
   // Group by resolved install path (§7.2 path sharing) so shared-path
   // targets install once but every adapter reports its own outcome.
   const groups = new Map<string, AgentAdapter[]>();
@@ -43,14 +45,20 @@ export function reinstallIntoAgents(input: ReinstallInput): PerAgentUpdate[] {
     if (existing) existing.push(adapter);
     else groups.set(dest, [adapter]);
   }
-  for (const group of groups.values()) {
+  return groups;
+}
+
+/** Reinstall one staged entry into each applicable destination group. */
+export function reinstallIntoAgents(input: ReinstallInput): PerAgentUpdate[] {
+  const perTarget: PerAgentUpdate[] = [];
+  for (const group of input.targetGroups) {
     installGroup(group, input, perTarget);
   }
   return perTarget;
 }
 
 function installGroup(
-  group: AgentAdapter[],
+  group: readonly AgentAdapter[],
   input: ReinstallInput,
   perTarget: PerAgentUpdate[],
 ): void {

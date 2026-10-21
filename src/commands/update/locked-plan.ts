@@ -27,7 +27,7 @@ import { updateTargetBatch } from "./target-set.ts";
 
 /** Inputs to the locked half of the plan, after selection has run. */
 export interface LockedPlanInput {
-  readonly ctx: CommandContext;
+  readonly ctx: Pick<CommandContext, "flags" | "cwd">;
   readonly config: Config;
   readonly home: string;
   readonly dryRun: boolean;

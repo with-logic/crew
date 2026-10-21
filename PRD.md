@@ -1420,7 +1420,8 @@ between resolution and targeting:
    b. If pinned to a tag, re-resolve the tag: if the tag moved and `--force` is given, proceed with the tag's new commit — the content installed is that commit's, not the default branch's; otherwise skip.
    c. Otherwise (tap source, branch, or default branch), re-resolve the ref to a SHA. The entry's own recorded `ref` is what gets re-resolved: an entry installed from `@<branch>` follows that branch, not the tap's default branch. An entry with no ref follows the tap's default branch as before.
    d. If the new SHA equals the installed `resolved_sha`, the skill is up-to-date; record as such and continue.
-   e. Otherwise, stage the new commit into the store and run the install algorithm (§7.3) for every (agent, scope) pair this skill is recorded against. Pre-flight safety checks apply as always: a customized install is skipped (not overwritten) unless `--force`.
+   e. Otherwise, validate the source skill, then check the recorded agent targets. If none names a recognized agent with a nonempty install base for the recorded scope and location, report the soft outcome `skipped` with reason `no applicable agent targets`, preserving the complete state entry and installed copies without staging into the store. This check does not replace source resolution or validation, infer targets from detection, or repair recorded agents. Otherwise, stage the new commit into the store and run the install algorithm (§7.3) for every applicable (agent, scope) pair this skill is recorded against. Pre-flight safety checks apply as always: a customized install is skipped (not overwritten) unless `--force`.
+   f. Advance the recorded revision, content hash, and installation time only when at least one target installed or was already current and no target had a hard failure. With zero completed targets, preserve the complete input state entry so a later update can retry. All-safety-skipped results retain their per-target diagnostics and remain soft. A mix of completed and safety-skipped targets may advance state; any hard target failure preserves the input entry even when another target completed.
 4. Garbage-collect the store: any `store/<name>@<short-sha>/` entry no longer referenced by any `state.json` entry or marker is deleted.
 5. Print summary (human or JSON).
 
@@ -1449,8 +1450,23 @@ soft outcome: exit code stays 0 for an update run whose only
 abnormalities are `source_gone`. Removal of an unwanted local skill is
 always explicit (`crew uninstall <selector>`).
 
-This rule also applies when a whole source becomes unresolvable: a
-tap's clone URL 404s, or a git repo is gone. Those produce
+**Local source changes during inspection.** For a path-kind tap, a skill
+root can disappear or become a file or looping symlink after its
+availability check succeeds. If hashing or manifest loading then fails
+because a source path is missing, is not a directory, or loops through
+symlinks, crew MUST recheck that same recorded skill root. Report
+`source_gone` only if it no longer resolves to a directory; preserve the
+installed bytes, marker, and logical state entry and continue other
+selected skills. This applies to normal updates and previews, with exit
+0 when it is the only abnormality. A missing or invalid `SKILL.md` in a
+still-resolvable root remains a validation failure. Permission failures
+such as `EACCES`, parser/validation errors, and other operational failures
+remain hard even if the root disappears later. This rule covers source
+hashing/loading before staging or target writes; it does not promise a
+consistent snapshot of a concurrently edited local source or retry it.
+
+When a whole remote source becomes unresolvable — a tap's clone URL
+404s, or a git repo is gone — those produce
 `source_unreachable` (hard failure, exit 1) per-skill as before —
 `source_gone` is reserved for "source resolved, skill inside it did
 not." The distinction matters because a transient network failure
@@ -1589,7 +1605,10 @@ is read-only:
 - A per-skill row whose SHA (or, for path-kind taps, content hash) has
   moved is reported with outcome `would_update` carrying the `new_sha`
   a real run would install. The skill is still validated, so a broken
-  upstream version still surfaces as `failed`.
+  upstream version still surfaces as `failed`. After validation, an entry
+  with no applicable recorded agent targets instead reports the same soft
+  `skipped` outcome as a real run (§10.1 step 3e). Preview does not execute
+  per-target installation safety checks.
 - A newly-added tap child is reported with kind `would_add` instead of
   being installed.
 - `up_to_date`, `skipped`, `source_gone`, `missing_project_root`, and
@@ -2775,6 +2794,8 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-38 | §10.1.1 | A new tap child whose target installation fails produces a per-child `tap_error` naming failed targets and reasons, exits 1, and is absent from state until every applicable target group succeeds. Remaining target groups, other children, and existing entries still process; the next non-dry-run update that re-expands the affected tap group retries the child. Replacements observed as still owned by the attempt are rolled back to their prior bytes, markers, and symlinks, and owned new copies are removed; targets detected as changed, removed, unreadable, or carrying a non-regular marker are preserved with lost ownership and any retained recovery path reported. Failed publication may restore a prior copy into an absent destination; completed publication later removed stays absent. Restoration failures report the problem and any retained recovery path. |
 | C-UPD-39 | §10.1 | For an existing skill update containing failed or safety-skipped targets, human output names each affected target. Its aggregate skill row is `partially updated` when any target installed or was already current; otherwise it is `failed` if any target failed, or `skipped`. Totals distinguish partial from full success while counting hard failures. JSON, state/retry behavior, and exit codes are unchanged. |
 | C-UPD-40 | §10.1.1 | If rollback-directory cleanup fails after a new tap child is successfully added, the child remains installed and recorded in state, and cleanup failure alone does not make the run fail. Human output displays the cleanup warning and leftover path; JSON includes the diagnostic in an optional `warnings` array on the successful `added` row. When cleanup succeeds, that row omits `warnings`. |
+| C-UPD-44 | §10.1 | After a local path skill root passes its availability check, a qualifying source hash/load lookup failure reports `source_gone` only when a fresh check finds that same root missing, non-directory, or a looping link. Normal and preview runs preserve the affected install, marker, and logical state entry, continue healthy selected entries, and exit 0 when this is the only abnormality. Previews leave installed/store/state bytes unchanged. Missing or invalid manifests in a still-resolvable directory, original permission failures, parser/validation errors, and other operational failures remain hard even if the root disappears later. |
+| C-UPD-45 | §10.1, §10.1.1, §11.1 | A moved skill with no applicable recorded agent targets (empty, unknown-only, or unsupported scope) reports a soft `skipped` outcome after source validation in real and preview runs, without staging or changing installed copies, markers, or its complete state entry. Other selected entries still process, and restoring an applicable recorded target permits retry. Any existing-entry update with zero completed targets, including all safety skips, preserves its complete state entry and remains retryable; per-target diagnostics, soft safety skips, successful partial updates, and hard-failure retry semantics are preserved. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |

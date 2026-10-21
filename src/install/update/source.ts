@@ -1,124 +1,49 @@
-/** Resolve and apply one update source while retaining acquisition defaults (§10.1, §14). */
-import { existsSync } from "node:fs";
-import { cwdForEntry } from "../../agents/adapter.ts";
-import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
-import type { Config, StateEntry, TapConfig } from "../../core/types.ts";
+/** Inspect update sources before staging; local lookup races preserve the installed copy (§10.1). */
+
+import { CrewError } from "../../core/errors.ts";
+import type { LoadedSkill, StateEntry, TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
-import { type AcquiredTap, withAcquiredSkillPath } from "../../sources/acquire/index.ts";
-import type { PreparedSources } from "../../sources/acquire/revision.ts";
+import { MissingSkillManifestError } from "../../skill/missing-manifest.ts";
 import { isGistTap } from "../../sources/gist.ts";
 import { hashSourceDirectory, isSourceDirectory } from "../../sources/read.ts";
-import { stageIntoStore } from "../../sources/store.ts";
-import { hasUsableProjectRoot } from "../../state/validation.ts";
-import { peekResolvedSha } from "./peek.ts";
-import { reinstallIntoAgents } from "./reinstall.ts";
-import type { InternalOutcome } from "./types.ts";
+import { isMissingSourcePathError, isSourceReadFailure } from "../../util/source-read.ts";
 
-export function updateOne(
+type SourceRead =
+  | { readonly kind: "source_gone" }
+  | { readonly kind: "up_to_date" }
+  | {
+      readonly kind: "ready";
+      readonly loaded: LoadedSkill;
+      readonly sourceHash: string | undefined;
+    };
+
+/** Hash before comparing the recorded hash; unchanged sources bypass full manifest validation. */
+export function readUpdateSource(
   entry: StateEntry,
-  config: Config,
-  home: string,
+  tap: TapConfig,
+  sourcePath: string,
+  newSha: string | null,
   force: boolean,
-  fallbackCwd: string,
-  dryRun: boolean,
-  baseFailures?: TargetBaseFailures,
-  prepared?: PreparedSources,
-): InternalOutcome {
-  if (
-    entry.scope === "project" &&
-    !(hasUsableProjectRoot(entry) && existsSync(entry.project_root))
-  ) {
-    return { kind: "missing_project_root", root: String(entry.project_root ?? "(unknown)") };
+): SourceRead {
+  if (tap.kind === "path" && !isSourceDirectory(sourcePath)) return { kind: "source_gone" };
+  try {
+    const sourceHash = newSha === null ? hashSourceDirectory(sourcePath) : undefined;
+    if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
+      if (newSha !== null || sourceHash === entry.content_hash) return { kind: "up_to_date" };
+    }
+    return { kind: "ready", loaded: loadSkill(sourcePath, isGistTap(tap)), sourceHash };
+  } catch (err) {
+    // §10.1: root absence only softens an original source lookup failure, never permission/validation.
+    if (tap.kind !== "path") throw err;
+    if (!isLookupFailure(err)) throw err;
+    if (!isSourceDirectory(sourcePath)) return { kind: "source_gone" };
+    throw err;
   }
-
-  const entryCwd = cwdForEntry(entry, fallbackCwd);
-  if (entry.pinned && entry.ref !== null && /^[0-9a-f]{40}$/i.test(entry.ref) && !force) {
-    return { kind: "skipped", reason: "pinned to exact SHA" };
-  }
-
-  const tap = config.taps.find((t) => t.name === entry.source.tap);
-  if (!tap) {
-    // Tap was removed from config (manually); doctor --repair can fix.
-    return { kind: "tap_missing", tap: entry.source.tap };
-  }
-  // §10.1 step 3c: re-resolve the entry's own ref. An entry installed at
-  // a branch follows that branch (a branch is not pinned), and a forced
-  // tag update installs the tag's current commit — neither is the
-  // clone's `origin/HEAD`.
-  //
-  // Resolution happens before materialization: an up-to-date tap needs
-  // only its SHA, and exporting a large tree just to discard it is the
-  // common case on a routine `crew update`.
-  // `--force` reinstalls a pinned entry even at an unchanged SHA, so it
-  // still needs the bytes.
-  // §14: consume the prepared failure before later local clone inspection.
-  const revision =
-    prepared && tap.kind === "git" ? prepared.revisionFor(tap, entry.ref) : undefined;
-  const peeked = revision?.resolvedSha ?? peekResolvedSha(tap, entry.ref, home);
-  if (peeked !== null && peeked === entry.resolved_sha && !(force && entry.pinned)) {
-    return { kind: "up_to_date" };
-  }
-  if (peeked !== null && entry.pinned && !force) {
-    return { kind: "skipped", reason: "pinned to tag; upstream moved" };
-  }
-  // Only this entry's own directory or gist file is read and exported —
-  // otherwise every entry sharing a whole-repo tap materializes the
-  // whole repository again (§10.1).
-  return withAcquiredSkillPath(
-    tap,
-    entry.ref,
-    entry.source.path,
-    home,
-    (acquired, sourcePath) =>
-      applyUpdate(entry, acquired, sourcePath, tap, home, force, entryCwd, dryRun, baseFailures),
-    prepared,
-  );
 }
 
-/** Stage and reinstall one entry from an already-acquired tree. */
-function applyUpdate(
-  entry: StateEntry,
-  acquired: Pick<AcquiredTap, "resolvedSha" | "pinned">,
-  sourcePath: string,
-  tap: TapConfig,
-  home: string,
-  force: boolean,
-  entryCwd: string,
-  dryRun: boolean,
-  baseFailures?: TargetBaseFailures,
-): InternalOutcome {
-  const newSha = acquired.resolvedSha;
-
-  if (entry.pinned && !force && newSha !== null && newSha !== entry.resolved_sha) {
-    return { kind: "skipped", reason: "pinned to tag; upstream moved" };
-  }
-
-  // §10.1: re-expansion handles removed children of tracked whole-tap installs;
-  // individual path sources rely on this directory check.
-  if (newSha === null && !isSourceDirectory(sourcePath)) return { kind: "source_gone" };
-  const sourceHash = newSha === null ? hashSourceDirectory(sourcePath) : undefined;
-  if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
-    if (newSha !== null) return { kind: "up_to_date" };
-    if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
-  }
-
-  const loaded = loadSkill(sourcePath, isGistTap(tap));
-  if (dryRun) return { kind: "would_update", new_sha: newSha };
-  const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash, isGistTap(tap));
-  const perTarget = reinstallIntoAgents({
-    entry,
-    tap,
-    storePath: staged.storePath,
-    contentHash: staged.contentHash,
-    newSha,
-    force,
-    entryCwd,
-    ...(baseFailures ? { baseFailures } : {}),
-  });
-  return {
-    kind: "updated",
-    new_sha: newSha,
-    content_hash: staged.contentHash,
-    per_target: perTarget,
-  };
+function isLookupFailure(err: unknown): boolean {
+  if (err instanceof MissingSkillManifestError) return true;
+  if (isSourceReadFailure(err)) return isMissingSourcePathError(err.cause);
+  if (err instanceof CrewError) return false;
+  return isMissingSourcePathError(err);
 }

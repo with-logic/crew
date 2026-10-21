@@ -16,8 +16,8 @@ import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
+import { updateOne } from "./execute.ts";
 import { rowFor } from "./row.ts";
-import { updateOne } from "./source.ts";
 import { entryWithGistFilename } from "./source-path.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { UpdateRow } from "./types.ts";
@@ -51,8 +51,12 @@ export function updateOneEntry(
     const hardFailure =
       outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed");
     let next = state;
-    // §10.1: one revision covers all targets; retain it until failed targets can retry.
-    if (outcome.kind === "updated" && !hardFailure) {
+    // §10.1: advancing a shared revision requires completion without hard failures.
+    const hasCompletedTarget =
+      outcome.kind === "updated" &&
+      outcome.per_target.some((t) => t.kind === "installed" || t.kind === "up_to_date");
+    const canAdvanceRevision = hasCompletedTarget && !hardFailure;
+    if (canAdvanceRevision) {
       const nonFailedTargets = outcome.per_target.map((t) => t.agent);
       const newEntry = rebuildStateEntry(
         selectedEntry,
