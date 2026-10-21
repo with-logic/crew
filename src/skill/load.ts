@@ -16,6 +16,7 @@ import { exists, readText } from "../util/fs.ts";
 import { readSourceFile } from "../util/source-read.ts";
 import { assertSkillFile } from "./file.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
+import { MissingSkillManifestError } from "./missing-manifest.ts";
 import { readFrontmatter } from "./read-frontmatter.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
@@ -52,13 +53,7 @@ export function hasSkillMd(path: string): boolean {
 /** Require a manifest at the expected path; reject every symlink, including internal links (§9 step 4). */
 function assertManifestIsNotSymlink(manifestPath: string, skillDirectory: string): void {
   const manifest = lstatSync(manifestPath, { throwIfNoEntry: false });
-  if (!manifest) {
-    throw new CrewError(
-      "invalid_skill",
-      `no SKILL.md in \`${skillDirectory}\` — every skill directory needs one`,
-      { path: skillDirectory },
-    );
-  }
+  if (!manifest) throw new MissingSkillManifestError(skillDirectory);
   if (!manifest.isSymbolicLink()) return;
   throw new CrewError(
     "invalid_skill",
