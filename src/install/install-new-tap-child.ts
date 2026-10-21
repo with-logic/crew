@@ -4,13 +4,14 @@
  * Stages the child into the store, runs the install algorithm for
  * every target the rest of the tap was installed into, and returns a
  * fresh state entry only when every applicable target group succeeds.
- * Failures name the targets and leave the child retryable in state.
+ * Target-group failures name affected targets; staging errors can occur earlier.
+ * Failed children have no state entry, so later re-expansion retries them.
  */
 
 import { type AgentAdapter, baseFor } from "../agents/adapter.ts";
 import { installSkillIntoAgents } from "../agents/install.ts";
 import { agentByName } from "../agents/registry.ts";
-import { CrewError } from "../core/errors.ts";
+import { CrewError, normalizeLocalError } from "../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../core/types.ts";
 import { stageIntoStore } from "../sources/store.ts";
 import { nowIso } from "../util/time.ts";
@@ -68,16 +69,17 @@ export function installNewTapChild(
       });
       for (const a of group) successfulTargets.push(a.name);
     } catch (err) {
-      const ce =
-        err instanceof CrewError
-          ? err
-          : new CrewError("usage_error", (err as Error).message ?? String(err));
+      const ce = normalizeLocalError(err);
       firstFailure ??= ce;
       failures.push(`${group.map((a) => a.name).join(", ")}: ${ce.message}`);
     }
   }
   // §10.1.1: a partial state entry would hide the failed targets on retry.
-  if (firstFailure) throw new CrewError(firstFailure.code, failures.join("; "));
+  if (firstFailure) {
+    if (successfulTargets.length > 0)
+      failures.push(`copies remain for successful targets: ${successfulTargets.join(", ")}`);
+    throw new CrewError(firstFailure.code, failures.join("; "));
+  }
   if (successfulTargets.length === 0) return null;
   return {
     name: args.skillName,

@@ -7,7 +7,7 @@
  * (`--dry-run`) or install it.
  */
 
-import { CrewError } from "../../core/errors.ts";
+import { normalizeLocalError } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import {
   type InstalledSourceIndex,
@@ -122,10 +122,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
         rows.push({ name: child.name, scope: input.scope, tap: input.tap.name, kind: "added" });
       }
     } catch (err) {
-      const ce =
-        err instanceof CrewError
-          ? err
-          : new CrewError("usage_error", (err as Error).message ?? String(err));
+      const ce = normalizeLocalError(err);
       hardFailure = true;
       rows.push({
         name: child.name,

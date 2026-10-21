@@ -94,7 +94,9 @@ commands that do what they say, across every agent you use.
 5. **Stay current automatically.** `crew update` pulls the latest versions
    of everything. Flip on autoupdate and a background job keeps every agent
    fresh. If adding a new tap skill fails for an agent, update reports the
-   target and reason, then retries that skill on the next run.
+   target and reason, including which successful targets retain copies. The
+   next update that re-expands the affected tap group retries that skill
+   (unless it is a dry run).
 
 ## Skill references
 

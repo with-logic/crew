@@ -60,10 +60,12 @@ function fixture() {
     "--agent",
     "codex",
   ]);
+  const alphaBytes = `${readFileSync(join(repo, "alpha", "SKILL.md"), "utf8")}\nUpdated alpha.\n`;
+  writeFileSync(join(repo, "alpha", "SKILL.md"), alphaBytes);
   makeSkill(repo, "newbie", skillFrontmatter({ name: "newbie" }));
   makeSkill(repo, "other", skillFrontmatter({ name: "other" }));
   commitAll(repo, "add children");
-  return { home, added, installed };
+  return { home, added, installed, alphaBytes };
 }
 function block(root: string) {
   mkdirSync(join(root, "newbie"));
@@ -72,7 +74,7 @@ function block(root: string) {
 
 for (const blocked of ["claude-code", "codex", "both"]) {
   test(`C-UPD-38 ${blocked} failure is reported and retried without losing target membership`, () => {
-    const { home, added, installed } = fixture();
+    const { home, added, installed, alphaBytes } = fixture();
     expect(added.code).toBe(0);
     expect(installed.code).toBe(0);
     if (blocked !== "codex") block(claudeRoot);
@@ -94,8 +96,12 @@ for (const blocked of ["claude-code", "codex", "both"]) {
       } else {
         // Remaining target groups are still attempted after an earlier failure.
         expect(existsSync(join(root!, "newbie", "SKILL.md"))).toBe(true);
+        expect(row.error?.message).toContain(`copies remain for successful targets: ${agent}`);
       }
     }
+    for (const root of [claudeRoot, codexRoot])
+      expect(readFileSync(join(root, "alpha", "SKILL.md"), "utf8")).toBe(alphaBytes);
+    expect(row.error?.message?.includes("copies remain")).toBe(blocked !== "both");
     expect(readState(home).installations.some((e) => e.name === "newbie")).toBe(false);
     expect(readState(home).installations.find((e) => e.name === "other")?.agents).toEqual([
       "claude-code",
@@ -106,6 +112,7 @@ for (const blocked of ["claude-code", "codex", "both"]) {
     expect(human.stdout).toContain("newbie");
     expect(human.stdout).toContain("untracked_directory");
     expect(human.stdout).toContain("1 failure");
+    expect(human.stdout.includes("copies remain")).toBe(blocked !== "both");
     if (blocked !== "codex") rmSync(join(claudeRoot, "newbie"), { recursive: true });
     if (blocked !== "claude-code") rmSync(join(codexRoot, "newbie"), { recursive: true });
     expect(invoke(home, ["update", "fixture"]).code).toBe(0);
@@ -155,7 +162,7 @@ test("C-UPD-38 a child staging error stays isolated and uses the local error cod
     const result = invoke(home, ["update", "fixture", "--json"]);
     expect(result.code).toBe(1);
     const parsed = JSON.parse(result.stdout) as { tap_reexpand_rows: TapReexpandRow[] };
-    expect(parsed.tap_reexpand_rows).toHaveLength(2);
+    expect(parsed.tap_reexpand_rows.map((r) => r.name).sort()).toEqual(["newbie", "other"]);
     expect(
       parsed.tap_reexpand_rows.every(
         (r) => r.kind === "tap_error" && r.error?.code === "usage_error",
