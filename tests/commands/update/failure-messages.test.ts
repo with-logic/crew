@@ -28,6 +28,55 @@ for (const [command, render] of [
     expect(output).toContain("failed");
   });
 
+  test(`C-UPD-41 ${command} masks apostrophe-prefixed credentials in failure reasons`, () => {
+    const message =
+      "fatal: unable to access 'https://user:'quote-secret@host/repo': denied\n" +
+      "fatal: '/repo?token='query-secret&ref=main': unavailable";
+    const rows: UpdateRow[] = [
+      {
+        name: "demo",
+        scope: "user",
+        outcome: { kind: "failed", error: { code: "source_unreachable", message } },
+      },
+    ];
+    const human = render({ rows, tapReexpandRows: [], tapRows: [] }, makeStyler(false));
+    const output = human.join("\n");
+    expect(output).toContain("source unreachable: fatal: unable to access '***");
+    expect(output).not.toContain("&ref=main");
+    for (const secret of ["quote-secret", "query-secret"]) expect(output).not.toContain(secret);
+    const capture = captureStreams();
+    writeSuccess({ exitCode: 1, human, json: { rows } }, true, false, capture.streams);
+    expect(JSON.parse(capture.stdout()).rows[0].outcome.error.message).toBe(message);
+  });
+
+  test.each(['"', "<", ">", "`"])(
+    `C-UPD-41 ${command} masks %s inside credential values without changing raw JSON`,
+    (delimiter) => {
+      const message =
+        `fatal: 'https://user:${delimiter}delimiter-secret@host/repo': denied\n` +
+        `fatal: '/repo?token=${delimiter}query-secret&ref=main': unavailable`;
+      const rows: UpdateRow[] = [
+        {
+          name: "demo",
+          scope: "user",
+          outcome: {
+            kind: "failed",
+            error: { code: "source_unreachable", message },
+          },
+        },
+      ];
+      const human = render({ rows, tapReexpandRows: [], tapRows: [] }, makeStyler(false));
+      const output = human.join("\n");
+      expect(output).toContain("source unreachable: fatal: '***");
+      expect(output).not.toContain("&ref=main");
+      for (const secret of ["delimiter-secret", "query-secret"])
+        expect(output).not.toContain(secret);
+      const capture = captureStreams();
+      writeSuccess({ exitCode: 1, human, json: { rows } }, true, false, capture.streams);
+      expect(JSON.parse(capture.stdout()).rows[0].outcome.error.message).toBe(message);
+    },
+  );
+
   test(`C-UPD-41 ${command} sanitizes the whole diagnostic and leaves JSON raw`, () => {
     const code = "usage_error\u001b";
     const message =
@@ -39,7 +88,7 @@ for (const [command, render] of [
     const human = render({ rows, tapReexpandRows: [], tapRows: [] }, makeStyler(false));
     const output = human.join("\n");
     expect(output).toContain("usage error\\x1b:");
-    expect(output).toContain("failed\\x0a\\x85retained at /tmp/export?token=***");
+    expect(output).not.toContain("retained at");
     expect(output).toContain("https://***@host/repo?token=***");
     for (const secret of ["alice", "password-secret", "query-secret", "path-secret"])
       expect(output).not.toContain(secret);

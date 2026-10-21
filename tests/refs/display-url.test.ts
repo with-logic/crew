@@ -131,3 +131,11 @@ describe("displayDetails", () => {
     expect(out["count"]).toBe(2);
   });
 });
+
+test.each(["?", "#"])(
+  "C-REF-28 malformed diagnostic authority suppresses the entire %s suffix",
+  (separator) => {
+    const text = `fatal: https://user:pass${separator}MALFORMED_SECRET@host`;
+    expect(displayText(text)).toBe("fatal: ***");
+  },
+);

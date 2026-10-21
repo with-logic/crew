@@ -28,13 +28,7 @@ export function renderQuietUpdateErrors(
   }
   for (const row of plan.tapReexpandRows) {
     if (row.kind === "tap_error")
-      lines.push(
-        failureLine(
-          `${row.name} (from ${row.tap})`,
-          row.error?.code ?? "unreachable",
-          row.error?.message ?? "",
-        ),
-      );
+      lines.push(failureLine(`${row.name} (from ${row.tap})`, row.error.code, row.error.message));
   }
   const namedTaps = new Set<string>();
   for (const selector of plan.selectors) {

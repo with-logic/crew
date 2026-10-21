@@ -10,6 +10,7 @@ import type { CommandContext } from "../commands/types.ts";
 import { CrewError } from "../core/errors.ts";
 import { crewHome } from "../core/paths.ts";
 import { maybeEmitUpdateNotice } from "../self-update/notice.ts";
+import { withGistDiscovery } from "../sources/gist.ts";
 import { setProgressSink } from "../util/progress.ts";
 import { colorEnabled, makeStyler, type Styler, terminalWidth } from "../util/term.ts";
 import { nowIso } from "../util/time.ts";
@@ -114,7 +115,7 @@ function runCliWithHome(
 
   let exitCode: number;
   try {
-    const output = dispatch(parsed.command, ctx);
+    const output = withGistDiscovery(() => dispatch(parsed.command, ctx));
     writeSuccess(output, parsed.flags.json, parsed.flags.quiet, streams);
     exitCode = output.exitCode;
   } catch (err) {

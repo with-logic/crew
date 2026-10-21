@@ -1,12 +1,16 @@
 /** Source filesystem reads preserve operational failures before validation or staging (§9, §13). */
 
-import { accessSync, constants, lstatSync, readdirSync, statSync } from "node:fs";
+import { accessSync, constants, copyFileSync, lstatSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { hashDirectory } from "../hash/content.ts";
 import { copyTree } from "../util/copy.ts";
 import { isInside, readBytes, type WalkedEntry, type WalkOptions, walk } from "../util/fs.ts";
-import { readSourceFile, sourceReadFailure } from "../util/source-read.ts";
+import {
+  isMissingSourcePathError,
+  readSourceFile,
+  sourceReadFailure,
+} from "../util/source-read.ts";
 
 /** Missing paths are absent; inaccessible source directories are operational failures. */
 export function isSourceDirectory(path: string, followSymlinks = true): boolean {
@@ -15,8 +19,7 @@ export function isSourceDirectory(path: string, followSymlinks = true): boolean 
     accessSync(path, constants.X_OK);
     return true;
   } catch (err) {
-    const { code } = err as NodeJS.ErrnoException;
-    if (code === "ENOENT" || code === "ENOTDIR" || code === "ELOOP") return false;
+    if (isMissingSourcePathError(err)) return false;
     throw sourceDirectoryFailure(path, err);
   }
 }
@@ -60,12 +63,14 @@ export function walkSourceDirectory(path: string, options: WalkOptions): WalkedE
 }
 
 function sourceDirectoryFailure(path: string, err: unknown): CrewError {
-  return new CrewError(
+  const error = new CrewError(
     "source_unreachable",
     `cannot inspect source \`${path}\`: ${(err as Error).message}`,
     { path },
     "Check that the source directory can be listed and searched, and that you can access its parent directories.",
   );
+  Object.defineProperty(error, "cause", { value: err, enumerable: false });
+  return error;
 }
 
 /** Hash an acquired source; target and store hashing retain their existing error behavior. */
@@ -79,9 +84,13 @@ export function hashSourceDirectory(path: string): string {
 }
 
 /** Copy an acquired source, distinguishing source permissions from destination failures. */
-export function copySourceTree(source: string, destination: string): void {
+export function copySourceTree(
+  source: string,
+  destination: string,
+  destinationRoot = destination,
+): void {
   try {
-    copyTree(source, destination, { stripRootMarker: true });
+    copyTree(source, destination, { destinationRoot, stripRootMarker: true });
   } catch (err) {
     const error = err as NodeJS.ErrnoException;
     const path = error.path!;
@@ -96,13 +105,27 @@ export function copySourceTree(source: string, destination: string): void {
     // `copyTree` lists only source directories; destination operations never use scandir.
     if (error.syscall === "scandir" || sourceInspectionFailed)
       throw sourceDirectoryFailure(path, err);
-    if (error.syscall !== "copyfile") throw err;
-    // copyfile reports the source in `path` even when the destination write failed.
-    try {
-      accessSync(path, constants.R_OK);
-    } catch (readError) {
-      throw sourceReadFailure(path, readError);
-    }
-    throw err;
+    throwCopyFailure(err);
   }
+}
+
+/** Copy raw source bytes without buffering, keeping destination errors native (§9 step 8). */
+export function copySourceFile(source: string, destination: string): void {
+  try {
+    copyFileSync(source, destination);
+  } catch (err) {
+    throwCopyFailure(err);
+  }
+}
+
+function throwCopyFailure(err: unknown): never {
+  const error = err as NodeJS.ErrnoException;
+  if (error.syscall !== "copyfile") throw err;
+  // copyfile reports the source in `path` even when the destination write failed.
+  try {
+    accessSync(error.path!, constants.R_OK);
+  } catch (readError) {
+    throw sourceReadFailure(error.path!, readError);
+  }
+  throw err;
 }

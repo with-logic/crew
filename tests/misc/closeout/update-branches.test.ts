@@ -160,7 +160,7 @@ describe("update — skill renamed upstream is treated as source_gone", () => {
       const c = captureStreams();
       const code = runCli(["update"], { home, streams: c.streams });
       expect(code).toBe(0);
-      expect(c.stdout()).toContain("removed upstream");
+      expect(c.stdout()).toContain("source no longer available");
     },
     RENAME_TIMEOUT_MS,
   );

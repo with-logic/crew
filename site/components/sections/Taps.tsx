@@ -48,6 +48,10 @@ export function Taps() {
               back to bounded recursive discovery.
             </p>
             <p className={styles.note}>
+              GitHub gists work too: install the owner’s gist URL or add it as a tap. Each top-level
+              file with valid skill frontmatter becomes a skill, whatever its filename.
+            </p>
+            <p className={styles.note}>
               Group related skills into <strong>namespaces</strong>: <code>skills/marketing/*</code>
               , <code>skills/engineering/*</code>. Then <code>crew install marketing</code> installs
               the whole bundle, and <code>crew install acme/marketing/email-outreach</code> picks

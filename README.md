@@ -183,7 +183,7 @@ When a command asks for an installed skill name, you can use the bare name
 
 | Command | What it does |
 |---|---|
-| `crew search [--tap <name>] [<query>]` | Case-insensitive substring match across every configured tap, or just one with `--tap`. With no query, lists every installable skill in those taps; exact installed matches are marked `✓`. With a query and without `--tap`, also suggests matching known taps to add; `--tap` scopes the search to a tap you already have, so it omits those suggestions. |
+| `crew search [--tap <name>] [<query>]` | Case-insensitive substring match across every configured tap, or just one with `--tap`. With no query, lists every installable skill in those taps; exact installed matches are marked `✓`. With a query and without `--tap`, also suggests matching known taps to add; `--tap` scopes the search to a tap you already have, so it omits those suggestions. Invalid directory manifests produce warnings with their source paths and validation reasons; healthy skills remain searchable. |
 | `crew tap add <url-or-path> [name]` | Add a registry from a git source or local path. Name defaults to the repo/path name. Add `--recursive` for trusted repos with non-standard nested layouts. |
 | `crew tap remove <name>` | Drop a tap from config; delete its shared clone when no other tap uses that repository. Refuses while skills from the tap are installed: pass `--uninstall` to remove them too, or `--force` to keep them. |
 | `crew tap list` | Print each tap's name, kind/status, source target, recursive discovery marker when set, and last-fetched timestamp for git taps. |
@@ -243,6 +243,8 @@ For trusted repos that don't follow either layout, `crew tap add --recursive`
 keeps the standard layouts first and falls back to bounded recursive discovery.
 
 ### Namespaces
+
+GitHub gists work too: install the owner’s gist URL or add it as a tap. Each top-level file with valid skill frontmatter becomes a skill, whatever its filename.
 
 Group related skills into a **namespace** by putting them under one directory
 inside `skills/`:
@@ -434,7 +436,12 @@ phones home.
 **How does `crew update` know when to skip a skill?** Skills pinned to an
 exact SHA are skipped unless `--force`. Skills pinned to a tag are
 re-resolved: if the tag moved and `--force` is given, the new commit is
-installed. Everything else updates to whatever the ref resolves to now.
+installed. If no recorded agent supports the install's scope, the skill is
+skipped. Its recorded revision stays unchanged until at least one target completes
+without a hard target failure, so an update with no completed targets can retry.
+If a local skill directory disappears during source inspection, update keeps
+the installed copy and continues. Invalid manifests and permission failures
+still report errors.
 
 **What about Linux? Windows?** Linux is supported for x86_64 and ARM64 hosts.
 Windows is future work because agent paths, scheduler integration, and binary

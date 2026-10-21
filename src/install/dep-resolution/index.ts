@@ -19,34 +19,37 @@
  */
 
 import { join, posix } from "node:path";
-import { CrewError } from "../core/errors.ts";
-import { tapClonePath } from "../core/repo-path.ts";
-import type { Config, GitSource, LoadedSkill, PathSource, TapConfig } from "../core/types.ts";
-import { hasSkillMd, loadSkill, loadSkillName } from "../skill/load.ts";
-import { tapRootDir } from "../sources/acquire/index.ts";
-import { isSourceDirectory, listSourceDirectory } from "../sources/read.ts";
-import { attributeRef } from "./tap-attribution.ts";
+import { CrewError } from "../../core/errors.ts";
+import { tapClonePath } from "../../core/repo-path.ts";
+import type { Config, GitSource, PathSource, SkillMetadata, TapConfig } from "../../core/types.ts";
+import { hasSkillMd, loadSkill, loadSkillName } from "../../skill/load.ts";
+import { tapRootDir } from "../../sources/acquire/index.ts";
+import { isGistTap } from "../../sources/gist.ts";
+import { isSourceDirectory, listSourceDirectory } from "../../sources/read.ts";
+import { attributeRef } from "../tap-attribution.ts";
+import { duplicateSiblingError } from "./errors.ts";
+import { gistSibling } from "./gist.ts";
 
 /** Result of finding a dep as a sibling within the parent's tap. */
 export interface SiblingHit {
   readonly tap: TapConfig;
   readonly config: Config;
   readonly tapRelativePath: string;
-  readonly loaded: LoadedSkill;
+  readonly loaded: SkillMetadata;
 }
 
 /**
  * Look for `depName` as a sibling skill of `parentTapPath`. Returns
  * null if not found (the dep walker will try cross-tap resolution next).
  *
- * `parent.parentDir`, when set, is the parent skill's own directory
- * inside an already-materialized export of a pinned commit. Siblings
+ * `parent.parentPath`, when set, is the parent skill's directory or gist file
+ * inside an already-materialized export of its captured commit. Siblings
  * must be discovered there, not in the live clone: staging HEAD's bytes
  * while recording the parent's SHA would make state describe a
  * provenance the content doesn't have (§9 step 3).
  */
 export function findSiblingDep(
-  parent: { tap: TapConfig; tapRelativePath: string; parentDir?: string | undefined },
+  parent: { tap: TapConfig; tapRelativePath: string; parentPath?: string | undefined },
   depName: string,
   home: string,
   config: Config,
@@ -54,18 +57,19 @@ export function findSiblingDep(
   const tapClone = tapClonePath(parent.tap, home);
   const tapRoot = tapRootDir(tapClone, parent.tap);
   if (
-    parent.parentDir === undefined &&
+    parent.parentPath === undefined &&
     parent.tap.kind === "git" &&
     parent.tap.subpath === "" &&
     parent.tapRelativePath === ""
   ) {
     return null;
   }
-  // The parent's own directory inside the tap.
-  const parentDir = parent.parentDir ?? join(tapRoot, parent.tapRelativePath);
-  const siblingParent = join(parentDir, "..");
+  const parentPath = parent.parentPath ?? join(tapRoot, parent.tapRelativePath);
+  const siblingParent = join(parentPath, "..");
+  if (isGistTap(parent.tap))
+    return gistSibling(siblingParent, parent.tap, config, depName, parent.parentPath !== undefined);
   const tapBase = parent.tapRelativePath.split("/").slice(0, -1);
-  const matches: { dirName: string; siblingDir: string; loaded: LoadedSkill }[] = [];
+  const matches: { dirName: string; siblingDir: string; loaded: SkillMetadata }[] = [];
   for (const dirName of listSourceDirectory(siblingParent)) {
     const siblingDir = join(siblingParent, dirName);
     if (!(isSourceDirectory(siblingDir, parent.tap.kind === "path") && hasSkillMd(siblingDir)))
@@ -97,8 +101,9 @@ export function findSiblingDep(
 function siblingName(path: string): string | null {
   try {
     return loadSkillName(path);
-  } catch {
-    return null;
+  } catch (err) {
+    if (err instanceof CrewError && err.code === "invalid_skill") return null;
+    throw err;
   }
 }
 
@@ -111,17 +116,4 @@ function siblingRootSource(
   const base = tap.subpath === "" ? "" : posix.dirname(tap.subpath);
   const subpath = base === "" || base === "." ? dirName : `${base}/${dirName}`;
   return { type: "git", url: tap.url, ref: null, subpath };
-}
-
-function duplicateSiblingError(
-  depName: string,
-  tapName: string,
-  matches: readonly { dirName: string }[],
-): CrewError {
-  const paths = matches.map((m) => m.dirName).join(", ");
-  return new CrewError(
-    "conflicting_dependencies",
-    `dependency \`${depName}\` appears multiple times near tap \`${tapName}\` at ${paths}`,
-    { name: depName, tap: tapName, paths: matches.map((m) => m.dirName) },
-  );
 }

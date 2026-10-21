@@ -71,8 +71,8 @@ export function reexpandTaps(
   const cache = makeTapScanCache();
   const installedIndex = buildInstalledSourceIndex(state, config);
 
-  // Group state entries by (tap-name, scope, project_root). Entries
-  // sharing all three are managed together: same tap clone, same
+  // Group state entries by (tap-name, scope, project_root, ref). Entries
+  // sharing all four are managed together: same tap revision, same
   // install location, same target set (typically).
   const byKey = new Map<string, StateEntry[]>();
   for (const entry of state.installations) {

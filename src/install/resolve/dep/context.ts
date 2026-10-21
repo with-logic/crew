@@ -1,9 +1,10 @@
-/** Invocation-scoped captured directory trees for dependency resolution (§9 steps 3, 6). */
+/** Invocation-scoped captured source trees for dependency resolution (§9 steps 3, 6). */
 
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import { tapClonePath } from "../../../core/repo-path.ts";
 import { createExportedTree, type ExportedTree } from "../../../git/export.ts";
+import { isGistTap } from "../../../sources/gist.ts";
 import { withExportCleanup } from "../../../util/export-cleanup.ts";
 import type { PendingItem } from "../enqueue.ts";
 
@@ -12,26 +13,27 @@ const MAX_RETAINED_TREES = 2;
 
 /** Shared only while one install-set walk owns the captured trees. */
 export interface DependencyTrees {
-  readonly parentDir: (parent: PendingItem) => string | undefined;
+  readonly parentPath: (parent: PendingItem) => string | undefined;
 }
 
 /** Reuse bounded captured roots and release every retained tree on scope exit. */
 export function withDependencyTrees<T>(home: string, fn: (trees: DependencyTrees) => T): T {
   const exports = new Map<string, ExportedTree>();
   return withExportCleanup(
-    () => fn({ parentDir: (parent) => parentDir(parent, home, exports) }),
+    () => fn({ parentPath: (parent) => parentPath(parent, home, exports) }),
     // The live iterator includes exports created by fn; cleanup consumes it after fn finishes.
     exports.values(),
   );
 }
 
 /** Bare siblings read the captured SHA even when a later fetch moved the parent's ref. */
-function parentDir(
+function parentPath(
   parent: PendingItem,
   home: string,
   exports: Map<string, ExportedTree>,
 ): string | undefined {
-  const hasCapturedRevision = parent.requestedRef !== null && parent.resolvedSha !== null;
+  const hasCapturedRevision =
+    (parent.requestedRef !== null || isGistTap(parent.tap)) && parent.resolvedSha !== null;
   if (!hasCapturedRevision || parent.tap.kind !== "git") return undefined;
   const clone = tapClonePath(parent.tap, home);
   // Widen a skill-root tap to its enclosing directory so siblings remain visible.

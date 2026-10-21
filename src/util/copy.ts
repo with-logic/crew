@@ -11,12 +11,14 @@
  */
 
 import { copyFileSync, lstatSync, readdirSync, readlinkSync, symlinkSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import { ensureDir } from "./fs.ts";
 
 /** Options for `copyTree`. */
 export interface CopyTreeOptions {
+  /** Trusted configured base; destination components strictly below it may not be symlinks. */
+  readonly destinationRoot: string;
   /**
    * If true, skip a `.crew.json` at the root of the source. Default: true.
    * We never accept a source-authored marker regardless of where it sits in
@@ -26,13 +28,27 @@ export interface CopyTreeOptions {
 }
 
 /**
- * Copy `src` into `dest`, creating it if needed. Refuse destination symlinks at
- * the root and each directory/file write path: source links are preserved, but
- * destination links must not redirect writes outside `dest` (§7.3 step 4).
+ * Copy `src` into `dest` under a caller-owned boundary, creating it if needed.
+ * Configured aliases used as ancestors are trusted at/above the boundary.
+ * The destination leaf and each recursive write path must still refuse links
+ * that could redirect writes (§7.3 step 4), even when dest equals the boundary.
  */
-export function copyTree(src: string, dest: string, options: CopyTreeOptions = {}): void {
+export function copyTree(src: string, dest: string, options: CopyTreeOptions): void {
+  const destination = resolve(dest);
+  const boundary = resolve(options.destinationRoot);
+  const rel = relative(boundary, destination);
+  if (rel === ".." || rel.startsWith(`..${sep}`))
+    throw new CrewError("usage_error", `Copy destination is outside its boundary: ${dest}`, {
+      path: dest,
+      destinationRoot: options.destinationRoot,
+    });
+  let path = boundary;
+  for (const component of rel.split(sep)) {
+    path = join(path, component);
+    rejectDestinationSymlink(path);
+  }
   const stripRootMarker = options.stripRootMarker !== false;
-  copyDirInto(src, dest, "", stripRootMarker);
+  copyDirInto(src, destination, "", stripRootMarker);
 }
 
 function copyDirInto(

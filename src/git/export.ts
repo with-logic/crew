@@ -27,39 +27,48 @@ import { CrewError } from "../core/errors.ts";
 import { paths } from "../core/paths.ts";
 import { cleanupFailedExport, withExportCleanup } from "../util/export-cleanup.ts";
 import { ensureDir, rmrf } from "../util/fs.ts";
-import { type GitProcessError, runGit } from "./exec.ts";
+import { GitProcessError, runGit } from "./exec.ts";
 import { assertNoSymlinkEscape } from "./tree-safety.ts";
 
 /**
  * Extract `sha`'s tree (optionally narrowed to `subpath`) from the clone
  * at `clonePath` into `dest`, which is created if missing.
  *
- * Two failure kinds, deliberately distinguished (§13):
+ * Two Git exit failures are deliberately distinguished (§13):
  *
  *   - the commit resolved and the tree is readable, but `subpath` isn't
  *     present at it → `no_skills_found`, a user-fixable reference;
- *   - anything else — an unreadable object, a corrupt repository, a
+ *   - other Git exit failures — an unreadable object, a corrupt repository, a
  *     scratch directory crew can't write — → `source_unreachable`,
  *     because the source was never successfully materialized and
  *     nothing can be concluded about what it contains.
+ *
+ * Non-GitProcessError failures propagate unchanged.
  *
  * Collapsing the second kind into the first would tell a user their ref
  * names a missing directory when the truth is that crew could not read
  * the repository at all.
  */
-export function exportTreeAt(clonePath: string, sha: string, subpath: string, dest: string): void {
+export function exportTreeAt(
+  clonePath: string,
+  sha: string,
+  subpath: string,
+  dest: string,
+  options: ExportPathOptions = {},
+): void {
   ensureDir(dest);
   // A scratch index keeps the clone's real index untouched; without it
   // `git checkout` would stage the exported paths into the shared repo.
   const indexFile = `${dest}.crew-export-index`;
-  const pathspec = subpath.length > 0 ? subpath : ".";
+  const selectedPath = subpath.length > 0 ? subpath : ".";
+  const pathspec = options.literalPathspec ? `:(literal)${selectedPath}` : selectedPath;
   const args = [`--work-tree=${dest}`, "checkout", sha, "--", pathspec];
   withExportCleanup(() => {
     try {
       runGit(args, { cwd: clonePath, env: { GIT_INDEX_FILE: indexFile } });
     } catch (err) {
-      // `runGit` only throws `GitProcessError`.
-      throw exportFailure(err as GitProcessError, sha, subpath, pathspec, clonePath);
+      if (!(err instanceof GitProcessError)) throw err;
+      throw exportFailure(err, sha, subpath, selectedPath, clonePath);
     }
   }, [{ cleanupPath: indexFile, cleanup: () => rmrf(indexFile) }]);
 }
@@ -110,8 +119,9 @@ export function withExportedTree<T>(
   subpath: string,
   home: string,
   fn: (rootDir: string) => T,
+  options: ExportPathOptions = {},
 ): T {
-  const tree = createExportedTree({ clonePath, sha, subpath, home });
+  const tree = createExportedTree({ clonePath, sha, subpath, home, ...options });
   return withExportCleanup(() => fn(tree.rootDir), [tree]);
 }
 
@@ -122,8 +132,13 @@ export interface ExportedTree {
   readonly cleanup: () => void;
 }
 
+/** A gist filename is literal even when it contains Git pathspec syntax (§9). */
+interface ExportPathOptions {
+  readonly literalPathspec?: boolean;
+}
+
 /** Repository coordinates and scratch location for one captured export. */
-export interface ExportOptions {
+export interface ExportOptions extends ExportPathOptions {
   readonly clonePath: string;
   readonly sha: string;
   readonly subpath: string;
@@ -131,10 +146,11 @@ export interface ExportOptions {
 }
 
 /** Retain one checked export within a caller-owned cleanup scope. */
-export function createExportedTree({ clonePath, sha, subpath, home }: ExportOptions): ExportedTree {
+export function createExportedTree(options: ExportOptions): ExportedTree {
+  const { clonePath, sha, subpath, home } = options;
   const dest = makeScratchDir(paths(home).gitCacheDir, sha);
   try {
-    exportTreeAt(clonePath, sha, subpath, dest);
+    exportTreeAt(clonePath, sha, subpath, dest, options);
     const rootDir = subpath.length > 0 ? join(dest, subpath) : dest;
     assertNoSymlinkEscape(dest, rootDir, subpath);
     return { rootDir, cleanupPath: dest, cleanup: () => rmrf(dest) };

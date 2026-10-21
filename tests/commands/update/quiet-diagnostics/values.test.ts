@@ -58,20 +58,28 @@ test("C-UPD-42 quiet formatting sanitizes every diagnostic value without mutatin
   const lines = renderQuietUpdateErrors(input);
   expect(lines).toHaveLength(4);
   for (const line of lines) {
-    expect(line).toContain("https://***@host/repo?token=***\\x0a\\x85");
+    expect(line).toContain("https://***@host/repo?token=***");
     for (const secret of ["alice", "password-secret", "query-secret", "\n", "\u0085"])
       expect(line).not.toContain(secret);
   }
   expect(JSON.stringify(input)).toBe(before);
 });
 
-test("C-UPD-42 optional tap-error details use the existing unreachable fallback", () => {
+test("C-UPD-42 explicit tap-error details preserve an unreachable code and empty message", () => {
   expect(
     renderQuietUpdateErrors({
       rows: [],
       tapRows: [],
       selectors: [],
-      tapReexpandRows: [{ name: "unknown", scope: "user", tap: "fixture", kind: "tap_error" }],
+      tapReexpandRows: [
+        {
+          name: "unknown",
+          scope: "user",
+          tap: "fixture",
+          kind: "tap_error",
+          error: { code: "unreachable", message: "" },
+        },
+      ],
     }),
   ).toEqual(["unknown (from fixture): failed (unreachable): "]);
 });
