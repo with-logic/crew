@@ -2,7 +2,7 @@
  * Human output rendering for `crew search` (§5.1, §16.6).
  */
 
-import { columns, truncate } from "../../util/format.ts";
+import { columns, shellQuote, truncate } from "../../util/format.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 import { knownInstallRef, knownSkillRef, knownTapSource } from "./known.ts";
@@ -146,7 +146,7 @@ function formatKnownRows(hits: readonly KnownSearchHit[], style: Styler, width: 
   const rows = displayHits.map(({ hit: h, displayName }) => [
     `    ${displayName}`,
     style.dim(
-      `${truncate(sanitizeLine(h.description), descBudget)} (crew install ${sanitizeLine(knownInstallRef(h))})`,
+      `${truncate(sanitizeLine(h.description), descBudget)} (crew install ${shellQuote(sanitizeLine(knownInstallRef(h)))})`,
     ),
   ]);
   return columns(rows, 2);

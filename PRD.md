@@ -211,7 +211,10 @@ control-character escaping rule before wrapping or styling. This includes
 descriptions, license, compatibility, homepage, and dependencies. Skill
 references in search results, including namespace-qualified names and
 suggested install references, follow the same rule before measuring column
-widths or laying out rows. JSON values and installed skill bytes are unchanged.
+widths or laying out rows. Known-tap search suggestions quote the full
+terminal-sanitized install reference as one POSIX shell argument; references
+containing only shell-safe characters remain unquoted. JSON values and
+installed skill bytes are unchanged.
 
 ### 5.2 Global flags
 
