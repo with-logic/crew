@@ -1,7 +1,7 @@
 /** Source directory discovery reports operational errors through install and dependencies (§9, §13). */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { accessSync, chmodSync, constants, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
@@ -19,17 +19,16 @@ beforeEach(() => {
 afterEach(() => Object.assign(claudeCodeAdapter, original));
 
 for (const mode of [0o111, 0o444]) {
-  for (const layout of ["root", "skills", "namespace", "recursive"]) {
+  for (const [layout, relativePath] of [
+    ["root", ""],
+    ["skills", "skills"],
+    ["namespace", "skills/team"],
+    ["recursive", "team/work"],
+  ] as const) {
     test(`install reports inaccessible ${layout} directory (${mode.toString(8)})`, () => {
       const home = makeCrewHome();
       const root = makeTempDir();
-      const relative = {
-        root: "",
-        skills: "skills",
-        namespace: "skills/team",
-        recursive: "team/work",
-      };
-      const blocked = join(root, relative[layout as keyof typeof relative]);
+      const blocked = join(root, relativePath);
       mkdirSync(blocked, { recursive: true });
       makeSkill(blocked, "demo", skillFrontmatter({ name: "demo" }));
       chmodSync(blocked, mode);
@@ -50,6 +49,30 @@ for (const mode of [0o111, 0o444]) {
     });
   }
 }
+
+test("recursive discovery rejects an empty unsearchable directory below its maximum depth", () => {
+  const root = makeTempDir();
+  const blocked = join(root, "parent", "empty");
+  mkdirSync(blocked, { recursive: true });
+  chmodSync(blocked, 0o444);
+  try {
+    expect(readdirSync(blocked)).toEqual([]);
+    expect(() => accessSync(blocked, constants.X_OK)).toThrow(
+      expect.objectContaining({ code: "EACCES" }),
+    );
+    const capture = captureStreams();
+    expect(
+      runCli(["install", root, "--recursive", "--json"], {
+        home: makeCrewHome(),
+        streams: capture.streams,
+      }),
+    ).toBe(5);
+    expect(JSON.parse(capture.stdout()).error.name).toBe("source_unreachable");
+    expect(capture.stdout()).toContain(blocked);
+  } finally {
+    chmodSync(blocked, 0o755);
+  }
+});
 
 test("recursive discovery probes an unsearchable skill at its maximum depth", () => {
   const root = makeTempDir();

@@ -10,7 +10,7 @@ import { basename } from "node:path";
 import { hasSkillMd } from "../skill/load.ts";
 import type { WalkedEntry } from "../util/fs.ts";
 import { sourceRelativePath } from "./path.ts";
-import { isSourceDirectory, walkSourceDirectory } from "./read.ts";
+import { assertSourceDirectorySearchable, walkSourceDirectory } from "./read.ts";
 
 const MAX_RECURSIVE_DEPTH = 5;
 const SKIPPED_DIRS = new Set([
@@ -43,12 +43,10 @@ export function findRecursiveSkillDirs(rootDir: string): string[] {
 
 function shouldDescendInto(entry: WalkedEntry, rootDir: string): boolean {
   if (shouldSkipDirectory(entry.absPath)) return false;
+  // Empty readable directories can still deny search permission (§9, §13).
+  assertSourceDirectorySearchable(entry.absPath);
   // Refuse to descend into depth-5 dirs so emitted entries are bounded at depth 5 (§9 step 5.4).
-  if (
-    !isSourceDirectory(entry.absPath) ||
-    depthOf(sourceRelativePath(rootDir, entry.absPath)) >= MAX_RECURSIVE_DEPTH
-  )
-    return false;
+  if (depthOf(sourceRelativePath(rootDir, entry.absPath)) >= MAX_RECURSIVE_DEPTH) return false;
   return !hasSkillMd(entry.absPath);
 }
 

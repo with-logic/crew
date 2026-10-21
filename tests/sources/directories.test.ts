@@ -84,3 +84,22 @@ test("source walker preserves a classified callback failure", () => {
     }),
   ).toThrow(error);
 });
+
+for (const callback of ["shouldDescend", "shouldEmit"] as const) {
+  test(`source walker preserves a plain ${callback} callback error by identity`, () => {
+    const root = makeTempDir();
+    mkdirSync(join(root, "child"));
+    const error = new Error("callback failed");
+    let caught: unknown;
+    try {
+      walkSourceDirectory(root, {
+        [callback]: () => {
+          throw error;
+        },
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBe(error);
+  });
+}
