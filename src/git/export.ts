@@ -34,14 +34,16 @@ import { assertNoSymlinkEscape } from "./tree-safety.ts";
  * Extract `sha`'s tree (optionally narrowed to `subpath`) from the clone
  * at `clonePath` into `dest`, which is created if missing.
  *
- * Two failure kinds, deliberately distinguished (§13):
+ * Two Git exit failures are deliberately distinguished (§13):
  *
  *   - the commit resolved and the tree is readable, but `subpath` isn't
  *     present at it → `no_skills_found`, a user-fixable reference;
- *   - anything else — an unreadable object, a corrupt repository, a
+ *   - other Git exit failures — an unreadable object, a corrupt repository, a
  *     scratch directory crew can't write — → `source_unreachable`,
  *     because the source was never successfully materialized and
  *     nothing can be concluded about what it contains.
+ *
+ * Non-GitProcessError failures propagate unchanged.
  *
  * Collapsing the second kind into the first would tell a user their ref
  * names a missing directory when the truth is that crew could not read
