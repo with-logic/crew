@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import { tapClonePath } from "../../../core/repo-path.ts";
 import { createExportedTree, type ExportedTree } from "../../../git/export.ts";
+import { withExportCleanup } from "../../../util/export-cleanup.ts";
 import type { PendingItem } from "../enqueue.ts";
 
 // Two contexts reuse alternating parents while capping disk use at two repository exports.
@@ -17,23 +18,10 @@ export interface DependencyTrees {
 /** Reuse bounded captured roots and release every retained tree on scope exit. */
 export function withDependencyTrees<T>(home: string, fn: (trees: DependencyTrees) => T): T {
   const exports = new Map<string, ExportedTree>();
-  try {
-    return fn({ parentDir: (parent) => parentDir(parent, home, exports) });
-  } finally {
-    cleanupExports(exports.values());
-  }
-}
-
-function cleanupExports(trees: Iterable<ExportedTree>): void {
-  const failures: unknown[] = [];
-  for (const tree of trees) {
-    try {
-      tree.cleanup();
-    } catch (err) {
-      failures.push(err);
-    }
-  }
-  if (failures.length > 0) throw failures[0];
+  return withExportCleanup(
+    () => fn({ parentDir: (parent) => parentDir(parent, home, exports) }),
+    exports.values(),
+  );
 }
 
 /** Bare siblings read the captured SHA even when a later fetch moved the parent's ref. */

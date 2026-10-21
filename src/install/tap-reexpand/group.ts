@@ -3,6 +3,7 @@
 import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
+import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import type { InstalledSourceIndex } from "../installed-lookup.ts";
 import { groupChildrenByName } from "../tap-children.ts";
 import { collectAdditions } from "./additions.ts";
@@ -42,7 +43,8 @@ export function reexpandGroup(input: GroupInput): TapReexpandResult {
       added: [],
       updated: [],
       sourceGone: new Set(),
-      hardFailure: ce.code !== "no_skills_found" && ce.code !== "invalid_ref",
+      hardFailure:
+        hasExportCleanupFailure(ce) || (ce.code !== "no_skills_found" && ce.code !== "invalid_ref"),
       rows: input.members.map((m) => ({
         name: m.name,
         scope: m.scope,
