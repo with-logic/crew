@@ -93,7 +93,10 @@ commands that do what they say, across every agent you use.
    meta-skill can pull in a dozen others in one command.
 5. **Stay current automatically.** `crew update` pulls the latest versions
    of everything. Flip on autoupdate and a background job keeps every agent
-   fresh. If adding a new tap skill fails for an agent, update reports the
+   fresh. Whole-tap updates report invalid directory manifests with their source
+   path and reason, while healthy skills continue updating. Existing copies
+   stay intact when upstream becomes invalid. If adding a new tap skill fails
+   for an agent, update reports the
    target and reason and rolls back copies still owned by that attempt.
    Targets detected as changed by another writer are preserved. If ownership is lost or restoration
    fails, it reports the problem and any retained recovery path. The
@@ -183,7 +186,7 @@ When a command asks for an installed skill name, you can use the bare name
 
 | Command | What it does |
 |---|---|
-| `crew search [--tap <name>] [<query>]` | Case-insensitive substring match across every configured tap, or just one with `--tap`. With no query, lists every installable skill in those taps; exact installed matches are marked `✓`. With a query and without `--tap`, also suggests matching known taps to add; `--tap` scopes the search to a tap you already have, so it omits those suggestions. |
+| `crew search [--tap <name>] [<query>]` | Case-insensitive substring match across every configured tap, or just one with `--tap`. With no query, lists every installable skill in those taps; exact installed matches are marked `✓`. With a query and without `--tap`, also suggests matching known taps to add; `--tap` scopes the search to a tap you already have, so it omits those suggestions. Invalid directory manifests produce warnings with their source paths and validation reasons; healthy skills remain searchable. |
 | `crew tap add <url-or-path> [name]` | Add a registry from a git source or local path. Name defaults to the repo/path name. Add `--recursive` for trusted repos with non-standard nested layouts. |
 | `crew tap remove <name>` | Drop a tap from config; delete its shared clone when no other tap uses that repository. Refuses while skills from the tap are installed: pass `--uninstall` to remove them too, or `--force` to keep them. |
 | `crew tap list` | Print each tap's name, kind/status, source target, recursive discovery marker when set, and last-fetched timestamp for git taps. |

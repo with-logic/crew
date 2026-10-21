@@ -78,7 +78,8 @@ describe("install directory expansion", () => {
     expect(existsSync(join(redirect.agents["claude-code"]!, "good-skill"))).toBe(true);
     // The invalid one was reported in stdout, not as a hard error.
     expect(capture.stdout()).toContain("Failed");
-    expect(capture.stdout()).toContain("name: Bad");
+    expect(capture.stdout()).toContain("`name` has invalid characters");
+    expect(capture.stdout()).not.toContain("Bad");
   });
 
   test("C-INST-21 multi-skill dir where every skill is invalid: exit 4, all listed in Failed", () => {
@@ -93,8 +94,9 @@ describe("install directory expansion", () => {
     const out = capture.stdout();
     expect(out).toContain("Failed");
     // Both validation failures were reported.
-    expect(out).toContain("name: BadOne");
-    expect(out).toContain("name: BadTwo");
+    expect(out.match(/`name` has invalid characters/g)).toHaveLength(2);
+    expect(out).not.toContain("BadOne");
+    expect(out).not.toContain("BadTwo");
   });
 
   test("C-INST-20 --json surfaces skipped skills", () => {

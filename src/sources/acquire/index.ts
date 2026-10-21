@@ -35,8 +35,10 @@ import { withExportedTree } from "../../git/export.ts";
 import { displayUrl } from "../../refs/display-url.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 import { isGistTap } from "../gist.ts";
+import { assertRecordedSourcePath } from "../path.ts";
 import { isSourceDirectory } from "../read.ts";
 import { acquireGitRevision, type PreparedSources } from "./revision.ts";
+import { assertRecordedGitLocation } from "./skill-path.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
@@ -132,12 +134,12 @@ export function withAcquiredSkillPath<T>(
   fn: (acquired: Pick<AcquiredTap, "resolvedSha" | "pinned">, sourcePath: string) => T,
   prepared?: PreparedSources,
 ): T {
+  assertRecordedSourcePath(skillPath);
   if (ref === null || tap.kind === "path") {
     const acquired = acquireTap(tap, home, prepared);
-    return fn(
-      { resolvedSha: acquired.resolvedSha, pinned: acquired.pinned },
-      join(acquired.rootDir, skillPath),
-    );
+    const selected = join(acquired.rootDir, skillPath);
+    if (tap.kind === "git") assertRecordedGitLocation(acquired.rootDir, selected);
+    return fn({ resolvedSha: acquired.resolvedSha, pinned: acquired.pinned }, selected);
   }
   const { clonePath, resolvedSha: sha, pinned } = acquireGitRevision(tap, ref, home, prepared);
   const exportPath =

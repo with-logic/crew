@@ -8,7 +8,7 @@ import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { isSourceReadFailure } from "../../util/source-read.ts";
 import type { InstalledSourceIndex } from "../installed-lookup.ts";
-import { type CurrentTapChild, groupChildrenByName } from "../tap-children.ts";
+import { type CurrentTapCatalog, groupChildrenByName } from "../tap-children.ts";
 import { collectAdditions } from "./additions.ts";
 import type { TapScanCache } from "./scan-cache.ts";
 import { surveyGroup } from "./survey.ts";
@@ -51,17 +51,24 @@ export function reexpandGroup(input: GroupInput): TapReexpandResult {
 function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult {
   const { members, tap, home, projectRoot, cache } = input;
   const first = members[0]!;
-  let children: readonly CurrentTapChild[];
+  let catalog: CurrentTapCatalog;
   try {
-    children = cache.children(tap, home, acquired.rootDir);
+    catalog = cache.children(tap, home, acquired.rootDir);
   } catch (err) {
     // §10.1: an inaccessible source cannot establish deletion or stop other groups.
     if (isSourceReadFailure(err)) return failedGroup(input, err);
     throw err;
   }
-  const survey = surveyGroup({ members, childrenByName: groupChildrenByName(children), tap });
+  const survey = surveyGroup({
+    members,
+    childrenByName: groupChildrenByName(catalog.children),
+    skipped: catalog.skipped,
+    rootDir: acquired.rootDir,
+    namespaces: input.namespaces,
+    tap,
+  });
   const additions = collectAdditions({
-    children,
+    children: catalog.children,
     conflictedNames: survey.conflictedNames,
     memberNames: new Set(members.map((m) => m.name)),
     scope: first.scope,

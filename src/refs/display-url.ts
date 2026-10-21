@@ -5,10 +5,13 @@
  * query tails git emits after stripping a file:// scheme.
  */
 
+import { firstMalformedHttpStart } from "../util/malformed-http/index.ts";
 import { redactDetails, redactText, safeUrl, sanitizeBlock } from "../util/redact.ts";
 
 /** References hide all userinfo; progress separately preserves SSH usernames. */
 export function displayUrl(raw: string): string {
+  // WHATWG normalization can turn a visible escaped control into a host/path (§13).
+  if (firstMalformedHttpStart(raw, true) !== undefined) return "***";
   try {
     const url = new URL(raw);
     if (url.username || url.password) {

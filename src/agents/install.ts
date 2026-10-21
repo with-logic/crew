@@ -120,7 +120,7 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
   const staging = join(dirname(dest), `.crew-staging-${basename(dest)}-${Date.now()}`);
   if (exists(staging)) rmrf(staging);
   try {
-    copyTree(input.storePath, staging, { stripRootMarker: true });
+    copyTree(input.storePath, staging, { destinationRoot: base, stripRootMarker: true });
 
     const agents = mergeAdapters(priorAdapters, incomingAdapters);
     const marker: Marker = {

@@ -19,7 +19,7 @@ import { acquireTap } from "../../sources/acquire/index.ts";
 import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { isGistTap } from "../../sources/gist.ts";
 import { isSourceReadFailure } from "../../util/source-read.ts";
-import { type CurrentTapChild, currentTapChildren } from "../tap-children.ts";
+import { type CurrentTapCatalog, currentTapChildren } from "../tap-children.ts";
 
 /** One tap's acquired clone location. */
 export interface AcquiredTapScan {
@@ -38,14 +38,14 @@ export interface TapScanCache {
    * Walk a tap's children, memoising results and normalized source-read failures
    * that become group `tap_error` rows, including directory discovery failures.
    */
-  children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[];
+  children(tap: TapConfig, home: string, rootDir: string): CurrentTapCatalog;
   /** Load and validate one child (§9 step 4), memoising validation and source-read errors. */
   validate(sourcePath: string, tap?: TapConfig): CrewError | null;
 }
 
 export function makeTapScanCache(prepared?: PreparedSources): TapScanCache {
   const acquisitions = new Map<string, AcquiredTapScan>();
-  const childScans = new Map<string, readonly CurrentTapChild[] | CrewError>();
+  const childScans = new Map<string, CurrentTapCatalog | CrewError>();
   const skillLoadErrors = new Map<string, CrewError | null>();
 
   return {
@@ -61,7 +61,7 @@ export function makeTapScanCache(prepared?: PreparedSources): TapScanCache {
       return scan;
     },
 
-    children(tap: TapConfig, home: string, rootDir: string): readonly CurrentTapChild[] {
+    children(tap: TapConfig, home: string, rootDir: string): CurrentTapCatalog {
       const key = JSON.stringify([tap.name, rootDir]);
       const hit = childScans.get(key);
       if (hit instanceof CrewError) throw hit;
