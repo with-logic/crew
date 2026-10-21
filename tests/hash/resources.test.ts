@@ -14,12 +14,10 @@ type Measurement = {
   readonly names: readonly string[];
   readonly digest: string;
   readonly maxRSS: number;
-  readonly exitCode: number;
-  readonly stderr: string;
 };
 
 /** A lightweight launcher prevents the test runner's resident memory becoming the child's floor. */
-function measure(directory: string): Measurement {
+function measure(directory: string) {
   const hashModule = import.meta.resolve("../../src/hash/content.ts");
   const hashScript = `
     import { readdirSync } from "node:fs";
@@ -40,12 +38,7 @@ function measure(directory: string): Measurement {
       maxRSS: child.resourceUsage.maxRSS
     }));
   `;
-  const result = Bun.spawnSync([process.execPath, "--eval", launcher]);
-  return {
-    ...JSON.parse(result.stdout.toString()),
-    exitCode: result.exitCode,
-    stderr: result.stderr.toString(),
-  } as Measurement;
+  return Bun.spawnSync([process.execPath, "--eval", launcher]);
 }
 
 test(
@@ -75,10 +68,12 @@ test(
         emptyDigest.update(`${name}\0${emptyFileSha}\n`);
         largeDigest.update(`${name}\0${fileDigest.digest("hex")}\n`);
       }
-      const baseline = measure(empty);
-      const measured = measure(large);
-      expect(baseline.exitCode, baseline.stderr).toBe(0);
-      expect(measured.exitCode, measured.stderr).toBe(0);
+      const baselineResult = measure(empty);
+      const measuredResult = measure(large);
+      expect(baselineResult.exitCode, baselineResult.stderr.toString()).toBe(0);
+      expect(measuredResult.exitCode, measuredResult.stderr.toString()).toBe(0);
+      const baseline = JSON.parse(baselineResult.stdout.toString()) as Measurement;
+      const measured = JSON.parse(measuredResult.stdout.toString()) as Measurement;
       expect(baseline.names).toEqual(names);
       expect(measured.names).toEqual(names);
       expect(baseline.digest).toBe(`sha256:${emptyDigest.digest("hex")}`);
