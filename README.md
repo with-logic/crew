@@ -96,8 +96,10 @@ commands that do what they say, across every agent you use.
    fresh. Invalid manifests in directory taps are reported with their source
    path and reason, while healthy skills continue updating. Existing copies
    stay intact when upstream becomes invalid. If adding a new tap skill fails
-   for an agent, update reports the target and reason, including which
-   successful targets retain copies. The next update that re-expands the
+   for an agent, update reports the target and reason and rolls back copies
+   still owned by that attempt. Targets detected as changed by another writer
+   are preserved. If ownership is lost or restoration fails, it reports the
+   problem and any retained recovery path. The next update that re-expands the
    affected tap group retries that skill
    (unless it is a dry run).
 

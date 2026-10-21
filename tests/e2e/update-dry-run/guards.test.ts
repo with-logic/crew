@@ -41,7 +41,7 @@ describe("crew update --dry-run guarantees", () => {
     expect(existsSync(`${paths(home).stateFile}.lock`)).toBe(false);
   });
 
-  test("C-UPD-18c/18e an invalid new tap child fails and is named in output", () => {
+  test("C-UPD-18c/18e C-UPD-42 an invalid new tap child fails with normal and quiet diagnostics", () => {
     const home = makeCrewHome();
     runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
     const repo = makeTempDir("crew-dry-invalid-");
@@ -74,9 +74,28 @@ describe("crew update --dry-run guarantees", () => {
     expect(human.stdout()).toContain("invalid_skill");
     expect(human.stdout()).toContain("description");
     expect(human.stdout()).toContain("1 failure");
+    expect(human.stderr()).toBe("");
+    const before = snapshotInstalledState(home);
+    for (const args of [["update", "--dry-run"], ["outdated"]]) {
+      const quiet = captureStreams();
+      expect(runCli([...args, "--quiet"], { home, streams: quiet.streams })).toBe(1);
+      expect(quiet.stdout()).toBe("");
+      expect(quiet.stderr()).toContain("bad (from ");
+      expect(quiet.stderr()).toContain("invalid_skill");
+      expect(quiet.stderr()).toContain("description");
+      expect(snapshotInstalledState(home)).toEqual(before);
+      const jsonQuiet = captureStreams();
+      expect(runCli([...args, "--quiet", "--json"], { home, streams: jsonQuiet.streams })).toBe(1);
+      expect(jsonQuiet.stdout()).toBe(dry.stdout());
+      expect(jsonQuiet.stderr()).toBe("");
+    }
 
     // The real run agrees: same failure, and nothing lands on disk.
-    expect(runCli(["update"], { home, streams: captureStreams().streams })).toBe(1);
+    const realQuiet = captureStreams();
+    expect(runCli(["update", "--quiet"], { home, streams: realQuiet.streams })).toBe(1);
+    expect(realQuiet.stdout()).toBe("");
+    expect(realQuiet.stderr()).toContain("bad (from ");
+    expect(realQuiet.stderr()).toContain("description");
     expect(existsSync(join(ccRoot, "bad"))).toBe(false);
   });
 

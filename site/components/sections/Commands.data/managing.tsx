@@ -48,9 +48,10 @@ export const MANAGING: CommandGroup = {
           refresh, but nothing you have installed is touched. Invalid manifests in directory taps
           are reported with their source path and reason while healthy skills continue updating.
           Existing copies stay intact when upstream becomes invalid. If adding a new tap skill fails
-          for an agent, update reports the target and reason, including which successful targets
-          retain copies. The next update that re-expands the affected tap group retries that skill,
-          unless it is a dry run.
+          for an agent, update reports the target and reason and rolls back copies still owned by
+          that attempt. Targets detected as changed by another writer are preserved. Lost ownership
+          or restoration failure reports the problem and any retained recovery path. The next update
+          that re-expands the affected tap group retries that skill, unless it is a dry run.
         </>
       ),
     },

@@ -208,8 +208,13 @@ user, which names the protocol account rather than a secret (§13).
 
 Human-readable skill metadata follows the same C0, DEL, and C1
 control-character escaping rule before wrapping or styling. This includes
-descriptions, license, compatibility, homepage, and dependencies. JSON
-values and installed skill bytes are unchanged.
+descriptions, license, compatibility, homepage, and dependencies. Skill
+references in search results, including namespace-qualified names and
+suggested install references, follow the same rule before measuring column
+widths or laying out rows. Known-tap search suggestions quote the full
+terminal-sanitized install reference as one POSIX shell argument; references
+containing only shell-safe characters remain unquoted. JSON values and
+installed skill bytes are unchanged.
 
 ### 5.2 Global flags
 
@@ -1417,6 +1422,40 @@ between resolution and targeting:
 
 **Error isolation.** Every skill is processed independently. A failure — network error, fetch error, spec validation error on a newly pulled version, customized install detected, dependency resolution failure, target install failure — is recorded against that skill and does not stop processing of the rest. Exit code is 0 if all skills were either up-to-date, updated successfully, or cleanly skipped as customized. Exit code is 1 if any skill encountered a hard failure (network, fetch, validation).
 
+**Human existing-entry failures.** An ordinary per-skill `failed` outcome
+MUST show its error code and primary message in normal human output for
+`crew update` and `crew outdated`, including any retained recovery path
+already present in that message. Redact credentials throughout the displayed
+diagnostic and escape control characters. Preserve the raw JSON error fields,
+state/retry behavior, and exit codes.
+
+**Quiet failure diagnostics.** When `crew update` (including `--dry-run`)
+or `crew outdated` has a hard failure, `--quiet` suppresses the human
+summary but MUST report diagnostics on stderr for ordinary failed entries,
+failed per-target results, tap re-expansion errors, and refresh failures of
+explicitly selected taps. Include the affected skill, agent or tap, error
+code, and full primary message, preserving rollback and retained recovery
+paths already present. Redact credentials and escape controls throughout.
+Successful and soft-only quiet runs remain silent, including soft
+`tap_error` outcomes (`no_skills_found` or `invalid_ref` without a cleanup
+failure). A hard-failed run may include its existing soft `tap_error` rows
+among its diagnostics without changing their classification. Normal human
+output, raw JSON, failure isolation, exit codes, state, and retries are
+unchanged; JSON mode still emits its payload without human stderr.
+
+**Human per-target results.** When an existing skill's `updated` JSON
+outcome contains failed or safety-skipped targets, human output MUST name
+each affected agent and its error code/message or skip reason. Escape
+control characters in these diagnostics. The human row says `partially
+updated` if at least one target was installed or already current and at
+least one target failed or skipped. With no completed target, it says
+`failed` if any target failed, otherwise `skipped`; it MUST NOT claim an
+update succeeded. Totals count partial rows separately from fully updated
+rows, count all-skipped rows as skips, and count each row with a hard
+target failure as one failure, including partial rows. Clean safety skips
+remain soft. These presentation rules do not change JSON outcomes, exit
+codes, or the state/retry rules.
+
 **Upstream deletion does not remove local installs.** If an installed
 skill's source still resolves (the repo or tap is reachable) but the
 specific skill is no longer present — the directory was deleted
@@ -1520,15 +1559,31 @@ On every `crew update` run, for each group of state entries sharing
    real and `--dry-run` runs. The run exits 1.
    If installation fails for any applicable target group, attempt the
    remaining groups, report a per-child `tap_error` naming each failed
-   target and its reason, disclose successful targets whose copies remain
-   on disk, and exit 1. Preserve a recognized error code; otherwise use
+   target and its reason, and exit 1. Preserve a recognized error code; otherwise use
    `usage_error` for an unclassified local failure. Do not
    record a state entry for that child unless every applicable target
    group succeeds, so the next non-dry-run update that re-expands the
    affected tap group retries it. Other children and existing skills
-   continue processing. Successful copies may remain on
-   disk after a failed child attempt; withholding its state entry does
-   not roll those copies back.
+   continue processing. Roll back this child’s completed
+   replacements only when the ownership check observes the current target as
+   belonging to this attempt:
+   remove newly created copies and restore replaced copies, including their
+   markers and symlinks. Before destructive rollback, observe the published
+   directory identity and require a regular marker file with matching exact
+   bytes. Targets detected as changed by another writer are preserved. Leave
+   targets whose install outcome was `up_to_date` and for which no replacement
+   was published, and targets observed as removed or unreadable, alone;
+   report lost ownership and retain any prior copy at the reported recovery
+   path. These observations do not serialize writes across different state
+   homes. A failed publication with no current destination may restore its
+   prior copy; a completed installation subsequently removed must stay absent.
+   If restoration fails, report the failure and retain any prior copy at the
+   reported recovery path. If cleanup of an
+   owned rollback directory fails, report its leftover path without changing
+   the install outcome: append the diagnostic to a failed child’s error, or
+   include it in an optional `warnings` array on the successful `added`
+   re-expansion row in JSON and display it in human output. Omit `warnings`
+   when cleanup succeeds.
 3. For each skill in state attributed to this tap whose directory is
    **no longer present** under the resolved root: reports `source_gone`
    and leaves the local install untouched (per the upstream-deletion
@@ -2678,7 +2733,11 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-35 | §10.1 | A tap named as a selector whose refresh fails is a hard failure (exit 1), even with nothing installed from it; an unnamed configured tap whose refresh fails remains a warning and the run exits 0. |
 | C-UPD-36 | §10.1, §10.1.1 | A namespace selector bounds re-expansion additions to that namespace: a child added upstream under a different namespace of the same tap is not installed. Naming the tap installs both. |
 | C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. |
-| C-UPD-38 | §10.1.1 | A new tap child whose target installation fails produces a per-child `tap_error` naming failed targets and reasons and disclosing successful targets whose copies remain on disk. It exits 1 and is absent from state until every applicable target group succeeds. Remaining target groups, other children, and existing entries still process; the next non-dry-run update that re-expands the affected tap group retries the child. |
+| C-UPD-38 | §10.1.1 | A new tap child whose target installation fails produces a per-child `tap_error` naming failed targets and reasons, exits 1, and is absent from state until every applicable target group succeeds. Remaining target groups, other children, and existing entries still process; the next non-dry-run update that re-expands the affected tap group retries the child. Replacements observed as still owned by the attempt are rolled back to their prior bytes, markers, and symlinks, and owned new copies are removed; targets detected as changed, removed, unreadable, or carrying a non-regular marker are preserved with lost ownership and any retained recovery path reported. Failed publication may restore a prior copy into an absent destination; completed publication later removed stays absent. Restoration failures report the problem and any retained recovery path. |
+| C-UPD-39 | §10.1 | For an existing skill update containing failed or safety-skipped targets, human output names each affected target. Its aggregate skill row is `partially updated` when any target installed or was already current; otherwise it is `failed` if any target failed, or `skipped`. Totals distinguish partial from full success while counting hard failures. JSON, state/retry behavior, and exit codes are unchanged. |
+| C-UPD-40 | §10.1.1 | If rollback-directory cleanup fails after a new tap child is successfully added, the child remains installed and recorded in state, and cleanup failure alone does not make the run fail. Human output displays the cleanup warning and leftover path; JSON includes the diagnostic in an optional `warnings` array on the successful `added` row. When cleanup succeeds, that row omits `warnings`. |
+| C-UPD-41 | §10.1, §10.1.1 | Normal human output for an existing-entry `failed` outcome in `crew update` and `crew outdated` shows its error code and primary message, including retained recovery paths already present. The whole diagnostic redacts credentials and escapes controls; raw JSON error fields, state/retry behavior, and exit codes remain unchanged. |
+| C-UPD-42 | §5.2, §10.1, §10.1.1 | On a hard-failed run, human `--quiet` update (including dry run) and outdated suppress summaries while sending ordinary failed entries, failed targets, tap re-expansion errors, and explicitly selected tap refresh failures to stderr with affected subjects, error codes, full primary messages, and retained recovery paths. Diagnostics redact credentials and escape controls. Successful and soft-only quiet runs stay silent; a hard-failed run may include existing soft `tap_error` diagnostics without reclassification. Normal human output, raw JSON, isolation, exit codes, state, and retries remain unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
