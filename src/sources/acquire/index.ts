@@ -39,8 +39,10 @@ import { displayUrl } from "../../refs/display-url.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 import { isGistTap } from "../gist.ts";
 import { migrateTapClone } from "../migrate-clones.ts";
+import { assertRecordedSourcePath } from "../path.ts";
 import { isSourceDirectory } from "../read.ts";
 import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
+import { assertRecordedGitLocation } from "./skill-path.ts";
 
 /** Output of acquisition. */
 export interface AcquiredTap {
@@ -138,9 +140,12 @@ export function withAcquiredSkillDir<T>(
   home: string,
   fn: (acquired: AcquiredTap, skillDir: string) => T,
 ): T {
+  assertRecordedSourcePath(skillPath);
   if (ref === null || tap.kind === "path") {
     const acquired = acquireTap(tap, home);
-    return fn(acquired, join(acquired.rootDir, skillPath));
+    const selected = join(acquired.rootDir, skillPath);
+    if (tap.kind === "git") assertRecordedGitLocation(acquired.rootDir, selected);
+    return fn(acquired, selected);
   }
   migrateTapClone(tap, home);
   const clonePath = tapClonePath(tap, home);
