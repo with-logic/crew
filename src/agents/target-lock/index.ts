@@ -44,7 +44,6 @@ export function withTargetLocks<T>(
       }
       if (!failures.has(path)) stat = inspect(path);
     }
-    // Unsupported/absent/non-directory bases cannot host a child; existing attempts report them.
     if (!stat?.isDirectory()) {
       unavailable.add(path);
       continue;
