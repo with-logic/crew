@@ -9,13 +9,13 @@ test.each(MALFORMED_URLS)("C-CLI-06c progress masks the complete malformed %j va
   expect(redactUrl(url)).toBe("***");
   expect(safeUrl(url)).toBe("***");
   expect(safeArgs(["clone", url, "destination"])).toBe("clone *** destination");
-  expect(displayUrl(url)).not.toContain(SECRET);
+  expect(displayUrl(url)).toBe("***");
 });
 
 test.each(CONTROL_UNITS)("C-CLI-06c whole progress masks raw or escaped %j controls", (c) => {
   for (const url of controlledUrls(c)) {
     expect(safeUrl(url)).toBe("***");
-    expect(displayUrl(url)).not.toContain(SECRET);
+    expect(displayUrl(url)).toBe("***");
   }
 });
 

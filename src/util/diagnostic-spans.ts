@@ -51,6 +51,7 @@ function schemeSpans(text: string): SchemeSpan[] {
 /**
  * Render URL spans with bounded monotonic scans and disjoint output slices (§13).
  * An undisplayable query value suppresses the remaining diagnostic, starting at that value.
+ * A malformed HTTP(S) opener suppresses the diagnostic from that opener, even without ://.
  * Adjacent :// openers in one space-delimited token suppress the suffix from the first URL.
  * A renderUrl result of "***" is a truncation sentinel: suppress that URL and everything after it.
  */
