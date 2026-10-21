@@ -8,6 +8,7 @@ import { ALL_AGENTS } from "../../src/agents/registry.ts";
 import { resetAutoupdatePlatform, setAutoupdatePlatform } from "../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../src/cli/main.ts";
 import { readState, writeState } from "../../src/state/load.ts";
+import { readDoctorMarker } from "../helpers/doctor-marker.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeTempDir } from "../helpers/fixtures.ts";
 import { installSkill, redirectClaudeCode, restoreClaudeCode } from "../helpers/scoped-install.ts";
@@ -80,7 +81,7 @@ test("C-STATE-06 repair reconstructs another project and merges agents only ther
       .sort(),
   ).toEqual([first, second].sort());
   const markerPath = join(second, ".claude", "skills", "demo", ".crew.json");
-  const marker = JSON.parse(readFileSync(markerPath, "utf8"));
+  const marker = readDoctorMarker(markerPath);
   writeFileSync(markerPath, JSON.stringify({ ...marker, agents: ["claude-code", "codex"] }));
   runCli(["doctor", "--repair"], { home, cwd: second, streams: captureStreams().streams });
   const after = readState(home).installations;
@@ -141,10 +142,10 @@ for (const scope of ["user", "project"] as const) {
     const before = readState(home);
     const base = scope === "user" ? redirected.userRoot : join(cwd, ".claude", "skills");
     const markerPath = join(base, "demo", ".crew.json");
-    const marker: unknown = JSON.parse(readFileSync(markerPath, "utf8"));
+    const marker = readDoctorMarker(markerPath);
     writeFileSync(
       markerPath,
-      JSON.stringify({ ...(marker as object), scope: scope === "user" ? "project" : "user" }),
+      JSON.stringify({ ...marker, scope: scope === "user" ? "project" : "user" }),
     );
     const paths = [
       join(home, "state.json"),

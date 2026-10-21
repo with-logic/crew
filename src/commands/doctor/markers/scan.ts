@@ -6,6 +6,7 @@ import { isDirectory, listDir } from "../../../util/fs.ts";
 import { readJson } from "../../../util/json.ts";
 import { redactText, sanitizeLine } from "../../../util/redact.ts";
 import type { Finding } from "../checks.ts";
+import { invalidMarkerFinding } from "./findings.ts";
 import { isDoctorMarker } from "./validate.ts";
 
 /**
@@ -41,15 +42,12 @@ export function scanMarkers(
       // Malformed JSON leaves null so the field-validation path reports marker_invalid.
     }
     if (!isDoctorMarker(marker)) {
-      findings.set(`marker_invalid\0${path}`, {
-        level: "error",
-        code: "marker_invalid",
-        message: sanitizeLine(
-          redactText(
-            `${path}: invalid marker; correct its JSON, field types, field values and tap metadata before repair`,
-          ),
+      findings.set(
+        ...invalidMarkerFinding(
+          path,
+          "invalid marker; correct its JSON, field types, field values and tap metadata before repair",
         ),
-      });
+      );
       continue;
     }
     if (marker.agents.includes(adapter.name))

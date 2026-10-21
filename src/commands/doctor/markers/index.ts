@@ -17,12 +17,12 @@
 
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { AgentAdapter, InstalledSkillRecord } from "../../../agents/adapter.ts";
+import type { InstalledSkillRecord } from "../../../agents/adapter.ts";
 import { ALL_AGENTS } from "../../../agents/registry.ts";
-import type { StateEntry } from "../../../core/types.ts";
+import type { Scope, StateEntry } from "../../../core/types.ts";
 import { hasUsableProjectRoot } from "../../../state/validation.ts";
-import { redactText, sanitizeLine } from "../../../util/redact.ts";
 import type { Finding } from "../checks.ts";
+import { invalidMarkerFinding } from "./findings.ts";
 import { scanMarkers } from "./scan.ts";
 
 export interface MarkerEntry {
@@ -43,25 +43,22 @@ export function buildMarkerIndex(
   const markers: MarkerEntry[] = [];
   const inventoryFindings = new Map<string, Finding>();
   const seen = new Set<string>();
+  const sameBase = cachedPhysicalBaseComparison();
   const projectRoots = new Set<string>([cwd]);
   for (const e of stateEntries) {
     if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
   }
   const roots = [...projectRoots];
   for (const adapter of ALL_AGENTS) {
-    const sharedBases = new Map<string, boolean>();
-    const sharesUserBase = (root: string): boolean => {
-      const shared = sharedBases.get(root) ?? sharesScopeBase(adapter, root);
-      sharedBases.set(root, shared);
-      return shared;
-    };
+    const sharesUserBase = (root: string): boolean =>
+      sameBase(adapter.userPath(), adapter.projectPath(root));
     let anySharedBase: boolean | undefined;
     const userInventory = scanMarkers(adapter, "user", cwd);
     for (const [key, finding] of userInventory.findings) inventoryFindings.set(key, finding);
     for (const rec of userInventory.records) {
       if (rec.marker.scope !== "user") {
         anySharedBase ??= roots.some(sharesUserBase);
-        if (!(anySharedBase || hasOtherOwningScopeBase(rec, roots)))
+        if (!(anySharedBase || hasOtherOwningScopeBase(rec, roots, sameBase)))
           inventoryFindings.set(...scopeMismatchFinding(rec));
         continue;
       }
@@ -79,7 +76,7 @@ export function buildMarkerIndex(
         sharesUserBase(root);
       for (const rec of projectInventory.records) {
         if (rec.marker.scope !== "project") {
-          if (!(projectBaseIsShared || hasOtherOwningScopeBase(rec, roots)))
+          if (!(projectBaseIsShared || hasOtherOwningScopeBase(rec, roots, sameBase)))
             inventoryFindings.set(...scopeMismatchFinding(rec));
           continue;
         }
@@ -93,22 +90,20 @@ export function buildMarkerIndex(
   return { markers, findings: [...inventoryFindings.values()] };
 }
 
-/** Scope labels disambiguate only an actual shared physical base (§11.1). */
-function sharesScopeBase(adapter: AgentAdapter, root: string): boolean {
-  const userBase = adapter.userPath();
-  const projectBase = adapter.projectPath(root);
-  return samePhysicalBase(userBase, projectBase);
-}
-
 /** A path-shared marker can acquire its declared scope through another owner (§7.2, §11.2). */
-function hasOtherOwningScopeBase(record: InstalledSkillRecord, roots: readonly string[]): boolean {
+function hasOtherOwningScopeBase(
+  record: InstalledSkillRecord,
+  roots: readonly string[],
+  sameBase: (first: string, second: string) => boolean,
+): boolean {
   const observedBase = dirname(record.installDir);
   for (const owner of ALL_AGENTS) {
     if (owner.name === record.adapter || !record.marker.agents.includes(owner.name)) continue;
-    if (record.marker.scope === "user") {
-      if (samePhysicalBase(observedBase, owner.userPath())) return true;
-    } else if (roots.some((root) => samePhysicalBase(observedBase, owner.projectPath(root))))
-      return true;
+    const ownsDeclaredBase = {
+      user: () => sameBase(observedBase, owner.userPath()),
+      project: () => roots.some((root) => sameBase(observedBase, owner.projectPath(root))),
+    } satisfies Record<Scope, () => boolean>;
+    if (ownsDeclaredBase[record.marker.scope]()) return true;
   }
   return false;
 }
@@ -126,17 +121,21 @@ function samePhysicalBase(first: string, second: string): boolean {
 
 /** A declared scope cannot authorize reconstruction at a physically distinct base (§11.2). */
 function scopeMismatchFinding(record: InstalledSkillRecord): [string, Finding] {
-  const path = join(record.installDir, ".crew.json");
-  return [
-    `marker_invalid\0${path}`,
-    {
-      level: "error",
-      code: "marker_invalid",
-      message: sanitizeLine(
-        redactText(
-          `${path}: marker scope ${record.marker.scope} disagrees with its ${record.scope} adapter base; correct the marker or install location before repair`,
-        ),
-      ),
-    },
-  ];
+  return invalidMarkerFinding(
+    join(record.installDir, ".crew.json"),
+    `marker scope ${record.marker.scope} disagrees with its ${record.scope} adapter base; correct the marker or install location before repair`,
+  );
+}
+
+/** Physical identity is stable only within this inventory build (§11.1). */
+function cachedPhysicalBaseComparison(): (first: string, second: string) => boolean {
+  const pairs = new Map<string, boolean>();
+  return (first, second) => {
+    const key = `${first}\0${second}`;
+    const cached = pairs.get(key);
+    if (cached !== undefined) return cached;
+    const same = samePhysicalBase(first, second);
+    pairs.set(key, same);
+    return same;
+  };
 }

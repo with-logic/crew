@@ -7,7 +7,7 @@ import { setLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
 import { setAutoupdatePlatform } from "../../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { paths } from "../../../src/core/paths.ts";
-import type { Marker } from "../../../src/core/types.ts";
+import type { Marker, Scope } from "../../../src/core/types.ts";
 import { writeState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
@@ -34,9 +34,18 @@ afterEach(() => {
     Object.assign(adapter, { userPath, projectPath, detect });
 });
 
+type Scenario =
+  | { kind: "malformed" }
+  | { kind: "mismatch"; inventoryScope: Scope; declaredScope: Scope };
+const scenarios = [
+  { kind: "malformed" },
+  { kind: "mismatch", inventoryScope: "user", declaredScope: "project" },
+  { kind: "mismatch", inventoryScope: "project", declaredScope: "user" },
+] satisfies readonly Scenario[];
 for (const enabled of [true, false]) {
-  for (const scope of ["malformed", "user", "project"] as const) {
-    test(`C-STATE-14 ${scope} invalid marker preserves scheduler when config enabled=${enabled}`, () => {
+  for (const scenario of scenarios) {
+    const label = scenario.kind === "malformed" ? "malformed" : scenario.inventoryScope;
+    test(`C-STATE-14 ${label} invalid marker preserves scheduler when config enabled=${enabled}`, () => {
       const home = makeCrewHome();
       const cwd = makeTempDir();
       setAutoupdatePlatform("darwin");
@@ -53,7 +62,7 @@ for (const enabled of [true, false]) {
         schema_version: 1,
         name: "demo",
         agents: ["claude-code"],
-        scope: scope === "project" ? "user" : "project",
+        scope: scenario.kind === "mismatch" ? scenario.declaredScope : "user",
         tap_name: "local",
         tap_kind: "path",
         tap_url: "",
@@ -66,12 +75,12 @@ for (const enabled of [true, false]) {
         installed_at: "2026-10-21T00:00:00.000Z",
         installed_by: "crew",
       };
-      if (scope === "project") {
+      if (scenario.kind === "mismatch" && scenario.inventoryScope === "project") {
         const adapter = ALL_AGENTS.find((candidate) => candidate.name === "claude-code")!;
         adapter.userPath = () => "";
         adapter.projectPath = () => join(target, "claude-code");
       }
-      writeFileSync(marker, scope === "malformed" ? "{broken" : JSON.stringify(fields));
+      writeFileSync(marker, scenario.kind === "malformed" ? "{broken" : JSON.stringify(fields));
       const before = [p.configFile, p.stateFile, p.autoupdatePlist].map((path) =>
         readFileSync(path),
       );
