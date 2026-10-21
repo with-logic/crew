@@ -101,6 +101,7 @@ describe("crew update selector identity", () => {
       scope: "project",
       tap: "b",
       kind: "added",
+      per_target: [{ agent: "claude-code", kind: "installed" }],
     });
     expect(installedBody(join(project, ".claude", "skills"), "shared")).toContain("name: shared");
     expect(

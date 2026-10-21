@@ -51,6 +51,7 @@ test("C-UPD-33 a new tap member does not adopt another location's dependency clo
     scope: "user",
     tap: "a",
     kind: "added",
+    per_target: [{ agent: "claude-code", kind: "installed" }],
   });
   expect(json.rows.map((row) => `${row.name}@${row.scope}`)).toEqual(["alpha@user", "x@user"]);
   expect(json.tap_rows.map((row) => row.name)).toEqual(["a"]);
