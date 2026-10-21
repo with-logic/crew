@@ -74,7 +74,7 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   }
   const input: TapAddInput = { name, rawArg, explicitName, target, recursive };
   if (ctx.flags.dryRun) {
-    // Read-only preview: no lock, no clone, no config write (§16.3).
+    // Read-only preview: no state lock, no clone, no config write (§16.3).
     const plan = planAdd(readConfig(ctx.home), input);
     return renderTapAdd(plan.outcome, name, target, true, ctx.style);
   }

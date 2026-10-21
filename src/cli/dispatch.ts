@@ -23,6 +23,7 @@ import { updateCommand } from "../commands/update/index.ts";
 import { CrewError } from "../core/errors.ts";
 import { lookup } from "../util/registry.ts";
 import { aliasFor, type CanonicalCommand } from "./aliases.ts";
+import { withCommandMaintenanceLock } from "./maintenance.ts";
 
 export type CommandHandler = (ctx: CommandContext) => CommandOutput;
 
@@ -68,5 +69,5 @@ export function dispatch(command: string, ctx: CommandContext): CommandOutput {
       "Run `crew help` to see what Homecrew can do.",
     );
   }
-  return handler(aliasCtx);
+  return withCommandMaintenanceLock(canonical, aliasCtx, () => handler(aliasCtx));
 }

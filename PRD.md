@@ -466,7 +466,7 @@ With `--json`, help MUST emit a structured payload:
 │   └── <readable-prefix>-<sha256>/
 ├── cache/               # ephemeral git clones of ad-hoc git sources
 │   └── git/<host>/<owner>/<repo>@<ref>/
-├── locks/               # per-repository clone locks (see §14)
+├── locks/               # maintenance and per-repository clone locks (see §14)
 │   └── tap-<hash>
 
 ├── store/               # content-addressed canonical skill copies
@@ -478,7 +478,7 @@ With `--json`, help MUST emit a structured payload:
         └── Info.plist
 ```
 
-All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` at any time; `store/` is garbage-collected by `crew update` and `crew cache clean`; `repos/`, `state.json`, `config.yaml`, and `logs/` are durable. `locks/` holds coordination lockfiles and MUST NOT live under `cache/`: cleaning the cache must not remove an active lock. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
+All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` when no command is using its source exports (§14); `store/` is garbage-collected by `crew update` and `crew cache clean`; `repos/`, `state.json`, `config.yaml`, and `logs/` are durable. `locks/` holds coordination lockfiles and MUST NOT live under `cache/`: cleaning the cache must not remove an active lock. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
 
 **One clone per repository.** A tap row is identified by its
 `(url, subpath)` pair, so several taps can point into one repository —
@@ -2007,7 +2007,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 | `not_installed_here` | 6 | Uninstall agent has no marker. |
 | `no_agents` | 4 | No agent tools detected or all disabled. |
 | `config_invalid` | 4 | `config.yaml` did not parse, or a tap name is not a single directory component (contains `/`, `\`, or is `.`/`..`). |
-| `state_locked` | 7 | Could not acquire a coordination lock within the timeout — either the state lock (`state.json.lock`) or a per-repository clone lock (§14). |
+| `state_locked` | 7 | Could not acquire a coordination lock within the timeout — the state lock (`state.json.lock`), maintenance lock, or a per-repository clone lock (§14). |
 | `autoupdate_failure` | 8 | Autoupdate enable/disable couldn't load/unload the platform scheduler. |
 | `self_update_unavailable` | 5 | `crew self-update` couldn't reach the release feed, the asset is missing for the current arch, or the named `--version` doesn't exist. |
 | `self_update_failed` | 8 | `crew self-update` fetched a new binary but couldn't replace the running one (e.g. the install prefix isn't writable). |
@@ -2067,6 +2067,7 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
    - Locks are acquired in a deterministic order (sorted physical clone path) so two runs touching the same taps cannot deadlock, and use the same 30 s timeout and `state_locked` failure as the state lock.
    - This applies to read-only previews too: `crew update --dry-run` does not take the state lock (§10.1.1) but DOES take clone locks, because it still fetches.
    - The state lock and clone locks are separate. A command that takes both acquires the state lock first.
+5. Commands using ephemeral source exports or the store hold a separate **maintenance advisory lock** at `locks/maintenance.lock` for their whole command handler, including source resolution, staging, installation, and collection. This covers `install`, `update` (including `--dry-run`), `outdated`, `info`, `search`, `doctor` (including read-only checks), `cache clean` (including `--dry-run`), and tap acquisition/refresh (`tap add`, shorthand add, and `tap update`). Consequently, no collector can remove another command's in-flight store entry or export. Acquire maintenance before any state or clone lock; release it on success or failure, using the same 30 s timeout and `state_locked` failure. Its lockfiles live outside `cache/` and `store/`. Nested synchronous source consumers in the same process may share the maintenance lock; a nested collector must still wait for the outer source consumer to finish. Read-only commands still never acquire the state lock. Commands that do not use these trees, including `list`, `tap list`, `help`, and `version`, do not acquire the maintenance lock.
 
 ## 15. Exit codes
 
@@ -2771,6 +2772,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CONC-02 | §14 | If the lock is not acquired within the timeout, the second process exits with `state_locked`, exit 7. |
 | C-CONC-03 | §14 | Read-only commands (`list`, `info`, `search`, `agents`, `tap list`, `help`, `version`) do NOT take the state lock. |
 | C-CONC-04 | §14 | The lock is released when the holding process exits for any reason (including crash). |
+| C-CONC-05 | §6, §14 | A maintenance collector waits while another command consumes a source export or stages an install; timeout returns `state_locked` without deleting its bytes. Read-only source commands use this separate coordination lock without creating `state.json`. |
 
 #### C-CLI: CLI contract (§5)
 
