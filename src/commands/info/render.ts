@@ -6,8 +6,8 @@
  *     installed SKILL.md), a tidy metadata block ("from", "version",
  *     "installed", "installed at"), and a trailing hint.
  *   - Uninstalled reference: one block per skill with description,
- *     license, homepage, deps. Multi-skill collections show a header
- *     up top.
+ *     license, compatibility, homepage, deps. Multi-skill collections
+ *     show a header up top.
  */
 
 import type { StateEntry, TapConfig } from "../../core/types.ts";
