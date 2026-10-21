@@ -1,5 +1,5 @@
 /**
- * Human-friendly rendering for `crew info`.
+ * Human-friendly rendering for `crew info` (§5.1, §9.1).
  *
  * Two layouts:
  *   - Installed skill: bold name, wrapped description (from the
@@ -12,6 +12,7 @@
 
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { plural, shortenHome, timeAgo, twoColumnTable, wrap } from "../../util/format.ts";
+import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 import { safeLabel } from "../source-label/index.ts";
 
@@ -53,7 +54,7 @@ export function renderInstalled(info: InstalledInfo, style: Styler, width: numbe
   lines.push(style.bold(primary.name));
   lines.push("");
   if (description && description.length > 0) {
-    for (const w of wrap(description, Math.max(40, width - 2))) lines.push(`  ${w}`);
+    for (const w of wrap(sanitizeLine(description), Math.max(40, width - 2))) lines.push(`  ${w}`);
     lines.push("");
   }
 
@@ -138,17 +139,21 @@ function renderOneSkill(
   lines.push(`${indent}${style.bold(skill.name)}`);
   if (skill.description) {
     lines.push("");
-    for (const w of wrap(skill.description, Math.max(40, width - indent.length - 2))) {
+    for (const w of wrap(
+      sanitizeLine(skill.description),
+      Math.max(40, width - indent.length - 2),
+    )) {
       lines.push(`${indent}  ${w}`);
     }
   }
   const metaRows: [string, string][] = [];
   metaRows.push([style.dim("from"), tap.name]);
-  if (skill.license) metaRows.push([style.dim("license"), skill.license]);
-  if (skill.compatibility) metaRows.push([style.dim("compatibility"), skill.compatibility]);
-  if (skill.homepage) metaRows.push([style.dim("homepage"), skill.homepage]);
+  if (skill.license) metaRows.push([style.dim("license"), sanitizeLine(skill.license)]);
+  if (skill.compatibility)
+    metaRows.push([style.dim("compatibility"), sanitizeLine(skill.compatibility)]);
+  if (skill.homepage) metaRows.push([style.dim("homepage"), sanitizeLine(skill.homepage)]);
   if (skill.dependencies.length > 0) {
-    metaRows.push([style.dim("depends on"), skill.dependencies.join(", ")]);
+    metaRows.push([style.dim("depends on"), sanitizeLine(skill.dependencies.join(", "))]);
   }
   if (metaRows.length > 0) {
     lines.push("");

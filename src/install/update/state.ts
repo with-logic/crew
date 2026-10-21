@@ -7,13 +7,13 @@ export function rebuildStateEntry(
   entry: StateEntry,
   newSha: string | null,
   contentHash: string,
-  successfulTargets: string[],
+  nonFailedTargets: string[],
 ): StateEntry {
   return {
     ...entry,
     resolved_sha: newSha,
     content_hash: contentHash,
-    agents: successfulTargets.length > 0 ? successfulTargets : entry.agents,
+    agents: nonFailedTargets.length > 0 ? nonFailedTargets : entry.agents,
     installed_at: nowIso(),
   };
 }

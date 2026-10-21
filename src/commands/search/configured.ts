@@ -5,7 +5,9 @@
 import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { indexTap, type SkillLocation } from "../../install/tap-index.ts";
+import { displayText } from "../../refs/display-url.ts";
 import { loadSkill } from "../../skill/load.ts";
+import { sanitizeLine } from "../../util/redact.ts";
 import { type SearchInstallIndex, searchInstallStatus } from "./install-state.ts";
 import type { ConfiguredSearchResult, SearchHit } from "./types.ts";
 
@@ -40,6 +42,17 @@ function collectHitsFromTap(
     // retry when online, which never fixes it. Name it for what it is.
     if (err instanceof CrewError && err.code === "invalid_ref") {
       warnings.push(`warning: tap \`${tap.name}\` skipped — ${err.message}`);
+      return;
+    }
+    // Source-file read failures carry their local path; acquisition failures do not.
+    const isSourceReadFailure =
+      err instanceof CrewError &&
+      err.code === "source_unreachable" &&
+      typeof err.details["path"] === "string";
+    if (isSourceReadFailure) {
+      warnings.push(
+        `warning: tap \`${sanitizeLine(tap.name)}\` skipped (${err.code}) — ${displayText(err.message)}`,
+      );
       return;
     }
     warnings.push(

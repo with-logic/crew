@@ -14,9 +14,9 @@ import { existsSync } from "node:fs";
 import { cwdForEntry } from "../../agents/adapter.ts";
 import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
-import { hashDirectory } from "../../hash/content.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { type AcquiredTap, withAcquiredSkillDir } from "../../sources/acquire/index.ts";
+import { hashSourceDirectory } from "../../sources/read.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
@@ -44,12 +44,12 @@ export function updateOneEntry(
     let next = state;
     // §10.1: one revision covers all targets; retain it until failed targets can retry.
     if (outcome.kind === "updated" && !hardFailure) {
-      const successfulTargets = outcome.per_target.map((t) => t.agent);
+      const nonFailedTargets = outcome.per_target.map((t) => t.agent);
       const newEntry = rebuildStateEntry(
         entry,
         outcome.new_sha,
         outcome.content_hash,
-        successfulTargets,
+        nonFailedTargets,
       );
       next = upsertEntry(state, newEntry);
     }
@@ -168,7 +168,7 @@ function applyUpdate(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
-  const sourceHash = newSha === null ? hashDirectory(skillDir) : undefined;
+  const sourceHash = newSha === null ? hashSourceDirectory(skillDir) : undefined;
   if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
     if (newSha !== null) return { kind: "up_to_date" };
     if (sourceHash === entry.content_hash) return { kind: "up_to_date" };

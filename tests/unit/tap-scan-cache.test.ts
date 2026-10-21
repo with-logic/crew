@@ -8,11 +8,80 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
+import type { TapConfig } from "../../src/core/types.ts";
 import { makeTapScanCache } from "../../src/install/tap-reexpand/scan-cache.ts";
-import { makeTempDir } from "../helpers/fixtures.ts";
+import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
+
+describe("tap scan cache child discovery", () => {
+  test("an unreadable manifest caches the same error only for its tap and root", () => {
+    const root = makeTempDir("crew-scan-children-");
+    const skill = makeSkill(root, "demo", skillFrontmatter({ name: "demo" }));
+    const manifest = join(skill, "SKILL.md");
+    const tap: TapConfig = {
+      name: "t",
+      kind: "path",
+      registered: true,
+      url: "",
+      subpath: "",
+      path: root,
+    };
+    const cache = makeTapScanCache();
+    let firstError: unknown;
+    chmodSync(manifest, 0);
+    try {
+      cache.children(tap, "/unused", root);
+    } catch (err) {
+      firstError = err;
+    } finally {
+      chmodSync(manifest, 0o600);
+    }
+    expect(firstError).toBeInstanceOf(CrewError);
+    expect(firstError).toMatchObject({ code: "source_unreachable" });
+    let cachedError: unknown;
+    try {
+      cache.children(tap, "/unused", root);
+    } catch (err) {
+      cachedError = err;
+    }
+    expect(cachedError).toBe(firstError);
+
+    const otherTap = { ...tap, name: "other" };
+    const children = cache.children(otherTap, "/unused", root);
+    expect(children.map((child) => child.name)).toEqual(["demo"]);
+    expect(cache.children(otherTap, "/unused", root)).toBe(children);
+    const otherRoot = makeTempDir("crew-scan-other-root-");
+    makeSkill(otherRoot, "second", skillFrontmatter({ name: "second" }));
+    expect(cache.children(tap, "/unused", otherRoot).map((child) => child.name)).toEqual([
+      "second",
+    ]);
+  });
+
+  test("a native traversal failure is not cached and a repaired root is scanned", () => {
+    const root = makeTempDir("crew-scan-unreadable-root-");
+    makeSkill(root, "demo", skillFrontmatter({ name: "demo" }));
+    const tap: TapConfig = {
+      name: "t",
+      kind: "path",
+      registered: true,
+      url: "",
+      subpath: "",
+      path: root,
+    };
+    const cache = makeTapScanCache();
+    chmodSync(root, 0);
+    try {
+      expect(() => cache.children(tap, "/unused", root)).toThrow(
+        expect.objectContaining({ code: "EACCES" }),
+      );
+    } finally {
+      chmodSync(root, 0o755);
+    }
+    expect(cache.children(tap, "/unused", root).map((child) => child.name)).toEqual(["demo"]);
+  });
+});
 
 describe("tap scan cache validation", () => {
   test("a spec violation is returned as a CrewError, not thrown", () => {
@@ -20,10 +89,13 @@ describe("tap scan cache validation", () => {
     // Valid YAML, but `description` is required by §9 step 4.
     writeFileSync(join(dir, "SKILL.md"), "---\nname: demo\n---\nbody\n");
 
-    const err = makeTapScanCache().validate(dir);
+    const cache = makeTapScanCache();
+    const err = cache.validate(dir);
 
     expect(err).toBeInstanceOf(CrewError);
     expect(err?.code).toBe("invalid_skill");
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: demo\ndescription: ok\n---\nbody\n");
+    expect(cache.validate(dir)).toBe(err);
   });
 
   test("a valid skill validates to null", () => {
@@ -33,24 +105,36 @@ describe("tap scan cache validation", () => {
     expect(makeTapScanCache().validate(dir)).toBeNull();
   });
 
-  test("an I/O failure rethrows instead of blaming the skill", () => {
+  test("a manifest I/O failure returns source_unreachable instead of invalid_skill", () => {
     const dir = makeTempDir("crew-scan-eisdir-");
     // `SKILL.md` exists — so the "no SKILL.md" guard passes — but it is a
-    // directory, so reading it raises a raw EISDIR `Error`. Reporting that
-    // as `invalid_skill` would blame the author for a local filesystem
-    // problem, so it must escape as-is for the run to handle.
+    // directory. The read boundary maps EISDIR to an operational error
+    // before frontmatter validation; the cache must retain that code.
     mkdirSync(join(dir, "SKILL.md"));
 
-    let thrown: unknown;
-    try {
-      makeTapScanCache().validate(dir);
-    } catch (err) {
-      thrown = err;
-    }
+    const cache = makeTapScanCache();
+    const error = cache.validate(dir);
+    expect(error).toBeInstanceOf(CrewError);
+    expect(error?.code).toBe("source_unreachable");
+    expect(error?.message).toContain("EISDIR");
+    expect(error?.details["path"]).toBe(join(dir, "SKILL.md"));
+    rmSync(join(dir, "SKILL.md"), { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: demo\ndescription: ok\n---\nbody\n");
+    expect(cache.validate(dir)).toBe(error);
+  });
 
-    expect(thrown).toBeInstanceOf(Error);
-    expect(thrown).not.toBeInstanceOf(CrewError);
-    expect((thrown as NodeJS.ErrnoException).code).toBe("EISDIR");
+  test("native errors traversing a manifest parent propagate without being cached", () => {
+    const dir = makeTempDir("crew-scan-parent-loop-");
+    const skillDir = join(dir, "loop");
+    symlinkSync("loop", skillDir);
+    const cache = makeTapScanCache();
+
+    expect(() => cache.validate(skillDir)).toThrow(expect.objectContaining({ code: "ELOOP" }));
+
+    rmSync(skillDir);
+    mkdirSync(skillDir);
+    writeFileSync(join(skillDir, "SKILL.md"), "---\nname: demo\ndescription: ok\n---\nbody\n");
+    expect(cache.validate(skillDir)).toBeNull();
   });
 
   test("validation is memoised per directory", () => {

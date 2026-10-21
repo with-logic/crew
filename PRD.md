@@ -206,6 +206,11 @@ terminal in 8-bit mode reads C1 as an escape sequence — are rendered as
 `\xNN` escapes. An SCP-style remote (`git@host:owner/repo`) keeps its
 user, which names the protocol account rather than a secret (§13).
 
+Human-readable skill metadata follows the same C0, DEL, and C1
+control-character escaping rule before wrapping or styling. This includes
+descriptions, license, compatibility, homepage, and dependencies. JSON
+values and installed skill bytes are unchanged.
+
 ### 5.2 Global flags
 
 Accepted on any command where they apply:
@@ -2006,7 +2011,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 | `invalid_ref` | 4 | The skill reference failed to parse (§8.4). |
 | `invalid_skill` | 4 | A skill directory failed spec validation. Message names the failing field. |
 | `no_skills_found` | 4 | A directory source expanded to zero valid skills. |
-| `source_unreachable` | 5 | Network or git failure acquiring a source. |
+| `source_unreachable` | 5 | Network or git failure acquiring a source, or filesystem failure reading source files. |
 | `ref_not_found` | 5 | Ref doesn't exist in the repo. |
 | `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
 | `tap_missing` | 0 | On update, the installed skill's tap is no longer in `config.yaml` (e.g. after `crew tap remove --force`). Soft outcome; local install is preserved. Never causes a non-zero exit. |

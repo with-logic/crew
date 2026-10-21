@@ -78,10 +78,8 @@ function installGroup(
     // Installation raises CrewError or native filesystem errors with optional string codes.
     const error = err as NodeJS.ErrnoException;
     const code = error.code ?? "usage_error";
-    const customized = code === "customized";
-    const untrackedDirectory = code === "untracked_directory";
-    const inconsistentMarker = code === "inconsistent_marker";
-    const safetySkip = customized || untrackedDirectory || inconsistentMarker;
+    const safetySkip =
+      code === "customized" || code === "untracked_directory" || code === "inconsistent_marker";
     for (const a of group) {
       perTarget.push(
         safetySkip
