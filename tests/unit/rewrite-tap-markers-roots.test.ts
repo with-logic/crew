@@ -22,14 +22,14 @@ test("tap marker rewrites leave corrupt relative project roots untouched while p
   const root = makeTempDir("crew-marker-roots-");
   const cwd = makeTempDir("crew-marker-cwd-");
   const project = makeTempDir("crew-marker-project-");
+  const projectLocations = new Map([
+    ["relative", "corrupt"],
+    [cwd, "cwd"],
+    [project, "retained"],
+  ]);
   for (const adapter of ALL_AGENTS) {
     adapter.userPath = () => join(root, "user", adapter.name);
-    adapter.projectPath = (location) =>
-      join(
-        root,
-        location === "relative" ? "corrupt" : location === cwd ? "cwd" : "retained",
-        adapter.name,
-      );
+    adapter.projectPath = (location) => join(root, projectLocations.get(location)!, adapter.name);
   }
   const markers = new Map<string, string>();
   for (const location of ["user", "cwd", "retained", "corrupt"]) {
