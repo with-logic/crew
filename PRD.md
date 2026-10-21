@@ -1519,6 +1519,16 @@ On every `crew update` run, for each group of state entries sharing
    `pinned` value (§11.1) — it was read from that revision, so recording
    it as an unpinned no-ref install would misattribute its bytes.
 
+   Directory candidates rejected during name-only indexing (§9 step 4)
+   remain part of this survey. Report each rejected location in scope
+   as a `tap_error` carrying its validation code, tap-relative path,
+   and reason; use the tap name as the row's subject when no valid
+   declared skill name is available. Never infer a skill name from its
+   directory. Namespace-only selectors bound these diagnostics to the
+   named namespaces, just as they bound additions (§10.1). Healthy
+   children and other groups continue; both real and `--dry-run` runs
+   exit 1. Invalid gist files remain ignored (§9 step 5).
+
    If the current
    child set contains the same declared `name` at more than one
    tap-relative source path, re-expansion records
@@ -1585,6 +1595,10 @@ On every `crew update` run, for each group of state entries sharing
 4. For each skill in state attributed to this tap whose directory is
    still present: proceeds with the normal per-skill update logic
    (step 3 of §10.1) — stage, re-resolve, reinstall if SHA moved.
+   A rejected candidate at its recorded source path establishes
+   presence even though its declared name could not be indexed. It
+   MUST NOT become `source_gone`: normal per-skill validation reports
+   the invalid version while preserving its previous install and state.
 
 Groups whose members are all individual-skill installs (no
 `tracks_tap`) skip re-expansion entirely. Their per-skill updates
@@ -2750,7 +2764,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps — the one thing it does change — then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, store entries, and state are byte-identical before and after; `--json` carries `dry_run: true`. |
 | C-UPD-18a | §10.1.1, §14 | `crew update --dry-run` against a home with no `state.json` leaves it absent: the state lock is never acquired, so neither the state file nor its lock is created. |
 | C-UPD-18b | §10.1.1 | `--force --dry-run` previews a pinned skill whose upstream moved as `would_update` (rather than `skipped`) and still writes nothing. |
-| C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. |
+| C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered directory-tap candidate whose frontmatter fails spec validation, including name-only indexing, is reported with `invalid_skill` and is not installed, identically in real and `--dry-run` runs; the run exits 1 while healthy children continue. A candidate without a valid declared name uses the tap as its error-row subject and names its source path and reason without inventing a skill name. A tracked rejected source path remains present for normal per-skill validation rather than becoming `source_gone`; its previous install and state are preserved. |
 | C-UPD-18d | §10.1.1, §14 | `crew update` holds a per-repository clone lock spanning refresh through source read, in both real and `--dry-run` runs, so a concurrent run cannot change the clone's checked-out commit between SHA resolution and byte read. A run blocked past the timeout exits `state_locked`. |
 | C-UPD-18e | §10.1.1 | A newly-discovered child that fails validation is named in human output along with its error code and message, and is counted as a failure in the run totals. |
 | C-UPD-18f | §10.1.1 | `crew outdated [<selector>...]` behaves as `crew update --dry-run`: identical `--json` payload (`dry_run: true`, `would_update` / `would_add` kinds), identical exit code, and the same write boundary — tap clones refresh, while installed skills, markers, store entries, and `state.json` are unchanged. Human output lists only rows that would change and prints a single "up to date" line when none would. |
