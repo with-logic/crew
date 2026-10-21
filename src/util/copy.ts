@@ -12,6 +12,7 @@
 
 import { copyFileSync, lstatSync, readdirSync, readlinkSync, symlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { CrewError } from "../core/errors.ts";
 import { ensureDir } from "./fs.ts";
 
 /** Options for `copyTree`. */
@@ -38,6 +39,7 @@ function copyDirInto(
 ): void {
   const srcDir = rel === "" ? srcRoot : join(srcRoot, rel);
   const destDir = rel === "" ? destRoot : join(destRoot, rel);
+  rejectDestinationSymlink(destDir);
   ensureDir(destDir);
   for (const name of readdirSync(srcDir)) {
     if (stripRootMarker && rel === "" && name === ".crew.json") {
@@ -53,8 +55,18 @@ function copyDirInto(
     } else if (lst.isDirectory()) {
       copyDirInto(srcRoot, destRoot, rel === "" ? name : `${rel}/${name}`, stripRootMarker);
     } else if (lst.isFile()) {
+      rejectDestinationSymlink(destPath);
       ensureDir(dirname(destPath));
       copyFileSync(srcPath, destPath);
     }
+  }
+}
+
+/** A case-folding destination can alias an earlier copied symlink (§12.1). */
+function rejectDestinationSymlink(path: string): void {
+  if (lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    throw new CrewError("usage_error", `Refusing to copy through destination symlink: ${path}`, {
+      path,
+    });
   }
 }
