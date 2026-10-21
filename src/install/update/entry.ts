@@ -48,11 +48,11 @@ export function updateOneEntry(
       outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed");
     let next = state;
     // §10.1: advancing a shared revision requires completion without hard failures.
-    if (
+    const hasCompletedTarget =
       outcome.kind === "updated" &&
-      !hardFailure &&
-      outcome.per_target.some((t) => t.kind === "installed" || t.kind === "up_to_date")
-    ) {
+      outcome.per_target.some((t) => t.kind === "installed" || t.kind === "up_to_date");
+    const canAdvanceRevision = hasCompletedTarget && !hardFailure;
+    if (canAdvanceRevision) {
       const nonFailedTargets = outcome.per_target.map((t) => t.agent);
       const newEntry = rebuildStateEntry(
         selectedEntry,
@@ -169,6 +169,7 @@ function applyUpdate(
     if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
   }
 
+  // §10.1: validate the source before a no-target skip so invalid metadata still fails.
   const loaded = loadSkill(sourcePath, isGistTap(tap));
   const targetGroups = groupRecordedTargets(entry, entryCwd);
   if (targetGroups.size === 0) return { kind: "skipped", reason: "no applicable agent targets" };
