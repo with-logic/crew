@@ -94,7 +94,7 @@ branch="release/${next_tag}"
 echo "==> Releasing ${current_version} -> ${next_version} (${RELEASE_TARGET})"
 
 if git show-ref --verify --quiet "refs/heads/${branch}"; then
-  echo "error: branch ${branch} already exists locally — delete it or pick a different bump" >&2
+  echo "error: branch ${branch} already exists locally — delete it or pick a different release target" >&2
   exit 1
 fi
 if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then

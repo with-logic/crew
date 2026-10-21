@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 
 const helperPath = fileURLToPath(new URL("../../scripts/next-version.sh", import.meta.url));
 
-function runHelper(functionName: string, ...args: string[]) {
+function runHelper(
+  functionName: "validate_release_target" | "next_release_version",
+  ...args: string[]
+) {
   const result = Bun.spawnSync([
     "bash",
     "-c",
@@ -64,6 +67,27 @@ describe("release version selection", () => {
     });
   });
 
+  test.each([
+    ["0.10.1", "9223372036854775808.0.0"],
+    ["1.0.0", "1.9223372036854775808.0"],
+    ["1.0.0", "1.0.9223372036854775808"],
+    ["9223372036854775807.9.9", "9223372036854775808.0.0"],
+    ["1.9223372036854775807.9", "1.9223372036854775808.0"],
+    ["1.0.9223372036854775807", "1.0.9223372036854775808"],
+    ["999999999999999999999999999999.9.9", "1000000000000000000000000000000.0.0"],
+    ["1.999999999999999999999999999999.9", "1.1000000000000000000000000000000.0"],
+    ["1.0.999999999999999999999999999999", "1.0.1000000000000000000000000000000"],
+    ["18446744073709551616.9.9", "18446744073709551617.0.0"],
+    ["18446744073709551616.1.9", "18446744073709551616.2.0"],
+    ["18446744073709551616.18446744073709551616.1", "18446744073709551616.18446744073709551616.2"],
+  ])("accepts advancing arbitrary-size target %s -> %s", (current, target) => {
+    expect(runHelper("next_release_version", current, target)).toEqual({
+      exitCode: 0,
+      stdout: `${target}\n`,
+      stderr: "",
+    });
+  });
+
   test("defaults to a patch bump", () => {
     expect(runHelper("next_release_version", "0.10.1")).toEqual({
       exitCode: 0,
@@ -77,5 +101,24 @@ describe("release version selection", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("must be greater than current version 0.10.1");
+  });
+
+  test.each([
+    ["9223372036854775808.0.0", "9223372036854775807.9.9"],
+    ["1.9223372036854775808.0", "1.9223372036854775807.9"],
+    ["1.0.9223372036854775808", "1.0.9223372036854775807"],
+    ["1000000000000000000000000000000.0.0", "999999999999999999999999999999.9.9"],
+    ["1.1000000000000000000000000000000.0", "1.999999999999999999999999999999.9"],
+    ["1.0.1000000000000000000000000000000", "1.0.999999999999999999999999999999"],
+    ["18446744073709551617.0.0", "18446744073709551616.9.9"],
+    ["18446744073709551616.2.0", "18446744073709551616.1.9"],
+    ["18446744073709551616.18446744073709551616.2", "18446744073709551616.18446744073709551616.1"],
+    ["18446744073709551616.18446744073709551616.2", "18446744073709551616.18446744073709551616.2"],
+  ])("rejects non-advancing arbitrary-size target %s -> %s", (current, target) => {
+    expect(runHelper("next_release_version", current, target)).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: `error: target version ${target} must be greater than current version ${current}\n`,
+    });
   });
 });

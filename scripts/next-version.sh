@@ -13,9 +13,11 @@ validate_release_target() {
   return 1
 }
 
+# Prints the selected version: defaults to a patch bump; exact targets must advance.
 next_release_version() {
   local current_version="$1" target="${2:-patch}"
-  local major minor patch target_major target_minor target_patch
+  local major minor patch component target_component index
+  local LC_ALL=C
   validate_release_target "$target" || return 1
   IFS='.' read -r major minor patch <<<"$current_version"
   case "$target" in
@@ -23,13 +25,20 @@ next_release_version() {
     minor) minor=$((minor + 1)); patch=0 ;;
     major) major=$((major + 1)); minor=0; patch=0 ;;
     *)
-      IFS='.' read -r target_major target_minor target_patch <<<"$target"
-      if (( target_major > major ||
-            (target_major == major && target_minor > minor) ||
-            (target_major == major && target_minor == minor && target_patch > patch) )); then
-        printf '%s\n' "$target"
-        return 0
-      fi
+      local -a current_components=("$major" "$minor" "$patch") target_components
+      IFS='.' read -r -a target_components <<<"$target"
+      for index in 0 1 2; do
+        component="${current_components[$index]}"
+        target_component="${target_components[$index]}"
+        [[ "$target_component" == "$component" ]] && continue
+        # Canonical decimal strings compare by length, then bytes, without overflow.
+        if (( ${#target_component} > ${#component} )) ||
+           { (( ${#target_component} == ${#component} )) && [[ "$target_component" > "$component" ]]; }; then
+          printf '%s\n' "$target"
+          return 0
+        fi
+        break
+      done
       echo "error: target version $target must be greater than current version $current_version" >&2
       return 1
       ;;
