@@ -1,12 +1,22 @@
 /** Strict doctor inventory reads distinguish absence from operational failures (§11.2). */
-import { accessSync, constants, readdirSync, statSync } from "node:fs";
+import { accessSync, constants, lstatSync, readdirSync, statSync } from "node:fs";
 import { redactText, sanitizeLine } from "../../../util/redact.ts";
 import type { Finding } from "../checks.ts";
+import { invalidMarkerFinding } from "./findings.ts";
 
 /** Existing directories must be searchable before their marker inventory can be trusted. */
-export function inventoryDirectory(path: string, findings: Map<string, Finding>): boolean {
+export function inventoryDirectory(
+  path: string,
+  findings: Map<string, Finding>,
+  followLinks = true,
+): boolean {
   try {
-    if (!statSync(path).isDirectory()) return false;
+    const entry = followLinks ? statSync(path) : lstatSync(path);
+    if (entry.isSymbolicLink()) {
+      inventoryLinkFailure(path, findings);
+      return false;
+    }
+    if (!entry.isDirectory()) return false;
     accessSync(path, constants.X_OK);
     return true;
   } catch (err) {
@@ -38,4 +48,14 @@ export function inventoryReadFailure(
     code: "marker_unreadable",
     message: sanitizeLine(redactText(`${path}: ${(err as Error).message}`)),
   });
+}
+
+/** Install leaves and marker entries cannot borrow authority through symbolic links (§11.2). */
+export function inventoryLinkFailure(path: string, findings: Map<string, Finding>): void {
+  findings.set(
+    ...invalidMarkerFinding(
+      path,
+      "symbolic link is invalid inventory; replace it with the managed entry before repair",
+    ),
+  );
 }
