@@ -142,7 +142,10 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
       rmrf(staging);
     } catch {
       // Cleanup must not replace the operation failure (§7.3).
-      (err as Error).message += `; could not remove staging directory \`${safePath(staging)}\``;
+      const failure =
+        err instanceof Error ? err : new CrewError("usage_error", String(err), { cause: err });
+      failure.message += `; could not remove staging directory \`${safePath(staging)}\``;
+      throw failure;
     }
     throw err;
   }
