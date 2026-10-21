@@ -103,7 +103,7 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   }
 
   for (const row of addedRows) {
-    for (const warning of row.warnings ?? []) {
+    for (const warning of (row.kind === "added" ? row.warnings : undefined) ?? []) {
       lines.push(
         `${style.symbol("warn")} ${style.bold(row.name)} ${style.dim(`(from ${row.tap})`)}: ${warning}`,
       );

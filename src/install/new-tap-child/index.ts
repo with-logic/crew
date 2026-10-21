@@ -5,7 +5,7 @@
  * every target the rest of the tap was installed into, and returns a
  * fresh state entry only when every applicable target group succeeds.
  * Target-group failures attempt rollback and name affected targets; failed
- * restoration retains and reports the prior copy at a recovery path.
+ * restoration or lost ownership retains and reports any prior recovery copy.
  * Failed children have no state entry; later non-dry-run re-expansion retries them.
  */
 
@@ -31,6 +31,7 @@ export function installNewTapChild(
     /** The ref the group tracks, and whether it is immutable (§11.1). */
     readonly ref: string | null;
     readonly pinned: boolean;
+    /** Cleanup diagnostics on success; failures append them to the primary error. */
     readonly onWarning?: (warning: string) => void;
   },
   force: boolean,
@@ -72,7 +73,7 @@ export function installNewTapChild(
         resolvedSha: args.resolvedSha,
         contentHash: staged.contentHash,
         force,
-        beforeReplace: () => replacement.moveAsideForReplacement(),
+        beforeReplace: (staging) => replacement.moveAsideForReplacement(staging),
       });
       replacement.installed = outcome.kind === "installed";
       for (const a of group) successfulTargets.push(a.name);

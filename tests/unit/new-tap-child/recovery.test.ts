@@ -14,6 +14,7 @@ import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../../src/agents/codex.ts";
 import { CrewError } from "../../../src/core/errors.ts";
 import { installNewTapChild } from "../../../src/install/new-tap-child/index.ts";
+import { redactText, sanitizeLine } from "../../../src/util/redact.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 
@@ -25,7 +26,8 @@ afterEach(() => {
 });
 
 test("C-UPD-38 later target failure reports recovery data after failed restoration", () => {
-  const root = makeTempDir();
+  const root = join(makeTempDir(), "controls\n\r\x1b\x7f\x85", "?token=rollback-secret");
+  mkdirSync(root, { recursive: true });
   const codexRoot = makeTempDir();
   claudeCodeAdapter.userPath = () => root;
   const blocked = join(codexRoot, "file");
@@ -79,11 +81,17 @@ test("C-UPD-38 later target failure reports recovery data after failed restorati
   }
   expect(error?.code).toBe("usage_error");
   expect(error?.message).toContain("codex");
+  expect(error?.message).toContain(blocked);
   expect(error?.message).toContain("rollback");
   expect(error?.message).toContain("prior copy retained at");
   const backup = readdirSync(root).find((name) => name.startsWith(".crew-rollback-"))!;
   const recovery = join(root, backup, "prior");
-  expect(error?.message).toContain(recovery);
+  expect(error?.message).toContain(sanitizeLine(redactText(recovery)));
+  expect(error?.message).toContain("token=***");
+  expect(error?.message).not.toContain("rollback-secret");
+  expect(error?.message).toContain("controls\\x0a\\x0d\\x1b\\x7f\\x85");
+  for (const control of ["\n", "\r", "\x1b", "\x7f", "\x85"])
+    expect(error?.message).not.toContain(control);
   expect(readFileSync(join(recovery, "SKILL.md"), "utf8")).toContain("prior bytes");
   expect(readFileSync(join(recovery, "locked", "asset"), "utf8")).toBe("prior asset");
   expect(existsSync(join(codexRoot, "newbie"))).toBe(false);

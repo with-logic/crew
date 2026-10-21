@@ -161,8 +161,8 @@ test("C-UPD-38 a failed install rename restores the moved prior tree", () => {
         resolvedSha: args.resolvedSha,
         contentHash: staged.contentHash,
         force: true,
-        beforeReplace: () => {
-          replacement.moveAsideForReplacement();
+        beforeReplace: (staging) => {
+          replacement.moveAsideForReplacement(staging);
           chmodSync(claudeRoot, 0o555);
         },
       }),

@@ -8,11 +8,23 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { ChildReplacement } from "../../../src/install/new-tap-child/replacement.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+
+function stage() {
+  const staging = makeSkill(
+    makeTempDir(),
+    "newbie",
+    skillFrontmatter({ name: "newbie" }),
+    "replacement bytes",
+  );
+  writeFileSync(join(staging, ".crew.json"), "{}");
+  return staging;
+}
 
 function prior() {
   const root = makeTempDir();
@@ -24,7 +36,7 @@ test("C-UPD-38 an unsuccessful new receipt never removes a different writer's co
   const root = makeTempDir();
   const dest = join(root, "newbie");
   const replacement = new ChildReplacement(dest);
-  replacement.moveAsideForReplacement();
+  replacement.moveAsideForReplacement(stage());
   mkdirSync(dest);
   writeFileSync(join(dest, "mine"), "other writer");
   expect(replacement.rollback()).toBeNull();
@@ -36,7 +48,7 @@ test("C-UPD-38 failed move-aside access aborts before replacing prior bytes", ()
   const { root, dest, replacement } = prior();
   chmodSync(root, 0o000);
   try {
-    expect(() => replacement.moveAsideForReplacement()).toThrow("EACCES");
+    expect(() => replacement.moveAsideForReplacement(stage())).toThrow("EACCES");
   } finally {
     chmodSync(root, 0o755);
   }
@@ -49,7 +61,7 @@ test("C-UPD-38 replacement moves unreadable prior bytes without duplicating thei
   const { root, dest, replacement } = prior();
   const original = lstatSync(join(dest, "SKILL.md"));
   chmodSync(join(dest, "SKILL.md"), 0o000);
-  replacement.moveAsideForReplacement();
+  replacement.moveAsideForReplacement(stage());
   const temporary = readdirSync(root).find((name) => name.startsWith(".crew-rollback-"))!;
   const moved = join(root, temporary, "prior", "SKILL.md");
   try {
@@ -67,9 +79,10 @@ test("C-UPD-38 replacement moves unreadable prior bytes without duplicating thei
 
 test("C-UPD-38 failed restoration retains and reports the complete backup", () => {
   const { root, dest, replacement } = prior();
-  replacement.moveAsideForReplacement();
-  mkdirSync(dest, { recursive: true });
-  writeFileSync(join(dest, "SKILL.md"), "replacement bytes");
+  const staging = stage();
+  replacement.moveAsideForReplacement(staging);
+  renameSync(staging, dest);
+  replacement.installed = true;
   chmodSync(root, 0o555);
   try {
     const failure = replacement.rollback();
@@ -86,7 +99,12 @@ test("C-UPD-38 failed restoration retains and reports the complete backup", () =
 });
 
 test("C-UPD-38 failure removing a new copy reports rollback without claiming a backup", () => {
-  const { root, replacement } = prior();
+  const root = makeTempDir();
+  const dest = join(root, "newbie");
+  const replacement = new ChildReplacement(dest);
+  const staging = stage();
+  replacement.moveAsideForReplacement(staging);
+  renameSync(staging, dest);
   replacement.installed = true;
   chmodSync(root, 0o555);
   try {
@@ -100,7 +118,7 @@ test("C-UPD-38 failure removing a new copy reports rollback without claiming a b
 
 test("C-UPD-38 backup cleanup failure cannot change a successful outcome", () => {
   const { root, dest, replacement } = prior();
-  replacement.moveAsideForReplacement();
+  replacement.moveAsideForReplacement(stage());
   mkdirSync(dest, { recursive: true });
   writeFileSync(join(dest, "SKILL.md"), "success bytes");
   const temporary = readdirSync(root).find((name) => name.startsWith(".crew-rollback-"))!;
@@ -121,7 +139,7 @@ test("C-UPD-38 cleanup diagnostics escape controls and redact credentials at the
   const root = join(makeTempDir(), "controls\n\r\x1b\x7f\x85", "?token=cleanup-secret");
   const dest = makeSkill(root, "newbie", skillFrontmatter({ name: "newbie" }));
   const replacement = new ChildReplacement(dest);
-  replacement.moveAsideForReplacement();
+  replacement.moveAsideForReplacement(stage());
   chmodSync(root, 0o555);
   try {
     const warning = replacement.cleanup()!;

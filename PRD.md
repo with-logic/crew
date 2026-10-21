@@ -1475,10 +1475,19 @@ On every `crew update` run, for each group of state entries sharing
    group succeeds, so the next non-dry-run update that re-expands the
    affected tap group retries it. Other children and existing skills
    continue processing. Roll back this child’s completed
-   replacements: remove copies newly created by the attempt and restore
-   replaced copies, including their markers and symlinks. Leave targets
-   that were not changed alone. If restoration fails, report the failure
-   and retain any prior copy at the reported recovery path. If cleanup of an
+   replacements only when the ownership check observes the current target as
+   belonging to this attempt:
+   remove newly created copies and restore replaced copies, including their
+   markers and symlinks. Before destructive rollback, observe the published
+   directory identity and require a regular marker file with matching exact
+   bytes. Targets detected as changed by another writer are preserved. Leave
+   unchanged targets and targets observed as removed or unreadable alone;
+   report lost ownership and retain any prior copy at the reported recovery
+   path. These observations do not serialize writes across different state
+   homes. A failed publication with no current destination may restore its
+   prior copy; a completed installation subsequently removed must stay absent.
+   If restoration fails, report the failure and retain any prior copy at the
+   reported recovery path. If cleanup of an
    owned rollback directory fails, report its leftover path without changing
    the install outcome: append the diagnostic to a failed child’s error, or
    include it in an optional `warnings` array on the successful `added`
@@ -2605,7 +2614,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-35 | §10.1 | A tap named as a selector whose refresh fails is a hard failure (exit 1), even with nothing installed from it; an unnamed configured tap whose refresh fails remains a warning and the run exits 0. |
 | C-UPD-36 | §10.1, §10.1.1 | A namespace selector bounds re-expansion additions to that namespace: a child added upstream under a different namespace of the same tap is not installed. Naming the tap installs both. |
 | C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. |
-| C-UPD-38 | §10.1.1 | A new tap child whose target installation fails produces a per-child `tap_error` naming failed targets and reasons, exits 1, and is absent from state until every applicable target group succeeds. Remaining target groups, other children, and existing entries still process; the next non-dry-run update that re-expands the affected tap group retries the child. Successful replacements are rolled back to their prior bytes, markers, and symlinks, and new copies are removed; restoration failures report the problem and any retained recovery path. |
+| C-UPD-38 | §10.1.1 | A new tap child whose target installation fails produces a per-child `tap_error` naming failed targets and reasons, exits 1, and is absent from state until every applicable target group succeeds. Remaining target groups, other children, and existing entries still process; the next non-dry-run update that re-expands the affected tap group retries the child. Replacements observed as still owned by the attempt are rolled back to their prior bytes, markers, and symlinks, and owned new copies are removed; targets detected as changed, removed, unreadable, or carrying a non-regular marker are preserved with lost ownership and any retained recovery path reported. Failed publication may restore a prior copy into an absent destination; completed publication later removed stays absent. Restoration failures report the problem and any retained recovery path. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |

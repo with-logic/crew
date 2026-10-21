@@ -1,4 +1,4 @@
-/** Snapshot failure keeps its error when staging cleanup also fails (§10.1.1). */
+/** Rollback-directory creation failure keeps its error when staging cleanup also fails (§10.1.1). */
 
 import { afterEach, expect, test } from "bun:test";
 import { chmodSync, readdirSync, readFileSync } from "node:fs";
@@ -14,7 +14,7 @@ afterEach(() => {
   claudeCodeAdapter.userPath = original;
 });
 
-test("C-UPD-38 failed staging cleanup preserves the primary snapshot error", () => {
+test("C-UPD-38 failed staging cleanup preserves the primary rollback-directory creation error", () => {
   const root = makeTempDir();
   claudeCodeAdapter.userPath = () => root;
   const source = makeSkill(
@@ -39,9 +39,9 @@ test("C-UPD-38 failed staging cleanup preserves the primary snapshot error", () 
       resolvedSha: null,
       contentHash: hashDirectory(source),
       force: true,
-      beforeReplace: () => {
+      beforeReplace: (staging) => {
         chmodSync(root, 0o555);
-        replacement.moveAsideForReplacement();
+        replacement.moveAsideForReplacement(staging);
       },
     });
   } catch (err) {

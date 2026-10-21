@@ -94,8 +94,9 @@ commands that do what they say, across every agent you use.
 5. **Stay current automatically.** `crew update` pulls the latest versions
    of everything. Flip on autoupdate and a background job keeps every agent
    fresh. If adding a new tap skill fails for an agent, update reports the
-   target and reason and rolls back copies changed by that attempt. If
-   restoration fails, it reports the failure and any recovery path. The
+   target and reason and rolls back copies still owned by that attempt.
+   Targets detected as changed by another writer are preserved. If ownership is lost or restoration
+   fails, it reports the problem and any retained recovery path. The
    next update that re-expands the affected tap group retries that skill
    (unless it is a dry run).
 

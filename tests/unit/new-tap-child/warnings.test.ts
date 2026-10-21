@@ -86,9 +86,10 @@ for (const fail of [false, true]) {
       if (fail) {
         expect(row.error?.code).toBe("usage_error");
         expect(row.error?.message).toContain("codex");
+        expect(row.error?.message).toContain(blocked);
         expect(row.error?.message).toContain(diagnostic);
         expect(result.added).toEqual([]);
-      } else {
+      } else if (row.kind === "added") {
         expect(row.warnings).toEqual([diagnostic]);
         expect(result.added.map((e) => e.name)).toEqual(["newbie"]);
       }
