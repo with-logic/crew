@@ -78,7 +78,7 @@ describe("indexTap", () => {
     );
   });
 
-  test("skills/ flat: invalid child frontmatter is skipped", () => {
+  test("C-TAP-08d skills/ flat: invalid child retains a diagnostic", () => {
     const root = makeTempDir("ti-invalid-name-");
     const skillsDir = join(root, "skills");
     mkdirSync(skillsDir);
@@ -87,6 +87,9 @@ describe("indexTap", () => {
 
     const idx = indexTap(pathTap(root), "/unused");
     expect([...idx.skills.keys()]).toEqual(["good"]);
+    expect(idx.skipped).toMatchObject([
+      { path: join(skillsDir, "bad"), tapRelativePath: "skills/bad", code: "invalid_skill" },
+    ]);
   });
 
   test("skills/ with namespace dir: skill + namespace indexed", () => {

@@ -61,8 +61,11 @@ function collectHitsFromTap(
     );
     return;
   }
+  for (const skipped of index.skipped) {
+    warnings.push(invalidManifestWarning(tap.name, skipped.path, skipped.message));
+  }
   for (const locs of index.skills.values()) {
-    for (const loc of locs) collectSkillHit(tap, loc, query, installIndex, hits);
+    for (const loc of locs) collectSkillHit(tap, loc, query, installIndex, hits, warnings);
   }
 }
 
@@ -72,6 +75,7 @@ function collectSkillHit(
   query: string,
   installIndex: SearchInstallIndex,
   hits: SearchHit[],
+  warnings: string[],
 ): void {
   try {
     const skill = loadSkill(loc.path, isGistTap(tap));
@@ -84,10 +88,16 @@ function collectSkillHit(
       description,
       ...searchInstallStatus(installIndex, name, tap.name, loc.tapRelativePath),
     });
-  } catch {
-    // Invalid skill directories in a tap are silently ignored —
-    // an unparseable SKILL.md isn't a search-time error.
+  } catch (err) {
+    if (err instanceof CrewError && err.code === "invalid_skill")
+      warnings.push(invalidManifestWarning(tap.name, loc.path, err.message));
   }
+}
+
+function invalidManifestWarning(tap: string, path: string, message: string): string {
+  return sanitizeLine(
+    displayText(`warning: tap \`${tap}\` skill \`${path}\` skipped (invalid_skill) — ${message}`),
+  );
 }
 
 function matchesSkill(name: string, description: string, query: string): boolean {

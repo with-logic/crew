@@ -1220,6 +1220,12 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Every other spec rule from the Agent Skills specification.
 
    A skill that fails validation is recorded as a failed skill with its message and path; the run continues. No validation failure aborts the whole command. See the exit-code rules in step 9.
+
+   Directory-tap name-only indexing retains a rejected candidate's source
+   path and validation reason separately from valid declared-name matches.
+   A rejected candidate MUST NOT be assigned an inferred skill name.
+   Configured search reports these diagnostics as described in §16.6.
+   The gist file-layout exception in step 5 still ignores invalid files.
 5. **Expand directories.** Three cases, checked in order:
    1. If the resolved source location has a `SKILL.md` at its root, it is one skill.
    2. Else, if the resolved source location has a `skills/` subdirectory, crew walks under `skills/` and collects skills:
@@ -2355,6 +2361,15 @@ Add a tap first, then install a suggested skill by qualified name.
 
 `crew search` (no query) lists every skill in every configured tap — the exhaustive catalog. It does not list the known-tap registry. Output and JSON shape are identical to the query form; the installed marker appears the same way and `known_hits` is empty.
 
+Invalid directory manifests are omitted from search hits and reported as
+warnings naming the tap, source path, `invalid_skill`, and validation reason.
+This includes candidates rejected during name-only indexing and during full
+metadata loading. Warnings appear on human stderr and in JSON `warnings`,
+regardless of query, since invalid metadata cannot be reliably matched.
+Healthy siblings remain searchable and validation warnings alone leave the
+search exit code at 0. Gist files excluded by §9's file-layout discovery
+remain ignored without validation warnings.
+
 **`--tap <name>`.** `crew search --tap <name> [<query>]` scopes the search
 (or the no-query catalog) to the single configured tap `<name>`. Only that
 tap is walked; every other configured tap is skipped, and known-tap registry
@@ -2721,6 +2736,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-08 | §16.6 | `crew search --json` emits a structured object `{ tap, hits, known_hits, warnings }`. `tap` is the `--tap <name>` filter's tap name, or `null` when the flag was absent. Each hit in `hits` includes `installed: boolean`, `same_name_installed: boolean`, and `namespace: string \| null` fields. |
 | C-TAP-08b | §16.6 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
 | C-TAP-08c | §16.6 | A same-name skill from a different tap/path is not marked installed in `crew search`; JSON reports `installed: false` and `same_name_installed: true`. |
+| C-TAP-08d | §9, §16.6 | Directory-tap candidates rejected during name-only indexing retain path-specific validation diagnostics without inferred names. Search reports invalid directory manifests in human stderr and JSON warnings, regardless of query, while healthy siblings remain hits and the command exits 0. Gist invalid files remain ignored. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
 | C-TAP-12 | §16.3 | `crew tap add <url>//<subpath>` configures a tap rooted at `<subpath>` inside the repo. Skills at the top level of `<subpath>` are installable by bare name, just like a root tap. |
