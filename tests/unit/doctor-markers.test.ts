@@ -20,7 +20,7 @@ const marker: Marker = {
   path: "",
   ref: null,
   resolved_sha: null,
-  content_hash: "abc",
+  content_hash: `sha256:${"a".repeat(64)}`,
   scope: "user",
   installed_at: "2026-10-21T00:00:00.000Z",
   installed_by: "crew",
@@ -67,7 +67,7 @@ test("C-STATE-14 scanMarkers discovers a valid Git marker from disk", () => {
     tap_path: "",
     ref: "main",
     resolved_sha: "a".repeat(40),
-    content_hash: "b".repeat(64),
+    content_hash: `sha256:${"b".repeat(64)}`,
     tap_discovery: "recursive",
   };
   writeFileSync(join(installDir, ".crew.json"), JSON.stringify(gitMarker));

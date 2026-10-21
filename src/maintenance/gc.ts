@@ -1,5 +1,5 @@
 /**
- * Garbage collection for the store (§10.1 step 4).
+ * Garbage collection for the store (§10.1 step 4, §12.2).
  *
  * After every update run, any `store/<name>@<short-sha>/` entry that is
  * no longer referenced by a state entry is deleted. `crew cache clean`
@@ -25,7 +25,7 @@ export function referencedStoreEntries(state: StateFile): Set<string> {
     const short =
       inst.resolved_sha === null
         ? inst.content_hash.slice("sha256:".length, "sha256:".length + 8)
-        : inst.resolved_sha.slice(0, 8);
+        : inst.resolved_sha.slice(0, 8).toLowerCase();
     names.add(`${inst.name}@${short}`);
   }
   return names;
