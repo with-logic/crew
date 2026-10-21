@@ -1,12 +1,17 @@
 /** Monotonic unstructured diagnostic boundaries; ambiguous credential suffixes fail closed (§5.2, §13). */
 
+import { isControlCharacterCode } from "./control-characters.ts";
+
 interface SchemeSpan {
   readonly start: number;
   readonly authorityStart: number;
 }
 
 /** Keys are parsed once; no delimiter in a credential value can release its suffix (§13). */
-function queryBoundary(text: string, displayableParams: ReadonlySet<string>): number | undefined {
+function firstUndisplayableQueryValueStart(
+  text: string,
+  displayableParams: ReadonlySet<string>,
+): number | undefined {
   let keyStart = -1;
   let readingKey = false;
   for (let i = 0; i < text.length; i++) {
@@ -42,14 +47,14 @@ function schemeSpans(text: string): SchemeSpan[] {
   return spans;
 }
 
-/** Render only unambiguous URL spans; all scans/slices cover disjoint bounded ranges. */
+/** Render unambiguous URL spans with bounded monotonic scans and disjoint output slices (§13). */
 export function redactDiagnostic(
   text: string,
   renderUrl: (value: string) => string,
   displayableParams: ReadonlySet<string>,
 ): string {
-  const boundary = queryBoundary(text, displayableParams);
-  const visible = text.slice(0, boundary ?? text.length);
+  const redactionStart = firstUndisplayableQueryValueStart(text, displayableParams);
+  const visible = text.slice(0, redactionStart ?? text.length);
   const spans = schemeSpans(visible);
   const parts: string[] = [];
   let cursor = 0;
@@ -60,7 +65,7 @@ export function redactDiagnostic(
       // Backslashes include CrewError-escaped controls and WHATWG slash normalization (§13).
       const ch = visible[authorityEnd]!;
       const code = ch.charCodeAt(0);
-      const ambiguous = /[\s'"<>`\\]/.test(ch) || code < 0x20 || (code >= 0x7f && code <= 0x9f);
+      const ambiguous = /[\s'"<>`\\]/.test(ch) || isControlCharacterCode(code);
       if (ambiguous) return `${parts.join("")}${visible.slice(cursor, span.start)}***`;
       authorityEnd++;
     }
@@ -81,6 +86,6 @@ export function redactDiagnostic(
     parts.push(visible.slice(cursor, span.start), rendered, visible.slice(trimmedEnd, bodyEnd));
     cursor = bodyEnd;
   }
-  parts.push(visible.slice(cursor), boundary === undefined ? "" : "***");
+  parts.push(visible.slice(cursor), redactionStart === undefined ? "" : "***");
   return parts.join("");
 }

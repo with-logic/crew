@@ -31,6 +31,7 @@
  * the `safe*` / `redact*` helpers before it reaches a stream.
  */
 
+import { isControlCharacterCode } from "./control-characters.ts";
 import { redactDiagnostic } from "./diagnostic-spans.ts";
 
 /**
@@ -63,9 +64,7 @@ export function sanitizeLine(text: string): string {
   let out = "";
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
-    const isC0 = code < 0x20 || code === 0x7f;
-    const isC1 = code >= 0x80 && code <= 0x9f;
-    if (isC0 || isC1) {
+    if (isControlCharacterCode(code)) {
       out += `\\x${code.toString(16).padStart(2, "0")}`;
       continue;
     }
