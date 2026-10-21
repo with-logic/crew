@@ -18,14 +18,7 @@ import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 /** Load and validate the skill at `path`. Throws `invalid_skill` on any failure. */
 export function loadSkill(path: string): LoadedSkill {
   const skillMdPath = join(path, "SKILL.md");
-  if (!exists(skillMdPath)) {
-    throw new CrewError(
-      "invalid_skill",
-      `no SKILL.md in \`${path}\` — every skill directory needs one`,
-      { path },
-    );
-  }
-  assertNoManifestLink(skillMdPath, path);
+  assertManifestIsNotSymlink(skillMdPath, path);
   const raw = readText(skillMdPath);
   const { data } = extractFrontmatter(raw);
   const frontmatter = validateFrontmatter(data);
@@ -35,14 +28,7 @@ export function loadSkill(path: string): LoadedSkill {
 /** Load only the declared skill name from `SKILL.md`, for tap indexing. */
 export function loadSkillName(path: string): string {
   const skillMdPath = join(path, "SKILL.md");
-  if (!exists(skillMdPath)) {
-    throw new CrewError(
-      "invalid_skill",
-      `no SKILL.md in \`${path}\` — every skill directory needs one`,
-      { path },
-    );
-  }
-  assertNoManifestLink(skillMdPath, path);
+  assertManifestIsNotSymlink(skillMdPath, path);
   const raw = readText(skillMdPath);
   const { data } = extractFrontmatter(raw);
   return validateFrontmatterName(data);
@@ -53,10 +39,20 @@ export function hasSkillMd(path: string): boolean {
   return exists(join(path, "SKILL.md"));
 }
 
-/** Manifest links cannot supply metadata from outside the skill (§9 step 4). */
-function assertNoManifestLink(manifest: string, path: string): void {
-  if (!lstatSync(manifest).isSymbolicLink()) return;
-  throw new CrewError("invalid_skill", `SKILL.md in \`${path}\` must not be a symbolic link`, {
-    path,
-  });
+/** Require a manifest at the expected path; reject every symlink, including internal links (§9 step 4). */
+function assertManifestIsNotSymlink(manifestPath: string, skillDirectory: string): void {
+  const manifest = lstatSync(manifestPath, { throwIfNoEntry: false });
+  if (!manifest) {
+    throw new CrewError(
+      "invalid_skill",
+      `no SKILL.md in \`${skillDirectory}\` — every skill directory needs one`,
+      { path: skillDirectory },
+    );
+  }
+  if (!manifest.isSymbolicLink()) return;
+  throw new CrewError(
+    "invalid_skill",
+    `SKILL.md in \`${skillDirectory}\` must not be a symbolic link`,
+    { path: skillDirectory },
+  );
 }

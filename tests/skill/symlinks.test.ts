@@ -20,7 +20,7 @@ import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts
 const original = { ...claudeCodeAdapter };
 afterEach(() => Object.assign(claudeCodeAdapter, original));
 
-function linkedSkill(mode: "absolute" | "relative" | "internal"): string {
+function makeSkillWithSymlinkedManifest(mode: "absolute" | "relative" | "internal"): string {
   const root = makeTempDir();
   const outside = makeSkill(root, "outside", skillFrontmatter({ name: "outside" }));
   const skill = join(root, "nested", "linked");
@@ -38,13 +38,15 @@ for (const load of [loadSkill, loadSkillName]) {
   test.each(["absolute", "relative", "internal"] as const)(
     `C-SPEC-15 ${load.name} rejects %s manifest links before reading them`,
     (mode) => {
-      expect(() => load(linkedSkill(mode))).toThrow("must not be a symbolic link");
+      expect(() => load(makeSkillWithSymlinkedManifest(mode))).toThrow(
+        "must not be a symbolic link",
+      );
     },
   );
 }
 
 test("C-SPEC-15 manifest rejection happens before target-file access", () => {
-  const skill = linkedSkill("absolute");
+  const skill = makeSkillWithSymlinkedManifest("absolute");
   const target = readlinkSync(join(skill, "SKILL.md"));
   chmodSync(target, 0);
   try {
@@ -62,10 +64,13 @@ test("C-SPEC-15 an external manifest link cannot create an agent install or stat
   claudeCodeAdapter.projectPath = claudeCodeAdapter.userPath;
   claudeCodeAdapter.detect = () => true;
   const output = captureStreams();
-  const code = runCli(["install", linkedSkill("absolute"), "--agent", "claude-code", "--json"], {
-    home,
-    streams: output.streams,
-  });
+  const code = runCli(
+    ["install", makeSkillWithSymlinkedManifest("absolute"), "--agent", "claude-code", "--json"],
+    {
+      home,
+      streams: output.streams,
+    },
+  );
   expect(code).toBe(4);
   expect(output.stdout() + output.stderr()).toContain("invalid_skill");
   expect(readdirSync(claudeCodeAdapter.userPath())).toEqual([]);
