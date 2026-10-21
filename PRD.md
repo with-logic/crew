@@ -1442,6 +1442,13 @@ soft outcome: exit code stays 0 for an update run whose only
 abnormalities are `source_gone`. Removal of an unwanted local skill is
 always explicit (`crew uninstall <selector>`).
 
+**Human source-absence results.** A `source_gone` row and its summary
+MUST describe the source as no longer available without assuming that
+it is remote or was deliberately removed upstream. The row MUST also
+say that the installed copy is kept. This presentation applies equally
+to Git and local path sources and does not change the machine outcome,
+its JSON shape, the soft exit code, or install/state preservation.
+
 **Local source changes during inspection.** For a path-kind tap, a skill
 root can disappear or become a file or looping symlink after its
 availability check succeeds. If hashing or manifest loading then fails
@@ -1635,7 +1642,9 @@ payload is identical to `crew update --dry-run --json` (including
 `dry_run: true`). Only the human rendering differs: it is trimmed to
 the rows that answer "what would change" — `would_update`, `would_add`,
 `source_gone`, and failures — and omits `up_to_date` and `skipped`
-rows. When nothing would change it prints a single line saying so.
+rows. Source-absence rows use the same neutral wording and kept-copy
+notice as `crew update` (§10.1), including in `--dry-run` output.
+When nothing would change it prints a single line saying so.
 
 ### 10.2 `crew autoupdate`
 
@@ -2113,7 +2122,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 | `no_skills_found` | 4 | A directory source expanded to zero valid skills. |
 | `source_unreachable` | 5 | Network or git failure acquiring a source, or filesystem failure reading source files. |
 | `ref_not_found` | 5 | Ref doesn't exist in the repo. |
-| `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
+| `source_gone` | 0 | On update, the skill is no longer present in a resolved Git source, or its recorded local path root is unavailable under the rules in §10.1. Soft outcome; local install is preserved. Never causes a non-zero exit. |
 | `tap_missing` | 0 | On update, the installed skill's tap is no longer in `config.yaml` (e.g. after `crew tap remove --force`). Soft outcome; local install is preserved. Never causes a non-zero exit. |
 | `ambiguous_reference` | 4 | A reference has more than one valid resolution across taps, skills, and namespaces, and the user is non-interactive or the prompt was aborted. |
 | `ambiguous_dependency` | 4 | A dependency's bare name is ambiguous across taps. |
@@ -2733,6 +2742,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-40 | §10.1.1 | If rollback-directory cleanup fails after a new tap child is successfully added, the child remains installed and recorded in state, and cleanup failure alone does not make the run fail. Human output displays the cleanup warning and leftover path; JSON includes the diagnostic in an optional `warnings` array on the successful `added` row. When cleanup succeeds, that row omits `warnings`. |
 | C-UPD-44 | §10.1 | After a local path skill root passes its availability check, a qualifying source hash/load lookup failure reports `source_gone` only when a fresh check finds that same root missing, non-directory, or a looping link. Normal and preview runs preserve the affected install, marker, and logical state entry, continue healthy selected entries, and exit 0 when this is the only abnormality. Previews leave installed/store/state bytes unchanged. Missing or invalid manifests in a still-resolvable directory, original permission failures, parser/validation errors, and other operational failures remain hard even if the root disappears later. |
 | C-UPD-45 | §10.1, §10.1.1, §11.1 | A moved skill with no applicable recorded agent targets (empty, unknown-only, or unsupported scope) reports a soft `skipped` outcome after source validation in real and preview runs, without staging or changing installed copies, markers, or its complete state entry. Other selected entries still process, and restoring an applicable recorded target permits retry. Any existing-entry update with zero completed targets, including all safety skips, preserves its complete state entry and remains retryable; per-target diagnostics, soft safety skips, successful partial updates, and hard-failure retry semantics are preserved. |
+| C-UPD-46 | §10.1, §10.1.1, §13 | Human `source_gone` rows and update summaries describe source absence without assuming remote/upstream removal, for both Git and local path sources; rows say that the installed copy is kept. Update, update preview, and outdated preserve the existing JSON shape/kind, soft exit code, install/marker/state preservation, and quiet suppression. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |

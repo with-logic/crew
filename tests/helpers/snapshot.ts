@@ -11,3 +11,10 @@ export function snapshotFiles(
 ): void {
   for (const entry of walk(root)) if (entry.isFile) files[key(entry)] = readFileSync(entry.absPath);
 }
+
+/** Snapshot regular files keyed by relative path while preserving traversal order (§10.1). */
+export function snapshot(root: string): Record<string, Buffer> {
+  const files: Record<string, Buffer> = {};
+  snapshotFiles(root, files, (entry) => entry.relPath);
+  return files;
+}
