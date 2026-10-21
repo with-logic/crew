@@ -65,8 +65,11 @@ function copyDirInto(
 /** A case-folding destination can alias an earlier copied symlink (§12.1). */
 function rejectDestinationSymlink(path: string): void {
   if (lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink()) {
-    throw new CrewError("usage_error", `Refusing to copy through destination symlink: ${path}`, {
-      path,
-    });
+    throw new CrewError(
+      "usage_error",
+      `Refusing to copy through destination symlink: ${path}`,
+      { path },
+      "Rename case-colliding source entries or remove destination symlinks, then retry.",
+    );
   }
 }
