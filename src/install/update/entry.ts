@@ -14,17 +14,16 @@ import { existsSync } from "node:fs";
 import { cwdForEntry } from "../../agents/adapter.ts";
 import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
-import { loadSkill } from "../../skill/load.ts";
 import { type AcquiredTap, withAcquiredSkillPath } from "../../sources/acquire/index.ts";
 import { isGistTap } from "../../sources/gist.ts";
-import { hashSourceDirectory, isSourceDirectory } from "../../sources/read.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { peekResolvedSha } from "./peek.ts";
-import { reinstallIntoAgents } from "./reinstall.ts";
+import { groupRecordedTargets, reinstallIntoAgents } from "./reinstall.ts";
 import { rowFor } from "./row.ts";
+import { readUpdateSource } from "./source.ts";
 import { entryWithGistFilename } from "./source-path.ts";
 import { rebuildStateEntry } from "./state.ts";
 import type { InternalOutcome, UpdateRow } from "./types.ts";
@@ -47,8 +46,12 @@ export function updateOneEntry(
     const hardFailure =
       outcome.kind === "updated" && outcome.per_target.some((t) => t.kind === "failed");
     let next = state;
-    // §10.1: one revision covers all targets; retain it until failed targets can retry.
-    if (outcome.kind === "updated" && !hardFailure) {
+    // §10.1: advancing a shared revision requires completion without hard failures.
+    const hasCompletedTarget =
+      outcome.kind === "updated" &&
+      outcome.per_target.some((t) => t.kind === "installed" || t.kind === "up_to_date");
+    const canAdvanceRevision = hasCompletedTarget && !hardFailure;
+    if (canAdvanceRevision) {
       const nonFailedTargets = outcome.per_target.map((t) => t.agent);
       const newEntry = rebuildStateEntry(
         selectedEntry,
@@ -156,16 +159,12 @@ function applyUpdate(
     return { kind: "skipped", reason: "pinned to tag; upstream moved" };
   }
 
-  // §10.1: re-expansion handles removed children of tracked whole-tap installs;
-  // individual path sources rely on this directory check.
-  if (newSha === null && !isSourceDirectory(sourcePath)) return { kind: "source_gone" };
-  const sourceHash = newSha === null ? hashSourceDirectory(sourcePath) : undefined;
-  if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
-    if (newSha !== null) return { kind: "up_to_date" };
-    if (sourceHash === entry.content_hash) return { kind: "up_to_date" };
-  }
-
-  const loaded = loadSkill(sourcePath, isGistTap(tap));
+  // §10.1: validate the source before a no-target skip so invalid metadata still fails.
+  const source = readUpdateSource(entry, tap, sourcePath, newSha, force);
+  if (source.kind !== "ready") return source;
+  const { loaded, sourceHash } = source;
+  const targetGroups = groupRecordedTargets(entry, entryCwd);
+  if (targetGroups.size === 0) return { kind: "skipped", reason: "no applicable agent targets" };
   if (dryRun) return { kind: "would_update", new_sha: newSha };
   const staged = stageIntoStore(loaded.path, entry.name, newSha, home, sourceHash, isGistTap(tap));
   const perTarget = reinstallIntoAgents({
@@ -176,6 +175,7 @@ function applyUpdate(
     newSha,
     force,
     entryCwd,
+    targetGroups: targetGroups.values(),
   });
   return {
     kind: "updated",

@@ -6,7 +6,11 @@ import { CrewError } from "../core/errors.ts";
 import { hashDirectory } from "../hash/content.ts";
 import { copyTree } from "../util/copy.ts";
 import { isInside, readBytes, type WalkedEntry, type WalkOptions, walk } from "../util/fs.ts";
-import { readSourceFile, sourceReadFailure } from "../util/source-read.ts";
+import {
+  isMissingSourcePathError,
+  readSourceFile,
+  sourceReadFailure,
+} from "../util/source-read.ts";
 
 /** Missing paths are absent; inaccessible source directories are operational failures. */
 export function isSourceDirectory(path: string, followSymlinks = true): boolean {
@@ -15,8 +19,7 @@ export function isSourceDirectory(path: string, followSymlinks = true): boolean 
     accessSync(path, constants.X_OK);
     return true;
   } catch (err) {
-    const { code } = err as NodeJS.ErrnoException;
-    if (code === "ENOENT" || code === "ENOTDIR" || code === "ELOOP") return false;
+    if (isMissingSourcePathError(err)) return false;
     throw sourceDirectoryFailure(path, err);
   }
 }
@@ -60,12 +63,14 @@ export function walkSourceDirectory(path: string, options: WalkOptions): WalkedE
 }
 
 function sourceDirectoryFailure(path: string, err: unknown): CrewError {
-  return new CrewError(
+  const error = new CrewError(
     "source_unreachable",
     `cannot inspect source \`${path}\`: ${(err as Error).message}`,
     { path },
     "Check that the source directory can be listed and searched, and that you can access its parent directories.",
   );
+  Object.defineProperty(error, "cause", { value: err, enumerable: false });
+  return error;
 }
 
 /** Hash an acquired source; target and store hashing retain their existing error behavior. */
