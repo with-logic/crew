@@ -45,10 +45,12 @@ export const MANAGING: CommandGroup = {
           installed from it. Pinned SHAs are skipped unless{" "}
           <span className={styles.flag}>--force</span>.{" "}
           <span className={styles.flag}>--dry-run</span> previews what would change: taps still
-          refresh, but nothing you have installed is touched. If adding a new tap skill fails for an
-          agent, update reports the target and reason, including which successful targets retain
-          copies. The next update that re-expands the affected tap group retries that skill, unless
-          it is a dry run.
+          refresh, but nothing you have installed is touched. Invalid manifests in directory taps
+          are reported with their source path and reason while healthy skills continue updating.
+          Existing copies stay intact when upstream becomes invalid. If adding a new tap skill fails
+          for an agent, update reports the target and reason, including which successful targets
+          retain copies. The next update that re-expands the affected tap group retries that skill,
+          unless it is a dry run.
         </>
       ),
     },

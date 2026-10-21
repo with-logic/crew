@@ -50,11 +50,11 @@ describe("tap scan cache child discovery", () => {
 
     const otherTap = { ...tap, name: "other" };
     const children = cache.children(otherTap, "/unused", root);
-    expect(children.map((child) => child.name)).toEqual(["demo"]);
+    expect(children.children.map((child) => child.name)).toEqual(["demo"]);
     expect(cache.children(otherTap, "/unused", root)).toBe(children);
     const otherRoot = makeTempDir("crew-scan-other-root-");
     makeSkill(otherRoot, "second", skillFrontmatter({ name: "second" }));
-    expect(cache.children(tap, "/unused", otherRoot).map((child) => child.name)).toEqual([
+    expect(cache.children(tap, "/unused", otherRoot).children.map((child) => child.name)).toEqual([
       "second",
     ]);
   });
@@ -83,8 +83,31 @@ describe("tap scan cache child discovery", () => {
       expect.objectContaining({ code: "source_unreachable" }),
     );
     expect(
-      cache.children({ ...tap, name: "repaired" }, "/unused", root).map((child) => child.name),
+      cache
+        .children({ ...tap, name: "repaired" }, "/unused", root)
+        .children.map((child) => child.name),
     ).toEqual(["demo"]);
+  });
+
+  test("C-UPD-18c the cached catalog retains rejected locations beside healthy children", () => {
+    const root = makeTempDir("crew-scan-rejected-");
+    makeSkill(root, "bad", skillFrontmatter({ name: "BAD_NAME" }));
+    makeSkill(root, "healthy", skillFrontmatter({ name: "healthy" }));
+    const tap: TapConfig = {
+      name: "t",
+      kind: "path",
+      path: root,
+      registered: true,
+      url: "",
+      subpath: "",
+    };
+    const cache = makeTapScanCache();
+    const catalog = cache.children(tap, "/unused", root);
+    expect(catalog.children.map((child) => child.name)).toEqual(["healthy"]);
+    expect(catalog.skipped).toMatchObject([{ tapRelativePath: "bad", code: "invalid_skill" }]);
+    makeSkill(root, "bad", skillFrontmatter({ name: "repaired" }));
+    expect(cache.children(tap, "/unused", root)).toBe(catalog);
+    expect(cache.children(tap, "/unused", root).skipped).toBe(catalog.skipped);
   });
 });
 

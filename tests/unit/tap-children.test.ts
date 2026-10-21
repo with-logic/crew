@@ -27,15 +27,15 @@ describe("currentTapChildren", () => {
     const linked = join(root, "linked");
     symlinkSync(skill, linked);
     const tap = pathTap(linked);
-    expect(currentTapChildren({ ...tap, kind: "git" }, "/unused", linked)).toEqual([]);
-    expect(currentTapChildren(tap, "/unused", linked)[0]?.name).toBe("real");
+    expect(currentTapChildren({ ...tap, kind: "git" }, "/unused", linked).children).toEqual([]);
+    expect(currentTapChildren(tap, "/unused", linked).children[0]?.name).toBe("real");
   });
 
   test("root-skill tap is returned with an empty tap-relative path", () => {
     const root = makeTempDir("tap-children-root-");
     makeSkill(root, ".", skillFrontmatter({ name: "declared-root" }));
 
-    const children = currentTapChildren(pathTap(root), "/unused", root);
+    const { children } = currentTapChildren(pathTap(root), "/unused", root);
 
     expect(children).toEqual([
       {
@@ -44,5 +44,22 @@ describe("currentTapChildren", () => {
         tapRelativePath: "",
       },
     ]);
+  });
+
+  test("C-UPD-18c a rejected root retains its path and reason without a name", () => {
+    const root = makeTempDir("tap-children-invalid-root-");
+    makeSkill(root, ".", skillFrontmatter({ name: "BAD_NAME" }));
+    expect(currentTapChildren(pathTap(root), "/unused", root)).toEqual({
+      children: [],
+      skipped: [
+        {
+          path: root,
+          tapRelativePath: "",
+          namespace: null,
+          code: "invalid_skill",
+          message: expect.stringContaining("BAD_NAME"),
+        },
+      ],
+    });
   });
 });
