@@ -11,16 +11,17 @@ import { lstatSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
-import { readSourceFrontmatter, readSourceText } from "../sources/read.ts";
-import { exists } from "../util/fs.ts";
+import { exists, readText } from "../util/fs.ts";
+import { readSourceFile } from "../util/source-read.ts";
 import { extractFrontmatter } from "./frontmatter.ts";
+import { readFrontmatter } from "./read-frontmatter.ts";
 import { validateFrontmatter, validateFrontmatterName } from "./validate.ts";
 
 /** Load and validate a skill; unreadable bytes are operational failures (§9, §13). */
 export function loadSkill(path: string): LoadedSkill {
   const skillMdPath = join(path, "SKILL.md");
   assertManifestIsNotSymlink(skillMdPath, path);
-  const raw = readSourceText(skillMdPath);
+  const raw = readSourceFile(skillMdPath, readText);
   const { data } = extractFrontmatter(raw);
   const frontmatter = validateFrontmatter(data);
   return { path, frontmatter, skillMd: raw };
@@ -30,7 +31,7 @@ export function loadSkill(path: string): LoadedSkill {
 export function loadSkillName(path: string): string {
   const skillMdPath = join(path, "SKILL.md");
   assertManifestIsNotSymlink(skillMdPath, path);
-  return validateFrontmatterName(readSourceFrontmatter(skillMdPath));
+  return validateFrontmatterName(readSourceFile(skillMdPath, readFrontmatter));
 }
 
 /** True iff `path` contains a `SKILL.md`. Does not validate. */

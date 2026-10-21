@@ -53,6 +53,8 @@ for (const file of ["SKILL.md", "asset.txt"]) {
       }),
     ).toBe(0);
     const before = readState(home);
+    const manifestBefore = readFileSync(join(target, "demo", "SKILL.md"));
+    const blockedBefore = readFileSync(join(target, "demo", file));
     chmodSync(blocked, 0);
     try {
       const capture = captureStreams();
@@ -61,7 +63,8 @@ for (const file of ["SKILL.md", "asset.txt"]) {
       expect(exit).toBe(1);
       expect(result.rows[0].outcome.error.code).toBe("source_unreachable");
       expect(readState(home)).toEqual(before);
-      expect(existsSync(join(target, "demo", "SKILL.md"))).toBe(true);
+      expect(readFileSync(join(target, "demo", "SKILL.md"))).toEqual(manifestBefore);
+      expect(readFileSync(join(target, "demo", file))).toEqual(blockedBefore);
     } finally {
       chmodSync(blocked, 0o600);
     }
@@ -84,6 +87,7 @@ for (const brokenFirst of [true, false]) {
     ).toBe(0);
     const brokenBefore = readState(home).installations.find((entry) => entry.name === "broken");
     const brokenMarker = readFileSync(join(target, "broken", ".crew.json"), "utf8");
+    const brokenManifest = readFileSync(join(target, "broken", "SKILL.md"));
     writeFileSync(join(healthy, "asset.txt"), "updated healthy bytes");
     makeSkill(healthyRoot, "new-child", skillFrontmatter({ name: "new-child" }));
     const manifest = join(broken, "SKILL.md");
@@ -117,6 +121,7 @@ for (const brokenFirst of [true, false]) {
       const state = readState(home);
       expect(state.installations.find((entry) => entry.name === "broken")).toEqual(brokenBefore);
       expect(readFileSync(join(target, "broken", ".crew.json"), "utf8")).toBe(brokenMarker);
+      expect(readFileSync(join(target, "broken", "SKILL.md"))).toEqual(brokenManifest);
       expect(readFileSync(join(target, "healthy", "asset.txt"), "utf8")).toBe(
         "updated healthy bytes",
       );

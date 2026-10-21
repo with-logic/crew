@@ -14,16 +14,34 @@ function makeSkillDirectory(rawSkillMd: string): string {
 }
 
 describe("loadSkillName", () => {
-  test("unreadable SKILL.md is source_unreachable", () => {
+  test.each([loadSkill, loadSkillName])(
+    "unreadable SKILL.md is source_unreachable (%p)",
+    (load) => {
+      const skill = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
+      const manifest = join(skill, "SKILL.md");
+      chmodSync(manifest, 0);
+      try {
+        expect(() => load(skill)).toThrow(
+          expect.objectContaining({
+            code: "source_unreachable",
+            details: { path: manifest },
+            remedy: expect.stringContaining("source file"),
+          }),
+        );
+      } finally {
+        chmodSync(manifest, 0o600);
+      }
+    },
+  );
+
+  test("manifest traversal permissions retain their native error", () => {
     const skill = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
-    const manifest = join(skill, "SKILL.md");
-    chmodSync(manifest, 0);
+    chmodSync(skill, 0o400);
     try {
-      expect(() => loadSkillName(skill)).toThrow(
-        expect.objectContaining({ code: "source_unreachable" }),
-      );
+      expect(() => loadSkill(skill)).toThrow(expect.objectContaining({ code: "EACCES" }));
+      expect(() => loadSkillName(skill)).toThrow(expect.objectContaining({ code: "EACCES" }));
     } finally {
-      chmodSync(manifest, 0o600);
+      chmodSync(skill, 0o700);
     }
   });
 

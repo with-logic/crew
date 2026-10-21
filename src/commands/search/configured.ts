@@ -43,11 +43,12 @@ function collectHitsFromTap(
       warnings.push(`warning: tap \`${tap.name}\` skipped — ${err.message}`);
       return;
     }
-    if (
+    // Source-file read failures carry their local path; acquisition failures do not.
+    const isSourceReadFailure =
       err instanceof CrewError &&
       err.code === "source_unreachable" &&
-      typeof err.details["path"] === "string"
-    ) {
+      typeof err.details["path"] === "string";
+    if (isSourceReadFailure) {
       warnings.push(
         `warning: tap \`${tap.name}\` skipped (${err.code}) — ${displayText(err.message)}`,
       );

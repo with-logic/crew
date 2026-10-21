@@ -31,9 +31,13 @@ import { walk } from "../util/fs.ts";
  * Compute the content hash of a directory.
  *
  * @param dir - directory path to hash.
+ * @param readFile - regular-file reader; traversal and symlink reads retain native errors.
  * @returns `sha256:<64 hex chars>` — always 71 characters total.
  */
-export function hashDirectory(dir: string): string {
+export function hashDirectory(
+  dir: string,
+  readFile: (path: string) => Buffer = readFileSync,
+): string {
   type Tuple = { relPath: string; fileSha: string };
   const tuples: Tuple[] = [];
 
@@ -49,7 +53,7 @@ export function hashDirectory(dir: string): string {
     if (e.isSymlink) {
       fileSha = sha256OfBytes(Buffer.from(readlinkSync(e.absPath), "utf8"));
     } else {
-      fileSha = sha256OfBytes(readFileSync(e.absPath));
+      fileSha = sha256OfBytes(readFile(e.absPath));
     }
     tuples.push({ relPath: e.relPath, fileSha });
   }
