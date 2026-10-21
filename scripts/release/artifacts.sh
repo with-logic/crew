@@ -65,7 +65,7 @@ fi
 
 }
 
-regenerate_release_registry() {
+regenerate_release_known_tap_registry() {
 # Refresh the bundled known-tap registry snapshot from the reviewed,
 # commit-pinned manifest. This deliberately does not advance pins from
 # trackingRef; pin refreshes must happen in ordinary reviewed PRs.
@@ -121,6 +121,6 @@ PY
 
 write_release_artifacts() {
   update_release_metadata
-  regenerate_release_registry
+  regenerate_release_known_tap_registry
   update_release_changelog
 }
