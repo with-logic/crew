@@ -3,7 +3,7 @@
 # Sourcing only defines the function. Run from ROOT with next_version set;
 # pr_body and changelog_section are outputs in the caller shell.
 
-generate_release_notes() {
+gather_release_changes() {
 # ---------- 3. Gather changes since last tag ------------------------------
 
 last_tag="$(git describe --tags --abbrev=0 2>/dev/null || echo "")"
@@ -23,6 +23,9 @@ if [ -z "$commit_log" ]; then
   exit 1
 fi
 
+}
+
+request_release_summary() {
 # ---------- 4. Ask Claude for a structured summary ------------------------
 
 echo "==> Asking Claude to summarize changes ${range_label}"
@@ -78,6 +81,9 @@ if [ -z "$response" ]; then
   exit 1
 fi
 
+}
+
+parse_release_summary() {
 # Claude reports logical failures (auth, budget, refusal) as a
 # top-level `{ "is_error": true, "result": "..." }` envelope and still
 # exits 0. Some Claude CLI versions wrap the result envelope in an
@@ -113,4 +119,10 @@ if [ -z "$changelog_section" ] || [ "$changelog_section" = "null" ]; then
   echo "error: claude response missing changelog" >&2
   exit 1
 fi
+}
+
+generate_release_notes() {
+  gather_release_changes
+  request_release_summary
+  parse_release_summary
 }
