@@ -110,7 +110,7 @@ function formatKnownSection(
 
 function formatConfiguredRows(hits: readonly SearchHit[], style: Styler, width: number): string[] {
   const displayName = (h: SearchHit): string =>
-    h.namespace === null ? h.name : `${h.namespace}/${h.name}`;
+    sanitizeLine(h.namespace === null ? h.name : `${h.namespace}/${h.name}`);
   const nameWidth = Math.max(...hits.map((h) => displayName(h).length));
   const descStart = 2 + 1 + 1 + nameWidth + 2;
   const descBudget = Math.max(20, width - descStart);
@@ -137,13 +137,13 @@ function searchHitMark(hit: SearchHit, style: Styler): string {
 }
 
 function formatKnownRows(hits: readonly KnownSearchHit[], style: Styler, width: number): string[] {
-  const nameWidth = Math.max(...hits.map((h) => knownSkillRef(h).length));
+  const nameWidth = Math.max(...hits.map((h) => sanitizeLine(knownSkillRef(h)).length));
   const descStart = 4 + nameWidth + 2;
   const descBudget = Math.max(20, width - descStart);
   const rows = hits.map((h) => [
-    `    ${knownSkillRef(h)}`,
+    `    ${sanitizeLine(knownSkillRef(h))}`,
     style.dim(
-      `${truncate(sanitizeLine(h.description), descBudget)} (crew install ${knownInstallRef(h)})`,
+      `${truncate(sanitizeLine(h.description), descBudget)} (crew install ${sanitizeLine(knownInstallRef(h))})`,
     ),
   ]);
   return columns(rows, 2);
