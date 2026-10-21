@@ -84,9 +84,13 @@ export function hashSourceDirectory(path: string): string {
 }
 
 /** Copy an acquired source, distinguishing source permissions from destination failures. */
-export function copySourceTree(source: string, destination: string): void {
+export function copySourceTree(
+  source: string,
+  destination: string,
+  destinationRoot = destination,
+): void {
   try {
-    copyTree(source, destination, { stripRootMarker: true });
+    copyTree(source, destination, { destinationRoot, stripRootMarker: true });
   } catch (err) {
     const error = err as NodeJS.ErrnoException;
     const path = error.path!;

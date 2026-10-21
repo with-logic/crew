@@ -11,7 +11,9 @@
 
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
+import { displayText } from "../../refs/display-url.ts";
 import { shortenHome } from "../../util/format.ts";
+import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler, SymbolKind } from "../../util/term.ts";
 import { targetIssues, updatedRowStatus } from "./targets.ts";
 
@@ -83,7 +85,9 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
   o satisfies Extract<Outcome, { kind: "failed" }>;
   return {
     status: style.red("failed"),
-    detail: style.red(o.error.code.replace(/_/g, " ")),
+    detail: style.red(
+      sanitizeLine(displayText(`${o.error.code.replace(/_/g, " ")}: ${o.error.message}`)),
+    ),
     required,
   };
 }

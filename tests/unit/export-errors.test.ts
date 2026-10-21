@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
 import { paths } from "../../src/core/paths.ts";
@@ -113,4 +113,32 @@ test("C-INST-05d export preserves a source-authored scratch-index filename", () 
   const dest = join(makeTempDir("crew-export-index-dest-"), "out");
   exportTreeAt(repo, sha, "", dest);
   expect(readFileSync(join(dest, ".crew-export-index"), "utf8")).toBe("source bytes\n");
+});
+
+test("unexpected native spawn failures survive direct and captured export cleanup", () => {
+  const home = makeTempDir("crew-export-spawn-home-");
+  const clonePath = join(makeTempDir("crew-export-spawn-clone-"), "missing");
+  const sha = "0".repeat(40);
+  for (const captured of [false, true]) {
+    const dest = join(makeTempDir("crew-export-spawn-dest-"), "out");
+    let caught: unknown;
+    try {
+      if (captured) createExportedTree({ clonePath, sha, subpath: "", home });
+      else exportTreeAt(clonePath, sha, "", dest);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(TypeError);
+    const error = caught as NodeJS.ErrnoException;
+    expect(error.code).toBe("ENOENT");
+    expect(error.path).toBe("git");
+    expect(error.syscall).toMatch(/spawn/);
+    expect(error.message).toContain("ENOENT");
+    if (captured) expect(readdirSync(paths(home).gitCacheDir)).toEqual([]);
+    else {
+      expect(existsSync(dest)).toBe(true);
+      expect(existsSync(`${dest}.crew-export-index`)).toBe(false);
+    }
+  }
 });
