@@ -6,12 +6,12 @@
  * shallow discovery separate from the update orchestration.
  */
 
+import { CrewError } from "../core/errors.ts";
 import type { TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { isGistTap } from "../sources/gist.ts";
 import { isSourceDirectory } from "../sources/read.ts";
-import { isSourceReadFailure } from "../util/source-read.ts";
-import { indexTap } from "./tap-index.ts";
+import { indexTap, type RejectedTapSkill } from "./tap-index.ts";
 
 export interface CurrentTapChild {
   readonly name: string;
@@ -19,16 +19,22 @@ export interface CurrentTapChild {
   readonly tapRelativePath: string;
 }
 
+export interface CurrentTapCatalog {
+  readonly children: readonly CurrentTapChild[];
+  readonly skipped: readonly RejectedTapSkill[];
+}
+
 export function currentTapChildren(
   tap: TapConfig,
   home: string,
   rootDir: string,
-): CurrentTapChild[] {
+): CurrentTapCatalog {
   const children: CurrentTapChild[] = [];
-  if (!isSourceDirectory(rootDir, tap.kind === "path")) return children;
+  const skipped: RejectedTapSkill[] = [];
+  if (!isSourceDirectory(rootDir, tap.kind === "path")) return { children, skipped };
   if (!isGistTap(tap) && hasSkillMd(rootDir)) {
-    pushLoaded(children, rootDir, "");
-    return children;
+    pushLoaded(children, skipped, rootDir);
+    return { children, skipped };
   }
   // `rootDir` is the caller's already-materialized root — the scratch
   // export of the group's ref, when it tracks one. Indexing the live
@@ -40,7 +46,7 @@ export function currentTapChildren(
       children.push({ name: loc.name, path: loc.path, tapRelativePath: loc.tapRelativePath });
     }
   }
-  return children;
+  return { children, skipped: index.skipped };
 }
 
 export function groupChildrenByName(
@@ -55,11 +61,15 @@ export function groupChildrenByName(
   return byName;
 }
 
-function pushLoaded(children: CurrentTapChild[], path: string, tapRelativePath: string): void {
+function pushLoaded(children: CurrentTapChild[], skipped: RejectedTapSkill[], path: string): void {
   try {
-    children.push({ name: loadSkillName(path), path, tapRelativePath });
+    children.push({ name: loadSkillName(path), path, tapRelativePath: "" });
   } catch (err) {
-    if (isSourceReadFailure(err)) throw err;
-    // Skip invalid names; same as tap indexing/search behavior.
+    if (!(err instanceof CrewError) || err.code !== "invalid_skill") throw err;
+    skipped.push({
+      path,
+      code: err.code,
+      message: err.message,
+    });
   }
 }
