@@ -1391,6 +1391,13 @@ between resolution and targeting:
 
 **Error isolation.** Every skill is processed independently. A failure — network error, fetch error, spec validation error on a newly pulled version, customized install detected, dependency resolution failure, target install failure — is recorded against that skill and does not stop processing of the rest. Exit code is 0 if all skills were either up-to-date, updated successfully, or cleanly skipped as customized. Exit code is 1 if any skill encountered a hard failure (network, fetch, validation).
 
+**Human existing-entry failures.** An ordinary per-skill `failed` outcome
+MUST show its error code and primary message in normal human output for
+`crew update` and `crew outdated`, including any retained recovery path
+already present in that message. Redact credentials throughout the displayed
+diagnostic and escape control characters. Preserve the raw JSON error fields,
+state/retry behavior, and exit codes.
+
 **Human per-target results.** When an existing skill's `updated` JSON
 outcome contains failed or safety-skipped targets, human output MUST name
 each affected agent and its error code/message or skip reason. Escape
@@ -2639,6 +2646,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-37 | §10.1, §11.1 | A selected entry whose skill moved to a different tap-relative path upstream is still updated in the same run that records the move: entry identity excludes the source path, so re-expansion rewriting it does not drop the entry from the selection. |
 | C-UPD-38 | §10.1.1 | A new tap child whose target installation fails produces a per-child `tap_error` naming failed targets and reasons and disclosing successful targets whose copies remain on disk. It exits 1 and is absent from state until every applicable target group succeeds. Remaining target groups, other children, and existing entries still process; the next non-dry-run update that re-expands the affected tap group retries the child. |
 | C-UPD-39 | §10.1 | For an existing skill update containing failed or safety-skipped targets, human output names each affected target. Its aggregate skill row is `partially updated` when any target installed or was already current; otherwise it is `failed` if any target failed, or `skipped`. Totals distinguish partial from full success while counting hard failures. JSON, state/retry behavior, and exit codes are unchanged. |
+| C-UPD-41 | §10.1, §10.1.1 | Normal human output for an existing-entry `failed` outcome in `crew update` and `crew outdated` shows its error code and primary message, including retained recovery paths already present. The whole diagnostic redacts credentials and escapes controls; raw JSON error fields, state/retry behavior, and exit codes remain unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
