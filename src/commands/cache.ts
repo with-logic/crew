@@ -35,7 +35,7 @@ export function cacheCommand(ctx: CommandContext): CommandOutput {
   }
   const p = paths(ctx.home);
   if (ctx.flags.dryRun) {
-    // Read-only preview: no lock, no deletion. Measure exactly what the
+    // Read-only preview: no state lock, no deletion. Measure exactly what the
     // real run would remove.
     const orphans = orphanStoreEntries(readState(ctx.home), ctx.home);
     let wouldFree = dirSize(p.cacheDir);

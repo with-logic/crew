@@ -21,8 +21,8 @@ import type { CommandContext, CommandOutput } from "../commands/types.ts";
 import { uninstallCommand } from "../commands/uninstall/index.ts";
 import { updateCommand } from "../commands/update/index.ts";
 import { CrewError } from "../core/errors.ts";
-import { lookup } from "../util/registry.ts";
 import { aliasFor, type CanonicalCommand } from "./aliases.ts";
+import { withCommandMaintenanceLock } from "./maintenance.ts";
 
 export type CommandHandler = (ctx: CommandContext) => CommandOutput;
 
@@ -59,8 +59,7 @@ export function dispatch(command: string, ctx: CommandContext): CommandOutput {
     positionalPrefix.length === 0
       ? ctx
       : { ...ctx, positional: [...positionalPrefix, ...ctx.positional] };
-  const handler = lookup(COMMAND_HANDLERS, canonical);
-  if (!handler) {
+  if (!isCanonicalCommand(canonical)) {
     throw new CrewError(
       "usage_error",
       `\`${command}\` is not a crew command.`,
@@ -68,5 +67,12 @@ export function dispatch(command: string, ctx: CommandContext): CommandOutput {
       "Run `crew help` to see what Homecrew can do.",
     );
   }
-  return handler(aliasCtx);
+  return withCommandMaintenanceLock(canonical, aliasCtx, () =>
+    COMMAND_HANDLERS[canonical](aliasCtx),
+  );
+}
+
+/** Own handler keys are exactly the canonical command union (§5.1). */
+function isCanonicalCommand(command: string): command is CanonicalCommand {
+  return Object.hasOwn(COMMAND_HANDLERS, command);
 }
