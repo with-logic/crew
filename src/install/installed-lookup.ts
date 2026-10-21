@@ -69,7 +69,10 @@ export function indexHasSameSource(index: InstalledSourceIndex, args: LookupArgs
 }
 
 /** Unknown state sources also reserve their location until ownership is resolved (§5.4). */
-export function indexHasForeignSource(index: InstalledSourceIndex, args: LookupArgs): boolean {
+export function indexHasDifferentOrUnresolvedSource(
+  index: InstalledSourceIndex,
+  args: LookupArgs,
+): boolean {
   const candidates = index.byLocation.get(
     installLocationKey(args.name, args.scope, args.projectRoot),
   );

@@ -7,7 +7,9 @@ import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
 import { nanobotAdapter } from "../../src/agents/nanobot.ts";
 import type { TapConfig } from "../../src/core/types.ts";
-import { assertChildOwnership } from "../../src/install/tap-reexpand/ownership.ts";
+import type { InstalledSourceIndex } from "../../src/install/installed-lookup.ts";
+import type { SourceIdentity } from "../../src/install/source-identity.ts";
+import { assertChildSourceOwnership } from "../../src/install/tap-reexpand/ownership.ts";
 import { makeTempDir } from "../helpers/fixtures.ts";
 
 let root: string;
@@ -39,7 +41,9 @@ const args = {
   tap,
   tapRelativePath: "skill",
 };
-const empty = () => ({ byLocation: new Map() });
+const empty = (): InstalledSourceIndex => ({
+  byLocation: new Map<string, (SourceIdentity | null)[]>(),
+});
 function marker() {
   return {
     schema_version: 1,
@@ -66,7 +70,7 @@ for (const kind of ["directory", "symlink", "unreadable"] as const) {
       chmodSync(file, 0);
     }
     try {
-      expect(() => assertChildOwnership(empty(), args, ["claude-code"])).toThrow(
+      expect(() => assertChildSourceOwnership(empty(), args, ["claude-code"])).toThrow(
         expect.objectContaining({ code: "name_conflict" }),
       );
     } finally {
@@ -80,7 +84,7 @@ test("C-INST-13j same path source aliases share a physical target", () => {
   mkdirSync(dest);
   writeFileSync(join(dest, ".crew.json"), JSON.stringify(marker()));
   expect(() =>
-    assertChildOwnership(empty(), args, ["unknown", "claude-code", "codex"]),
+    assertChildSourceOwnership(empty(), args, ["unknown", "claude-code", "codex"]),
   ).not.toThrow();
 });
 
@@ -92,23 +96,23 @@ test("C-INST-14 malformed path roots and empty git URLs cannot establish ownersh
     { ...marker(), tap_kind: "git", tap_url: "" },
   ]) {
     writeFileSync(join(dest, ".crew.json"), JSON.stringify(source));
-    expect(() => assertChildOwnership(empty(), args, ["claude-code"])).toThrow(
+    expect(() => assertChildSourceOwnership(empty(), args, ["claude-code"])).toThrow(
       expect.objectContaining({ code: "name_conflict" }),
     );
   }
 });
 
 test("C-INST-14 untracked destinations retain the installer contract", () => {
-  expect(() => assertChildOwnership(empty(), args, ["claude-code"])).not.toThrow();
+  expect(() => assertChildSourceOwnership(empty(), args, ["claude-code"])).not.toThrow();
   writeFileSync(join(root, "skill"), "untracked file");
-  expect(() => assertChildOwnership(empty(), args, ["claude-code"])).not.toThrow();
+  expect(() => assertChildSourceOwnership(empty(), args, ["claude-code"])).not.toThrow();
   rmSync(join(root, "skill"));
 });
 
 test("C-INST-14 inaccessible target ownership fails closed", () => {
   chmodSync(root, 0);
   try {
-    expect(() => assertChildOwnership(empty(), args, ["claude-code"])).toThrow(
+    expect(() => assertChildSourceOwnership(empty(), args, ["claude-code"])).toThrow(
       expect.objectContaining({ code: "name_conflict" }),
     );
   } finally {
@@ -120,7 +124,7 @@ test("C-INST-13e unsupported scope has no physical target to inspect", () => {
   const original = nanobotAdapter.userPath;
   nanobotAdapter.userPath = () => "";
   try {
-    expect(() => assertChildOwnership(empty(), args, ["nanobot"])).not.toThrow();
+    expect(() => assertChildSourceOwnership(empty(), args, ["nanobot"])).not.toThrow();
   } finally {
     nanobotAdapter.userPath = original;
   }

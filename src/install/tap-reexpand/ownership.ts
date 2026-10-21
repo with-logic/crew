@@ -8,12 +8,16 @@ import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import {
   type InstalledSourceIndex,
-  indexHasForeignSource,
+  indexHasDifferentOrUnresolvedSource,
   type LookupArgs,
 } from "../installed-lookup.ts";
 import { sameSourceIdentity, sourceIdentityOf } from "../source-identity.ts";
 
-export function assertChildOwnership(
+/**
+ * Reject different/unresolved state or target-marker sources with `name_conflict`.
+ * Absent markers retain the installer's untracked-directory/force rules (§13).
+ */
+export function assertChildSourceOwnership(
   index: InstalledSourceIndex,
   args: LookupArgs,
   agents: readonly string[],
@@ -21,10 +25,10 @@ export function assertChildOwnership(
   const conflict = (dest?: string): never => {
     throw new CrewError(
       "name_conflict",
-      `Cannot add \`${args.name}\`: its existing source differs or cannot be established${dest ? ` at \`${dest}\`` : ""}`,
+      `Cannot add \`${args.name}\`: its existing source differs or cannot be established${dest ? ` at \`${dest}\`` : ""}. Investigate its ownership metadata or uninstall the existing skill before switching sources; --force does not bypass this check.`,
     );
   };
-  if (indexHasForeignSource(index, args)) conflict();
+  if (indexHasDifferentOrUnresolvedSource(index, args)) conflict();
   const incoming = sourceIdentityOf(args.tap, args.tapRelativePath);
   const checked = new Set<string>();
   for (const name of agents) {
@@ -62,6 +66,7 @@ function markerSource(raw: unknown, args: LookupArgs): { tap: TapConfig; path: s
     m["scope"] !== args.scope ||
     typeof m["tap_name"] !== "string" ||
     typeof m["path"] !== "string" ||
+    isAbsolute(m["path"]) ||
     typeof m["tap_url"] !== "string" ||
     typeof m["tap_subpath"] !== "string" ||
     typeof m["tap_path"] !== "string"

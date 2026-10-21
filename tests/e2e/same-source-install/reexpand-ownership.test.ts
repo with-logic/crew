@@ -121,7 +121,17 @@ for (const owner of ["state", "marker", "missing-tap", "mixed-state"] as const) 
   }
 }
 
-for (const broken of ["invalid-json", "null", "kind", "url", "path", "schema"] as const) {
+for (const broken of [
+  "invalid-json",
+  "null",
+  "kind",
+  "url",
+  "path",
+  "schema",
+  "name",
+  "scope",
+  "absolute-path",
+] as const) {
   for (const flags of [["--force"], ["--force", "--dry-run"]]) {
     test(`C-INST-14 malformed marker ${broken} cannot bypass ownership ${flags.join(" ")}`, () => {
       const { home, invoke, first, dest } = fixture();
@@ -138,6 +148,9 @@ for (const broken of ["invalid-json", "null", "kind", "url", "path", "schema"] a
       if (broken === "url") marker.tap_url = 42;
       if (broken === "path") delete marker.path;
       if (broken === "schema") marker.schema_version = 2;
+      if (broken === "name") marker.name = "another-skill";
+      if (broken === "scope") marker.scope = "project";
+      if (broken === "absolute-path") marker.path = "/shared";
       const bytes = readFileSync(join(dest, "SKILL.md"), "utf8");
       const malformed =
         broken === "invalid-json" ? "{" : broken === "null" ? "null" : JSON.stringify(marker);
@@ -157,7 +170,6 @@ for (const broken of ["invalid-json", "null", "kind", "url", "path", "schema"] a
     });
   }
 }
-
 for (const preview of [false, true]) {
   test(`C-INST-13e marker-only canonical aliases are accepted (${preview})`, () => {
     const { home, invoke, first, dest } = fixture();

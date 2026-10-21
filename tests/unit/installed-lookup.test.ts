@@ -11,7 +11,7 @@ import { describe, expect, test } from "bun:test";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../src/core/types.ts";
 import {
   buildInstalledSourceIndex,
-  indexHasForeignSource,
+  indexHasDifferentOrUnresolvedSource,
   indexHasSameSource,
   noteInstalled,
 } from "../../src/install/installed-lookup.ts";
@@ -126,7 +126,7 @@ describe("installed source index", () => {
       config,
     );
     expect(
-      indexHasForeignSource(orphaned, {
+      indexHasDifferentOrUnresolvedSource(orphaned, {
         name: "docx",
         scope: "user",
         projectRoot: null,

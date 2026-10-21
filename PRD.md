@@ -1463,7 +1463,10 @@ On every `crew update` run, for each group of state entries sharing
    `name_conflict`, including with `--force`; preserve its bytes, marker,
    and state, and continue other children. A missing state tap or a
    present marker whose source metadata cannot be read or validated
-   cannot establish shared ownership and also blocks the addition.
+   cannot establish shared ownership and also produces `name_conflict`.
+   For a new child without a same-source state identity, full §9 step 4
+   validation precedes ownership checks: invalid frontmatter produces
+   `invalid_skill` even when a conflicting owner exists.
    Same-source tap aliases remain duplicates, but cannot hide another
    conflicting owner at that location. A directory without a marker
    retains the existing `untracked_directory`/`--force` rules (§13).
