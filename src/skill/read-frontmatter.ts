@@ -25,7 +25,6 @@ export function readFrontmatter(path: string): YamlValue {
   }
 }
 
-/** Track trim-equivalent delimiter lines with constant memory until a closing byte extent exists. */
 function frontmatterExtent(fd: number): number | "" | "---" {
   const buffer = Buffer.alloc(4096);
   const decoder = new StringDecoder("utf8");
