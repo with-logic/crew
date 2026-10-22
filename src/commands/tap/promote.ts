@@ -44,14 +44,12 @@ export function promoteExistingTap(
   };
   const state = readState(home);
   withTargetLocks(markerTargetBases(state.installations, cwd), (_failures, unavailableBases) => {
-    writeConfig(updated, home);
     const rewritten: StateFile = {
       ...state,
       installations: state.installations.map((e) =>
         e.source.tap === sameTarget.name ? { ...e, source: { ...e.source, tap: renamedName } } : e,
       ),
     };
-    if (renamedName !== sameTarget.name) writeState(rewritten, home);
     rewriteTapMarkers(
       {
         oldName: sameTarget.name,
@@ -62,5 +60,8 @@ export function promoteExistingTap(
       cwd,
       unavailableBases,
     );
+    if (renamedName !== sameTarget.name) writeState(rewritten, home);
+    // Keep promotion eligible for retry until authoritative markers and state agree (§11.1, §16.5).
+    writeConfig(updated, home);
   });
 }
