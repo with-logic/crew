@@ -17,7 +17,8 @@ import { readConfig } from "../../config/load.ts";
 import { readState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import { type AutoupdateRepair, repairAutoupdateDrift } from "./autoupdate.ts";
-import { checkAutoupdateDrift, checkStateMarkerDrift, type Finding } from "./checks.ts";
+import { checkAutoupdateDrift, checkStateMarkerDrift } from "./checks.ts";
+import type { Finding } from "./findings/index.ts";
 import { buildMarkerIndex } from "./markers/index.ts";
 import { repairStateUnderLock } from "./repair.ts";
 

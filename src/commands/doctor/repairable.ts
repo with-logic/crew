@@ -10,7 +10,7 @@
  * about behaviour.
  */
 
-import type { Finding } from "./checks.ts";
+import type { Finding, FindingCode } from "./findings/index.ts";
 
 /**
  * Codes `--repair` actually fixes. An allowlist on purpose: a new
@@ -34,7 +34,7 @@ import type { Finding } from "./checks.ts";
  *     vanished project's install isn't doctor's job, so it is a
  *     permanent heads-up rather than pending work.
  */
-const REPAIRABLE_CODES: ReadonlySet<string> = new Set([
+const REPAIRABLE_CODES: ReadonlySet<FindingCode> = new Set<FindingCode>([
   "state_entry_without_marker",
   "marker_without_state",
   "orphan_store_entry",
@@ -43,7 +43,7 @@ const REPAIRABLE_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /** True when `code` is one `crew doctor --repair` can actually fix. */
-export function isRepairableCode(code: string): boolean {
+export function isRepairableCode(code: FindingCode): boolean {
   return REPAIRABLE_CODES.has(code);
 }
 

@@ -93,7 +93,10 @@ commands that do what they say, across every agent you use.
    meta-skill can pull in a dozen others in one command.
 5. **Stay current automatically.** `crew update` pulls the latest versions
    of everything. Flip on autoupdate and a background job keeps every agent
-   fresh. If adding a new tap skill fails for an agent, update reports the
+   fresh. Whole-tap updates report invalid directory manifests with their source
+   path and reason, while healthy skills continue updating. Existing copies
+   stay intact when upstream becomes invalid. If adding a new tap skill fails
+   for an agent, update reports the
    target and reason and rolls back copies still owned by that attempt.
    Targets detected as changed by another writer are preserved. If ownership is lost or restoration
    fails, it reports the problem and any retained recovery path. The
@@ -173,7 +176,7 @@ When a command asks for an installed skill name, you can use the bare name
 | `crew uninstall <selector>…` | Remove installed skills from every agent they were installed into. A selector is a skill (`pdf`, `anthropic/pdf`), a tap (`acme`) to remove everything installed from it, or a namespace — qualified (`acme/marketing`) or bare when unique across your taps. `--all` removes everything at the target scope. Acts on one scope at a time: the user-scoped install by default, or the current project's with `--scope project`. |
 | `crew remove <name>…`, `crew rm <name>…` | Aliases for `crew uninstall`. |
 | `crew upgrade [<name>…]` | Alias for `crew update`. |
-| `crew update [<selector>…]` | Update all installed skills, or only those selected. A selector is a skill name (`pdf`, `anthropic/pdf`), a tap name (`acme`), or a namespace (`acme/marketing`); a tap or namespace updates everything installed from it, and a skill name wins over a same-named collection. Pinned SHAs are skipped unless `--force`. `--dry-run` previews pending updates and new tap skills: tap clones are still refreshed, but no installed skill, marker, store entry, or `state.json` changes. |
+| `crew update [<selector>…]` | Update all installed skills, or only those selected. A selector is a skill name (`pdf`, `anthropic/pdf`), a tap name (`acme`), or a namespace (`acme/marketing`); a tap or namespace updates everything installed from it, and a skill name wins over a same-named collection. Pinned SHAs are skipped unless `--force`. `--dry-run` previews pending updates and new tap skills: tap clones are still refreshed, but no installed skill, marker, store entry, or `state.json` changes. Project-scoped additions, warnings, and errors identify their project folder. |
 | `crew outdated [<name>…]` | Preview what `crew update` would change — pending updates, plus new skills added to a tap you installed whole. Same as `crew update --dry-run`, trimmed to what matters: tap clones are still refreshed, but nothing installed changes. |
 | `crew list` | List installed skills, grouped by scope, with sources and resolved SHAs. `--scope user` or `--scope project` narrows to one scope; `--agent <name>` and `--tap <name>` filter by agent or tap. |
 | `crew skills`, `crew ls` | Aliases for `crew list`. |

@@ -8,12 +8,26 @@
  */
 
 import type { TapConfig } from "../../core/types.ts";
-import { indexTap, type TapIndex } from "../tap-index.ts";
+import { sourceRelativePath } from "../../sources/path.ts";
+import { indexTap, type TapIndex, tapRoot } from "../tap-index.ts";
+import type { RejectedReferenceSkill } from "./diagnostics.ts";
 import type { NonTapNameCandidate, TapRoots } from "./types.ts";
 
+/** Reference-only namespace context, derived from the same indexed root (§8.3, §9). */
+export interface ReferenceTapIndex extends TapIndex {
+  readonly skipped: readonly RejectedReferenceSkill[];
+}
+
 /** Index `tap`, reading from its exported root when one was supplied. */
-export function indexTapAt(tap: TapConfig, home: string, roots: TapRoots): TapIndex {
-  return indexTap(tap, home, roots[tap.name]);
+export function indexTapAt(tap: TapConfig, home: string, roots: TapRoots): ReferenceTapIndex {
+  const root = roots[tap.name] ?? tapRoot(tap, home);
+  const index = indexTap(tap, home, root);
+  const skipped = index.skipped.map((skill): RejectedReferenceSkill => {
+    const parts = sourceRelativePath(root, skill.path).split("/");
+    const namespace = parts.length === 3 && parts[0] === "skills" ? parts[1]! : null;
+    return { ...skill, tap: tap.name, namespace };
+  });
+  return { ...index, skipped };
 }
 
 /**
@@ -22,7 +36,7 @@ export function indexTapAt(tap: TapConfig, home: string, roots: TapRoots): TapIn
  * caller is searching for a name and an unreadable tap simply cannot
  * contribute a candidate.
  */
-export function safeIndex(tap: TapConfig, home: string, roots: TapRoots): TapIndex | null {
+export function safeIndex(tap: TapConfig, home: string, roots: TapRoots): ReferenceTapIndex | null {
   try {
     return indexTapAt(tap, home, roots);
   } catch {
@@ -31,15 +45,12 @@ export function safeIndex(tap: TapConfig, home: string, roots: TapRoots): TapInd
 }
 
 /** The skill named `name` inside `tap`, preferring an unnamespaced match. */
-export function lookupInTap(
+export function lookupInIndex(
   tap: TapConfig,
-  home: string,
+  index: TapIndex,
   name: string,
-  roots: TapRoots,
 ): NonTapNameCandidate | null {
-  const idx = safeIndex(tap, home, roots);
-  if (!idx) return null;
-  const locs = idx.skills.get(name);
+  const locs = index.skills.get(name);
   if (!locs || locs.length === 0) return null;
   // Prefer unnamespaced. If the same name lives in multiple
   // namespaces, a 2-segment ref is ambiguous within the tap; we pick

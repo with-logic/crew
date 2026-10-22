@@ -48,12 +48,15 @@ export const MANAGING: CommandGroup = {
           fails. <span className={styles.flag}>--dry-run</span> previews what would change: taps
           still refresh, but nothing you have installed is touched. If a local skill directory
           disappears during source inspection, update keeps the installed copy and continues;
-          invalid manifests and permission failures still report errors. If adding a new tap skill
-          fails for an agent, update reports the target and reason and rolls back copies still owned
-          by that attempt. Targets detected as changed by another writer are preserved. Lost
-          ownership or restoration failure reports the problem and any retained recovery path. The
-          next update that re-expands the affected tap group retries that skill, unless it is a dry
-          run.
+          invalid manifests and permission failures still report errors. Invalid manifests in
+          whole-tap updates are reported with their source path and reason while healthy skills
+          continue updating. Existing copies stay intact when upstream becomes invalid. If adding a
+          new tap skill fails for an agent, update reports the target and reason and rolls back
+          copies still owned by that attempt. Targets detected as changed by another writer are
+          preserved. Lost ownership or restoration failure reports the problem and any retained
+          recovery path. The next update that re-expands the affected tap group retries that skill,
+          unless it is a dry run. Project-scoped additions, warnings, and errors identify their
+          project folder.
         </>
       ),
     },

@@ -14,13 +14,11 @@ import { hashDirectory } from "../../hash/content.ts";
 import { orphanStoreEntries } from "../../maintenance/gc.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
+import type { Finding } from "./findings/index.ts";
 import type { MarkerEntry } from "./markers/index.ts";
 
-export interface Finding {
-  readonly level: "ok" | "warn" | "error";
-  readonly code: string;
-  readonly message: string;
-}
+// Preserve the existing Finding import path during this internal type refactor.
+export type { Finding } from "./findings/index.ts";
 
 /**
  * Check 1 & 2: state ↔ markers drift. With path sharing (§7.2), a

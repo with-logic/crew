@@ -1,7 +1,7 @@
 /** Source staging reports read failures without relabeling destination writes (§9, §13). */
 
 import { expect, test } from "bun:test";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { copySourceTree } from "../../src/sources/read.ts";
 import { stageIntoStore } from "../../src/sources/store.ts";
@@ -9,19 +9,26 @@ import { copyTree } from "../../src/util/copy.ts";
 import { makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
-test("staging a resolved git source identifies an unreadable asset", () => {
+test("C-INST-23 failed copying removes partial store staging and keeps the source error", () => {
   const home = makeCrewHome();
   const skill = makeSkill(makeTempDir(), "demo", skillFrontmatter({ name: "demo" }));
-  const asset = join(skill, "asset.txt");
-  writeFileSync(asset, "bytes");
+  for (let i = 0; i < 20; i++) writeFileSync(join(skill, `asset-${i}`), "bytes");
+  // Use the actual directory order so copying reaches readable files before this fault.
+  const asset = join(skill, readdirSync(skill).at(-1)!);
   chmodSync(asset, 0);
   try {
     expect(() => stageIntoStore(skill, "demo", "a".repeat(40), home)).toThrow(
-      expect.objectContaining({ code: "source_unreachable" }),
+      expect.objectContaining({
+        code: "source_unreachable",
+        details: { path: asset },
+        remedy: expect.stringContaining("source file"),
+      }),
     );
   } finally {
     chmodSync(asset, 0o600);
   }
+  expect(readdirSync(join(home, "store"))).toEqual([]);
+  expect(readdirSync(skill)).toHaveLength(21);
 });
 
 test("a store destination write failure is not source_unreachable", () => {

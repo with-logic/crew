@@ -7,11 +7,8 @@
  */
 
 import type { TapConfig } from "../core/types.ts";
-import { hasSkillMd, loadSkillName } from "../skill/load.ts";
-import { isGistTap } from "../sources/gist.ts";
 import { isSourceDirectory } from "../sources/read.ts";
-import { isSourceReadFailure } from "../util/source-read.ts";
-import { indexTap } from "./tap-index.ts";
+import { indexTap, type RejectedTapSkill } from "./tap-index.ts";
 
 export interface CurrentTapChild {
   readonly name: string;
@@ -19,17 +16,19 @@ export interface CurrentTapChild {
   readonly tapRelativePath: string;
 }
 
+export interface CurrentTapCatalog {
+  readonly children: readonly CurrentTapChild[];
+  readonly skipped: readonly RejectedTapSkill[];
+}
+
 export function currentTapChildren(
   tap: TapConfig,
   home: string,
   rootDir: string,
-): CurrentTapChild[] {
+): CurrentTapCatalog {
   const children: CurrentTapChild[] = [];
-  if (!isSourceDirectory(rootDir, tap.kind === "path")) return children;
-  if (!isGistTap(tap) && hasSkillMd(rootDir)) {
-    pushLoaded(children, rootDir, "");
-    return children;
-  }
+  const skipped: RejectedTapSkill[] = [];
+  if (!isSourceDirectory(rootDir, tap.kind === "path")) return { children, skipped };
   // `rootDir` is the caller's already-materialized root — the scratch
   // export of the group's ref, when it tracks one. Indexing the live
   // clone instead would discover children that don't exist at that
@@ -40,7 +39,7 @@ export function currentTapChildren(
       children.push({ name: loc.name, path: loc.path, tapRelativePath: loc.tapRelativePath });
     }
   }
-  return children;
+  return { children, skipped: index.skipped };
 }
 
 export function groupChildrenByName(
@@ -53,13 +52,4 @@ export function groupChildrenByName(
     else byName.set(child.name, [child]);
   }
   return byName;
-}
-
-function pushLoaded(children: CurrentTapChild[], path: string, tapRelativePath: string): void {
-  try {
-    children.push({ name: loadSkillName(path), path, tapRelativePath });
-  } catch (err) {
-    if (isSourceReadFailure(err)) throw err;
-    // Skip invalid names; same as tap indexing/search behavior.
-  }
 }

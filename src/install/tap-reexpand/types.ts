@@ -6,6 +6,8 @@ import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 interface TapReexpandRowBase {
   readonly name: string;
   readonly scope: Scope;
+  /** §10.1.1: present only for the originating project install. */
+  readonly project_root?: string;
   readonly tap: string;
 }
 

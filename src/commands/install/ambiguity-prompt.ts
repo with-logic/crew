@@ -11,7 +11,7 @@
  */
 
 import type { Config } from "../../core/types.ts";
-import { enumerateCandidates, type NameCandidate } from "../../install/attribute-bare-name.ts";
+import { type NameCandidate, scanNameCandidates } from "../../install/attribute-bare-name.ts";
 import { ambiguityError } from "../../install/resolve-ref/errors.ts";
 import { shortLabelFor } from "../../install/resolve-ref/format.ts";
 import { withTapLocks } from "../../sources/tap-lock.ts";
@@ -52,7 +52,7 @@ export function promptBareNameAmbiguity(
   raw: string,
 ): string {
   const candidates = withTapLocks(config.taps, ctx.home, () =>
-    filterForAmbiguity(enumerateCandidates(trimmed, config, ctx.home), trimmed),
+    filterForAmbiguity(scanNameCandidates(trimmed, config, ctx.home).candidates, trimmed),
   );
   if (candidates.length <= 1) return raw;
   // `--yes` skips this prompt but does NOT pick a default candidate

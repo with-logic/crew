@@ -20,6 +20,7 @@
 import { readConfig } from "../../config/load.ts";
 import { crewHome } from "../../core/paths.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
+import { renderQuietUpdateErrors } from "../update/diagnostics.ts";
 import { planUpdate } from "../update/plan.ts";
 import { renderOutdated } from "./render.ts";
 
@@ -32,6 +33,7 @@ export function outdatedCommand(ctx: CommandContext): CommandOutput {
   return {
     exitCode: plan.hardFailure ? 1 : 0,
     human: renderOutdated({ rows, tapReexpandRows, tapRows }, ctx.style),
+    stderr: ctx.flags.quiet && plan.hardFailure ? renderQuietUpdateErrors(plan) : [],
     json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows, dry_run: true, selectors },
   };
 }

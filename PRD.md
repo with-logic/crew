@@ -855,7 +855,7 @@ Written into every Homecrew-installed skill directory. JSON, UTF-8, trailing new
 - `tap_subpath` — for `tap_kind: git`, an optional directory inside the repo (empty string when none). Empty string for `tap_kind: path`.
 - `tap_path` — for `tap_kind: path`, the absolute filesystem path to the tap. Empty string for `tap_kind: git`.
 - `tap_discovery` — optional. When `"recursive"`, `doctor --repair` reconstructs the tap with recursive fallback discovery. Absent means standard discovery.
-- `path` — the skill's source location relative to the tap's root (after subpath is applied for git taps). Empty string when the tap itself is one skill (root SKILL.md). This path need not end in the skill's declared `name`.
+- `path` — the skill's source location relative to the tap's root (after subpath is applied for git taps). Empty string when the tap itself is one skill (root SKILL.md). This path need not end in the skill's declared `name`. It MUST be a POSIX relative path without a leading slash, NUL, or complete `..` component. Empty root paths and literal filename characters, including backslashes, remain valid; validation does not rewrite the recorded spelling.
 - `ref` — the ref the user asked for (`main`, `v1.2.0`, a SHA, or `null` if the default branch was used and no ref was specified).
 - `resolved_sha` — the full 40-char commit SHA the install came from, or `null` for path-kind taps.
 - `content_hash` — the hash per §12.1, prefixed `sha256:`.
@@ -1055,6 +1055,22 @@ A 2-segment reference `foo/bar` is resolved with tap-first precedence: if `foo` 
 
 A 3-segment reference `tap/namespace/skill` is always unambiguous.
 
+**Rejected directory manifests on a final miss.** If no interpretation of a
+reference resolves, the existing `invalid_ref` message also reports rejected
+directory manifests encountered in the searched scope: each diagnostic names
+the configured tap, candidate path, `invalid_skill`, and validation reason.
+These are rejected locations, not inferred matches for the requested skill
+name. The original error message prefix, details, remedy, and exit 4 remain;
+JSON carries the diagnostics in `error.message` without adding fields.
+Successful resolution and ambiguity do not add these diagnostics. Bare-name
+and `--skill` misses report all rejections in searched taps; `--bundle` reports
+only the requested namespace, and `--tap` misses remain unchanged. A
+2-segment miss reports all rejections in its named-tap interpretation plus
+only matching-namespace rejections in other searched taps. A 3-segment miss
+reports only the named tap and namespace. Requested refs use the same
+captured commit tree as resolution (§9 step 3). Invalid gist files remain
+ignored (§9 step 5); diagnostics are escaped and redacted per §13.
+
 **Disambiguation flags.** The user may force an interpretation on `crew install`. These are presence flags; the name comes from the positional argument.
 - `--tap` — force every bare-name positional to be resolved as a tap name (install the whole tap). Errors if the positional is not a configured tap.
 - `--bundle` — force every bare-name positional to be resolved as a namespace name (install every skill in the namespace). Errors if the positional is not a namespace in exactly one configured tap.
@@ -1201,7 +1217,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Tap-name reference (`<tap-name>` with no slash) where `<tap-name>` matches a configured tap: install the entire tap (every skill it currently exposes).
    - Git URL or shorthand (`@org/repo`, `gh:org/repo`, etc.): if any configured tap already points at the same URL+subpath, use it; otherwise create an auto tap (§16.5) and use it. The new tap is cloned and refreshed.
    - Path reference (`./foo`, `/abs/foo`): if any configured tap already points at the same path, use it; otherwise create a path-kind auto tap and use it.
-   In all cases, the resolved `state.installations[i].source` is `{ tap: <tap-name>, path: <skill-relative-path-inside-tap> }`. The URL/path of the tap itself lives in `config.yaml`.
+   In all cases, the resolved `state.installations[i].source` is `{ tap: <tap-name>, path: <skill-relative-path-inside-tap> }`. The URL/path of the tap itself lives in `config.yaml`. Acquiring a recorded skill location repeats the §7.5 relative-path check before reading source content; an invalid spelling fails with `invalid_skill`. Git-kind locations must also be reached without traversing descendant symlinks, including without an explicit ref. Source-root aliases remain valid. Explicitly local path-kind sources retain their trusted standard-layout links.
    - If a tap-source reference cannot be resolved from configured taps, Homecrew consults the known-tap registry (§16.2.1) before returning `invalid_ref`. Exact known-tap matches are suggestions only: Homecrew MUST NOT clone, fetch, add a tap to config, or install anything from a known tap until the user explicitly runs the suggested `crew tap add <source-ref> <name>` command (or a future interactive flow confirms that same action). The error MUST include the tap-add command and the follow-up `crew install <tap>/<skill>` or `crew install <tap>` command. A two-segment reference `<owner>/<repo>` also matches a known tap whose URL is `https://github.com/<owner>/<repo>` — the user typed the repository, not a tap name — and the error suggests that tap the same way (§8.5 "Two-segment misses").
 3. **Resolve refs to SHAs.** For git sources and tap sources, the ref (tag, branch, or `HEAD`) is resolved to a full commit SHA. This SHA is what's recorded in state and markers, even if the user specified a tag or branch. If the ref is not present in the local clone, crew fetches once and re-resolves; a ref that is still unknown is `ref_not_found` (§13, exit 5).
 
@@ -1273,6 +1289,8 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - **Conflict detection:** if two skills in the install set have the same `name` but come from different tap-relative source paths, or resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
 7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
 8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. If the store entry already exists and its content hash matches, reuse it.
+
+   If staging or publication fails after allocating a private staging directory, remove only that attempt's staging directory and preserve the original failure. If removal also fails, append a diagnostic identifying the retained staging path and cleanup error while preserving the original error's name, exit code, details, and remedy. Escape control characters and redact credentials in the appended diagnostic (§5.2). This cleanup MUST NOT remove source paths, peer staging directories, reused store entries, or published canonical bytes.
 9. **Install into each agent.** For each skill × each agent in the agent set × the scope, run the install algorithm from §7.3. Record per-agent results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, agent) pair does not stop others.
 
    **Skill outcome.** After per-agent installs complete, each attempted skill has one of two outcomes:
@@ -1425,6 +1443,27 @@ between resolution and targeting:
 
 **Error isolation.** Every skill is processed independently. A failure — network error, fetch error, spec validation error on a newly pulled version, customized install detected, dependency resolution failure, target install failure — is recorded against that skill and does not stop processing of the rest. Exit code is 0 if all skills were either up-to-date, updated successfully, or cleanly skipped as customized. Exit code is 1 if any skill encountered a hard failure (network, fetch, validation).
 
+**Human existing-entry failures.** An ordinary per-skill `failed` outcome
+MUST show its error code and primary message in normal human output for
+`crew update` and `crew outdated`, including any retained recovery path
+already present in that message. Redact credentials throughout the displayed
+diagnostic and escape control characters. Preserve the raw JSON error fields,
+state/retry behavior, and exit codes.
+
+**Quiet failure diagnostics.** When `crew update` (including `--dry-run`)
+or `crew outdated` has a hard failure, `--quiet` suppresses the human
+summary but MUST report diagnostics on stderr for ordinary failed entries,
+failed per-target results, tap re-expansion errors, and refresh failures of
+explicitly selected taps. Include the affected skill, agent or tap, error
+code, and full primary message, preserving rollback and retained recovery
+paths already present. Redact credentials and escape controls throughout.
+Successful and soft-only quiet runs remain silent, including soft
+`tap_error` outcomes (`no_skills_found` or `invalid_ref` without a cleanup
+failure). A hard-failed run may include its existing soft `tap_error` rows
+among its diagnostics without changing their classification. Normal human
+output, raw JSON, failure isolation, exit codes, state, and retries are
+unchanged; JSON mode still emits its payload without human stderr.
+
 **Human per-target results.** When an existing skill's `updated` JSON
 outcome contains failed or safety-skipped targets, human output MUST name
 each affected agent and its error code/message or skip reason. Escape
@@ -1519,6 +1558,16 @@ On every `crew update` run, for each group of state entries sharing
    `pinned` value (§11.1) — it was read from that revision, so recording
    it as an unpinned no-ref install would misattribute its bytes.
 
+   Directory candidates rejected during name-only indexing (§9 step 4)
+   remain part of this survey. Report each rejected location in scope
+   as a `tap_error` carrying its validation code, tap-relative path,
+   and reason; use the tap name as the row's subject when no valid
+   declared skill name is available. Never infer a skill name from its
+   directory. Namespace-only selectors bound these diagnostics to the
+   named namespaces, just as they bound additions (§10.1). Healthy
+   children and other groups continue; both real and `--dry-run` runs
+   exit 1. Invalid gist files remain ignored (§9 step 5).
+
    If the current
    child set contains the same declared `name` at more than one
    tap-relative source path, re-expansion records
@@ -1585,6 +1634,10 @@ On every `crew update` run, for each group of state entries sharing
 4. For each skill in state attributed to this tap whose directory is
    still present: proceeds with the normal per-skill update logic
    (step 3 of §10.1) — stage, re-resolve, reinstall if SHA moved.
+   A rejected candidate at its recorded source path establishes
+   presence even though its declared name could not be indexed. It
+   MUST NOT become `source_gone`: normal per-skill validation reports
+   the invalid version while preserving its previous install and state.
 
 Groups whose members are all individual-skill installs (no
 `tracks_tap`) skip re-expansion entirely. Their per-skill updates
@@ -1594,6 +1647,26 @@ The behavior is the same regardless of whether the tap was registered
 manually (`crew tap add`) or created automatically by a multi-skill
 install — they're stored identically in `config.yaml` and re-expanded
 identically here.
+
+**Project identity in re-expansion results.** Each `tap_reexpand_rows`
+record carries `name`, `scope`, `tap`, and `kind` (`added`, `would_add`,
+`source_gone`, or `tap_error`), with the existing optional `error` and
+added-only `warnings` fields. A string `project_root` MUST be present iff
+`scope` is `project`, copied from the originating install group's recorded
+project root. User-scope rows MUST omit it. This applies to successful and
+preview additions, validation and rejected-location diagnostics, conflicting
+names, vanished sources, and group acquisition or read failures.
+
+Human update and outdated output identifies each project location using
+`(in <path>)`, shortening the home directory to `~`. Addition summaries
+group by `(tap, scope, project_root)` in encounter order so independent
+projects remain distinguishable. Project addition warnings and re-expansion
+errors, including quiet error diagnostics, carry the same location. Escape
+controls in displayed paths; quiet diagnostics retain their whole-message
+redaction. User-scope row shape and rendering remain unchanged. This result
+contract applies equally to real update, update previews, and outdated;
+source identity, state, markers, retries, classification, and exit codes
+remain unchanged.
 
 **Autoupdate.** The background scheduler (§10.2) runs `crew update`, so
 tap re-expansion is automatic. The expected flow: a user runs
@@ -2070,7 +2143,7 @@ off.
 7. If autoupdate is enabled in config, the platform scheduler is actually loaded.
 8. For every project-scope entry, `project_root` exists on disk and a `.crew.json` marker lives under `<project_root>/<adapter-base>/<name>/`. A `project_root` that no longer exists produces a `missing_project_root` finding (warn, not error — the user may have simply moved the project, and the right fix is a `crew uninstall` from their new location).
 
-Markers must be readable JSON objects with the required §7.5 field types, schema version, scope and nonempty agent list. Their tap metadata must pass the same validation as a config tap (§6.1). A missing marker is absent; an unreadable marker produces an error-level `marker_unreadable` finding, and malformed JSON or invalid marker fields produce an error-level `marker_invalid` finding. A symbolic link at an install-directory leaf or its `.crew.json` entry is also `marker_invalid`: doctor inspects these entries without following links, whether the link target exists, is missing or loops. This restriction does not apply to project-root or adapter-base aliases. A well-typed marker whose declared scope disagrees with the inventoried adapter base is also `marker_invalid`, unless another base for the declared scope, belonging to an adapter listed in the marker’s agents, resolves to the same physical directory. For genuine same-path or symlink aliases, the marker’s declared scope remains authoritative and the install is indexed once; shared paths between adapters remain valid (§7.2). Findings identify the marker path. An operational failure to inspect or search a project root, adapter base or install directory, or to list an adapter base, also produces `marker_unreadable`, identifying the affected directory. Missing paths and ordinary non-directory entries remain absent inventory, not read failures. Either marker finding prevents reconstruction or deletion: it causes `--repair` to apply no repairs, preserving state, config, the store and the scheduler, and exit 1. Repair previews count zero findings as addressable until these inventory problems are corrected.
+Markers must be readable JSON objects with the required §7.5 field types, schema version, scope and nonempty agent list. Every owner must name a supported adapter (§7.2); one unsupported owner invalidates the whole marker before adapter membership filtering. The content hash must be exactly `sha256:` followed by 64 lowercase hexadecimal characters (§12.1). Git-kind markers must have a resolved SHA of exactly 40 hexadecimal characters, accepting either case; path-kind markers must have a null resolved SHA. These semantic violations are `marker_invalid` even without `--verify`; digest recomputation remains exclusive to `--verify`. Their recorded skill paths must satisfy the relative-path rule in §7.5; invalid paths are `marker_invalid` and block repair. Their tap metadata must pass the same validation as a config tap (§6.1). A missing marker is absent; an unreadable marker produces an error-level `marker_unreadable` finding, and malformed JSON or invalid marker fields produce an error-level `marker_invalid` finding. A symbolic link at an install-directory leaf or its `.crew.json` entry is also `marker_invalid`: doctor inspects these entries without following links, whether the link target exists, is missing or loops. This restriction does not apply to project-root or adapter-base aliases. A well-typed marker whose declared scope disagrees with the inventoried adapter base is also `marker_invalid`, unless another base for the declared scope, belonging to an adapter listed in the marker’s agents, resolves to the same physical directory. For genuine same-path or symlink aliases, the marker’s declared scope remains authoritative and the install is indexed once; shared paths between adapters remain valid (§7.2). Findings identify the marker path. An operational failure to inspect or search a project root, adapter base or install directory, or to list an adapter base, also produces `marker_unreadable`, identifying the affected directory. Missing paths and ordinary non-directory entries remain absent inventory, not read failures. Either marker finding prevents reconstruction or deletion: it causes `--repair` to apply no repairs, preserving state, config, the store and the scheduler, and exit 1. Repair previews count zero findings as addressable until these inventory problems are corrected.
 
 `--verify` includes check 3 (hash recomputation); without it, check 3 is skipped for speed.
 
@@ -2113,7 +2186,7 @@ Algorithm:
 
 ### 12.2 Skill SHA
 
-The 40-char hex commit SHA the skill was resolved from. Short SHA is the first 8 chars.
+The 40-char hex commit SHA the skill was resolved from, accepting either case. Short SHA for store keys is the first 8 characters converted to lowercase, matching Git-resolved store entries. Marker and state SHA spelling is preserved; deriving a store key does not rewrite metadata.
 
 ## 13. Error conditions
 
@@ -2672,6 +2745,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation). |
 | C-INST-21a | §9 step 9 | Two directly-named roots where one succeeds in ≥1 agent and the other fails in every selected agent: the run exits 1 and both roots appear in the output. |
 | C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
+| C-INST-23 | §9 step 8 | A staging or store publication failure releases only that attempt's private staging directory. If cleanup also fails, the original failure retains its name, exit code, details, and remedy, and reports the retained staging path and cleanup error with §5.2 escaping/redaction. Source paths, peer staging directories, reused entries, and published canonical bytes remain unchanged. |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
 
@@ -2758,7 +2832,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-18 | §10.1.1 | `crew update --dry-run` fetches taps — the one thing it does change — then reports pending per-skill updates as `would_update` and pending tap additions as `would_add` without staging, installing, or writing `state.json`. Installed files, markers, store entries, and state are byte-identical before and after; `--json` carries `dry_run: true`. |
 | C-UPD-18a | §10.1.1, §14 | `crew update --dry-run` against a home with no `state.json` leaves it absent: the state lock is never acquired, so neither the state file nor its lock is created. |
 | C-UPD-18b | §10.1.1 | `--force --dry-run` previews a pinned skill whose upstream moved as `would_update` (rather than `skipped`) and still writes nothing. |
-| C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered tap child whose frontmatter fails spec validation is reported as a per-child `invalid_skill` failure and is not installed, identically in real and `--dry-run` runs; the run exits 1. |
+| C-UPD-18c | §10.1.1, §9 step 4 | A newly-discovered directory-tap candidate whose frontmatter fails spec validation, including name-only indexing, is reported with `invalid_skill` and is not installed, identically in real and `--dry-run` runs; the run exits 1 while healthy children continue. A candidate without a valid declared name uses the tap as its error-row subject and names its source path and reason without inventing a skill name. A tracked rejected source path remains present for normal per-skill validation rather than becoming `source_gone`; its previous install and state are preserved. |
 | C-UPD-18d | §10.1.1, §14 | `crew update` holds a per-repository clone lock spanning refresh through source read, in both real and `--dry-run` runs, so a concurrent run cannot change the clone's checked-out commit between SHA resolution and byte read. A run blocked past the timeout exits `state_locked`. |
 | C-UPD-18e | §10.1.1 | A newly-discovered child that fails validation is named in human output along with its error code and message, and is counted as a failure in the run totals. |
 | C-UPD-18f | §10.1.1 | `crew outdated [<selector>...]` behaves as `crew update --dry-run`: identical `--json` payload (`dry_run: true`, `would_update` / `would_add` kinds), identical exit code, and the same write boundary — tap clones refresh, while installed skills, markers, store entries, and `state.json` are unchanged. Human output lists only rows that would change and prints a single "up to date" line when none would. |
@@ -2783,9 +2857,12 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-38 | §10.1.1 | A new tap child whose target installation fails produces a per-child `tap_error` naming failed targets and reasons, exits 1, and is absent from state until every applicable target group succeeds. Remaining target groups, other children, and existing entries still process; the next non-dry-run update that re-expands the affected tap group retries the child. Replacements observed as still owned by the attempt are rolled back to their prior bytes, markers, and symlinks, and owned new copies are removed; targets detected as changed, removed, unreadable, or carrying a non-regular marker are preserved with lost ownership and any retained recovery path reported. Failed publication may restore a prior copy into an absent destination; completed publication later removed stays absent. Restoration failures report the problem and any retained recovery path. |
 | C-UPD-39 | §10.1 | For an existing skill update containing failed or safety-skipped targets, human output names each affected target. Its aggregate skill row is `partially updated` when any target installed or was already current; otherwise it is `failed` if any target failed, or `skipped`. Totals distinguish partial from full success while counting hard failures. JSON, state/retry behavior, and exit codes are unchanged. |
 | C-UPD-40 | §10.1.1 | If rollback-directory cleanup fails after a new tap child is successfully added, the child remains installed and recorded in state, and cleanup failure alone does not make the run fail. Human output displays the cleanup warning and leftover path; JSON includes the diagnostic in an optional `warnings` array on the successful `added` row. When cleanup succeeds, that row omits `warnings`. |
+| C-UPD-41 | §10.1, §10.1.1 | Normal human output for an existing-entry `failed` outcome in `crew update` and `crew outdated` shows its error code and primary message, including retained recovery paths already present. The whole diagnostic redacts credentials and escapes controls; raw JSON error fields, state/retry behavior, and exit codes remain unchanged. |
 | C-UPD-44 | §10.1 | After a local path skill root passes its availability check, a qualifying source hash/load lookup failure reports `source_gone` only when a fresh check finds that same root missing, non-directory, or a looping link. Normal and preview runs preserve the affected install, marker, and logical state entry, continue healthy selected entries, and exit 0 when this is the only abnormality. Previews leave installed/store/state bytes unchanged. Missing or invalid manifests in a still-resolvable directory, original permission failures, parser/validation errors, and other operational failures remain hard even if the root disappears later. |
 | C-UPD-45 | §10.1, §10.1.1, §11.1 | A moved skill with no applicable recorded agent targets (empty, unknown-only, or unsupported scope) reports a soft `skipped` outcome after source validation in real and preview runs, without staging or changing installed copies, markers, or its complete state entry. Other selected entries still process, and restoring an applicable recorded target permits retry. Any existing-entry update with zero completed targets, including all safety skips, preserves its complete state entry and remains retryable; per-target diagnostics, soft safety skips, successful partial updates, and hard-failure retry semantics are preserved. |
 | C-UPD-46 | §10.1, §10.1.1, §13 | Human `source_gone` rows and update summaries describe source absence without assuming remote/upstream removal, for both Git and local path sources; rows say that the installed copy is kept. Update, update preview, and outdated preserve the existing JSON shape/kind, soft exit code, install/marker/state preservation, and quiet suppression. |
+| C-UPD-42 | §5.2, §10.1, §10.1.1 | On a hard-failed run, human `--quiet` update (including dry run) and outdated suppress summaries while sending ordinary failed entries, failed targets, tap re-expansion errors, and explicitly selected tap refresh failures to stderr with affected subjects, error codes, full primary messages, and retained recovery paths. Diagnostics redact credentials and escape controls. Successful and soft-only quiet runs stay silent; a hard-failed run may include existing soft `tap_error` diagnostics without reclassification. Normal human output, raw JSON, isolation, exit codes, state, and retries remain unchanged. |
+| C-UPD-43 | §10.1.1 | Every project-scope tap re-expansion result carries its originating recorded `project_root`; user-scope results omit the field. Real update, preview, and outdated preserve identity for additions, successful-addition warnings, validation and rejected-location errors, conflicting names, vanished sources, and group failures. Human addition summaries remain separate by tap/scope/project root, and project warnings and errors identify the location, including quiet errors, with safe path formatting. Source/state/marker identity, classification, retries, and exit codes are unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
@@ -2858,6 +2935,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-08b | §16.6 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
 | C-TAP-08c | §16.6 | A same-name skill from a different tap/path is not marked installed in `crew search`; JSON reports `installed: false` and `same_name_installed: true`. |
 | C-TAP-08d | §9, §16.6 | Directory-tap candidates rejected during name-only indexing retain path-specific validation diagnostics without inferred names. Search reports invalid directory manifests in human stderr and JSON warnings, regardless of query, while healthy siblings remain hits and the command exits 0. Gist invalid files remain ignored. |
+| C-TAP-08e | §8.3, §9 | Final tap-source resolution misses retain `invalid_ref`, exit 4, original details and remedy, while human and JSON error messages report scoped rejected directory locations, validation code and reason without inferred names. Healthy resolution, ambiguity, `--tap` misses, requested-ref trees, known-tap suggestions, and ignored invalid gist files retain their existing behavior. |
 | C-TAP-08f | §16.6 | When a directory skill passes name indexing but a later full-manifest read fails operationally, search emits one safe warning identifying the tap, indexed skill, source path, `source_unreachable`, and OS reason, regardless of query. Only the failed skill is skipped, healthy hits continue, human stderr and JSON warnings retain the diagnostic, and the command exits 0. Invalid-manifest warning behavior is unchanged. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
@@ -2926,7 +3004,8 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-12 | §11.2 | `crew doctor --repair --dry-run` reports the findings a repair would address and changes nothing: state, config, and the store are byte-identical afterward. |
 | C-STATE-12a | §11.2 | Findings `--repair` cannot fix (`customized`, `agent_missing`, `config_invalid`, `missing_project_root`) are excluded from both the dry-run "would address" count and the post-repair "addressed" count; an unrepairable error-level finding keeps the exit code non-zero after `--repair`. |
 | C-STATE-13 | §6 | `crew cache clean --dry-run` reports the bytes and orphan store entries a clean would free and deletes nothing. |
-| C-STATE-14 | §11.2 | Unreadable or invalid markers (including symbolic links at install-directory leaves or `.crew.json` entries, and a declared scope with no base among the marker’s owning adapters at the inventoried physical directory), and operational failures to inspect/search project roots or inventory directories or list adapter bases, produce path-specific error findings without aborting doctor; repair and repair previews apply no repairs or destructive inference from the incomplete inventory. State, config, store and scheduler remain unchanged, and the run exits 1. Genuinely missing paths and ordinary non-directory inventory entries remain absent rather than unreadable. |
+| C-STATE-14 | §11.2 | Unreadable or invalid markers (including unsupported owners, invalid content-hash text or tap-kind-incompatible resolved SHAs, invalid source-relative paths, symbolic links at install-directory leaves or `.crew.json` entries, and a declared scope with no base among the marker’s owning adapters at the inventoried physical directory), and operational failures to inspect/search project roots or inventory directories or list adapter bases, produce path-specific error findings without aborting doctor; repair and repair previews apply no repairs or destructive inference from the incomplete inventory. State, config, store and scheduler remain unchanged, and the run exits 1. Genuinely missing paths and ordinary non-directory inventory entries remain absent rather than unreadable. |
+| C-STATE-15 | §7.5, §9 | Recorded skill acquisition rejects absolute paths, NUL and complete parent components before source reads. Git-kind acquisition also rejects descendant symlinks without an explicit ref. Trusted local path-kind layout links, source-root aliases, empty-root skills and literal filename characters remain supported; rejected acquisition preserves installed bytes and state. |
 
 #### C-AUTO: Autoupdate (§10.2)
 
