@@ -13,10 +13,15 @@ test("C-TAP-08g recursive discovery retains a link warning before a later unread
   expect(reset.code).toBe(0);
   const affected = source("recursive", "unavailable", false);
   const projects = join(affected.repo, "projects");
-  symlinkSync("absent-partial-target", join(projects, "00-link"));
-  const denied = join(projects, "zz-denied");
-  mkdirSync(denied);
-  writeFileSync(join(denied, "keep.txt"), "tracked directory\n");
+  const branches = ["branch-one", "branch-two"];
+  for (const name of branches) {
+    const branch = join(projects, name);
+    mkdirSync(branch);
+    symlinkSync("absent-partial-target", join(branch, "excluded-link"));
+    const descendant = join(branch, "blocked");
+    mkdirSync(descendant);
+    writeFileSync(join(descendant, "keep.txt"), "tracked directory\n");
+  }
   commitAll(affected.repo, "link before an unreadable recursive descendant");
   const registered = register(home, affected.repo, "recursive", "affected");
   expect(registered.code).toBe(0);
@@ -29,10 +34,13 @@ test("C-TAP-08g recursive discovery retains a link warning before a later unread
   const tap = readConfig(home).taps.find((entry) => entry.name === "affected")!;
   const cloneProjects = join(tapClonePath(tap, home), "projects");
   const order = readdirSync(cloneProjects);
-  expect(order).toContain("00-link");
-  expect(order).toContain("zz-denied");
-  expect(order.indexOf("00-link")).toBeLessThan(order.indexOf("zz-denied"));
-  const blocked = join(cloneProjects, "zz-denied");
+  const branchOrder = order.filter((name) => branches.includes(name));
+  expect(branchOrder).toHaveLength(2);
+  const [later, earlier] = [branchOrder[0]!, branchOrder[1]!];
+  expect(readdirSync(join(cloneProjects, earlier))).toContain("excluded-link");
+  expect(order.indexOf(later)).toBeLessThan(order.indexOf(earlier));
+  // The walker pops directories last-in-first-out; fail in the branch visited second.
+  const blocked = join(cloneProjects, later, "blocked");
   chmodSync(blocked, 0);
   try {
     const result = cli(home, ["search", "--json"]);
@@ -42,7 +50,7 @@ test("C-TAP-08g recursive discovery retains a link warning before a later unread
     expect(result.err).toBe("");
     expect(payload.hits.map((hit: { name: string }) => hit.name)).toEqual(["healthy"]);
     expect(payload.warnings[0]).toContain("source_unreachable");
-    expect(payload.warnings[0]).toContain("zz-denied");
+    expect(payload.warnings[0]).toContain(later);
     expect(payload.warnings).toHaveLength(2);
     expect(payload.warnings[1]).toBe(WARNING);
   } finally {
