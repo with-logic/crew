@@ -1,5 +1,6 @@
-/** Error-only human diagnostics for hard-failed quiet update previews and runs (§5.2, §10.1). */
+/** Safe display fields and error projections for update diagnostics (§5.2, §10.1, §13). */
 
+import { displayText } from "../../refs/display-url.ts";
 import { withRemedy } from "../../util/error-remedy.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import { projectTag } from "./location.ts";
@@ -49,6 +50,35 @@ export function renderQuietUpdateErrors(
       lines.push(failureLine(`tap ${row.name}`, row.error.code, row.error.message));
   }
   return lines;
+}
+
+/** Escape each source-derived display field before trusted layout or styling (§5.2, §13). */
+export function displayField(value: string): string {
+  return sanitizeLine(displayText(value));
+}
+
+/** Only diagnostic messages change; machine identity fields remain raw (§10.1.1, §13). */
+export function displayUpdateErrors(
+  input: Pick<UpdatePlan, "rows" | "tapReexpandRows">,
+): Pick<UpdatePlan, "rows" | "tapReexpandRows"> {
+  return {
+    rows: input.rows.map((row) => {
+      const outcome = row.outcome;
+      if (outcome.kind !== "failed") return row;
+      return {
+        ...row,
+        outcome: {
+          ...outcome,
+          error: { ...outcome.error, message: displayField(outcome.error.message) },
+        },
+      };
+    }),
+    tapReexpandRows: input.tapReexpandRows.map((row) =>
+      row.kind === "tap_error"
+        ? { ...row, error: { ...row.error, message: displayField(row.error.message) } }
+        : row,
+    ),
+  };
 }
 
 function failureLine(subject: string, code: string, message: string, remedy?: string): string {

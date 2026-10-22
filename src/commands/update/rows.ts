@@ -16,6 +16,7 @@ import { withRemedy } from "../../util/error-remedy.ts";
 import { shortenHome } from "../../util/format.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler, SymbolKind } from "../../util/term.ts";
+import { displayField } from "./diagnostics.ts";
 import { targetIssues, updatedRowStatus } from "./targets.ts";
 
 export interface RowParts {
@@ -28,7 +29,7 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
   const o = row.outcome;
   const required =
     row.transitively_required_by && row.transitively_required_by.length > 0
-      ? style.dim(`(required by ${row.transitively_required_by.join(", ")})`)
+      ? style.dim(`(required by ${row.transitively_required_by.map(displayField).join(", ")})`)
       : "";
 
   if (o.kind === "up_to_date") {
@@ -75,7 +76,9 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
   if (o.kind === "tap_missing") {
     return {
       status: style.yellow("tap removed"),
-      detail: style.dim(`keeping your copy; re-add \`${o.tap}\` or run \`crew doctor --repair\``),
+      detail: style.dim(
+        `keeping your copy; re-add \`${displayField(o.tap)}\` or run \`crew doctor --repair\``,
+      ),
       required,
     };
   }
@@ -125,7 +128,7 @@ function shortSha(sha: string | null): string {
  * how a project-scoped row identifies itself.
  */
 export function nameCell(row: UpdateRow, style: Styler): string {
-  const base = `  ${symbolFor(row, style)} ${style.bold(row.name)}`;
+  const base = `  ${symbolFor(row, style)} ${style.bold(displayField(row.name))}`;
   if (row.scope !== "project" || typeof row.project_root !== "string" || !row.project_root)
     return base;
   return `${base} ${style.dim(`(in ${shortenHome(row.project_root)})`)}`;

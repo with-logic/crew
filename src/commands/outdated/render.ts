@@ -20,6 +20,7 @@ import { columns, plural } from "../../util/format.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
+import { displayField } from "../update/diagnostics.ts";
 import { projectTag } from "../update/location.ts";
 import { formatRowParts, groupAdditions, nameCell } from "../update/rows.ts";
 
@@ -65,7 +66,7 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
       couldNotCheck = true;
       const code = tr.error?.code ?? "unreachable";
       lines.push(
-        `${style.symbol("warn")} couldn't refresh tap ${style.bold(tr.name)} ${style.dim(`(${code})`)}`,
+        `${style.symbol("warn")} couldn't refresh tap ${style.bold(displayField(tr.name))} ${style.dim(`(${code})`)}`,
       );
       lines.push(style.dim("  showing what's known from the last-fetched copy"));
     }
@@ -78,9 +79,9 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
       // (invalid_skill)" alone would not tell them which skill broke.
       const code = r.error.code;
       lines.push(
-        `${style.symbol("warn")} ${style.bold(r.name)}${projectTag(r, style)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
+        `${style.symbol("warn")} ${style.bold(displayField(r.name))}${projectTag(r, style)} ${style.dim(`(from ${displayField(r.tap)})`)} ${style.red(code)}`,
       );
-      if (r.error.message) lines.push(style.dim(`  ${r.error.message}`));
+      if (r.error.message) lines.push(style.dim(`  ${displayField(r.error.message)}`));
       if (r.error.remedy)
         lines.push(style.dim(sanitizeLine(displayText(`  Next step: ${r.error.remedy}`))));
     }
@@ -117,7 +118,7 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
     if (rows.length > 0) lines.push("");
     for (const group of groupAdditions(added)) {
       lines.push(
-        `${style.symbol("ok")} ${plural(group.names.length, "new skill")} available from ${style.bold(group.tap)}${projectTag(group, style)}: ${group.names.join(", ")}`,
+        `${style.symbol("ok")} ${plural(group.names.length, "new skill")} available from ${style.bold(displayField(group.tap))}${projectTag(group, style)}: ${group.names.map(displayField).join(", ")}`,
       );
     }
   }

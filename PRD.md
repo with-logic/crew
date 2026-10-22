@@ -1482,12 +1482,21 @@ between resolution and targeting:
 
 **Error isolation.** Every skill is processed independently. A failure — network error, fetch error, spec validation error on a newly pulled version, customized install detected, dependency resolution failure, target install failure — is recorded against that skill and does not stop processing of the rest. Exit code is 0 if all skills were either up-to-date, updated successfully, or cleanly skipped as customized. Exit code is 1 if any skill encountered a hard failure (network, fetch, validation).
 
+**Aggregate diagnostic message boundaries.** Ordinary per-skill `failed`
+and group or child `tap_error` primary `error.message` values MUST redact
+credentials and escape controls in both human and JSON results (§5.2,
+§13). Normalize each primary diagnostic field before combining it with
+trusted labels and remedies so its contents cannot consume adjacent text.
+JSON names, tap names, scopes, recorded project roots, error codes and
+outcome classifications remain unchanged.
+
 **Human existing-entry failures.** An ordinary per-skill `failed` outcome
 MUST show its error code and primary message in normal human output for
 `crew update` and `crew outdated`, including any retained recovery path
 already present in that message. Redact credentials throughout the displayed
-diagnostic and escape control characters. Preserve the raw JSON error fields,
-state/retry behavior, and exit codes.
+diagnostic and escape control characters. Preserve JSON error codes and
+raw identity fields, state/retry behavior, and exit codes; primary JSON
+diagnostic messages follow the boundary rule above.
 
 **Explicit remedy hints in aggregate results.** An ordinary per-skill
 `failed` outcome and a group or child `tap_error` result MUST preserve an
@@ -1497,7 +1506,8 @@ hint; do not substitute the error code's generic default remedy. Render
 that hint beside the existing diagnostic in normal and quiet human output
 for update, update previews, and outdated. Redact credentials and escape
 controls in the hint in both human and JSON results (§5.2, §13). Preserve
-the code and primary message, raw identity fields, outcome classification,
+the code and primary message content subject to the diagnostic boundary
+rule above, raw identity fields, outcome classification,
 quiet failure policy, exit code, state, and retry behavior. Without an
 explicit hint, error-object shapes and diagnostic text remain unchanged.
 
@@ -1512,8 +1522,9 @@ Successful and soft-only quiet runs remain silent except for the aggregate
 Git discovery warning (§9 step 5), including soft `tap_error` outcomes
 (`no_skills_found` or `invalid_ref` without a cleanup failure). A hard-failed run may include its existing soft `tap_error` rows
 among its diagnostics without changing their classification. Normal human
-output, raw JSON, failure isolation, exit codes, state, and retries are
-unchanged; JSON mode still emits its payload without human stderr.
+output, JSON shapes and identity fields, failure isolation, exit codes,
+state, and retries are unchanged; primary JSON diagnostic messages follow
+the boundary rule above. JSON mode still emits its payload without human stderr.
 
 **Human per-target results.** When an existing skill's `updated` JSON
 outcome contains failed or safety-skipped targets, human output MUST name
@@ -3034,13 +3045,13 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-38 | §10.1.1 | A new tap child whose target installation fails produces a per-child `tap_error` naming failed targets and reasons, exits 1, and is absent from state until every applicable target group succeeds. Remaining target groups, other children, and existing entries still process; the next non-dry-run update that re-expands the affected tap group retries the child. Replacements observed as still owned by the attempt are rolled back to their prior bytes, markers, and symlinks, and owned new copies are removed; targets detected as changed, removed, unreadable, or carrying a non-regular marker are preserved with lost ownership and any retained recovery path reported. Failed publication may restore a prior copy into an absent destination; completed publication later removed stays absent. Restoration failures report the problem and any retained recovery path. |
 | C-UPD-39 | §10.1 | For an existing skill update containing failed or safety-skipped targets, human output names each affected target. Its aggregate skill row is `partially updated` when any target installed or was already current; otherwise it is `failed` if any target failed, or `skipped`. Totals distinguish partial from full success while counting hard failures. JSON, state/retry behavior, and exit codes are unchanged. |
 | C-UPD-40 | §10.1.1 | If rollback-directory cleanup fails after a new tap child is successfully added, the child remains installed and recorded in state, and cleanup failure alone does not make the run fail. Human output displays the cleanup warning and leftover path; JSON includes the diagnostic in an optional `warnings` array on the successful `added` row. When cleanup succeeds, that row omits `warnings`. |
-| C-UPD-41 | §10.1, §10.1.1 | Normal human output for an existing-entry `failed` outcome in `crew update` and `crew outdated` shows its error code and primary message, including retained recovery paths already present. The whole diagnostic redacts credentials and escapes controls; raw JSON error fields, state/retry behavior, and exit codes remain unchanged. |
+| C-UPD-41 | §10.1, §10.1.1 | Normal human output for an existing-entry `failed` outcome in `crew update` and `crew outdated` shows its error code and primary message, including retained recovery paths already present. The whole diagnostic redacts credentials and escapes controls. Ordinary `failed` and group/child `tap_error` primary diagnostic messages also redact credentials and escape controls in JSON, with each message formatted before adjacent display labels or remedies. JSON error codes and raw identity fields, state/retry behavior, and exit codes remain unchanged. |
 | C-UPD-44 | §10.1 | After a local path skill root passes its availability check, a qualifying source hash/load lookup failure reports `source_gone` only when a fresh check finds that same root missing, non-directory, or a looping link. Normal and preview runs preserve the affected install, marker, and logical state entry, continue healthy selected entries, and exit 0 when this is the only abnormality. Previews leave installed/store/state bytes unchanged. Missing or invalid manifests in a still-resolvable directory, original permission failures, parser/validation errors, and other operational failures remain hard even if the root disappears later. |
 | C-UPD-45 | §10.1, §10.1.1, §11.1 | A moved skill with no applicable recorded agent targets (empty, unknown-only, or unsupported scope) reports a soft `skipped` outcome after source validation in real and preview runs, without staging or changing installed copies, markers, or its complete state entry. Other selected entries still process, and restoring an applicable recorded target permits retry. Any existing-entry update with zero completed targets, including all safety skips, preserves its complete state entry and remains retryable; per-target diagnostics, soft safety skips, successful partial updates, and hard-failure retry semantics are preserved. |
 | C-UPD-46 | §10.1, §10.1.1, §13 | Human `source_gone` rows and update summaries describe source absence without assuming remote/upstream removal, for both Git and local path sources; rows say that the installed copy is kept. Update, update preview, and outdated preserve the existing JSON shape/kind, soft exit code, install/marker/state preservation, and quiet suppression. |
-| C-UPD-42 | §5.2, §10.1, §10.1.1 | On a hard-failed run, human `--quiet` update (including dry run) and outdated suppress summaries while sending ordinary failed entries, failed targets, tap re-expansion errors, and explicitly selected tap refresh failures to stderr with affected subjects, error codes, full primary messages, and retained recovery paths. Diagnostics redact credentials and escape controls. Successful and soft-only quiet runs stay silent except for §9 step 5’s aggregate Git discovery warning; a hard-failed run may include existing soft `tap_error` diagnostics without reclassification. Normal human output, raw JSON, isolation, exit codes, state, and retries remain unchanged. |
+| C-UPD-42 | §5.2, §10.1, §10.1.1 | On a hard-failed run, human `--quiet` update (including dry run) and outdated suppress summaries while sending ordinary failed entries, failed targets, tap re-expansion errors, and explicitly selected tap refresh failures to stderr with affected subjects, error codes, full primary messages, and retained recovery paths. Diagnostics redact credentials and escape controls. Successful and soft-only quiet runs stay silent except for §9 step 5’s aggregate Git discovery warning; a hard-failed run may include existing soft `tap_error` diagnostics without reclassification. Normal human output, JSON shapes and identity fields, isolation, exit codes, state, and retries remain unchanged; primary JSON diagnostic messages follow C-UPD-41. |
 | C-UPD-43 | §10.1.1 | Every project-scope tap re-expansion result carries its originating recorded `project_root`; user-scope results omit the field. Real update, preview, and outdated preserve identity for additions, successful-addition warnings, validation and rejected-location errors, conflicting names, vanished sources, and group failures. Human addition summaries remain separate by tap/scope/project root, and project warnings and errors identify the location, including quiet errors, with safe path formatting. Source/state/marker identity, classification, retries, and exit codes are unchanged. |
-| C-UPD-47 | §5.2, §10.1, §10.1.1, §13 | Ordinary `failed` and group/child `tap_error` results preserve an originating explicit nonempty remedy as optional `error.remedy`, safely rendered beside the existing diagnostic in normal/quiet update, update preview, and outdated, and safely exposed in JSON. Undefined/null/empty hints omit the field and added text without generic defaults. Code, primary message, raw identity and project location, no-hint shapes/text, classification, quiet policy, state, retries, and exit behavior remain unchanged. |
+| C-UPD-47 | §5.2, §10.1, §10.1.1, §13 | Ordinary `failed` and group/child `tap_error` results preserve an originating explicit nonempty remedy as optional `error.remedy`, safely rendered beside the existing diagnostic in normal/quiet update, update preview, and outdated, and safely exposed in JSON. Undefined/null/empty hints omit the field and added text without generic defaults. Code, primary message content subject to C-UPD-41 diagnostic formatting, raw identity and project location, no-hint shapes/text, classification, quiet policy, state, retries, and exit behavior remain unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
