@@ -55,7 +55,8 @@ export const MANAGING: CommandGroup = {
           copies still owned by that attempt. Targets detected as changed by another writer are
           preserved. Lost ownership or restoration failure reports the problem and any retained
           recovery path. The next update that re-expands the affected tap group retries that skill,
-          unless it is a dry run.
+          unless it is a dry run. Project-scoped additions, warnings, and errors identify their
+          project folder.
         </>
       ),
     },

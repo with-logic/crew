@@ -57,6 +57,9 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
     rows.push({
       name: tap.name,
       scope: first.scope,
+      ...(first.scope === "project" && first.project_root
+        ? { project_root: first.project_root }
+        : {}),
       tap: tap.name,
       kind: "tap_error",
       error: {
@@ -75,6 +78,9 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
     rows.push({
       name,
       scope: first.scope,
+      ...(first.scope === "project" && first.project_root
+        ? { project_root: first.project_root }
+        : {}),
       tap: tap.name,
       kind: "tap_error",
       error: {
@@ -94,7 +100,13 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
       // from another tap or at another scope, and that install is a
       // different thing that may still be present upstream.
       sourceGone.add(entryIdentity(m));
-      rows.push({ name: m.name, scope: m.scope, tap: tap.name, kind: "source_gone" });
+      rows.push({
+        name: m.name,
+        scope: m.scope,
+        ...(m.scope === "project" && m.project_root ? { project_root: m.project_root } : {}),
+        tap: tap.name,
+        kind: "source_gone",
+      });
       continue;
     }
     if (child.tapRelativePath !== m.source.path) {

@@ -9,6 +9,7 @@
  * closing lines) and differ deliberately.
  */
 
+import type { Scope } from "../../core/types.ts";
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
 import { displayText } from "../../refs/display-url.ts";
@@ -130,13 +131,27 @@ export function nameCell(row: UpdateRow, style: Styler): string {
   return `${base} ${style.dim(`(in ${shortenHome(row.project_root)})`)}`;
 }
 
-/** Group re-expansion rows by tap name, preserving encounter order. */
-export function groupByTap(rows: readonly TapReexpandRow[]): Map<string, string[]> {
-  const out = new Map<string, string[]>();
+interface TapAdditionGroup {
+  readonly tap: string;
+  readonly scope: Scope;
+  readonly project_root?: string;
+  readonly names: readonly string[];
+}
+
+/** Keep independent install locations separate, preserving encounter order (§10.1.1). */
+export function groupAdditions(rows: readonly TapReexpandRow[]): readonly TapAdditionGroup[] {
+  const out = new Map<string, Omit<TapAdditionGroup, "names"> & { names: string[] }>();
   for (const r of rows) {
-    const names = out.get(r.tap);
-    if (names) names.push(r.name);
-    else out.set(r.tap, [r.name]);
+    const key = JSON.stringify([r.tap, r.scope, r.project_root ?? null]);
+    const group = out.get(key);
+    if (group) group.names.push(r.name);
+    else
+      out.set(key, {
+        tap: r.tap,
+        scope: r.scope,
+        ...(r.project_root === undefined ? {} : { project_root: r.project_root }),
+        names: [r.name],
+      });
   }
-  return out;
+  return [...out.values()];
 }

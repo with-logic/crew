@@ -99,6 +99,9 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       rows.push({
         name: child.name,
         scope: input.scope,
+        ...(input.scope === "project" && input.projectRoot
+          ? { project_root: input.projectRoot }
+          : {}),
         tap: input.tap.name,
         kind: "would_add",
       });
@@ -125,6 +128,9 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
         rows.push({
           name: child.name,
           scope: input.scope,
+          ...(input.scope === "project" && input.projectRoot
+            ? { project_root: input.projectRoot }
+            : {}),
           tap: input.tap.name,
           kind: "added",
           ...(warnings.length > 0 ? { warnings } : {}),
@@ -145,6 +151,7 @@ function childErrorRow(input: AdditionsInput, name: string, error: CrewError): T
   return {
     name,
     scope: input.scope,
+    ...(input.scope === "project" && input.projectRoot ? { project_root: input.projectRoot } : {}),
     tap: input.tap.name,
     kind: "tap_error",
     error: { code: error.code, message: error.message },

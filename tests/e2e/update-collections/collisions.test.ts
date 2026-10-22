@@ -99,6 +99,7 @@ describe("crew update selector identity", () => {
     expect(j.tap_reexpand_rows).toContainEqual({
       name: "shared",
       scope: "project",
+      project_root: project,
       tap: "b",
       kind: "added",
     });

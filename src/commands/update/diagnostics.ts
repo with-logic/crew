@@ -2,6 +2,7 @@
 
 import { displayText } from "../../refs/display-url.ts";
 import { sanitizeLine } from "../../util/redact.ts";
+import { projectTag } from "./location.ts";
 import type { UpdatePlan } from "./plan.ts";
 
 /** The caller owns the quiet/hard-failure gate; rendering never changes severity or raw rows. */
@@ -28,7 +29,13 @@ export function renderQuietUpdateErrors(
   }
   for (const row of plan.tapReexpandRows) {
     if (row.kind === "tap_error")
-      lines.push(failureLine(`${row.name} (from ${row.tap})`, row.error.code, row.error.message));
+      lines.push(
+        failureLine(
+          `${row.name}${projectTag(row)} (from ${row.tap})`,
+          row.error.code,
+          row.error.message,
+        ),
+      );
   }
   const namedTaps = new Set<string>();
   for (const selector of plan.selectors) {
