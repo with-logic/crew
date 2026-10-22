@@ -1,5 +1,5 @@
 /**
- * `crew tap remove <name>` (§16.3), including the attached-skill guard.
+ * `crew tap remove <name>` (§16.3, §14), including the attached-skill guard.
  *
  * Removing a tap that still backs state entries would leave those
  * entries pointing at a tap that no longer exists, so the bare command
@@ -21,6 +21,8 @@
  * Guard evaluation lives in `./plan.ts`.
  */
 
+import { entryTargetBases } from "../../../agents/target-lock/bases.ts";
+import { withTargetLocks } from "../../../agents/target-lock/index.ts";
 import { readConfig, writeConfig } from "../../../config/load.ts";
 import { CrewError } from "../../../core/errors.ts";
 import { paths } from "../../../core/paths.ts";
@@ -124,50 +126,59 @@ function removeTapOnly(
 /** `--uninstall`: run the §7.4 removal for each attached entry, then drop the tap. */
 function removeWithSkills(ctx: CommandContext, plan: RemovePlan, dryRun: boolean): CommandOutput {
   const cloneShared = cloneStillReferenced(plan.tap, readConfig(ctx.home).taps);
-  const records: UninstallRecord[] = [];
-  let state = readState(ctx.home);
-  // Group this tap's entries by skill name so each name is removed once,
-  // in a single state pass, and only entries belonging to THIS tap are
-  // touched — a same-named skill from another tap or project stays put.
-  const byName = new Map<string, StateEntry[]>();
-  for (const e of plan.attached) {
-    const list = byName.get(e.name);
-    if (list) list.push(e);
-    else byName.set(e.name, [e]);
-  }
-  // Each `removeOne` rebuilds the whole installations array, so K skills
-  // over N entries costs K*N visits. Run the per-agent filesystem work
-  // per skill (it must stay per-skill), collect the entries that came off
-  // cleanly, and apply the state change in one keyed traversal.
-  //
-  // Cleanliness is per ENTRY, not per name: one skill name can be
-  // installed at several §11.1 locations (user + project, or two project
-  // roots). Keying the decision on the name group would retain a deleted
-  // install's row whenever a sibling location aborted, leaving state
-  // claiming bytes that are gone and blocking the tap forever.
-  const cleanlyRemoved: StateEntry[] = [];
-  for (const [name, entries] of byName) {
-    const { rec, updatedState, fullyRemoved } = removeOne(
-      state,
-      { raw: name, name, entries },
-      ctx,
-      false,
-      null,
-      true,
-    );
-    state = updatedState;
-    records.push(rec);
-    cleanlyRemoved.push(...fullyRemoved);
-  }
-  state = dropScopedEntriesAndUpdateRequiredBy(state, cleanlyRemoved);
+  const remove = (unavailableBases?: ReadonlySet<string>) => {
+    const records: UninstallRecord[] = [];
+    let state = readState(ctx.home);
+    // Group this tap's entries by skill name so each name is removed once,
+    // in a single state pass, and only entries belonging to THIS tap are
+    // touched — a same-named skill from another tap or project stays put.
+    const byName = new Map<string, StateEntry[]>();
+    for (const e of plan.attached) {
+      const list = byName.get(e.name);
+      if (list) list.push(e);
+      else byName.set(e.name, [e]);
+    }
+    // Each `removeOne` rebuilds the whole installations array, so K skills
+    // over N entries costs K*N visits. Run the per-agent filesystem work
+    // per skill (it must stay per-skill), collect the entries that came off
+    // cleanly, and apply the state change in one keyed traversal.
+    //
+    // Cleanliness is per ENTRY, not per name: one skill name can be
+    // installed at several §11.1 locations (user + project, or two project
+    // roots). Keying the decision on the name group would retain a deleted
+    // install's row whenever a sibling location aborted, leaving state
+    // claiming bytes that are gone and blocking the tap forever.
+    const cleanlyRemoved: StateEntry[] = [];
+    for (const [name, entries] of byName) {
+      const { rec, updatedState, fullyRemoved } = removeOne(
+        state,
+        { raw: name, name, entries },
+        ctx,
+        false,
+        null,
+        true,
+        unavailableBases,
+      );
+      state = updatedState;
+      records.push(rec);
+      cleanlyRemoved.push(...fullyRemoved);
+    }
+    state = dropScopedEntriesAndUpdateRequiredBy(state, cleanlyRemoved);
 
-  const failed = records.some((r) => r.failures.length > 0);
-  if (!dryRun) {
-    writeState(state, ctx.home);
-    // Only drop the tap once every skill actually came off; a safety
-    // abort leaves the tap in place so the user can retry with --force.
-    if (!failed) dropTap(ctx.home, plan.tap);
-  }
+    const failed = records.some((r) => r.failures.length > 0);
+    if (!dryRun) {
+      writeState(state, ctx.home);
+    }
+    return { records, failed };
+  };
+  const { records, failed } = dryRun
+    ? remove()
+    : withTargetLocks(entryTargetBases(plan.attached, ctx.cwd, false), (_failures, unavailable) =>
+        remove(unavailable),
+      );
+  // §14: retain the tap after any failed removal so retained installs remain retryable.
+  // Clone deletion happens after target locks have been released.
+  if (!(dryRun || failed)) dropTap(ctx.home, plan.tap);
   return {
     exitCode: failed ? 1 : 0,
     human: renderTapRemove({

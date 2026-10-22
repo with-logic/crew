@@ -49,8 +49,9 @@ const ITEMS: readonly {
     title: "Concurrency-safe.",
     body: (
       <>
-        Every write takes an advisory lock on <code>state.json.lock</code>. The background
-        autoupdater and your interactive shell can't stomp on each other.
+        A state lock coordinates writes within each crew home. Shared target locks coordinate
+        installs and marker changes across homes at each physical agent skill base. Each target lock
+        covers the whole base, so unrelated skills there wait for one another.
       </>
     ),
   },

@@ -1,8 +1,10 @@
 /** Walk one tracked tap revision and collect re-expansion outcomes (§10.1.1). */
 
+import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
+import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { isSourceReadFailure } from "../../util/source-read.ts";
 import type { InstalledSourceIndex } from "../installed-lookup.ts";
@@ -22,6 +24,8 @@ interface GroupInput {
   readonly installOne: InstallNewChild;
   readonly dryRun: boolean;
   readonly namespaces: ReadonlySet<string> | null;
+  readonly prepared?: PreparedSources;
+  readonly baseFailures?: TargetBaseFailures;
 }
 
 export function reexpandGroup(input: GroupInput): TapReexpandResult {
@@ -36,7 +40,7 @@ export function reexpandGroup(input: GroupInput): TapReexpandResult {
       const acquired = input.cache.acquire(input.tap, input.home);
       return walk({ ...acquired, pinned: false });
     }
-    return withAcquiredTap(input.tap, first.ref, input.home, walk);
+    return withAcquiredTap(input.tap, first.ref, input.home, walk, input.prepared);
   } catch (err) {
     if (acquiredDone) throw err;
     const ce = err as CrewError;
@@ -79,6 +83,7 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
     installedIndex: input.installedIndex,
     ref: first.ref,
     pinned: acquired.pinned,
+    ...(input.baseFailures ? { baseFailures: input.baseFailures } : {}),
   });
   return {
     added: additions.added,

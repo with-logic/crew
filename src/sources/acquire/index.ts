@@ -30,18 +30,14 @@
 import { join, posix } from "node:path";
 import { CrewError } from "../../core/errors.ts";
 import { crewHome } from "../../core/paths.ts";
-import { tapClonePath } from "../../core/repo-path.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { withExportedTree } from "../../git/export.ts";
-import { ensureClone } from "../../git/repo/index.ts";
-import { classifyRef, resolveRef } from "../../git/repo/refs.ts";
 import { displayUrl } from "../../refs/display-url.ts";
 import { assertNoSymlinkEscape } from "../../util/symlink-containment.ts";
 import { isGistTap } from "../gist.ts";
-import { migrateTapClone } from "../migrate-clones.ts";
 import { assertRecordedSourcePath } from "../path.ts";
 import { isSourceDirectory } from "../read.ts";
-import { resolveRefFetchingIfNeeded } from "./resolve-ref.ts";
+import { acquireGitRevision, type PreparedSources } from "./revision.ts";
 import { assertRecordedGitLocation } from "./skill-path.ts";
 
 /** Output of acquisition. */
@@ -63,7 +59,11 @@ export interface AcquiredTap {
  * `no_skills_found` when that path is missing or isn't a directory,
  * and `invalid_ref` when the stored subpath escapes the clone (see `tapRootDir`).
  */
-export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredTap {
+export function acquireTap(
+  tap: TapConfig,
+  home: string = crewHome(),
+  prepared?: PreparedSources,
+): AcquiredTap {
   if (tap.kind === "path") {
     if (!isSourceDirectory(tap.path)) {
       throw new CrewError(
@@ -75,11 +75,8 @@ export function acquireTap(tap: TapConfig, home: string = crewHome()): AcquiredT
     return { rootDir: tap.path, resolvedSha: null, pinned: false };
   }
   // kind === "git"
-  migrateTapClone(tap, home);
-  const clonePath = tapClonePath(tap, home);
-  ensureClone(tap.url, clonePath);
   // §9 step 3: Git's `@` is checkout HEAD, even after a refs-only fetch.
-  const sha = resolveRef(clonePath, "@");
+  const { clonePath, resolvedSha: sha } = acquireGitRevision(tap, null, home, prepared);
   // `tapRootDir` proves containment (lexical + symlink) as it resolves.
   const rootDir = tapRootDir(clonePath, tap);
   if (!isSourceDirectory(rootDir, false)) {
@@ -106,16 +103,12 @@ export function withAcquiredTap<T>(
   ref: string | null,
   home: string,
   fn: (acquired: AcquiredTap) => T,
+  prepared?: PreparedSources,
 ): T {
   if (ref === null || tap.kind === "path") {
-    return fn(acquireTap(tap, home));
+    return fn(acquireTap(tap, home, prepared));
   }
-  migrateTapClone(tap, home);
-  const clonePath = tapClonePath(tap, home);
-  ensureClone(tap.url, clonePath);
-  const sha = resolveRefFetchingIfNeeded(clonePath, ref);
-  const kind = classifyRef(clonePath, ref);
-  const pinned = kind === "sha" || kind === "tag";
+  const { clonePath, resolvedSha: sha, pinned } = acquireGitRevision(tap, ref, home, prepared);
   return withExportedTree(clonePath, sha, tap.subpath, home, (rootDir) =>
     fn({ rootDir, resolvedSha: sha, pinned }),
   );
@@ -139,20 +132,16 @@ export function withAcquiredSkillPath<T>(
   skillPath: string,
   home: string,
   fn: (acquired: Pick<AcquiredTap, "resolvedSha" | "pinned">, sourcePath: string) => T,
+  prepared?: PreparedSources,
 ): T {
   assertRecordedSourcePath(skillPath);
   if (ref === null || tap.kind === "path") {
-    const acquired = acquireTap(tap, home);
+    const acquired = acquireTap(tap, home, prepared);
     const selected = join(acquired.rootDir, skillPath);
     if (tap.kind === "git") assertRecordedGitLocation(acquired.rootDir, selected);
     return fn({ resolvedSha: acquired.resolvedSha, pinned: acquired.pinned }, selected);
   }
-  migrateTapClone(tap, home);
-  const clonePath = tapClonePath(tap, home);
-  ensureClone(tap.url, clonePath);
-  const sha = resolveRefFetchingIfNeeded(clonePath, ref);
-  const kind = classifyRef(clonePath, ref);
-  const pinned = kind === "sha" || kind === "tag";
+  const { clonePath, resolvedSha: sha, pinned } = acquireGitRevision(tap, ref, home, prepared);
   const exportPath =
     skillPath.length === 0
       ? tap.subpath

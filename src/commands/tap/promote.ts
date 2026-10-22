@@ -1,6 +1,6 @@
 /**
  * Promote an existing *auto* tap to *registered* and (optionally)
- * rename it.
+ * rename it (§16.3, §14).
  *
  * A rename is a cross-cutting operation: the tap row, every
  * `state.installations[].source.tap`, and every on-disk marker's
@@ -12,6 +12,8 @@
  * a rename doesn't change.
  */
 
+import { markerTargetBases } from "../../agents/target-lock/bases.ts";
+import { withTargetLocks } from "../../agents/target-lock/index.ts";
 import type { readConfig } from "../../config/load.ts";
 import { writeConfig } from "../../config/load.ts";
 import type { StateFile, TapConfig } from "../../core/types.ts";
@@ -40,22 +42,25 @@ export function promoteExistingTap(
     ...config,
     taps: config.taps.map((t) => (t.name === sameTarget.name ? promoted : t)),
   };
-  writeConfig(updated, home);
   const state = readState(home);
-  const rewritten: StateFile = {
-    ...state,
-    installations: state.installations.map((e) =>
-      e.source.tap === sameTarget.name ? { ...e, source: { ...e.source, tap: renamedName } } : e,
-    ),
-  };
-  if (renamedName !== sameTarget.name) writeState(rewritten, home);
-  rewriteTapMarkers(
-    {
-      oldName: sameTarget.name,
-      newName: renamedName,
-      ...(recursive ? { discovery: "recursive" } : {}),
-    },
-    rewritten.installations,
-    cwd,
-  );
+  withTargetLocks(markerTargetBases(state.installations, cwd), (_failures, unavailableBases) => {
+    writeConfig(updated, home);
+    const rewritten: StateFile = {
+      ...state,
+      installations: state.installations.map((e) =>
+        e.source.tap === sameTarget.name ? { ...e, source: { ...e.source, tap: renamedName } } : e,
+      ),
+    };
+    if (renamedName !== sameTarget.name) writeState(rewritten, home);
+    rewriteTapMarkers(
+      {
+        oldName: sameTarget.name,
+        newName: renamedName,
+        ...(recursive ? { discovery: "recursive" } : {}),
+      },
+      rewritten.installations,
+      cwd,
+      unavailableBases,
+    );
+  });
 }

@@ -1,5 +1,5 @@
 /**
- * End-to-end `crew install` flow (§9).
+ * End-to-end `crew install` flow (§9, §14).
  *
  * This module ties the pieces together:
  *
@@ -13,9 +13,10 @@
  *      the CLI layer can format.
  */
 
+import { withTargetLocks } from "../agents/target-lock/index.ts";
 import { readConfig, writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
-import type { Config, ResolvedSkill, Scope, StateEntry } from "../core/types.ts";
+import type { Config, ResolvedSkill, Scope } from "../core/types.ts";
 import { garbageCollectAutoTaps } from "../maintenance/auto-taps.ts";
 import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
@@ -29,6 +30,7 @@ import { applyReattributions, rewriteReattributedMarkers } from "./reattribute.t
 import { type RequiredByMap, resolveInstallSet } from "./resolve/index.ts";
 import type { KindHint } from "./resolve-ref/index.ts";
 import { rewriteTapMarkers } from "./rewrite-tap-markers.ts";
+import { discoveryUpgrades, installTargetBases } from "./target-batch.ts";
 
 /** Options accepted by `runInstall`. */
 export interface InstallOptions {
@@ -144,52 +146,46 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     );
     const { toInstall, promoteToExplicit, reattributions, keepSource } = analysis;
     alreadyInstalled = analysis.alreadyInstalled;
-    rewriteDiscoveryUpgradeMarkers(config, configWithAutoTaps, freshState.installations, cwd);
-    // §5.4: entries that reached the same source through a narrower
-    // auto tap move onto the incoming tap before the install runs, so
-    // `performInstall` sees the attribution it is about to write.
-    rewriteReattributedMarkers(reattributions, configWithAutoTaps.taps, cwd);
-    const reattributed = applyReattributions(freshState, reattributions);
-    const result = performInstall(toInstall, agents, options.scope, cwd, reattributed, {
-      force: options.force,
-      dryRun: false,
-      requiredBy,
-      allResolved: resolvedAll,
-      keepSource,
-    });
-    const promoted = promoteExplicit(
-      result.newState,
-      promoteToExplicit,
+    const rewrites = discoveryUpgrades(config, configWithAutoTaps);
+    const bases = installTargetBases(
+      toInstall.length > 0 ? agents : [],
       options.scope,
-      options.scope === "project" ? cwd : null,
+      cwd,
+      rewrites,
+      reattributions,
+      freshState.installations,
     );
-    writeState(promoted, home);
-    // An auto tap left with no entries after re-attribution is crew's
-    // own bookkeeping and goes away with its clone (§16.5).
-    if (reattributions.length > 0) garbageCollectAutoTaps(promoted, home);
-    return { ...result, newState: promoted };
+    const installed = withTargetLocks(bases, (baseFailures, unavailableBases) => {
+      for (const rewrite of rewrites)
+        rewriteTapMarkers(rewrite, freshState.installations, cwd, unavailableBases);
+      // §5.4: entries that reached the same source through a narrower
+      // auto tap move onto the incoming tap before the install runs, so
+      // `performInstall` sees the attribution it is about to write.
+      rewriteReattributedMarkers(reattributions, configWithAutoTaps.taps, cwd, unavailableBases);
+      const reattributed = applyReattributions(freshState, reattributions);
+      const result = performInstall(toInstall, agents, options.scope, cwd, reattributed, {
+        force: options.force,
+        dryRun: false,
+        requiredBy,
+        allResolved: resolvedAll,
+        keepSource,
+        baseFailures,
+      });
+      const promoted = promoteExplicit(
+        result.newState,
+        promoteToExplicit,
+        options.scope,
+        options.scope === "project" ? cwd : null,
+      );
+      writeState(promoted, home);
+      return { ...result, newState: promoted };
+    });
+    // §14: target exclusion ends before clone locks taken by auto-tap GC.
+    if (reattributions.length > 0) garbageCollectAutoTaps(installed.newState, home);
+    return installed;
   }, home);
 
   return { summary, alreadyInstalled, resolved: resolvedAll, skipped };
-}
-
-function rewriteDiscoveryUpgradeMarkers(
-  before: Config,
-  after: Config,
-  stateEntries: readonly StateEntry[],
-  cwd: string,
-): void {
-  const previous = new Map(before.taps.map((tap) => [tap.name, tap]));
-  for (const tap of after.taps) {
-    const old = previous.get(tap.name);
-    if (!old) continue;
-    if (old.discovery === "recursive" || tap.discovery !== "recursive") continue;
-    rewriteTapMarkers(
-      { oldName: tap.name, newName: tap.name, discovery: "recursive" },
-      stateEntries,
-      cwd,
-    );
-  }
 }
 
 // Keep `RequiredByMap` exported under this module's name for consumers.

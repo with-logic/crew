@@ -1,5 +1,5 @@
 /**
- * Target install operations (§7.3).
+ * Target install operations (§7.3, §14).
  *
  * These are adapter-independent and path-centric: multiple adapters
  * may resolve to the same `dest` (path sharing, §7.2), so the unit of
@@ -21,6 +21,7 @@ import { progress } from "../util/progress.ts";
 import { safePath } from "../util/redact.ts";
 import { nowIso } from "../util/time.ts";
 import { type AgentAdapter, baseFor } from "./adapter.ts";
+import type { TargetBaseFailures } from "./target-lock/index.ts";
 
 /** Input to the install operation for one (dest, agent-group). */
 export interface InstallInput {
@@ -38,6 +39,8 @@ export interface InstallInput {
   readonly resolvedSha: string | null;
   readonly contentHash: string;
   readonly force: boolean;
+  /** Failed base preparation/admission cannot become an unlocked read or write later (§14). */
+  readonly baseFailures?: TargetBaseFailures;
   /** Internal receipt hook with the completed staging path, before destination replacement. */
   readonly beforeReplace?: (staging: string) => void;
 }
@@ -56,6 +59,8 @@ export function installSkillIntoAgents(input: InstallInput): InstallOutcome {
   // grouping happens before we get here. Use the first adapter's
   // `base` and carry all adapter names in the marker.
   const base = baseFor(input.agents[0]!, input.scope, input.cwd);
+  const failure = input.baseFailures?.get(base);
+  if (failure) throw failure;
   ensureDir(base, 0o755);
   const dest = join(base, input.skillName);
 

@@ -490,6 +490,14 @@ With `--json`, help MUST emit a structured payload:
 
 All paths inside `~/.crew/` are owned by Homecrew. External tools should not write here. Homecrew may delete anything under `cache/` when no command is using its source exports (§14); `store/` is garbage-collected by `crew update` and `crew cache clean`; `repos/`, `state.json`, `config.yaml`, and `logs/` are durable. `locks/` holds coordination lockfiles and MUST NOT live under `cache/`: cleaning the cache must not remove an active lock. `crew cache clean --dry-run` reports the bytes and unreferenced store entries a clean would remove and deletes nothing; `--json` output carries `dry_run: true`.
 
+**Shared install-target coordination.** Each physical adapter skill-base may
+contain the reserved hidden sentinel `.crew-target`, its persistent
+`.crew-target.lock.owner` ownership record, and a transient
+`.crew-target.lock` directory (§14). These coordination entries live outside
+valid skill-name children and survive child replacement and removal. They are
+shared across independent `CREW_HOME` roots; they MUST NOT live in a
+home-local registry, cache, store, or installed skill directory.
+
 **One clone per repository.** A tap row is identified by its
 `(url, subpath)` pair, so several taps can point into one repository —
 `@acme/skills//docs` and `@acme/skills//tools` are two taps over the same
@@ -666,7 +674,7 @@ Install takes a staged skill directory in the store, a skill name, a scope, and 
       iv. Write a `.crew.json` marker into the staging directory per §7.5. The marker's `agents` field is the **union** of (a) any `agents` list present in a prior marker at `dest`, and (b) the agent names in this group. This preserves ownership by agents that installed into the same path on an earlier run and aren't part of the current operation.
       v. If `dest` exists, remove it.
       vi. Rename the staging directory to `dest`.
-4. **Never modify files outside `dest`.** Adapters must not edit shared configuration files the agent tool may use (such as global `AGENTS.md`, settings JSON, etc.). If a agent tool's documented convention requires modifying a shared file, that is out of scope for v1.
+4. **Never modify files outside `dest`**, except the sibling staging/rollback directories required by installation and the reserved target-coordination entries in the adapter skill-base (§6, §14). Adapters must not edit shared configuration files the agent tool may use (such as global `AGENTS.md`, settings JSON, etc.). If an agent tool's documented convention requires modifying a shared file, that is out of scope for v1.
 
 **Per-agent reporting.** Even when N adapters share one `dest`, the user-facing summary lists all N adapter names as installed (or up-to-date, or failed). The install summary returned to callers is keyed by adapter name, not by `dest`.
 
@@ -2213,7 +2221,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 | `not_installed_here` | 6 | Uninstall agent has no marker. |
 | `no_agents` | 4 | No agent tools detected or all disabled. |
 | `config_invalid` | 4 | `config.yaml` did not parse, or a tap name is not a single directory component (contains `/`, `\`, or is `.`/`..`). |
-| `state_locked` | 7 | Could not acquire a coordination lock within the timeout — the state lock (`state.json.lock`), maintenance lock, or a per-repository clone lock (§14). |
+| `state_locked` | 7 | Could not acquire a coordination lock within the timeout — the state lock (`state.json.lock`), maintenance lock, per-repository clone lock, or shared physical-target lock (§14). |
 | `autoupdate_failure` | 8 | Autoupdate enable/disable couldn't load/unload the platform scheduler. |
 | `self_update_unavailable` | 5 | `crew self-update` couldn't reach the release feed, the asset is missing for the current arch, or the named `--version` doesn't exist. |
 | `self_update_failed` | 8 | `crew self-update` fetched a new binary but couldn't replace the running one (e.g. the install prefix isn't writable). |
@@ -2319,6 +2327,98 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
    - The state lock and clone locks are separate. A command that takes both acquires the state lock first.
 5. Commands using ephemeral source exports or the store hold a separate **maintenance advisory lock** at `locks/maintenance.lock` for their whole command handler, including source resolution, staging, installation, and collection. This covers `install`, `update` (including `--dry-run`), `outdated`, `info`, `search`, `doctor` (including read-only checks), `cache clean` (including `--dry-run`), and tap acquisition/refresh (`tap add`, shorthand add, and `tap update`). Tap operations acquire it after argument validation and retain it through acquisition/refresh; source-free tap `--dry-run` previews and rejected tap arguments do not acquire it. Consequently, no collector can remove another command's in-flight store entry or export. Acquire maintenance before any state or clone lock; release it on success or failure, using the same 30 s timeout and `state_locked` failure. Its lockfiles live outside `cache/` and `store/`. Nested synchronous source consumers in the same process may share the maintenance lock; a nested collector must still wait for the outer source consumer to finish. Read-only commands still never acquire the state lock. Commands that do not use these trees, including `list`, `tap list`, `help`, and `version`, do not acquire the maintenance lock.
 
+6. Every command that mutates an installed skill directory or its marker
+   holds a **shared physical-target advisory lock**, independent of
+   `CREW_HOME`. The lock covers the entire physical adapter skill-base, so
+   unrelated child skills in that base intentionally serialize. Acquire it
+   using the reserved `.crew-target` sentinel inside that base (§6); replacing
+   or removing a child never removes its coordination entries. This covers
+   install/reinstall, new-child source ownership preflight, publication,
+   rollback and owned cleanup, uninstall/prune/tap removal, owner detach,
+   tap promotion/discovery marker rewrites, and source reattribution even
+   when the skill's bytes are already installed.
+   - The sentinel must be a regular file and its `.lock` entry, when present,
+     a real directory. Reject other reserved entry types with `usage_error`
+     without following their links; trusted aliases of the base itself remain
+     supported. Publish the unchanged PID/directory-identity owner record by
+     atomic replacement, never by writing through a pre-existing owner link
+     or hardlink. A temporary owner file inside the acquired lock directory
+     is removed on failure or stale reclamation without removing other contents.
+     Liveness reads never follow owner links or read special-file streams:
+     use a non-following, nonblocking descriptor and a bounded regular-record
+     read sufficient for the PID/directory-identity format. Unsupported,
+     oversized or malformed records provide no liveness protection; ordinary
+     filesystem read failures still propagate.
+   - Resolve trusted adapter-base ancestors physically. Deduplicate aliases
+     by the base directory's filesystem device/inode identity and acquire the
+     complete required set in ascending numeric `(device, inode)` order;
+     release in reverse order on success or failure. Do not lowercase paths,
+     derive lock placement from markers/sources/taps, or resolve the final
+     skill child to decide base identity. Adapter sharing and user/project or
+     symlink aliases of the same base take one lock. A missing install base
+     may be created before locking; marker-only and removal scans skip absent
+     bases and do not create them. An existing ordinary non-directory base
+     cannot host skill children and retains its per-agent failure behavior.
+     Bases unavailable during preparation remain unavailable to this batch
+     even if they appear later: removal uses its ordinary missing-install
+     outcome and metadata scans omit them before reading markers. An install
+     base preparation failure is consumed at its ordinary target attempt,
+     preventing a later newly real directory from being written unlocked.
+     If creating an absent install base fails, recheck whether another
+     process established a real directory and lock it if so. Otherwise retain
+     the creation failure for that base's ordinary target-attempt position,
+     preventing any later unlocked write even if the directory appears.
+     Source validation/staging and other targets retain their existing
+     precedence, partial-success and rollback behavior. For an install-only
+     base, an initial sentinel-open or lock-directory-mkdir failure with
+     `EACCES`, `EPERM`, or `EROFS` is likewise retained for its ordinary
+     target attempt. Every lexical alias of that physical base receives the
+     original failure; no target ownership/marker reads or writes may occur
+     there during the batch, even if permissions later change. These failed
+     existing bases are distinct from absent bases skipped by metadata scans.
+     A metadata or removal request makes its physical base strict, including
+     when another request installs there through the same path or an alias:
+     its admission failures abort the batch rather than omit required work.
+     Base inspection, owner inspection/publication, reserved-entry type errors,
+     and all other acquisition failures remain fatal.
+   - Determine every required base for one mutation/rollback batch up front.
+     Acquire the entire set before target safety/source/marker reads used to
+     decide mutations, and retain it through publication, rollback and owned
+     cleanup. Re-read marker inventories under exclusion; never replay an
+     unlocked marker snapshot. Do not dynamically extend or nest held target
+     sets. If admission fails fatally, release earlier locks and mutate no
+     targets in that batch. Retained install-only permission failures exclude
+     those bases from every target-dependent read/write; acquire the entire
+     remaining set before processing ordinary target attempts. Each attempted
+     lock has the existing 30 s timeout;
+     contention produces `state_locked`, exit 7, outside per-target failure
+     isolation. Existing stale/live-owner handling and host dependencies apply.
+   - Where locks coexist, the order is maintenance → state → clone → target.
+     Install source resolution finishes before its target batch. Update
+     refreshes sources once under clone locks before determining or acquiring
+     targets, so source-only fetch/clone work holds no target locks. A recorded
+     project root recreated by that refresh participates in target preparation.
+     After refresh, complete clone/ref-fetch fallback decisions before target
+     admission, retaining one coherent revision outcome per configured tap/ref
+     for the command. Consumers share its clone/SHA/pin result or original
+     isolated failure rather than retrying transport inside target exclusion;
+     healthy entries continue with unchanged row/error shapes. Initial refresh
+     and one pre-lock fallback attempt per pair may both contact the source.
+     Roots still absent after complete source preparation, when the target batch is determined,
+     retain the ordinary missing-project skip through per-entry updates and
+     tap re-expansion for the entire batch, even if they appear later. Do not
+     create a missing project root to prepare targets or admit it dynamically.
+     Acquire targets before child preflight.
+     Release targets before any later auto-tap collection or clone deletion;
+     never acquire a lower-order lock while holding target locks.
+   - Read-only commands and dry runs take no target locks and create no target
+     coordination entries; their existing maintenance/clone locks still
+     apply. Doctor repair currently writes home-local state/config/store and
+     scheduler artifacts, not installed skills, so it takes no target lock.
+     This protocol coordinates cooperating Homecrew writers; it does not
+     exclude external filesystem mutations, promise a snapshot-consistent
+     read-only inventory, or replace rollback publication-ownership checks.
+
 ## 15. Exit codes
 
 | Code | Meaning |
@@ -2329,7 +2429,7 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
 | 4 | User error: invalid arguments, invalid skill, unresolvable references, no agents available, config invalid. |
 | 5 | Network / source failure: could not reach git, ref does not exist, release feed unreachable. |
 | 6 | Safety-check abort: untracked directory, customized skill, bad marker. |
-| 7 | Could not acquire state lock. |
+| 7 | Could not acquire a coordination lock (§14). |
 | 8 | Platform integration failure: autoupdate scheduler could not be loaded/unloaded, or self-update couldn't replace the binary. |
 
 ## 16. Taps
@@ -3051,6 +3151,10 @@ Implementations and test suites refer to criteria by ID.
 | C-CONC-03 | §14 | Read-only commands (`list`, `info`, `search`, `agents`, `tap list`, `help`, `version`) do NOT take the state lock. |
 | C-CONC-04 | §14 | The lock is released when the holding process exits for any reason (including crash). |
 | C-CONC-05 | §6, §14 | A maintenance collector waits while another command consumes a source export or stages an install; timeout returns `state_locked` without deleting its bytes. Read-only source commands use this separate coordination lock without creating `state.json`. |
+| C-CONC-06 | §7.2–§7.4, §14 | Independent homes writing the same physical user/project skill-base exclude each other before safety/owner reads, including trusted base aliases and adapter sharing; a later successful install or detach preserves the fresh owner set. |
+| C-CONC-07 | §10.1, §14, §16.3 | Update/reinstall, new-child source preflight and rollback, removal/prune/tap removal, metadata promotion/discovery, and source reattribution all hold physical-target exclusion through their complete mutation/rollback batch. |
+| C-CONC-08 | §14 | Complete multi-base sets acquire in deterministic filesystem identity order; contention times out per lock with state_locked/exit 7 before any target mutation, unwinds earlier locks, and permits retry. |
+| C-CONC-09 | §6, §14 | Read-only commands and dry runs take no physical-target locks and create none of the reserved target coordination entries; existing source clone/maintenance preview coordination remains. |
 
 #### C-CLI: CLI contract (§5)
 

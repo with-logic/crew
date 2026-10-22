@@ -5,8 +5,8 @@
  * refresh taps, re-expand them, walk each selected entry — and returns
  * the state that would result plus every output row. It does NOT lock
  * state, persist, or GC; the caller in `./index.ts` owns that, so the
- * preview and the real run share one decision path and can never
- * disagree about what happens.
+ * preview and the real run share one decision path. Previews read an
+ * unlocked view and may differ under concurrent target changes (§14).
  *
  * Clone locking (§14) is acquired here because it spans the whole plan:
  * refresh, re-expansion, and per-skill source reads all touch the same

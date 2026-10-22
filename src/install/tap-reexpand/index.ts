@@ -22,7 +22,9 @@
  * install callback is never invoked.
  */
 
+import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
+import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { entryIdentity } from "../../state/collections/index.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
@@ -60,6 +62,9 @@ export function reexpandTaps(
   selection: ReexpandSelection | null,
   installOne: InstallNewChild,
   dryRun: boolean = false,
+  missingProjectRoots?: ReadonlySet<string>,
+  prepared?: PreparedSources,
+  baseFailures?: TargetBaseFailures,
 ): TapReexpandResult {
   const added: StateEntry[] = [];
   const updated: StateEntry[] = [];
@@ -68,7 +73,7 @@ export function reexpandTaps(
   let hardFailure = false;
   // One tap backs several (scope, project_root) groups; acquire, walk
   // and validate it once per run rather than once per group.
-  const cache = makeTapScanCache();
+  const cache = makeTapScanCache(prepared);
   const installedIndex = buildInstalledSourceIndex(state, config);
 
   // Group state entries by (tap-name, scope, project_root, ref). Entries
@@ -117,7 +122,11 @@ export function reexpandTaps(
     const projectRoot = first.project_root ?? null;
     if (
       first.scope === "project" &&
-      !(hasUsableProjectRoot(first) && isDirectory(first.project_root))
+      !(
+        hasUsableProjectRoot(first) &&
+        !missingProjectRoots?.has(first.project_root) &&
+        isDirectory(first.project_root)
+      )
     )
       continue;
 
@@ -131,6 +140,8 @@ export function reexpandTaps(
       installOne,
       dryRun,
       namespaces: selection?.namespaces ?? null,
+      ...(prepared ? { prepared } : {}),
+      ...(baseFailures ? { baseFailures } : {}),
     });
     rows.push(...result.rows);
     updated.push(...result.updated);
