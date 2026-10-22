@@ -2565,6 +2565,14 @@ Healthy siblings remain searchable and validation warnings alone leave the
 search exit code at 0. Gist files excluded by §9's file-layout discovery
 remain ignored without validation warnings.
 
+If a directory skill's declared name was indexed successfully but its later
+full-manifest read fails operationally, search MUST warn once for that failed
+skill, naming the tap, indexed skill name, source path, `source_unreachable`,
+and OS reason. The warning MUST redact credentials and escape terminal controls
+as one safe line. Only that skill is skipped; healthy hits continue, warnings
+appear on human stderr and in JSON `warnings` regardless of query, and the
+search exits 0. The invalid-manifest warning policy above is unchanged.
+
 Configured-tap source-read warnings MUST append an explicit nonempty
 error remedy to the same warning string beside the existing code and
 primary message. Undefined, null, and empty hints add no text; generic
@@ -2952,6 +2960,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-08c | §16.6 | A same-name skill from a different tap/path is not marked installed in `crew search`; JSON reports `installed: false` and `same_name_installed: true`. |
 | C-TAP-08d | §9, §16.6 | Directory-tap candidates rejected during name-only indexing retain path-specific validation diagnostics without inferred names. Search reports invalid directory manifests in human stderr and JSON warnings, regardless of query, while healthy siblings remain hits and the command exits 0. Gist invalid files remain ignored. |
 | C-TAP-08e | §8.3, §9 | Final tap-source resolution misses retain `invalid_ref`, exit 4, original details and remedy, while human and JSON error messages report scoped rejected directory locations, validation code and reason without inferred names. Healthy resolution, ambiguity, `--tap` misses, requested-ref trees, known-tap suggestions, and ignored invalid gist files retain their existing behavior. |
+| C-TAP-08f | §16.6 | When a directory skill passes name indexing but a later full-manifest read fails operationally, search emits one safe warning identifying the tap, indexed skill, source path, `source_unreachable`, and OS reason, regardless of query. Only the failed skill is skipped, healthy hits continue, human stderr and JSON warnings retain the diagnostic, and the command exits 0. Invalid-manifest warning behavior is unchanged. |
 | C-TAP-08h | §5.2, §13, §16.6 | Configured-tap source-read warnings append an originating explicit nonempty remedy to the existing warning string, with whole-diagnostic credential redaction and control escaping. Human stderr and JSON `warnings` contain the same strings; warning cardinality, `string[]` shape, healthy hits, and exit 0 remain unchanged. Undefined/null/empty hints and generic defaults add no text; no-hint warnings retain their existing text. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
