@@ -10,6 +10,7 @@ import { uninstallSkillFromAgents } from "../../../src/agents/uninstall.ts";
 import { rewriteReattributedMarkers } from "../../../src/install/reattribute.ts";
 import { rewriteTapMarkers } from "../../../src/install/rewrite-tap-markers.ts";
 import { stageIntoStore } from "../../../src/sources/store.ts";
+import { acquireLock } from "../../../src/util/advisory-lock.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 
@@ -128,5 +129,29 @@ test("C-CONC-07 a non-directory install base cannot become a later unlocked inst
     rmSync(base);
     expect(() => installSkillIntoAgents({ ...args, baseFailures })).toThrow("EEXIST");
     expect(existsSync(join(base, "demo"))).toBe(false);
+  });
+});
+
+test("C-CONC-07 an unavailable base cannot become an unlocked install after recreation", () => {
+  const base = join(makeTempDir(), "missing");
+  const args = input(base);
+  withTargetLocks([{ path: base, create: false }], (baseFailures, unavailableBases) => {
+    expect(unavailableBases.has(base)).toBe(true);
+    // Recreate the install under a different batch, then retain its physical lock.
+    withTargetLocks([{ path: base, create: true }], (failures) =>
+      installSkillIntoAgents({ ...args, baseFailures: failures }),
+    );
+    const marker = join(base, "demo", ".crew.json");
+    const bytes = readFileSync(marker);
+    const held = acquireLock(join(base, ".crew-target"));
+    try {
+      expect(() => installSkillIntoAgents({ ...args, force: true, baseFailures })).toThrow(
+        "unavailable during target preparation",
+      );
+      expect(readFileSync(marker)).toEqual(bytes);
+      expect(existsSync(join(base, ".crew-target.lock"))).toBe(true);
+    } finally {
+      held.release();
+    }
   });
 });

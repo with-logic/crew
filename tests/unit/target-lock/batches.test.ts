@@ -76,7 +76,9 @@ test("C-CONC-09 absent read-only bases and non-directory bases create no artifac
       { path: join(file, "child"), create: false },
     ],
     (failures) => {
-      expect(failures.size).toBe(0);
+      expect(failures.size).toBe(3);
+      for (const path of [missing, file, join(file, "child")])
+        expect(failures.get(path)?.code).toBe("usage_error");
     },
   );
   expect(existsSync(missing)).toBe(false);

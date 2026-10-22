@@ -1,7 +1,9 @@
 /** Physical adapter-base batches, independent of crew home (§6, §14). */
 import { realpathSync, statSync } from "node:fs";
+import { CrewError } from "../../core/errors.ts";
 import { acquireLock, type HeldLock } from "../../util/advisory-lock.ts";
 import { ensureDir } from "../../util/fs.ts";
+import { safePath } from "../../util/redact.ts";
 import { isTargetPreparationPermissionError, prepareTargetSentinel } from "./sentinel.ts";
 
 export interface TargetBase {
@@ -60,6 +62,14 @@ export function withTargetLocks<T>(
     }
     if (!stat?.isDirectory()) {
       unavailable.add(path);
+      if (!failures.has(path))
+        failures.set(
+          path,
+          new CrewError(
+            "usage_error",
+            `Target base \`${safePath(path)}\` was unavailable during target preparation; retry the command`,
+          ),
+        );
       continue;
     }
     const pathPhysical = realpathSync(path);
