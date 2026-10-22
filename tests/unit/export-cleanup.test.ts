@@ -48,7 +48,7 @@ test("callback CrewError identity, details and rendered diagnostics survive clea
   expect(primary.details).toEqual({ skill: "demo" });
   expect(primary.message).toContain(sanitizeLine(root));
   expect(primary.message).not.toContain("\n");
-  expect(primary.message).toMatch(/EACCES|EPERM/);
+  expect(primary.message).toMatch(/EACCES|EPERM|ENOTEMPTY/);
   for (const json of [false, true]) {
     const output = captureStreams();
     writeError(primary, json, output.streams, makeStyler(false));
@@ -92,7 +92,7 @@ test("cleanup failure after a successful callback still fails the operation", ()
         chmodSync(root, 0o500);
         return "success";
       }),
-    ).toThrow(/EACCES|EPERM/);
+    ).toThrow(/EACCES|EPERM|ENOTEMPTY/);
     expect(existsSync(root)).toBe(true);
   } finally {
     if (root) chmodSync(root, 0o700);

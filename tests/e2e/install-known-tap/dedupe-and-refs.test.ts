@@ -71,4 +71,23 @@ describe("known-tap fallback for install misses", () => {
     expect(c.stderr()).toContain("Homecrew found possible matches in known taps");
     expect(c.stderr()).toContain("crew install supabase/database/schema-review");
   });
+
+  test("C-TAP-24 equivalent input refs produce one known-tap suggestion", () => {
+    const home = homeWithKnownTaps();
+    const before = readConfig(home);
+    const c = captureStreams();
+    const code = runCli(
+      ["install", "schema-review", "database/schema-review", "schema-review", "--json"],
+      { home, streams: c.streams },
+    );
+    expect(code).toBe(4);
+    const suggestions = JSON.parse(c.stdout()).error.details.known_tap_suggestions;
+    expect(suggestions).toHaveLength(1);
+    expect(suggestions[0]).toMatchObject({
+      tap: "supabase",
+      name: "schema-review",
+      install: "crew install supabase/database/schema-review",
+    });
+    expect(readConfig(home)).toEqual(before);
+  });
 });

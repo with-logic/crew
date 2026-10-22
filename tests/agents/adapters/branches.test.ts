@@ -4,7 +4,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { writeFileSync } from "node:fs";
+import { delimiter, join } from "node:path";
+import { isOnPath } from "../../../src/agents/path.ts";
 import { withOriginalAdapter } from "../../helpers/env.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
 
@@ -56,6 +58,20 @@ describe("adapter path branches", () => {
       });
     } finally {
       process.env["PATH"] = prevPath;
+    }
+  });
+
+  test("PATH lookup skips empty components and continues to real entries", () => {
+    const binDir = makeTempDir("crew-empty-path-");
+    writeFileSync(join(binDir, "crew-path-fixture"), "fixture");
+    const prevPath = process.env["PATH"];
+    try {
+      process.env["PATH"] = `${delimiter}${binDir}${delimiter}${delimiter}`;
+      expect(isOnPath("crew-path-fixture")).toBe(true);
+      expect(isOnPath("crew-missing-path-fixture")).toBe(false);
+    } finally {
+      if (prevPath === undefined) delete process.env["PATH"];
+      else process.env["PATH"] = prevPath;
     }
   });
 });

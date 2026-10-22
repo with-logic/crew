@@ -1,5 +1,6 @@
 /** Real local tap and install-location fixtures for C-UPD-43 (§10.1.1). */
 
+import { strictEqual } from "node:assert";
 import { runCli } from "../../../src/cli/main.ts";
 import type { TapReexpandRow } from "../../../src/install/tap-reexpand/types.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
@@ -38,12 +39,10 @@ export function locations(
   rows: readonly (TapReexpandRow & { readonly project_root?: string })[],
 ): (string | undefined)[] {
   return rows
-    .map((row) =>
-      row.scope === "project"
-        ? row.project_root
-        : Object.hasOwn(row, "project_root")
-          ? "unexpected user project_root"
-          : "user",
-    )
+    .map((row) => {
+      if (row.scope === "project") return row.project_root;
+      strictEqual(Object.hasOwn(row, "project_root"), false);
+      return "user";
+    })
     .sort();
 }

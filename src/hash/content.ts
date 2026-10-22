@@ -44,9 +44,6 @@ export function hashDirectory(dir: string, readFile?: (path: string) => Buffer):
   });
 
   for (const e of entries) {
-    if (e.relPath === ".crew.json") {
-      continue; // belt-and-suspenders — marker exclusion is at the root.
-    }
     let fileSha: string;
     if (e.isSymlink) {
       fileSha = sha256OfBytes(Buffer.from(readlinkSync(e.absPath), "utf8"));
