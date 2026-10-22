@@ -12,7 +12,8 @@ export function explicitRemedy(error: RemedyHint): { readonly remedy?: string } 
   return error.remedy ? { remedy: sanitizeLine(displayText(error.remedy)) } : {};
 }
 
-/** Compose before the caller applies whole-diagnostic escaping and redaction. */
+/** Keep recovery hints independent of fail-closed primary suffix redaction (§13). */
 export function withRemedy(message: string, error: RemedyHint): string {
-  return error.remedy ? `${message}; next step: ${error.remedy}` : message;
+  const primary = displayText(message);
+  return error.remedy ? `${primary}; next step: ${displayText(error.remedy)}` : primary;
 }

@@ -1,6 +1,5 @@
 /** Error-only human diagnostics for hard-failed quiet update previews and runs (§5.2, §10.1). */
 
-import { displayText } from "../../refs/display-url.ts";
 import { withRemedy } from "../../util/error-remedy.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import { projectTag } from "./location.ts";
@@ -53,7 +52,5 @@ export function renderQuietUpdateErrors(
 }
 
 function failureLine(subject: string, code: string, message: string, remedy?: string): string {
-  return sanitizeLine(
-    displayText(withRemedy(`${subject}: failed (${code}): ${message}`, { remedy })),
-  );
+  return sanitizeLine(withRemedy(`${subject}: failed (${code}): ${message}`, { remedy }));
 }

@@ -53,9 +53,7 @@ function collectHitsFromTap(
     if (isSourceReadFailure) {
       warnings.push(
         sanitizeLine(
-          displayText(
-            withRemedy(`warning: tap \`${tap.name}\` skipped (${err.code}) — ${err.message}`, err),
-          ),
+          withRemedy(`warning: tap \`${tap.name}\` skipped (${err.code}) — ${err.message}`, err),
         ),
       );
       return;
