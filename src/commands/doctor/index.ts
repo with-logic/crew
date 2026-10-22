@@ -19,9 +19,9 @@ import {
   checkOrphanStoreEntries,
   checkProjectRoots,
   checkStateMarkerDrift,
-  type Finding,
 } from "./checks.ts";
 import { applyRepairs } from "./coordinator.ts";
+import type { Finding } from "./findings/index.ts";
 import { buildMarkerIndex } from "./markers/index.ts";
 import { renderDoctor } from "./render.ts";
 import { isRepairableCode } from "./repairable.ts";
