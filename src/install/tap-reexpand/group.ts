@@ -100,6 +100,9 @@ function failedGroup(input: GroupInput, error: CrewError): TapReexpandResult {
     rows: input.members.map((member) => ({
       name: member.name,
       scope: member.scope,
+      ...(member.scope === "project" && member.project_root
+        ? { project_root: member.project_root }
+        : {}),
       tap: input.tap.name,
       kind: "tap_error",
       error: { code: error.code ?? "source_unreachable", message: error.message },

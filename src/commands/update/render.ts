@@ -10,7 +10,8 @@ import type { UpdateRow } from "../../install/update/types.ts";
 import { columns, plural } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
-import { formatRowParts, groupByTap, nameCell } from "./rows.ts";
+import { projectTag } from "./location.ts";
+import { formatRowParts, groupAdditions, nameCell } from "./rows.ts";
 import { formatTotals, tally } from "./totals.ts";
 
 /** A tap or namespace the user selected, with how many entries it expanded to. */
@@ -92,21 +93,23 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   }
 
   // Tap additions: "gained X new skills from tap Y".
-  const addedByTap = groupByTap(addedRows);
-  if (addedByTap.size > 0) {
+  const additions = groupAdditions(addedRows);
+  if (additions.length > 0) {
     if (lines.length > 0 && lines[lines.length - 1] !== "") lines.push("");
-    for (const [tap, names] of addedByTap) {
+    for (const group of additions) {
       const sym = style.symbol("ok");
-      const count = plural(names.length, "new skill");
+      const count = plural(group.names.length, "new skill");
       const verb = dryRun ? "would add " : "";
-      lines.push(`${sym} ${verb}${count} from ${style.bold(tap)}: ${names.join(", ")}`);
+      lines.push(
+        `${sym} ${verb}${count} from ${style.bold(group.tap)}${projectTag(group, style)}: ${group.names.join(", ")}`,
+      );
     }
   }
 
   for (const row of addedRows) {
     for (const warning of (row.kind === "added" ? row.warnings : undefined) ?? []) {
       lines.push(
-        `${style.symbol("warn")} ${style.bold(row.name)} ${style.dim(`(from ${row.tap})`)}: ${warning}`,
+        `${style.symbol("warn")} ${style.bold(row.name)}${projectTag(row, style)} ${style.dim(`(from ${row.tap})`)}: ${warning}`,
       );
     }
   }
@@ -117,7 +120,7 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   for (const r of errorRows) {
     const code = r.error.code;
     lines.push(
-      `${style.symbol("fail")} ${style.bold(r.name)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
+      `${style.symbol("fail")} ${style.bold(r.name)}${projectTag(r, style)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
     );
     if (r.error.message) lines.push(style.dim(`  ${r.error.message}`));
   }

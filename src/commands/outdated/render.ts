@@ -18,7 +18,8 @@ import type { UpdateRow } from "../../install/update/types.ts";
 import { columns, plural } from "../../util/format.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
-import { formatRowParts, groupByTap, nameCell } from "../update/rows.ts";
+import { projectTag } from "../update/location.ts";
+import { formatRowParts, groupAdditions, nameCell } from "../update/rows.ts";
 
 export interface RenderOutdatedInput {
   readonly rows: readonly UpdateRow[];
@@ -75,7 +76,7 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
       // (invalid_skill)" alone would not tell them which skill broke.
       const code = r.error.code;
       lines.push(
-        `${style.symbol("warn")} ${style.bold(r.name)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
+        `${style.symbol("warn")} ${style.bold(r.name)}${projectTag(r, style)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
       );
       if (r.error.message) lines.push(style.dim(`  ${r.error.message}`));
     }
@@ -110,9 +111,9 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
     // Only separate from a preceding row section — warnings already
     // emit their own trailing blank line.
     if (rows.length > 0) lines.push("");
-    for (const [tap, names] of groupByTap(added)) {
+    for (const group of groupAdditions(added)) {
       lines.push(
-        `${style.symbol("ok")} ${plural(names.length, "new skill")} available from ${style.bold(tap)}: ${names.join(", ")}`,
+        `${style.symbol("ok")} ${plural(group.names.length, "new skill")} available from ${style.bold(group.tap)}${projectTag(group, style)}: ${group.names.join(", ")}`,
       );
     }
   }
