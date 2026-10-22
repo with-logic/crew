@@ -8,6 +8,7 @@
  */
 
 import type { TapConfig } from "../../core/types.ts";
+import type { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { sourceRelativePath } from "../../sources/path.ts";
 import { indexTap, type TapIndex, tapRoot } from "../tap-index.ts";
 import type { RejectedReferenceSkill } from "./diagnostics.ts";
@@ -19,9 +20,14 @@ export interface ReferenceTapIndex extends TapIndex {
 }
 
 /** Index `tap`, reading from its exported root when one was supplied. */
-export function indexTapAt(tap: TapConfig, home: string, roots: TapRoots): ReferenceTapIndex {
+export function indexTapAt(
+  tap: TapConfig,
+  home: string,
+  roots: TapRoots,
+  discovery?: GitDiscoveryWarnings,
+): ReferenceTapIndex {
   const root = roots[tap.name] ?? tapRoot(tap, home);
-  const index = indexTap(tap, home, root);
+  const index = indexTap(tap, home, root, discovery);
   const skipped = index.skipped.map((skill): RejectedReferenceSkill => {
     const parts = sourceRelativePath(root, skill.path).split("/");
     const namespace = parts.length === 3 && parts[0] === "skills" ? parts[1]! : null;
@@ -36,9 +42,14 @@ export function indexTapAt(tap: TapConfig, home: string, roots: TapRoots): Refer
  * caller is searching for a name and an unreadable tap simply cannot
  * contribute a candidate.
  */
-export function safeIndex(tap: TapConfig, home: string, roots: TapRoots): ReferenceTapIndex | null {
+export function safeIndex(
+  tap: TapConfig,
+  home: string,
+  roots: TapRoots,
+  discovery?: GitDiscoveryWarnings,
+): ReferenceTapIndex | null {
   try {
-    return indexTapAt(tap, home, roots);
+    return indexTapAt(tap, home, roots, discovery);
   } catch {
     return null;
   }

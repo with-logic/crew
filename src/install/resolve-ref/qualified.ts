@@ -15,6 +15,7 @@
 
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapSource } from "../../core/types.ts";
+import type { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { type RejectedReferenceSkill, withRejectedManifests } from "./diagnostics.ts";
 import { ambiguityError, twoSegmentMissError } from "./errors.ts";
 import { indexTapAt, lookupInIndex, safeIndex } from "./tap-index-lookup.ts";
@@ -26,6 +27,7 @@ export function resolveThreeSegment(
   config: Config,
   home: string,
   roots: TapRoots,
+  discovery?: GitDiscoveryWarnings,
 ): NonTapNameCandidate {
   const tap = config.taps.find((t) => t.name === source.tap);
   if (!tap) {
@@ -36,7 +38,7 @@ export function resolveThreeSegment(
       "View your configured taps with `crew tap list`.",
     );
   }
-  const index = indexTapAt(tap, home, roots);
+  const index = indexTapAt(tap, home, roots, discovery);
   const locs = index.skills.get(source.name) ?? [];
   const match = locs.find((l) => l.namespace === source.namespace);
   if (!match) {
@@ -62,11 +64,12 @@ export function resolveTwoSegment(
   config: Config,
   home: string,
   roots: TapRoots,
+  discovery?: GitDiscoveryWarnings,
 ): NonTapNameCandidate {
   const first = source.tap!;
   const second = source.name;
   const tap = config.taps.find((t) => t.name === first);
-  const tapIndex = tap ? safeIndex(tap, home, roots) : null;
+  const tapIndex = tap ? safeIndex(tap, home, roots, discovery) : null;
   const asTapSkill = tap && tapIndex ? lookupInIndex(tap, tapIndex, second) : null;
   const rejected: RejectedReferenceSkill[] = [];
   if (tap && tapIndex) {
@@ -78,7 +81,7 @@ export function resolveTwoSegment(
   const nsCandidates: NonTapNameCandidate[] = [];
   for (const t of config.taps) {
     if (t === tap) continue;
-    const idx = safeIndex(t, home, roots);
+    const idx = safeIndex(t, home, roots, discovery);
     if (!idx) continue;
     for (const skill of idx.skipped) {
       if (skill.namespace === first) rejected.push({ ...skill, tap: t.name });

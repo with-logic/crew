@@ -22,6 +22,7 @@
 
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapSource } from "../../core/types.ts";
+import type { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import type { NameCandidate } from "../attribute-bare-name.ts";
 import { scanNameCandidates } from "../attribute-bare-name.ts";
 import { withRejectedManifests } from "./diagnostics.ts";
@@ -41,6 +42,7 @@ export function resolveTapRef(
   home: string,
   kindHint: "non-tap",
   roots?: TapRoots,
+  discovery?: GitDiscoveryWarnings,
 ): NonTapNameCandidate;
 export function resolveTapRef(
   source: TapSource,
@@ -48,6 +50,7 @@ export function resolveTapRef(
   home: string,
   kindHint?: KindHint,
   roots?: TapRoots,
+  discovery?: GitDiscoveryWarnings,
 ): NameCandidate;
 export function resolveTapRef(
   source: TapSource,
@@ -55,19 +58,20 @@ export function resolveTapRef(
   home: string,
   kindHint: KindHint = null,
   roots: TapRoots = {},
+  discovery?: GitDiscoveryWarnings,
 ): NameCandidate {
   // 3-segment: <tap>/<namespace>/<skill> — always unambiguous.
   if (source.tap !== null && source.namespace !== null) {
-    return resolveThreeSegment(source, config, home, roots);
+    return resolveThreeSegment(source, config, home, roots, discovery);
   }
 
   // 2-segment: <first>/<second>. Try tap-first, then namespace-first.
   if (source.tap !== null && source.namespace === null) {
-    return resolveTwoSegment(source, config, home, roots);
+    return resolveTwoSegment(source, config, home, roots, discovery);
   }
 
   // Bare name.
-  return resolveBare(source.name, config, home, kindHint, roots);
+  return resolveBare(source.name, config, home, kindHint, roots, discovery);
 }
 
 function resolveBare(
@@ -76,8 +80,9 @@ function resolveBare(
   home: string,
   kindHint: KindHint,
   roots: TapRoots,
+  discovery?: GitDiscoveryWarnings,
 ): NameCandidate {
-  const { candidates: all, rejected } = scanNameCandidates(name, config, home, roots);
+  const { candidates: all, rejected } = scanNameCandidates(name, config, home, roots, discovery);
   const scopedRejections =
     kindHint === "tap"
       ? []

@@ -30,10 +30,21 @@ export function outdatedCommand(ctx: CommandContext): CommandOutput {
   const plan = planUpdate(ctx, config, home, true);
 
   const { rows, tapReexpandRows, tapRows, selectors } = plan;
+  const warnings = plan.warnings ?? [];
   return {
     exitCode: plan.hardFailure ? 1 : 0,
     human: renderOutdated({ rows, tapReexpandRows, tapRows }, ctx.style),
-    stderr: ctx.flags.quiet && plan.hardFailure ? renderQuietUpdateErrors(plan) : [],
-    json: { rows, tap_reexpand_rows: tapReexpandRows, tap_rows: tapRows, dry_run: true, selectors },
+    stderr: [
+      ...(ctx.flags.quiet && plan.hardFailure ? renderQuietUpdateErrors(plan) : []),
+      ...warnings,
+    ],
+    json: {
+      rows,
+      tap_reexpand_rows: tapReexpandRows,
+      tap_rows: tapRows,
+      dry_run: true,
+      selectors,
+      ...(warnings.length > 0 ? { warnings } : {}),
+    },
   };
 }

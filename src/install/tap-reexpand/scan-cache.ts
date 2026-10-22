@@ -17,6 +17,7 @@ import type { TapConfig } from "../../core/types.ts";
 import { loadSkill } from "../../skill/load.ts";
 import { acquireTap } from "../../sources/acquire/index.ts";
 import type { PreparedSources } from "../../sources/acquire/revision.ts";
+import type { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { isGistTap } from "../../sources/gist.ts";
 import { isSourceReadFailure } from "../../util/source-read.ts";
 import { type CurrentTapCatalog, currentTapChildren } from "../tap-children.ts";
@@ -43,7 +44,10 @@ export interface TapScanCache {
   validate(sourcePath: string, tap?: TapConfig): CrewError | null;
 }
 
-export function makeTapScanCache(prepared?: PreparedSources): TapScanCache {
+export function makeTapScanCache(
+  prepared?: PreparedSources,
+  discovery?: GitDiscoveryWarnings,
+): TapScanCache {
   const acquisitions = new Map<string, AcquiredTapScan>();
   const childScans = new Map<string, CurrentTapCatalog | CrewError>();
   const skillLoadErrors = new Map<string, CrewError | null>();
@@ -67,7 +71,7 @@ export function makeTapScanCache(prepared?: PreparedSources): TapScanCache {
       if (hit instanceof CrewError) throw hit;
       if (hit) return hit;
       try {
-        const walked = currentTapChildren(tap, home, rootDir);
+        const walked = currentTapChildren(tap, home, rootDir, discovery);
         childScans.set(key, walked);
         return walked;
       } catch (err) {

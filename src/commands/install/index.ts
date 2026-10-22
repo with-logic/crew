@@ -13,6 +13,7 @@ import { detectCollision } from "../../install/collision-check.ts";
 import { runInstall } from "../../install/flow.ts";
 import type { KindHint } from "../../install/resolve-ref/index.ts";
 import { parseRef } from "../../refs/parse.ts";
+import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { withTapLocks } from "../../sources/tap-lock.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { promptBareNameAmbiguity } from "./ambiguity-prompt.ts";
@@ -50,7 +51,8 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const kindHint = readKindHint(ctx);
   rejectRecursiveTapRefs(ctx);
   const config = readConfig(ctx.home);
-  const refs = resolveCollisions(ctx, config);
+  const discovery = new GitDiscoveryWarnings();
+  const refs = resolveCollisions(ctx, config, discovery);
   // §5.3: `--from-git` is never bare, so it skips collision resolution.
   if (typeof fromGit === "string") refs.push(normalizeFromGit(fromGit, ctx.cwd));
   const installOptions = {
@@ -63,6 +65,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     home: ctx.home,
     kindHint,
     recursive: Boolean(ctx.flags.extras["recursive"]),
+    discovery,
   };
   let result: ReturnType<typeof runInstall>;
   try {
@@ -107,14 +110,17 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     ctx.style,
   );
 
+  const warnings = discovery.warnings();
   return {
     exitCode,
     human,
+    stderr: warnings,
     json: {
       already_installed: result.alreadyInstalled,
       records: result.summary.records,
       skipped: result.skipped,
       dry_run: ctx.flags.dryRun,
+      ...(warnings.length > 0 ? { warnings } : {}),
     },
   };
 }
@@ -146,7 +152,11 @@ function rejectRecursiveTapRefs(ctx: CommandContext): void {
  * Non-bare positionals (paths, git URLs, `<tap>/<skill>`) are passed
  * through unchanged.
  */
-function resolveCollisions(ctx: CommandContext, config: Config): string[] {
+function resolveCollisions(
+  ctx: CommandContext,
+  config: Config,
+  discovery: GitDiscoveryWarnings,
+): string[] {
   const refs: string[] = [];
   const kindHint = readKindHint(ctx);
   for (const raw of ctx.positional) {
@@ -162,10 +172,10 @@ function resolveCollisions(ctx: CommandContext, config: Config): string[] {
       continue;
     }
     const collision = withTapLocks(config.taps, ctx.home, () =>
-      detectCollision(canonical, config, ctx.home),
+      detectCollision(canonical, config, ctx.home, discovery),
     );
     if (collision && !ctx.flags.yes) {
-      refs.push(promptForCollision(ctx, collision, canonical, raw));
+      refs.push(promptForCollision(ctx, collision, canonical, raw, discovery));
       continue;
     }
     if (collision) {
@@ -174,7 +184,7 @@ function resolveCollisions(ctx: CommandContext, config: Config): string[] {
     }
     // No tap-vs-other-tap-skill collision. Check for bare-name
     // ambiguity across skills and namespaces (§8.3).
-    refs.push(promptBareNameAmbiguity(ctx, config, canonical, raw));
+    refs.push(promptBareNameAmbiguity(ctx, config, canonical, raw, discovery));
   }
   return refs;
 }

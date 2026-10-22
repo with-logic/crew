@@ -40,12 +40,14 @@ export function Taps() {
             </CodeBlock>
             <p className={styles.note}>
               Any top-level directory with a valid <code>SKILL.md</code> is a skill; the install
-              name comes from the <code>name</code> field inside <code>SKILL.md</code>. Everything
-              else is ignored. Prefer to keep skills under a <code>skills/</code> directory? That
-              works too — if <code>skills/</code> exists, crew indexes its children instead of the
-              root. For trusted repos with non-standard nesting,{" "}
-              <code>crew tap add --recursive</code> keeps those standard layouts first and falls
-              back to bounded recursive discovery.
+              name comes from the <code>name</code> field inside <code>SKILL.md</code>. Prefer to
+              keep skills under a <code>skills/</code> directory? That works too — if{" "}
+              <code>skills/</code> exists, crew indexes its children instead of the root. For
+              trusted repos with non-standard nesting, <code>crew tap add --recursive</code> keeps
+              those standard layouts first and falls back to bounded recursive discovery. Git skill
+              discovery skips symlink entries without following their targets and reports one
+              warning when its chosen layout excludes any. Skill assets and trusted path-tap links
+              keep their existing behavior.
             </p>
             <p className={styles.note}>
               GitHub gists work too: install the owner’s gist URL or add it as a tap. Each top-level

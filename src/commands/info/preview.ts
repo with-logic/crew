@@ -16,6 +16,7 @@ import { type NonTapNameCandidate, resolveTapRef } from "../../install/resolve-r
 import { withResolutionRoots } from "../../install/resolve-ref/roots.ts";
 import { loadSkillMetadata } from "../../skill/load.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
+import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { expandSkills } from "../../sources/expand.ts";
 import { gistCandidates, isGistTap, noGistSkillsFound } from "../../sources/gist.ts";
 import type { SkillInfo } from "./render.ts";
@@ -31,19 +32,25 @@ export function tapCandidate(
   config: Config,
   ref: string | null,
   home: string,
+  discovery?: GitDiscoveryWarnings,
 ): TapPreview {
   if (ref === null) {
-    return candidateSkills(resolveTapRef(source, config, home, "non-tap"));
+    return candidateSkills(resolveTapRef(source, config, home, "non-tap", {}, discovery));
   }
 
   return withResolutionRoots({ ...source, ref }, config, home, (atRef, roots) =>
-    narrowAtRoots(source, atRef, home, roots),
+    narrowAtRoots(source, atRef, home, roots, discovery),
   );
 }
 
 /** Expand a tap's skills, reading at `ref` when one was requested. */
-export function skillsAtRef(tap: TapConfig, ref: string | null, home: string): SkillInfo[] {
-  return withAcquiredTap(tap, ref, home, (acq) => buildSkillInfos(acq.rootDir, tap));
+export function skillsAtRef(
+  tap: TapConfig,
+  ref: string | null,
+  home: string,
+  discovery = new GitDiscoveryWarnings(),
+): SkillInfo[] {
+  return withAcquiredTap(tap, ref, home, (acq) => buildSkillInfos(acq.rootDir, tap, discovery));
 }
 
 /**
@@ -56,8 +63,9 @@ function narrowAtRoots(
   config: Config,
   home: string,
   roots: Readonly<Record<string, string | undefined>>,
+  discovery?: GitDiscoveryWarnings,
 ): TapPreview {
-  const candidate = resolveTapRef(source, config, home, "non-tap", roots);
+  const candidate = resolveTapRef(source, config, home, "non-tap", roots, discovery);
   return candidateSkills(candidate);
 }
 
@@ -72,7 +80,11 @@ function candidateSkills(candidate: NonTapNameCandidate): TapPreview {
   return { tap: candidate.tap, skills: buildSkillInfosFromPaths(candidate.members, candidate.tap) };
 }
 
-function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
+function buildSkillInfos(
+  dir: string,
+  tap: TapConfig,
+  discovery: GitDiscoveryWarnings,
+): SkillInfo[] {
   if (isGistTap(tap)) {
     const candidates = gistCandidates(dir);
     if (candidates.length === 0) throw noGistSkillsFound(dir);
@@ -81,6 +93,7 @@ function buildSkillInfos(dir: string, tap: TapConfig): SkillInfo[] {
   const { valid } = expandSkills(dir, {
     recursive: tap.discovery === "recursive",
     followStandardLayoutSymlinks: tap.kind === "path",
+    discovery,
   });
   return valid.map(skillInfoOf);
 }

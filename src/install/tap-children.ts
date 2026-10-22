@@ -7,6 +7,7 @@
  */
 
 import type { TapConfig } from "../core/types.ts";
+import type { GitDiscoveryWarnings } from "../sources/discovery.ts";
 import { isSourceDirectory } from "../sources/read.ts";
 import { indexTap, type RejectedTapSkill } from "./tap-index.ts";
 
@@ -25,6 +26,7 @@ export function currentTapChildren(
   tap: TapConfig,
   home: string,
   rootDir: string,
+  discovery?: GitDiscoveryWarnings,
 ): CurrentTapCatalog {
   const children: CurrentTapChild[] = [];
   const skipped: RejectedTapSkill[] = [];
@@ -33,7 +35,7 @@ export function currentTapChildren(
   // export of the group's ref, when it tracks one. Indexing the live
   // clone instead would discover children that don't exist at that
   // revision (§10.1.1).
-  const index = indexTap(tap, home, rootDir);
+  const index = indexTap(tap, home, rootDir, discovery);
   for (const locs of index.skills.values()) {
     for (const loc of locs) {
       children.push({ name: loc.name, path: loc.path, tapRelativePath: loc.tapRelativePath });

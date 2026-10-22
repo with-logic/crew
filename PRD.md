@@ -1265,6 +1265,33 @@ Given one or more skill references on the command line, `crew install` proceeds 
    3. Else, crew walks **exactly one directory level deep** under the resolved location and adds every subdirectory containing a `SKILL.md` to the install set. Deeper nesting is ignored.
    4. If, and only if, the standard cases above find zero skill candidates and the owning tap has `discovery: recursive` (or the user supplied `--recursive` for a direct git/path install), crew performs bounded recursive fallback discovery. It searches descendant directories up to depth 5 for `SKILL.md`, skips hidden directories and common non-source/vendor directories (`.git`, `.hg`, `.svn`, `.crew`, `node_modules`, `vendor`, `dist`, `build`, `coverage`, `.next`), never descends inside a directory once it has found that directory's `SKILL.md`, and records each discovered skill with its POSIX path relative to the tap root. Recursive fallback never runs when a standard layout produced any valid or invalid skill candidate; invalid standard candidates are surfaced as validation failures instead of being bypassed by deeper search.
 
+   **Excluded Git discovery links.** When Git-kind directory discovery
+   excludes one or more symbolic-link entries at positions inspected for
+   skill directories, the returned command result MUST include exactly one
+   aggregate warning:
+   `warning: Git skill discovery skipped symlink entries; link targets were not followed.`
+   This includes the `skills/` probe, its inspected children and namespace
+   children, flat-layout children, and entries encountered by recursive
+   fallback when it actually runs. Only the chosen layout contributes:
+   root-skill assets, unvisited layouts, pruned skill descendants, and
+   recursive hidden/vendor/depth exclusions do not trigger this warning.
+   Discovery MUST NOT follow links, read their targets, infer target kinds,
+   or list or count entries or targets. Explicit linked roots/subpaths retain
+   their existing refusal semantics. Path-kind discovery and ignored gist
+   files do not gain this warning; symbolic-link manifests retain step 4's
+   validation semantics.
+
+   Aggregate actual discovery evidence across all scans in one command,
+   including collision checks, reference and dependency resolution, and
+   update groups. Append the fixed warning after existing diagnostics in
+   human stderr, including under `--quiet`, and in top-level JSON `warnings`
+   on stdout with empty stderr. Search retains its existing `warnings` array;
+   install, source-preview info, update, and outdated omit the optional
+   array when empty. The warning applies to returned results, including
+   partial success; fatal `CrewError` output is unchanged. It changes no
+   candidate, validation outcome, exit code, state, or locking behavior and
+   requires no extra discovery pass.
+
    **GitHub gist file layout.** For git-kind sources whose host is exactly
    `gist.github.com`, this layout takes precedence over the directory cases
    above. Every top-level regular file whose complete frontmatter passes the
@@ -1353,6 +1380,9 @@ install reference and previews the valid skills available at that source. An
 `@ref` tail is not part of the installed-skill selector grammar; arguments such
 as `<tap>/<skill>@<ref>` therefore follow the reference-preview path rather than
 matching installed state.
+
+Source previews include the aggregate Git discovery warning from §9 step 5
+when applicable. Installed-state info performs no discovery and adds no warning.
 
 ## 10. Update and autoupdate
 
@@ -1477,9 +1507,9 @@ failed per-target results, tap re-expansion errors, and refresh failures of
 explicitly selected taps. Include the affected skill, agent or tap, error
 code, and full primary message, preserving rollback and retained recovery
 paths already present. Redact credentials and escape controls throughout.
-Successful and soft-only quiet runs remain silent, including soft
-`tap_error` outcomes (`no_skills_found` or `invalid_ref` without a cleanup
-failure). A hard-failed run may include its existing soft `tap_error` rows
+Successful and soft-only quiet runs remain silent except for the aggregate
+Git discovery warning (§9 step 5), including soft `tap_error` outcomes
+(`no_skills_found` or `invalid_ref` without a cleanup failure). A hard-failed run may include its existing soft `tap_error` rows
 among its diagnostics without changing their classification. Normal human
 output, raw JSON, failure isolation, exit codes, state, and retries are
 unchanged; JSON mode still emits its payload without human stderr.
@@ -1549,6 +1579,11 @@ says so. `tap_missing` is distinct from `source_unreachable`: nothing
 was unreachable, crew simply has no source configured to check.
 
 ### 10.1.1 Tap re-expansion
+
+Actual discovery during update, update previews, and outdated contributes
+the aggregate Git discovery warning from §9 step 5 once per command result,
+including when several tap revisions or install groups are surveyed. The
+update-preview and outdated JSON payloads remain identical.
 
 Homecrew picks up new skills added to a tap automatically — but only for
 **whole-tap** installs. If the user asked for the whole tap (`crew
@@ -2682,6 +2717,10 @@ JSON `warnings` contain the same strings; `warnings` remains `string[]`
 with the same cardinality, healthy hits, and soft exit behavior. No-hint
 warning text remains unchanged.
 
+Git directory discovery also appends the aggregate warning from §9 step 5
+once after existing warnings, regardless of query. Only taps actually
+searched contribute; candidate hits and exit codes remain unchanged.
+
 **`--tap <name>`.** `crew search --tap <name> [<query>]` scopes the search
 (or the no-query catalog) to the single configured tap `<name>`. Only that
 tap is walked; every other configured tap is skipped, and known-tap registry
@@ -2984,7 +3023,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-44 | §10.1 | After a local path skill root passes its availability check, a qualifying source hash/load lookup failure reports `source_gone` only when a fresh check finds that same root missing, non-directory, or a looping link. Normal and preview runs preserve the affected install, marker, and logical state entry, continue healthy selected entries, and exit 0 when this is the only abnormality. Previews leave installed/store/state bytes unchanged. Missing or invalid manifests in a still-resolvable directory, original permission failures, parser/validation errors, and other operational failures remain hard even if the root disappears later. |
 | C-UPD-45 | §10.1, §10.1.1, §11.1 | A moved skill with no applicable recorded agent targets (empty, unknown-only, or unsupported scope) reports a soft `skipped` outcome after source validation in real and preview runs, without staging or changing installed copies, markers, or its complete state entry. Other selected entries still process, and restoring an applicable recorded target permits retry. Any existing-entry update with zero completed targets, including all safety skips, preserves its complete state entry and remains retryable; per-target diagnostics, soft safety skips, successful partial updates, and hard-failure retry semantics are preserved. |
 | C-UPD-46 | §10.1, §10.1.1, §13 | Human `source_gone` rows and update summaries describe source absence without assuming remote/upstream removal, for both Git and local path sources; rows say that the installed copy is kept. Update, update preview, and outdated preserve the existing JSON shape/kind, soft exit code, install/marker/state preservation, and quiet suppression. |
-| C-UPD-42 | §5.2, §10.1, §10.1.1 | On a hard-failed run, human `--quiet` update (including dry run) and outdated suppress summaries while sending ordinary failed entries, failed targets, tap re-expansion errors, and explicitly selected tap refresh failures to stderr with affected subjects, error codes, full primary messages, and retained recovery paths. Diagnostics redact credentials and escape controls. Successful and soft-only quiet runs stay silent; a hard-failed run may include existing soft `tap_error` diagnostics without reclassification. Normal human output, raw JSON, isolation, exit codes, state, and retries remain unchanged. |
+| C-UPD-42 | §5.2, §10.1, §10.1.1 | On a hard-failed run, human `--quiet` update (including dry run) and outdated suppress summaries while sending ordinary failed entries, failed targets, tap re-expansion errors, and explicitly selected tap refresh failures to stderr with affected subjects, error codes, full primary messages, and retained recovery paths. Diagnostics redact credentials and escape controls. Successful and soft-only quiet runs stay silent except for §9 step 5’s aggregate Git discovery warning; a hard-failed run may include existing soft `tap_error` diagnostics without reclassification. Normal human output, raw JSON, isolation, exit codes, state, and retries remain unchanged. |
 | C-UPD-43 | §10.1.1 | Every project-scope tap re-expansion result carries its originating recorded `project_root`; user-scope results omit the field. Real update, preview, and outdated preserve identity for additions, successful-addition warnings, validation and rejected-location errors, conflicting names, vanished sources, and group failures. Human addition summaries remain separate by tap/scope/project root, and project warnings and errors identify the location, including quiet errors, with safe path formatting. Source/state/marker identity, classification, retries, and exit codes are unchanged. |
 | C-UPD-47 | §5.2, §10.1, §10.1.1, §13 | Ordinary `failed` and group/child `tap_error` results preserve an originating explicit nonempty remedy as optional `error.remedy`, safely rendered beside the existing diagnostic in normal/quiet update, update preview, and outdated, and safely exposed in JSON. Undefined/null/empty hints omit the field and added text without generic defaults. Code, primary message, raw identity and project location, no-hint shapes/text, classification, quiet policy, state, retries, and exit behavior remain unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
@@ -3061,6 +3100,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-08d | §9, §16.6 | Directory-tap candidates rejected during name-only indexing retain path-specific validation diagnostics without inferred names. Search reports invalid directory manifests in human stderr and JSON warnings, regardless of query, while healthy siblings remain hits and the command exits 0. Gist invalid files remain ignored. |
 | C-TAP-08e | §8.3, §9 | Final tap-source resolution misses retain `invalid_ref`, exit 4, original details and remedy, while human and JSON error messages report scoped rejected directory locations, validation code and reason without inferred names. Healthy resolution, ambiguity, `--tap` misses, requested-ref trees, known-tap suggestions, and ignored invalid gist files retain their existing behavior. |
 | C-TAP-08f | §16.6 | When a directory skill passes name indexing but a later full-manifest read fails operationally, search emits one safe warning identifying the tap, indexed skill, source path, `source_unreachable`, and OS reason, regardless of query. Only the failed skill is skipped, healthy hits continue, human stderr and JSON warnings retain the diagnostic, and the command exits 0. Invalid-manifest warning behavior is unchanged. |
+| C-TAP-08g | §9, §9.1, §10.1.1, §16.6 | Actual Git directory discovery that excludes symlink entries in its chosen layout produces exactly one fixed aggregate warning per returned search, install, source-info, update, or outdated result, after existing diagnostics: human stderr including quiet mode, or top-level JSON warnings on stdout with empty stderr. Repeated scans/taps/groups do not repeat it. No links are followed or targets read, counted, or listed; assets, unvisited/pruned/filtered positions, path-kind links, and ignored gist files do not trigger it. Candidates, errors, exits, state, and locks are unchanged; clean non-search results omit warnings. |
 | C-TAP-08h | §5.2, §13, §16.6 | Configured-tap source-read warnings append an originating explicit nonempty remedy to the existing warning string, with whole-diagnostic credential redaction and control escaping. Human stderr and JSON `warnings` contain the same strings; warning cardinality, `string[]` shape, healthy hits, and exit 0 remain unchanged. Undefined/null/empty hints and generic defaults add no text; no-hint warnings retain their existing text. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
