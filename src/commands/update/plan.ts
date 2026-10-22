@@ -50,8 +50,8 @@ export interface UpdatePlan {
  * Refresh taps, re-expand them, and walk every selected entry,
  * returning the state that would result. `dryRun` is threaded into the
  * per-skill and per-child steps, so this one function drives both the
- * preview and the real run — they can never disagree about what
- * happens.
+ * preview and the real run. Previews read an unlocked target view and
+ * may differ from a later real run under concurrent changes (§14).
  */
 export function planUpdate(
   ctx: CommandContext,

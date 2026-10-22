@@ -8,15 +8,27 @@ export function uninstallTargetBases(
   targets: readonly UninstallTarget[],
   prune: boolean,
   cwd: string,
+  agentFilter: readonly string[] | null,
 ) {
   const selected = targets.flatMap((target) => target.subject.entries);
+  const filtered = agentFilter
+    ? selected.map((entry) => ({
+        ...entry,
+        agents: entry.agents.filter((agent) => agentFilter.includes(agent)),
+      }))
+    : selected;
   const locations = new Set(
-    selected.map((entry) => JSON.stringify([entry.scope, entry.project_root])),
+    selected
+      .filter((entry) => !agentFilter || entry.agents.every((agent) => agentFilter.includes(agent)))
+      .map((entry) => JSON.stringify([entry.scope, entry.project_root])),
   );
   const lockEntries = prune
-    ? state.installations.filter((entry) =>
-        locations.has(JSON.stringify([entry.scope, entry.project_root])),
-      )
-    : selected;
+    ? [
+        ...filtered,
+        ...state.installations.filter((entry) =>
+          locations.has(JSON.stringify([entry.scope, entry.project_root])),
+        ),
+      ]
+    : filtered;
   return entryTargetBases(lockEntries, cwd, false);
 }

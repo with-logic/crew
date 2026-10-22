@@ -131,7 +131,7 @@ function runUninstall(
   return ctx.flags.dryRun
     ? remove()
     : withTargetLocks(
-        uninstallTargetBases(state, targets, prune, ctx.cwd),
+        uninstallTargetBases(state, targets, prune, ctx.cwd, agentFilter),
         (_failures, unavailable) => remove(unavailable),
       );
 }

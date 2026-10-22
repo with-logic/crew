@@ -118,7 +118,7 @@ export function reexpandTaps(
       if (!(touchesMember || tapNamed)) continue;
     }
 
-    // Project-scoped group whose project_root is gone: skip.
+    // §14: roots absent at target preparation stay skipped, even if they reappear.
     const projectRoot = first.project_root ?? null;
     if (
       first.scope === "project" &&
