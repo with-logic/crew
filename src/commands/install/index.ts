@@ -11,6 +11,7 @@ import { CrewError } from "../../core/errors.ts";
 import type { Config } from "../../core/types.ts";
 import { detectCollision } from "../../install/collision-check.ts";
 import { runInstall } from "../../install/flow.ts";
+import { UNUSABLE_PROJECT_ROOT_WARNING } from "../../install/metadata-warning.ts";
 import type { KindHint } from "../../install/resolve-ref/index.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
@@ -114,7 +115,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   return {
     exitCode,
     human,
-    stderr: warnings,
+    stderr: result.unusableProjectRoots ? [UNUSABLE_PROJECT_ROOT_WARNING, ...warnings] : warnings,
     json: {
       already_installed: result.alreadyInstalled,
       records: result.summary.records,

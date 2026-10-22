@@ -1355,6 +1355,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
       `metadata.crew.dependencies` directly names `X`. Transitive
       relationships are not stored — they are derivable by walking the
       graph. `required_by` is symmetric to `dependencies` at one hop.
+    - Install-driven recursive-discovery marker rewrites follow the retained-root warning rules in §11.1.
 11. **Print summary.** Human-readable: one line per skill reporting which agents it succeeded, was skipped, or failed in. `--json` mode emits the structured equivalent (§15).
 
 The exit code is defined by step 9 above. Every other exit code an install can produce (invalid reference, unreachable source, locked state, …) is per §15.
@@ -2138,6 +2139,19 @@ in state, reported by doctor as `missing_project_root`, and never used as an
 install location. Repair preserves these entries until the user corrects the
 recorded path; it must not guess the location from the current directory.
 
+When a tap-name or recursive-discovery metadata rewrite is requested (§9,
+§16.3), a retained project entry attributed to the old tap name with a missing,
+non-string, empty, or relative `project_root` causes one aggregate human stderr
+warning per command: `warning: Some recorded project roots are unusable for tap metadata updates. Run crew doctor to inspect them.`
+Attribution is checked before any tap rename. Usable roots from every tap remain
+in the marker inventory; markers are authoritative. Rejected roots are never
+used to locate installs, and their entries remain retained (including the
+existing source-name change on rename). This warning remains visible with
+`--quiet`, is suppressed with `--json` without changing its payload or exit
+code, and adds no per-skill result. Dry-runs, metadata rewrite no-ops and
+unrelated unusable roots are silent. A promotion requesting recursive metadata
+still requests a rewrite even when the tap is already recursive.
+
 A stale `project_root` (directory no longer exists, was moved,
 permissions changed) is reported by `crew doctor` as a
 `missing_project_root` finding and is a clean skip on `crew update` —
@@ -2604,6 +2618,7 @@ since the registry was built, the normal tap-add or install error applies.
   - If the URL/path matches an existing **auto** tap, `crew tap add` promotes it: `registered` flips to `true`, and the `<name>` argument (if supplied) renames the tap. No re-clone.
   - `--dry-run` runs the same parsing, name validation, and same-name/same-target checks (producing the same `usage_error`s), then reports which outcome would apply — add, no-op, promote, or recursive-discovery upgrade — without cloning, writing `config.yaml`, or rewriting any marker. `--json` output carries `dry_run: true`.
 - `crew tap add --recursive <url-or-path> [<name>]` registers or promotes the tap with `discovery: recursive`. Re-running it against an existing registered tap with the same target upgrades that tap to recursive discovery. Promoting an existing auto tap preserves any recursive discovery mode already recorded for that tap; adding `--recursive` during promotion upgrades it at the same time. This is an explicit trust signal for non-standard repository layouts: standard discovery still runs first, and recursive discovery is only the fallback described in §9 step 5.4. There is no command-level downgrade flag. Editing `config.yaml` to remove `discovery` makes live tap resolution use standard discovery, but existing installed markers retain the discovery mode used at install time; `doctor --repair` can therefore reconstruct recursive discovery from those markers until the affected skills are reinstalled or markers are rewritten by a future command.
+- Promotion/rename and recursive-discovery marker rewrites follow the retained-root warning rules in §11.1.
 - `crew tap <url-or-path> [<name>]` is a shorthand for `crew tap add <url-or-path> [<name>]` when the first positional parses as a git source per §8.2 or as a path. Bare `crew tap` (no positional at all) prints the command's help page (same as `crew help tap`) with exit 0. Any other input — an unknown subcommand, or a word that doesn't parse as a source — is a `usage_error` whose message names the offending input and points at `crew help tap`. When the rejected argument to `crew tap add` is a two-segment tap reference (`acme/skills`), the error's remedy suggests `crew tap add @acme/skills`, since that is almost always what was meant. Other commands that take subcommands (`crew cache`, `crew autoupdate`) behave the same way; `crew agents` lists agents when bare and errors on an unknown subcommand.
 - Once a tap is configured, users reference skills inside it by bare name (`python-testing`) or qualified name (`<tap-name>/python-testing`). The subpath, URL, or path is entirely internal — it never appears in skill references.
 - `crew tap remove <name>` removes the tap from config and deletes the local clone, unless another configured tap still points at the same repository (§6) — clones are shared per repository, so the bytes go only with the last tap referencing them. Auto taps are also removed automatically when their last associated state entry is uninstalled (see §16.5). With `--dry-run`, the same lookup and default-tap guard run, but nothing is written or deleted; the command reports what would be removed and `--json` carries `dry_run: true`.
@@ -3171,6 +3186,7 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-13 | §6 | `crew cache clean --dry-run` reports the bytes and orphan store entries a clean would free and deletes nothing. |
 | C-STATE-14 | §11.2 | Unreadable or invalid markers (including unsupported owners, invalid content-hash text or tap-kind-incompatible resolved SHAs, invalid source-relative paths, symbolic links at install-directory leaves or `.crew.json` entries, and a declared scope with no base among the marker’s owning adapters at the inventoried physical directory), and operational failures to inspect/search project roots or inventory directories or list adapter bases, produce path-specific error findings without aborting doctor; repair and repair previews apply no repairs or destructive inference from the incomplete inventory. State, config, store and scheduler remain unchanged, and the run exits 1. Genuinely missing paths and ordinary non-directory inventory entries remain absent rather than unreadable. |
 | C-STATE-15 | §7.5, §9 | Recorded skill acquisition rejects absolute paths, NUL and complete parent components before source reads. Git-kind acquisition also rejects descendant symlinks without an explicit ref. Trusted local path-kind layout links, source-root aliases, empty-root skills and literal filename characters remain supported; rejected acquisition preserves installed bytes and state. |
+| C-STATE-16 | §11.1, §9, §16.3 | An actual tap-name/discovery metadata rewrite with unusable project roots attributed to the old tap emits one fixed aggregate human stderr warning, including under `--quiet`; usable roots across every tap still supply authoritative markers, rejected roots are not probed, and entries are retained. JSON payloads, exit codes and per-skill results remain unchanged. Dry-runs, existing metadata no-ops and unrelated unusable roots are silent. |
 
 #### C-AUTO: Autoupdate (§10.2)
 

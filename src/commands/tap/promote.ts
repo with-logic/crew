@@ -29,7 +29,7 @@ export function promoteExistingTap(
   sameTarget: TapConfig,
   explicitName: string | undefined,
   recursive: boolean,
-): void {
+): boolean {
   withTapLocks([sameTarget], home, () => migrateTapClone(sameTarget, home));
   const renamedName = explicitName ?? sameTarget.name;
   const promoted: TapConfig = {
@@ -43,25 +43,27 @@ export function promoteExistingTap(
     taps: config.taps.map((t) => (t.name === sameTarget.name ? promoted : t)),
   };
   const state = readState(home);
-  withTargetLocks(markerTargetBases(state.installations, cwd), (_failures, unavailableBases) => {
+  const bases = markerTargetBases(state.installations, cwd);
+  return withTargetLocks(bases, (_failures, unavailableBases) => {
     const rewritten: StateFile = {
       ...state,
       installations: state.installations.map((e) =>
         e.source.tap === sameTarget.name ? { ...e, source: { ...e.source, tap: renamedName } } : e,
       ),
     };
-    rewriteTapMarkers(
+    const unusableProjectRoots = rewriteTapMarkers(
       {
         oldName: sameTarget.name,
         newName: renamedName,
         ...(recursive ? { discovery: "recursive" } : {}),
       },
-      rewritten.installations,
+      state.installations,
       cwd,
       unavailableBases,
     );
     if (renamedName !== sameTarget.name) writeState(rewritten, home);
     // Keep promotion eligible for retry until authoritative markers and state agree (§11.1, §16.5).
     writeConfig(updated, home);
+    return unusableProjectRoots;
   });
 }
