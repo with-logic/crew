@@ -1,5 +1,5 @@
 /**
- * `crew tap add <url-or-path> [<name>]` (§16.3). Four outcomes:
+ * `crew tap add <url-or-path> [<name>]` (§16.3, §14). Four outcomes:
  * *added* (new tap row; git taps clone first), *no-op* (same target
  * already configured as registered), *promoted* (same target already
  * backs an auto tap — see `./promote.ts`), *updated* (same registered
@@ -12,6 +12,8 @@
  * The clone is the one validation a preview cannot perform.
  */
 
+import { markerTargetBases } from "../../agents/target-lock/bases.ts";
+import { withTargetLocks } from "../../agents/target-lock/index.ts";
 import { withSourceMaintenanceLock } from "../../cli/maintenance.ts";
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
@@ -137,20 +139,24 @@ function applyAdd(ctx: CommandContext, config: Config, plan: TapAddPlan, input: 
   if (plan.outcome === "no-op") return;
   if (plan.outcome === "updated") {
     const existing = plan.sameTarget;
-    writeConfig(
-      {
-        ...config,
-        taps: config.taps.map((t) =>
-          t.name === existing.name ? { ...t, discovery: "recursive" } : t,
-        ),
-      },
-      ctx.home,
-    );
-    rewriteTapMarkers(
-      { oldName: existing.name, newName: existing.name, discovery: "recursive" },
-      readState(ctx.home).installations,
-      ctx.cwd,
-    );
+    const entries = readState(ctx.home).installations;
+    withTargetLocks(markerTargetBases(entries, ctx.cwd), (_failures, unavailableBases) => {
+      writeConfig(
+        {
+          ...config,
+          taps: config.taps.map((t) =>
+            t.name === existing.name ? { ...t, discovery: "recursive" } : t,
+          ),
+        },
+        ctx.home,
+      );
+      rewriteTapMarkers(
+        { oldName: existing.name, newName: existing.name, discovery: "recursive" },
+        entries,
+        ctx.cwd,
+        unavailableBases,
+      );
+    });
     return;
   }
   if (plan.outcome === "promoted") {

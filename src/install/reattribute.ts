@@ -1,5 +1,5 @@
 /**
- * Re-attribute state entries onto the incoming tap (§5.4, §16.5).
+ * Re-attribute state entries onto the incoming tap (§5.4, §16.5, §14).
  *
  * When a skill is already installed from an auto tap and the user
  * installs the same location again through a tap that covers it — the
@@ -77,6 +77,7 @@ export function rewriteReattributedMarkers(
   reattributions: readonly Reattribution[],
   taps: readonly TapConfig[],
   cwd: string,
+  unavailableBases?: ReadonlySet<string>,
 ): void {
   if (reattributions.length === 0) return;
   const tapsByName = new Map(taps.map((t) => [t.name, t]));
@@ -98,7 +99,7 @@ export function rewriteReattributedMarkers(
     if (root === null) continue;
     for (const adapter of ALL_AGENTS) {
       const base = baseFor(adapter, r.scope, root);
-      if (base === "") continue;
+      if (base === "" || unavailableBases?.has(base)) continue;
       const installDir = join(base, r.name);
       const marker = tryReadJson<Marker>(join(installDir, ".crew.json"));
       // No marker, or one this adapter doesn't own: not ours to rewrite.

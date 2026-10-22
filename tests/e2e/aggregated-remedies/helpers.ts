@@ -45,7 +45,12 @@ export function immutable(home: string, ...targets: string[]) {
   return {
     state: readFileSync(paths(home).stateFile),
     store: snapshot(paths(home).storeDir),
-    installs: targets.map(snapshot),
+    installs: targets.map((target) => {
+      const files = snapshot(target);
+      // §14: lease ownership timestamps may change without changing installed skill bytes.
+      delete files[".crew-target.lock.owner"];
+      return files;
+    }),
   };
 }
 

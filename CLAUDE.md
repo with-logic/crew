@@ -196,8 +196,10 @@ Prefer fixing the callers.
 
 ### Key design decisions
 
-**1. All state under `~/.crew/`, redirectable via `CREW_HOME`.**
-`src/core/paths.ts` is the single source of truth for every path.
+**1. Home-local state under `~/.crew/`, redirectable via `CREW_HOME`.**
+`src/core/paths.ts` is the single source of truth for home-local paths.
+Shared target coordination uses persistent `.crew-target` entries under
+adapter bases, outside `CREW_HOME` (PRD §§6 and 14).
 Tests pass `CREW_HOME=/tmp/...` via the `home` option to `runCli` — no
 globals, no `process.chdir`.
 

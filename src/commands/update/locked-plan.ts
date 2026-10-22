@@ -1,5 +1,5 @@
 /**
- * The part of `crew update`'s plan that touches tap clones (§10.1,
+ * The part of `crew update`'s plan that touches tap clones (§14, §10.1,
  * §10.1.1), run with every relevant clone lock held.
  *
  * Split from `./plan.ts` (200-line cap). `./plan.ts` owns selection and
@@ -7,18 +7,23 @@
  * locks: refresh, re-expansion, and the per-entry update walk.
  */
 
+import { type TargetBaseFailures, withTargetLocks } from "../../agents/target-lock/index.ts";
 import type { Config, StateEntry, StateFile, TapConfig } from "../../core/types.ts";
 import { installNewTapChild } from "../../install/new-tap-child/index.ts";
 import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import { updateOneEntry } from "../../install/update/entry.ts";
+import { rowFor } from "../../install/update/row.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
+import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { type CollectionSubject, entryIdentity } from "../../state/collections/index.ts";
 import { upsertEntry } from "../../state/load.ts";
-import { refreshTaps } from "../tap/refresh.ts";
+import { refreshTaps, type TapRefreshRow } from "../tap/refresh.ts";
 import type { CommandContext } from "../types.ts";
 import type { UpdatePlan, UpdateSelector } from "./plan.ts";
 import type { CollectionSummary } from "./render.ts";
 import { entriesAfterReexpansion, reexpandSelectionFor, withTransitive } from "./selection.ts";
+import { prepareUpdateSources } from "./source-preparation.ts";
+import { updateTargetBatch } from "./target-set.ts";
 
 /** Inputs to the locked half of the plan, after selection has run. */
 export interface LockedPlanInput {
@@ -41,7 +46,25 @@ export interface LockedPlanInput {
 }
 
 export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
-  const { ctx, config, home, dryRun, taps, transitiveSources, subjects, initialSelected } = input;
+  const tapRows = refreshTaps(input.taps, input.home);
+  const prepared = prepareUpdateSources(input);
+  const { bases, missingProjectRoots } = updateTargetBatch(input);
+  // §14: previews share decision logic but read an unlocked, non-snapshot-consistent inventory.
+  if (input.dryRun) return runTargetBatch(input, tapRows, undefined, missingProjectRoots, prepared);
+  // §14: source clone locks are already held; acquisition stays outside per-entry catches.
+  return withTargetLocks(bases, (failures) =>
+    runTargetBatch(input, tapRows, failures, missingProjectRoots, prepared),
+  );
+}
+
+function runTargetBatch(
+  input: LockedPlanInput,
+  tapRows: readonly TapRefreshRow[],
+  baseFailures?: TargetBaseFailures,
+  missingProjectRoots?: ReadonlySet<string>,
+  prepared?: PreparedSources,
+): UpdatePlan {
+  const { ctx, config, home, dryRun, transitiveSources, subjects, initialSelected } = input;
   const rows: UpdateRow[] = [];
   const tapReexpandRows: TapReexpandRow[] = [];
   let hardFailure = false;
@@ -57,7 +80,6 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
     collections.push({ kind: s.kind, name: s.name, count: s.entries.length });
   }
 
-  const tapRows = refreshTaps(taps, home);
   // A tap the user named AS A SELECTOR that could not be refreshed is a
   // hard failure, even when nothing is installed from it: the run did
   // not do what was asked, and exiting 0 lets the warning scroll past
@@ -78,8 +100,11 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
     config,
     home,
     reexpandSelection,
-    (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd),
+    (args) => installNewTapChild(args, ctx.flags.force, home, ctx.cwd, baseFailures),
     dryRun,
+    missingProjectRoots,
+    prepared,
+    baseFailures,
   );
   tapReexpandRows.push(...reexpanded.rows);
   if (reexpanded.hardFailure) hardFailure = true;
@@ -102,6 +127,23 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
   // adopt an unrelated install's dependencies on a tap we never locked.
   const targetEntries = entriesAfterReexpansion(current, subjects, initialSelected);
   for (const entry of targetEntries) {
+    // §14: preparation's missing-root decision survives later source work.
+    if (
+      entry.scope === "project" &&
+      entry.project_root &&
+      missingProjectRoots?.has(entry.project_root)
+    ) {
+      rows.push(
+        withTransitive(
+          rowFor(entry, {
+            kind: "missing_project_root",
+            root: entry.project_root,
+          }),
+          transitiveSources,
+        ),
+      );
+      continue;
+    }
     if (sourceGone.has(entryIdentity(entry))) {
       rows.push(
         withTransitive(
@@ -124,6 +166,8 @@ export function planLockedUpdate(input: LockedPlanInput): UpdatePlan {
       ctx.flags.force,
       ctx.cwd,
       dryRun,
+      baseFailures,
+      prepared,
     );
     current = updatedState;
     rows.push(withTransitive(row, transitiveSources));

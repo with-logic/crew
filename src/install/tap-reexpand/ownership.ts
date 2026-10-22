@@ -4,6 +4,7 @@ import { lstatSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { baseFor } from "../../agents/adapter.ts";
 import { agentByName } from "../../agents/registry.ts";
+import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import {
@@ -21,6 +22,7 @@ export function assertChildSourceOwnership(
   index: InstalledSourceIndex,
   args: LookupArgs,
   agents: readonly string[],
+  baseFailures?: TargetBaseFailures,
 ): void {
   const conflict = (dest?: string): never => {
     throw new CrewError(
@@ -36,6 +38,7 @@ export function assertChildSourceOwnership(
     if (!adapter) continue;
     const base = baseFor(adapter, args.scope, args.projectRoot ?? "");
     if (!base) continue;
+    if (baseFailures?.has(base)) continue;
     const dest = join(base, args.name);
     if (checked.has(dest)) continue;
     checked.add(dest);

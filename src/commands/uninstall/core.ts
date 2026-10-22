@@ -1,5 +1,5 @@
 /**
- * Core removal primitives for `crew uninstall`.
+ * Core removal primitives for `crew uninstall` (§7.4, §14).
  *
  * `removeOne` takes a state snapshot and a single skill name, runs the
  * per-target uninstall, and returns the updated state plus a record of
@@ -67,6 +67,7 @@ export function removeOne(
   pruned: boolean,
   agentFilter: readonly string[] | null,
   deferStateEntryDrops: boolean = false,
+  unavailableBases?: ReadonlySet<string>,
 ): {
   updatedState: StateFile;
   rec: UninstallRecord;
@@ -95,7 +96,7 @@ export function removeOne(
     const agentsToRemove = agentFilter
       ? entry.agents.filter((t) => agentFilter.includes(t))
       : entry.agents;
-    const detached = removeFromAgents(entry, agentsToRemove, name, ctx, rec);
+    const detached = removeFromAgents(entry, agentsToRemove, name, ctx, rec, unavailableBases);
     // Retention follows the per-agent OUTCOME, not the request: an
     // agent whose removal aborted on a safety check still has the
     // skill's bytes on disk, so §7.4 obliges us to report it as
@@ -135,6 +136,7 @@ function removeFromAgents(
   name: string,
   ctx: CommandContext,
   rec: UninstallRecord,
+  unavailableBases?: ReadonlySet<string>,
 ): ReadonlySet<string> {
   // For project-scope entries, the authoritative install location is
   // the entry's recorded `project_root` — NOT `ctx.cwd`.
@@ -169,6 +171,7 @@ function removeFromAgents(
         skillName: name,
         force: ctx.flags.force,
         dryRun: ctx.flags.dryRun,
+        ...(unavailableBases ? { unavailableBases } : {}),
       });
       if (outcome.kind === "absent") {
         for (const a of group) rec.absentFrom.push(a.name);

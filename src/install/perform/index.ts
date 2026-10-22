@@ -1,5 +1,5 @@
 /**
- * Install every resolved skill into every active agent (§9 steps 9–10).
+ * Install every resolved skill into every active agent (§9 steps 9–10, §14).
  *
  * Given a resolved, topologically-ordered install set and the active
  * agents, this function:
@@ -24,6 +24,7 @@
 
 import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
 import { type InstallOutcome, installSkillIntoAgents } from "../../agents/install.ts";
+import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import type { CrewError } from "../../core/errors.ts";
 import type { ResolvedSkill, Scope, StateFile } from "../../core/types.ts";
 import { upsertEntry } from "../../state/load.ts";
@@ -76,6 +77,7 @@ export function performInstall(
      * and markers (registered tap or a broader whole-tap subscription).
      */
     readonly keepSource?: readonly KeptSource[];
+    readonly baseFailures?: TargetBaseFailures;
   },
 ): InstallSummary {
   const records: InstallRecord[] = [];
@@ -112,6 +114,7 @@ export function performInstall(
           resolvedSha: skill.resolvedSha,
           contentHash: skill.contentHash,
           force: options.force,
+          ...(options.baseFailures ? { baseFailures: options.baseFailures } : {}),
         });
         for (const a of group.agents) {
           perAgent.push({

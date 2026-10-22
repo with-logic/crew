@@ -7,6 +7,7 @@
  * (`--dry-run`) or install it.
  */
 
+import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import { type CrewError, normalizeLocalError } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import { explicitRemedy } from "../../util/error-remedy.ts";
@@ -35,6 +36,7 @@ export interface AdditionsInput {
   readonly installOne: InstallNewChild;
   readonly cache: TapScanCache;
   readonly installedIndex: InstalledSourceIndex;
+  readonly baseFailures?: TargetBaseFailures;
   /**
    * When a namespace selector drove this run, the namespaces it named.
    * Children outside them are skipped: the group spans the whole tap,
@@ -87,7 +89,7 @@ export function collectAdditions(input: AdditionsInput): AdditionsResult {
       continue;
     }
     try {
-      assertChildSourceOwnership(input.installedIndex, lookup, input.agents);
+      assertChildSourceOwnership(input.installedIndex, lookup, input.agents, input.baseFailures);
     } catch (err) {
       hardFailure = true;
       rows.push(childErrorRow(input, child.name, err as CrewError));
