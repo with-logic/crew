@@ -25,7 +25,7 @@ export function readUpdateSource(
   newSha: string | null,
   force: boolean,
 ): SourceRead {
-  if (tap.kind === "path" && !isSourceDirectory(sourcePath)) return { kind: "source_gone" };
+  if (!(isGistTap(tap) || isSourceDirectory(sourcePath))) return { kind: "source_gone" };
   try {
     const sourceHash = newSha === null ? hashSourceDirectory(sourcePath) : undefined;
     if (newSha === entry.resolved_sha && !(force && entry.pinned)) {
