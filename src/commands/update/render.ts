@@ -118,11 +118,11 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   // tap access, child validation, staging, and target-install failures.
   const errorRows = input.tapReexpandRows.filter((r) => r.kind === "tap_error");
   for (const r of errorRows) {
-    const code = r.error?.code ?? "unreachable";
+    const code = r.error.code;
     lines.push(
       `${style.symbol("fail")} ${style.bold(r.name)}${projectTag(r, style)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
     );
-    if (r.error?.message) lines.push(style.dim(`  ${r.error.message}`));
+    if (r.error.message) lines.push(style.dim(`  ${r.error.message}`));
   }
 
   const totals = tally(input.rows, addedRows.length, errorRows.length);

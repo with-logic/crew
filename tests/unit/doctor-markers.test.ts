@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
+import { invalidMarkerFinding } from "../../src/commands/doctor/markers/findings.ts";
 import { scanMarkers } from "../../src/commands/doctor/markers/scan.ts";
 import { isDoctorMarker } from "../../src/commands/doctor/markers/validate.ts";
 import type { Marker } from "../../src/core/types.ts";
@@ -25,6 +26,21 @@ const marker: Marker = {
   installed_at: "2026-10-21T00:00:00.000Z",
   installed_by: "crew",
 };
+
+test("C-STATE-14 invalid marker diagnostics preserve path identity and escape controls", () => {
+  const path = "/tmp/crew\nmarker/.crew.json";
+  expect(
+    invalidMarkerFinding(path, "invalid marker from https://alice:secret@example.com/skills.git"),
+  ).toEqual([
+    `marker_invalid\0${path}`,
+    {
+      level: "error",
+      code: "marker_invalid",
+      message:
+        "/tmp/crew\\x0amarker/.crew.json: invalid marker from https://alice:***@example.com/skills.git",
+    },
+  ]);
+});
 
 test("C-STATE-14 a complete typed marker passes the doctor guard", () => {
   expect(isDoctorMarker(marker)).toBe(true);

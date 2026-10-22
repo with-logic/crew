@@ -32,7 +32,8 @@ for (const query of ["", "healthy", "unrelated"]) {
       expect(warning).toContain("local");
       expect(warning).toContain("invalid_skill");
     }
-    expect(parsed.warnings.join("\n")).toContain("BAD_NAME");
+    expect(parsed.warnings.join("\n")).toContain("`name` has invalid characters");
+    expect(parsed.warnings.join("\n")).not.toContain("BAD_NAME");
     expect(parsed.warnings.join("\n")).toContain("isn't valid YAML");
     expect(parsed.warnings.join("\n")).toContain("description");
     expect(parsed.warnings.join("\n")).toContain("must not be a symbolic link");

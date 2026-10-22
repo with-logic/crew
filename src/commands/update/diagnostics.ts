@@ -32,8 +32,8 @@ export function renderQuietUpdateErrors(
       lines.push(
         failureLine(
           `${row.name}${projectTag(row)} (from ${row.tap})`,
-          row.error?.code ?? "unreachable",
-          row.error?.message ?? "",
+          row.error.code,
+          row.error.message,
         ),
       );
   }

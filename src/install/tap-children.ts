@@ -68,8 +68,6 @@ function pushLoaded(children: CurrentTapChild[], skipped: RejectedTapSkill[], pa
     if (!(err instanceof CrewError) || err.code !== "invalid_skill") throw err;
     skipped.push({
       path,
-      tapRelativePath: "",
-      namespace: null,
       code: err.code,
       message: err.message,
     });

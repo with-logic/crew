@@ -59,6 +59,7 @@ function walkGroup(input: GroupInput, acquired: AcquiredTap): TapReexpandResult 
     members,
     childrenByName: groupChildrenByName(catalog.children),
     skipped: catalog.skipped,
+    rootDir: acquired.rootDir,
     namespaces: input.namespaces,
     tap,
   });

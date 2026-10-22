@@ -112,7 +112,7 @@ for (const tracked of [false, true]) {
         } else {
           for (const name of badPaths) expect(result.out).toContain(name);
           expect(result.out).toContain("invalid_skill");
-          expect(result.out).toContain("BAD_NAME");
+          expect(result.out).toContain("invalid characters");
           expect(result.out).toContain("isn't valid YAML");
           expect(result.out).toContain("must not be a symbolic link");
           expect(result.out).toContain("added");

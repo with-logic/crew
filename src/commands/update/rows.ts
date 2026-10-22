@@ -60,7 +60,7 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
   }
   if (o.kind === "source_gone") {
     return {
-      status: style.yellow("removed upstream"),
+      status: style.yellow("source no longer available"),
       detail: style.dim("keeping your copy"),
       required,
     };

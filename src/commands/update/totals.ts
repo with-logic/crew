@@ -72,7 +72,7 @@ export function formatTotals(t: Totals, dryRun: boolean): string {
   if (t.upToDate > 0) parts.push(`${t.upToDate} up to date`);
   if (t.skipped > 0) parts.push(`${t.skipped} skipped`);
   if (t.tapMissing > 0) parts.push(`${t.tapMissing} with a removed tap`);
-  if (t.sourceGone > 0) parts.push(`${t.sourceGone} removed upstream`);
+  if (t.sourceGone > 0) parts.push(`${t.sourceGone} with unavailable sources`);
   if (t.failed > 0) parts.push(plural(t.failed, "failure"));
   if (parts.length === 0) return "nothing changed";
   return parts.join(" · ");

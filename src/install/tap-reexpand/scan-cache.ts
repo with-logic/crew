@@ -39,7 +39,7 @@ export interface TapScanCache {
    */
   children(tap: TapConfig, home: string, rootDir: string): CurrentTapCatalog;
   /** Load and validate one child (§9 step 4), memoising validation and source-read errors. */
-  validate(skillDir: string, tap?: TapConfig): CrewError | null;
+  validate(sourcePath: string, tap?: TapConfig): CrewError | null;
 }
 
 export function makeTapScanCache(): TapScanCache {
@@ -75,11 +75,11 @@ export function makeTapScanCache(): TapScanCache {
       }
     },
 
-    validate(skillDir: string, tap?: TapConfig): CrewError | null {
-      const hit = skillLoadErrors.get(skillDir);
+    validate(sourcePath: string, tap?: TapConfig): CrewError | null {
+      const hit = skillLoadErrors.get(sourcePath);
       if (hit !== undefined) return hit;
-      const skillLoadError = skillLoadErrorFor(skillDir, tap !== undefined && isGistTap(tap));
-      skillLoadErrors.set(skillDir, skillLoadError);
+      const skillLoadError = skillLoadErrorFor(sourcePath, tap !== undefined && isGistTap(tap));
+      skillLoadErrors.set(sourcePath, skillLoadError);
       return skillLoadError;
     },
   };
@@ -92,9 +92,9 @@ export function makeTapScanCache(): TapScanCache {
  * Cache stable `CrewError` codes for validation and source-read failures;
  * unexpected errors from manifest path inspection must still propagate.
  */
-function skillLoadErrorFor(skillDir: string, file: boolean): CrewError | null {
+function skillLoadErrorFor(sourcePath: string, isGistFile: boolean): CrewError | null {
   try {
-    loadSkill(skillDir, file);
+    loadSkill(sourcePath, isGistFile);
     return null;
   } catch (err) {
     if (err instanceof CrewError) return err;

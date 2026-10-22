@@ -54,10 +54,8 @@ describe("currentTapChildren", () => {
       skipped: [
         {
           path: root,
-          tapRelativePath: "",
-          namespace: null,
           code: "invalid_skill",
-          message: expect.stringContaining("BAD_NAME"),
+          message: expect.stringContaining("invalid characters"),
         },
       ],
     });

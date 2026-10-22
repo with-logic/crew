@@ -7,7 +7,6 @@ import type { TapConfig } from "../../core/types.ts";
 import { indexTap, type SkillLocation } from "../../install/tap-index.ts";
 import { displayText } from "../../refs/display-url.ts";
 import { loadSkill } from "../../skill/load.ts";
-import { isGistTap } from "../../sources/gist.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import { type SearchInstallIndex, searchInstallStatus } from "./install-state.ts";
 import type { ConfiguredSearchResult, SearchHit } from "./types.ts";
@@ -65,7 +64,9 @@ function collectHitsFromTap(
     return;
   }
   for (const skipped of index.skipped) {
-    warnings.push(invalidManifestWarning(tap.name, skipped.path, skipped.message));
+    warnings.push(
+      invalidManifestWarning({ tap: tap.name, path: skipped.path, message: skipped.message }),
+    );
   }
   for (const locs of index.skills.values()) {
     for (const loc of locs) collectSkillHit(tap, loc, query, installIndex, hits, warnings);
@@ -81,8 +82,7 @@ function collectSkillHit(
   warnings: string[],
 ): void {
   try {
-    const skill = loadSkill(loc.path, isGistTap(tap));
-    const { name, description } = skill.frontmatter;
+    const { name, description } = loc.frontmatter ?? loadSkill(loc.path).frontmatter;
     if (!matchesSkill(name, description, query)) return;
     hits.push({
       tap: tap.name,
@@ -93,11 +93,21 @@ function collectSkillHit(
     });
   } catch (err) {
     if (err instanceof CrewError && err.code === "invalid_skill")
-      warnings.push(invalidManifestWarning(tap.name, loc.path, err.message));
+      warnings.push(
+        invalidManifestWarning({ tap: tap.name, path: loc.path, message: err.message }),
+      );
   }
 }
 
-function invalidManifestWarning(tap: string, path: string, message: string): string {
+function invalidManifestWarning({
+  tap,
+  path,
+  message,
+}: {
+  readonly tap: string;
+  readonly path: string;
+  readonly message: string;
+}): string {
   return sanitizeLine(
     displayText(`warning: tap \`${tap}\` skill \`${path}\` skipped (invalid_skill) — ${message}`),
   );

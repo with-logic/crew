@@ -60,13 +60,14 @@ test("C-GIST-04 whole-gist updates change bytes, add files and preserve deleted 
   const next = gistFile(f.repo, "new.anything", "new");
   rmSync(join(f.repo, "build.txt"));
   commitAll(f.repo, "updated gist");
+  const beforePreview = readState(f.home);
   const preview = f.cli("update", "--dry-run");
   expect(preview.code).toBe(0);
   expect(preview.out).toContain("new");
-  expect(readState(f.home).installations).toHaveLength(2);
+  expect(readState(f.home)).toEqual(beforePreview);
   const update = f.cli("update");
   expect(update.code).toBe(0);
-  expect(update.out).toContain("removed upstream");
+  expect(update.out).toContain("source no longer available");
   expect(readFileSync(join(target, "prd", "SKILL.md"), "utf8")).toContain("changed");
   expect(readFileSync(join(target, "new", "SKILL.md"), "utf8")).toBe(next);
   expect(readFileSync(join(target, "build", "SKILL.md"), "utf8")).toContain("Original build");
@@ -75,6 +76,11 @@ test("C-GIST-04 whole-gist updates change bytes, add files and preserve deleted 
       .installations.map((e) => e.name)
       .sort(),
   ).toEqual(["build", "new", "prd"]);
+  const added = readState(f.home).installations.find((entry) => entry.name === "new")!;
+  expect(added.source.path).toBe("new.anything");
+  expect(JSON.parse(readFileSync(join(target, "new", ".crew.json"), "utf8")).path).toBe(
+    "new.anything",
+  );
   expect(f.cli("update").out).toContain("up to date");
 });
 test("C-GIST-03 refs preview and update files at their selected commit", () => {

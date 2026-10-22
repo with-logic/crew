@@ -104,7 +104,7 @@ describe("tap scan cache child discovery", () => {
     const cache = makeTapScanCache();
     const catalog = cache.children(tap, "/unused", root);
     expect(catalog.children.map((child) => child.name)).toEqual(["healthy"]);
-    expect(catalog.skipped).toMatchObject([{ tapRelativePath: "bad", code: "invalid_skill" }]);
+    expect(catalog.skipped).toMatchObject([{ path: join(root, "bad"), code: "invalid_skill" }]);
     makeSkill(root, "bad", skillFrontmatter({ name: "repaired" }));
     expect(cache.children(tap, "/unused", root)).toBe(catalog);
     expect(cache.children(tap, "/unused", root).skipped).toBe(catalog.skipped);

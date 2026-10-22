@@ -2,14 +2,14 @@
  * Per-group survey of a tap's current children during re-expansion
  * (§10.1.1 step 2).
  *
- * Split from `./index.ts` (200-line cap). Given the children a tap now
- * exposes and the entries installed from it, decide three things:
- * which names are ambiguous upstream, which installed entries have
- * vanished, and which have merely moved.
+ * Split from `./index.ts` (200-line cap). Survey current children and rejected
+ * locations against installed entries: report validation errors and ambiguous
+ * names, distinguish vanished entries, and identify relocations.
  */
 
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { displayText } from "../../refs/display-url.ts";
+import { sourceRelativePath } from "../../sources/path.ts";
 import { entryIdentity } from "../../state/collections/index.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import type { CurrentTapChild } from "../tap-children.ts";
@@ -21,6 +21,7 @@ export interface SurveyInput {
   readonly childrenByName: ReadonlyMap<string, CurrentTapChild[]>;
   readonly tap: TapConfig;
   readonly skipped: readonly RejectedTapSkill[];
+  readonly rootDir: string;
   readonly namespaces: ReadonlySet<string> | null;
 }
 
@@ -46,11 +47,11 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
 
   const rejectedPaths = new Set<string>();
   for (const rejected of input.skipped) {
-    rejectedPaths.add(rejected.tapRelativePath);
-    if (
-      input.namespaces !== null &&
-      (rejected.namespace === null || !input.namespaces.has(rejected.namespace))
-    )
+    const tapRelativePath = sourceRelativePath(input.rootDir, rejected.path);
+    rejectedPaths.add(tapRelativePath);
+    const parts = tapRelativePath.split("/");
+    const namespace = parts.length === 3 && parts[0] === "skills" ? parts[1]! : null;
+    if (input.namespaces !== null && (namespace === null || !input.namespaces.has(namespace)))
       continue;
     hardFailure = true;
     rows.push({
@@ -64,9 +65,7 @@ export function surveyGroup(input: SurveyInput): SurveyResult {
       error: {
         code: rejected.code,
         message: sanitizeLine(
-          displayText(
-            `invalid skill at \`${rejected.tapRelativePath || "(root)"}\`: ${rejected.message}`,
-          ),
+          displayText(`invalid skill at \`${tapRelativePath || "(root)"}\`: ${rejected.message}`),
         ),
       },
     });

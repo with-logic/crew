@@ -88,5 +88,7 @@ test("local invalid skill diagnostics escape metadata before wrapping", () => {
   makeSkill(source, "invalid", skillFrontmatter({ name: yamlValue }));
   const human = captureStreams();
   expect(runCli(["install", source], { home, streams: human.streams })).toBe(1);
-  expect(human.stdout()).toContain(escaped);
+  expect(human.stdout()).toContain("`name` has invalid characters");
+  expect(human.stdout()).not.toContain(raw);
+  expect(human.stdout()).not.toContain(escaped);
 });

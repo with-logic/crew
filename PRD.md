@@ -225,7 +225,7 @@ Accepted on any command where they apply:
 - `--dry-run` — describe what would happen without changing any installed state: no skill, marker, store entry, config, or `state.json` is written. A command MAY still refresh its own read caches where that is how it learns what would change (`crew update --dry-run` fetches tap clones — §10.1.1); any such exception MUST be stated in that command's section.
 - `--json` — emit machine-readable output. Required on `list`, `search`, `info`, `agents`, `autoupdate status`. Optional on all other commands; when provided, humans-readable output is suppressed and a structured result is emitted.
 - `--quiet` — suppress non-error output. Error output still goes to stderr.
-- `--verbose` — emit progress details to stderr: every `git` (and scheduler) subprocess invocation, tap clone/fetch, store staging, and per-agent install/uninstall step, one line each. Lines go to stderr only, so `--verbose --json` still leaves a clean JSON payload on stdout. Without the flag, none of these lines are emitted. Credentials MUST NOT appear in this output: a URL's password, an `https://<token>@host/…` userinfo token, and the value of a sensitive query parameter (`token`, `access_token`, `private_token`, `api_key`, `apikey`, `password`) are each replaced with `***`. SSH userinfo (`git@host`) is a username, not a secret, and is preserved. Control characters in any echoed value are escaped so crafted input cannot forge or reposition output — including a newline, which would otherwise open its own line and forge what reads as a second message; only line breaks an implementation composes itself as layout are preserved. The same redaction applies wherever a source URL can appear in a user-visible error, through every channel: the rendered message, any diagnostic quoted from `git` (which repeats the remote verbatim), and the `details` object of a `--json` error payload. Error `details` keys remain stable per §13; only their values are redacted.
+- `--verbose` — emit progress details to stderr: every `git` (and scheduler) subprocess invocation, tap clone/fetch, store staging, and per-agent install/uninstall step, one line each. Lines go to stderr only, so `--verbose --json` still leaves a clean JSON payload on stdout. Without the flag, none of these lines are emitted. Credentials MUST NOT appear in this output: a URL's password, an `https://<token>@host/…` userinfo token, and the value of a sensitive query parameter (`token`, `access_token`, `private_token`, `api_key`, `apikey`, `password`) are each replaced with `***`. SSH userinfo (`git@host`) is a username, not a secret, and is preserved. Control characters in any echoed value are escaped so crafted input cannot forge or reposition output — including a newline, which would otherwise open its own line and forge what reads as a second message; only line breaks an implementation composes itself as layout are preserved. The same redaction applies wherever a source URL can appear in a user-visible error, through every channel: the rendered message, any diagnostic quoted from `git` (which repeats the remote verbatim), and the `details` object of a `--json` error payload. Error `details` keys remain stable per §13; only their values are redacted. Unstructured diagnostics follow §13's fail-closed ambiguity policy; preserving trailing prose never takes precedence over credential confidentiality.
 - `--yes` — answer "yes" to any confirmation prompt.
 - `--force` — override safety checks as defined in §7 and §10. Never overrides spec validation failures or two-skills-same-name conflicts.
 
@@ -855,7 +855,7 @@ Written into every Homecrew-installed skill directory. JSON, UTF-8, trailing new
 - `tap_subpath` — for `tap_kind: git`, an optional directory inside the repo (empty string when none). Empty string for `tap_kind: path`.
 - `tap_path` — for `tap_kind: path`, the absolute filesystem path to the tap. Empty string for `tap_kind: git`.
 - `tap_discovery` — optional. When `"recursive"`, `doctor --repair` reconstructs the tap with recursive fallback discovery. Absent means standard discovery.
-- `path` — the skill's source location relative to the tap's root (after subpath is applied for git taps). Empty string when the tap itself is one skill (root SKILL.md). This path need not end in the skill's declared `name`.
+- `path` — the skill's source location relative to the tap's root (after subpath is applied for git taps). Empty string when the tap itself is one skill (root SKILL.md). This path need not end in the skill's declared `name`. It MUST be a POSIX relative path without a leading slash, NUL, or complete `..` component. Empty root paths and literal filename characters, including backslashes, remain valid; validation does not rewrite the recorded spelling.
 - `ref` — the ref the user asked for (`main`, `v1.2.0`, a SHA, or `null` if the default branch was used and no ref was specified).
 - `resolved_sha` — the full 40-char commit SHA the install came from, or `null` for path-kind taps.
 - `content_hash` — the hash per §12.1, prefixed `sha256:`.
@@ -1201,7 +1201,7 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - Tap-name reference (`<tap-name>` with no slash) where `<tap-name>` matches a configured tap: install the entire tap (every skill it currently exposes).
    - Git URL or shorthand (`@org/repo`, `gh:org/repo`, etc.): if any configured tap already points at the same URL+subpath, use it; otherwise create an auto tap (§16.5) and use it. The new tap is cloned and refreshed.
    - Path reference (`./foo`, `/abs/foo`): if any configured tap already points at the same path, use it; otherwise create a path-kind auto tap and use it.
-   In all cases, the resolved `state.installations[i].source` is `{ tap: <tap-name>, path: <skill-relative-path-inside-tap> }`. The URL/path of the tap itself lives in `config.yaml`.
+   In all cases, the resolved `state.installations[i].source` is `{ tap: <tap-name>, path: <skill-relative-path-inside-tap> }`. The URL/path of the tap itself lives in `config.yaml`. Acquiring a recorded skill location repeats the §7.5 relative-path check before reading source content; an invalid spelling fails with `invalid_skill`. Git-kind locations must also be reached without traversing descendant symlinks, including without an explicit ref. Source-root aliases remain valid. Explicitly local path-kind sources retain their trusted standard-layout links.
    - If a tap-source reference cannot be resolved from configured taps, Homecrew consults the known-tap registry (§16.2.1) before returning `invalid_ref`. Exact known-tap matches are suggestions only: Homecrew MUST NOT clone, fetch, add a tap to config, or install anything from a known tap until the user explicitly runs the suggested `crew tap add <source-ref> <name>` command (or a future interactive flow confirms that same action). The error MUST include the tap-add command and the follow-up `crew install <tap>/<skill>` or `crew install <tap>` command. A two-segment reference `<owner>/<repo>` also matches a known tap whose URL is `https://github.com/<owner>/<repo>` — the user typed the repository, not a tap name — and the error suggests that tap the same way (§8.5 "Two-segment misses").
 3. **Resolve refs to SHAs.** For git sources and tap sources, the ref (tag, branch, or `HEAD`) is resolved to a full commit SHA. This SHA is what's recorded in state and markers, even if the user specified a tag or branch. If the ref is not present in the local clone, crew fetches once and re-resolves; a ref that is still unknown is `ref_not_found` (§13, exit 5).
 
@@ -1247,6 +1247,8 @@ Given one or more skill references on the command line, `crew install` proceeds 
    existing skill validator is a skill, regardless of filename or extension
    (including `SKILL.md`, `skills`, and `.crew.json`). Directories, symlinks,
    files without valid frontmatter, and malformed manifests are ignored.
+   The gist candidate file itself is the manifest passed to step 4
+   validation; it does not need to be named `SKILL.md` at its source.
    A whole-source install includes every valid file; duplicate declared names
    produce `conflicting_dependencies`. Selected files are copied byte for byte
    into the store as `SKILL.md`, without other gist files. State `source.path`
@@ -1416,7 +1418,8 @@ between resolution and targeting:
    b. If pinned to a tag, re-resolve the tag: if the tag moved and `--force` is given, proceed with the tag's new commit — the content installed is that commit's, not the default branch's; otherwise skip.
    c. Otherwise (tap source, branch, or default branch), re-resolve the ref to a SHA. The entry's own recorded `ref` is what gets re-resolved: an entry installed from `@<branch>` follows that branch, not the tap's default branch. An entry with no ref follows the tap's default branch as before.
    d. If the new SHA equals the installed `resolved_sha`, the skill is up-to-date; record as such and continue.
-   e. Otherwise, stage the new commit into the store and run the install algorithm (§7.3) for every (agent, scope) pair this skill is recorded against. Pre-flight safety checks apply as always: a customized install is skipped (not overwritten) unless `--force`.
+   e. Otherwise, validate the source skill, then check the recorded agent targets. If none names a recognized agent with a nonempty install base for the recorded scope and location, report the soft outcome `skipped` with reason `no applicable agent targets`, preserving the complete state entry and installed copies without staging into the store. This check does not replace source resolution or validation, infer targets from detection, or repair recorded agents. Otherwise, stage the new commit into the store and run the install algorithm (§7.3) for every applicable (agent, scope) pair this skill is recorded against. Pre-flight safety checks apply as always: a customized install is skipped (not overwritten) unless `--force`.
+   f. Advance the recorded revision, content hash, and installation time only when at least one target installed or was already current and no target had a hard failure. With zero completed targets, preserve the complete input state entry so a later update can retry. All-safety-skipped results retain their per-target diagnostics and remain soft. A mix of completed and safety-skipped targets may advance state; any hard target failure preserves the input entry even when another target completed.
 4. Garbage-collect the store: any `store/<name>@<short-sha>/` entry no longer referenced by any `state.json` entry or marker is deleted.
 5. Print summary (human or JSON).
 
@@ -1466,8 +1469,30 @@ soft outcome: exit code stays 0 for an update run whose only
 abnormalities are `source_gone`. Removal of an unwanted local skill is
 always explicit (`crew uninstall <selector>`).
 
-This rule also applies when a whole source becomes unresolvable: a
-tap's clone URL 404s, or a git repo is gone. Those produce
+**Human source-absence results.** A `source_gone` row and its summary
+MUST describe the source as no longer available without assuming that
+it is remote or was deliberately removed upstream. The row MUST also
+say that the installed copy is kept. This presentation applies equally
+to Git and local path sources and does not change the machine outcome,
+its JSON shape, the soft exit code, or install/state preservation.
+
+**Local source changes during inspection.** For a path-kind tap, a skill
+root can disappear or become a file or looping symlink after its
+availability check succeeds. If hashing or manifest loading then fails
+because a source path is missing, is not a directory, or loops through
+symlinks, crew MUST recheck that same recorded skill root. Report
+`source_gone` only if it no longer resolves to a directory; preserve the
+installed bytes, marker, and logical state entry and continue other
+selected skills. This applies to normal updates and previews, with exit
+0 when it is the only abnormality. A missing or invalid `SKILL.md` in a
+still-resolvable root remains a validation failure. Permission failures
+such as `EACCES`, parser/validation errors, and other operational failures
+remain hard even if the root disappears later. This rule covers source
+hashing/loading before staging or target writes; it does not promise a
+consistent snapshot of a concurrently edited local source or retry it.
+
+When a whole remote source becomes unresolvable — a tap's clone URL
+404s, or a git repo is gone — those produce
 `source_unreachable` (hard failure, exit 1) per-skill as before —
 `source_gone` is reserved for "source resolved, skill inside it did
 not." The distinction matters because a transient network failure
@@ -1640,7 +1665,10 @@ is read-only:
 - A per-skill row whose SHA (or, for path-kind taps, content hash) has
   moved is reported with outcome `would_update` carrying the `new_sha`
   a real run would install. The skill is still validated, so a broken
-  upstream version still surfaces as `failed`.
+  upstream version still surfaces as `failed`. After validation, an entry
+  with no applicable recorded agent targets instead reports the same soft
+  `skipped` outcome as a real run (§10.1 step 3e). Preview does not execute
+  per-target installation safety checks.
 - A newly-added tap child is reported with kind `would_add` instead of
   being installed.
 - `up_to_date`, `skipped`, `source_gone`, `missing_project_root`, and
@@ -1675,7 +1703,9 @@ payload is identical to `crew update --dry-run --json` (including
 `dry_run: true`). Only the human rendering differs: it is trimmed to
 the rows that answer "what would change" — `would_update`, `would_add`,
 `source_gone`, and failures — and omits `up_to_date` and `skipped`
-rows. When nothing would change it prints a single line saying so.
+rows. Source-absence rows use the same neutral wording and kept-copy
+notice as `crew update` (§10.1), including in `--dry-run` output.
+When nothing would change it prints a single line saying so.
 
 ### 10.2 `crew autoupdate`
 
@@ -2095,7 +2125,7 @@ off.
 7. If autoupdate is enabled in config, the platform scheduler is actually loaded.
 8. For every project-scope entry, `project_root` exists on disk and a `.crew.json` marker lives under `<project_root>/<adapter-base>/<name>/`. A `project_root` that no longer exists produces a `missing_project_root` finding (warn, not error — the user may have simply moved the project, and the right fix is a `crew uninstall` from their new location).
 
-Markers must be readable JSON objects with the required §7.5 field types, schema version, scope and nonempty agent list. Their tap metadata must pass the same validation as a config tap (§6.1). A missing marker is absent; an unreadable marker produces an error-level `marker_unreadable` finding, and malformed JSON or invalid marker fields produce an error-level `marker_invalid` finding. Findings identify the marker path. Either marker finding prevents reconstruction or deletion: it causes `--repair` to apply no repairs, preserving state, config and the store, and exit 1. Repair previews count zero findings as addressable until these marker problems are corrected.
+Markers must be readable JSON objects with the required §7.5 field types, schema version, scope and nonempty agent list. Their recorded skill paths must satisfy the relative-path rule in §7.5; invalid paths are `marker_invalid` and block repair. Their tap metadata must pass the same validation as a config tap (§6.1). A missing marker is absent; an unreadable marker produces an error-level `marker_unreadable` finding, and malformed JSON or invalid marker fields produce an error-level `marker_invalid` finding. A symbolic link at an install-directory leaf or its `.crew.json` entry is also `marker_invalid`: doctor inspects these entries without following links, whether the link target exists, is missing or loops. This restriction does not apply to project-root or adapter-base aliases. A well-typed marker whose declared scope disagrees with the inventoried adapter base is also `marker_invalid`, unless another base for the declared scope, belonging to an adapter listed in the marker’s agents, resolves to the same physical directory. For genuine same-path or symlink aliases, the marker’s declared scope remains authoritative and the install is indexed once; shared paths between adapters remain valid (§7.2). Findings identify the marker path. An operational failure to inspect or search a project root, adapter base or install directory, or to list an adapter base, also produces `marker_unreadable`, identifying the affected directory. Missing paths and ordinary non-directory entries remain absent inventory, not read failures. Either marker finding prevents reconstruction or deletion: it causes `--repair` to apply no repairs, preserving state, config, the store and the scheduler, and exit 1. Repair previews count zero findings as addressable until these inventory problems are corrected.
 
 `--verify` includes check 3 (hash recomputation); without it, check 3 is skipped for speed.
 
@@ -2153,7 +2183,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 | `no_skills_found` | 4 | A directory source expanded to zero valid skills. |
 | `source_unreachable` | 5 | Network or git failure acquiring a source, or filesystem failure reading source files. |
 | `ref_not_found` | 5 | Ref doesn't exist in the repo. |
-| `source_gone` | 0 | On update, the source resolved but the installed skill no longer exists upstream. Soft outcome; local install is preserved. Never causes a non-zero exit. |
+| `source_gone` | 0 | On update, the skill is no longer present in a resolved Git source, or its recorded local path root is unavailable under the rules in §10.1. Soft outcome; local install is preserved. Never causes a non-zero exit. |
 | `tap_missing` | 0 | On update, the installed skill's tap is no longer in `config.yaml` (e.g. after `crew tap remove --force`). Soft outcome; local install is preserved. Never causes a non-zero exit. |
 | `ambiguous_reference` | 4 | A reference has more than one valid resolution across taps, skills, and namespaces, and the user is non-interactive or the prompt was aborted. |
 | `ambiguous_dependency` | 4 | A dependency's bare name is ambiguous across taps. |
@@ -2185,6 +2215,50 @@ mode, while `details` keys survive so the machine contract above holds.
 Implementations SHOULD also render a safe form at construction sites
 that compose a URL into a sentence, because a redacted URL reads better
 there than a scrub of the finished text.
+
+**Ambiguous diagnostic boundaries.** A whole URL supplied as a separate
+value has a known boundary; its non-sensitive transport parameters
+(`service`, `ref`, `version`, case-insensitive) remain readable. Free-text
+diagnostics, including bare query tails echoed by git and filesystem
+paths, have no trusted interpolation boundaries. Once a query parameter
+outside that allowlist reaches `=`, replace its value and the entire
+remaining diagnostic input with `***`. Quotes, markup, whitespace
+(including literal spaces and raw or escaped controls), suffix punctuation,
+later parameters, and trailing prose MUST NOT be restored from that suffix.
+Decode parameter names as URL query keys before applying the allowlist.
+
+An unstructured URL authority containing quote/markup, whitespace,
+controls, or backslashes is ambiguous too: replace from its scheme start
+through end-of-input with `***`, rather than treating those characters as
+trusted credential terminators. Authority boundaries follow URL grammar
+(`/`, `?`, `#`, or actual end-of-input). A URL renderer MUST NOT consume an
+adjacent scheme opener as part of another URL, including when controls
+between them were already escaped; suppress the ambiguous suffix from the
+first involved scheme. Ordinary prose and multiline layout without these
+credential ambiguities remain readable. This intentionally permits loss
+of untrusted trailing git prose; separately composed operation prefixes
+and remedy blocks remain available. Redaction MUST scan monotonically
+without repeated suffix searches or an arbitrary input-length cutoff.
+
+Malformed HTTP(S) openers are also credential ambiguities. Recognize
+`http` and `https` case-insensitively as complete scheme names with an
+ASCII colon, including raw C0, DEL, C1, or their visible `\xNN` control
+escapes between scheme letters or around the colon. Ordinary spaces may
+surround the colon but MUST NOT join separated scheme letters. A slash
+or backslash opening run with missing, mixed, whitespace-separated, or
+control-separated separators suppresses the diagnostic from its scheme
+through end-of-input. Existing uninterrupted `://` and extra-forward-slash
+normalization remain unchanged. With no opening separators, an `@` before
+the first `/`, `?`, or `#` authority boundary makes the same suffix
+ambiguous; whitespace, quotes, markup, and raw or escaped controls MUST
+NOT terminate userinfo. Thus `HTTP: contact user@host` may be concealed,
+while `HTTP: request denied` remains readable. Larger scheme names,
+percent-encoded or Unicode-lookalike colons, and ordinary split words
+are outside this recognition rule. Whole-token progress values use the
+same malformed-opener guard; a well-formed structured URL retains its
+existing safe rendering without interpreting its path as another URL.
+These are display rules only: accepted source-reference grammar, SSH
+and SCP behavior, recorded identities, and error names/codes do not change.
 
 **Human-mode error quality.** In human mode, an error message should
 name the offending thing (path, skill, ref, URL) and — whenever a
@@ -2757,6 +2831,9 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-39 | §10.1 | For an existing skill update containing failed or safety-skipped targets, human output names each affected target. Its aggregate skill row is `partially updated` when any target installed or was already current; otherwise it is `failed` if any target failed, or `skipped`. Totals distinguish partial from full success while counting hard failures. JSON, state/retry behavior, and exit codes are unchanged. |
 | C-UPD-40 | §10.1.1 | If rollback-directory cleanup fails after a new tap child is successfully added, the child remains installed and recorded in state, and cleanup failure alone does not make the run fail. Human output displays the cleanup warning and leftover path; JSON includes the diagnostic in an optional `warnings` array on the successful `added` row. When cleanup succeeds, that row omits `warnings`. |
 | C-UPD-41 | §10.1, §10.1.1 | Normal human output for an existing-entry `failed` outcome in `crew update` and `crew outdated` shows its error code and primary message, including retained recovery paths already present. The whole diagnostic redacts credentials and escapes controls; raw JSON error fields, state/retry behavior, and exit codes remain unchanged. |
+| C-UPD-44 | §10.1 | After a local path skill root passes its availability check, a qualifying source hash/load lookup failure reports `source_gone` only when a fresh check finds that same root missing, non-directory, or a looping link. Normal and preview runs preserve the affected install, marker, and logical state entry, continue healthy selected entries, and exit 0 when this is the only abnormality. Previews leave installed/store/state bytes unchanged. Missing or invalid manifests in a still-resolvable directory, original permission failures, parser/validation errors, and other operational failures remain hard even if the root disappears later. |
+| C-UPD-45 | §10.1, §10.1.1, §11.1 | A moved skill with no applicable recorded agent targets (empty, unknown-only, or unsupported scope) reports a soft `skipped` outcome after source validation in real and preview runs, without staging or changing installed copies, markers, or its complete state entry. Other selected entries still process, and restoring an applicable recorded target permits retry. Any existing-entry update with zero completed targets, including all safety skips, preserves its complete state entry and remains retryable; per-target diagnostics, soft safety skips, successful partial updates, and hard-failure retry semantics are preserved. |
+| C-UPD-46 | §10.1, §10.1.1, §13 | Human `source_gone` rows and update summaries describe source absence without assuming remote/upstream removal, for both Git and local path sources; rows say that the installed copy is kept. Update, update preview, and outdated preserve the existing JSON shape/kind, soft exit code, install/marker/state preservation, and quiet suppression. |
 | C-UPD-42 | §5.2, §10.1, §10.1.1 | On a hard-failed run, human `--quiet` update (including dry run) and outdated suppress summaries while sending ordinary failed entries, failed targets, tap re-expansion errors, and explicitly selected tap refresh failures to stderr with affected subjects, error codes, full primary messages, and retained recovery paths. Diagnostics redact credentials and escape controls. Successful and soft-only quiet runs stay silent; a hard-failed run may include existing soft `tap_error` diagnostics without reclassification. Normal human output, raw JSON, isolation, exit codes, state, and retries remain unchanged. |
 | C-UPD-43 | §10.1.1 | Every project-scope tap re-expansion result carries its originating recorded `project_root`; user-scope results omit the field. Real update, preview, and outdated preserve identity for additions, successful-addition warnings, validation and rejected-location errors, conflicting names, vanished sources, and group failures. Human addition summaries remain separate by tap/scope/project root, and project warnings and errors identify the location, including quiet errors, with safe path formatting. Source/state/marker identity, classification, retries, and exit codes are unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
@@ -2898,7 +2975,8 @@ Implementations and test suites refer to criteria by ID.
 | C-STATE-12 | §11.2 | `crew doctor --repair --dry-run` reports the findings a repair would address and changes nothing: state, config, and the store are byte-identical afterward. |
 | C-STATE-12a | §11.2 | Findings `--repair` cannot fix (`customized`, `agent_missing`, `config_invalid`, `missing_project_root`) are excluded from both the dry-run "would address" count and the post-repair "addressed" count; an unrepairable error-level finding keeps the exit code non-zero after `--repair`. |
 | C-STATE-13 | §6 | `crew cache clean --dry-run` reports the bytes and orphan store entries a clean would free and deletes nothing. |
-| C-STATE-14 | §11.2 | Unreadable or invalid markers produce path-specific error findings without aborting doctor; repair and repair previews apply no repairs or destructive inference from the incomplete inventory. State, config and store remain unchanged, and the run exits 1. A genuinely missing marker remains repairable drift. |
+| C-STATE-14 | §11.2 | Unreadable or invalid markers (including invalid source-relative paths, symbolic links at install-directory leaves or `.crew.json` entries, and a declared scope with no base among the marker’s owning adapters at the inventoried physical directory), and operational failures to inspect/search project roots or inventory directories or list adapter bases, produce path-specific error findings without aborting doctor; repair and repair previews apply no repairs or destructive inference from the incomplete inventory. State, config, store and scheduler remain unchanged, and the run exits 1. Genuinely missing paths and ordinary non-directory inventory entries remain absent rather than unreadable. |
+| C-STATE-15 | §7.5, §9 | Recorded skill acquisition rejects absolute paths, NUL and complete parent components before source reads. Git-kind acquisition also rejects descendant symlinks without an explicit ref. Trusted local path-kind layout links, source-root aliases, empty-root skills and literal filename characters remain supported; rejected acquisition preserves installed bytes and state. |
 
 #### C-AUTO: Autoupdate (§10.2)
 
@@ -2967,6 +3045,7 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-06 | §5.2 | `--quiet` suppresses non-error stdout. Error output still reaches stderr. |
 | C-CLI-06a | §5.2 | `--verbose` emits progress lines (git invocations, store staging, per-agent install paths) on stderr and nothing extra on stdout; without the flag those lines are absent, including on the run after a failed `--verbose` run. |
 | C-CLI-06b | §5.2 | `--verbose` output redacts credentials: a URL password, an `https://<token>@host` userinfo token, and sensitive query-parameter values are replaced with `***`, while SSH usernames are preserved. Control characters in echoed values are escaped, newlines included, so an interpolated value cannot forge a second message line. The same redaction applies to source URLs in user-visible errors through every channel: the rendered message, diagnostics quoted from `git`, and the `details` object of a `--json` error payload. |
+| C-CLI-06c | §5.2, §13 | Malformed HTTP(S) diagnostic/progress openers with missing or mixed separators, raw or visible escaped controls, or zero-separator userinfo suppress their ambiguous suffix. Rejected references remain `invalid_ref` (exit 4) in human and JSON output; valid structured URL rendering, SSH/SCP behavior, stable details keys, and ordinary non-ambiguous prose remain unchanged. |
 | C-CLI-07 | §13 | `--json` outputs use the stable error `name` values listed in §13 for any non-zero result. |
 | C-CLI-08 | §5.2 | Unknown flags produce a usage error, exit 4. |
 | C-CLI-08a | §5.2 | A non-repeatable flag passed more than once is a `usage_error` (exit 4) naming the flag — boolean (`--json --json`) as well as value (`--scope user --scope project`); the repeatable `--agent` collects every occurrence. |

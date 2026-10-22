@@ -93,14 +93,14 @@ commands that do what they say, across every agent you use.
    meta-skill can pull in a dozen others in one command.
 5. **Stay current automatically.** `crew update` pulls the latest versions
    of everything. Flip on autoupdate and a background job keeps every agent
-   fresh. Invalid manifests in directory taps are reported with their source
+   fresh. Whole-tap updates report invalid directory manifests with their source
    path and reason, while healthy skills continue updating. Existing copies
    stay intact when upstream becomes invalid. If adding a new tap skill fails
-   for an agent, update reports the target and reason and rolls back copies
-   still owned by that attempt. Targets detected as changed by another writer
-   are preserved. If ownership is lost or restoration fails, it reports the
-   problem and any retained recovery path. The next update that re-expands the
-   affected tap group retries that skill
+   for an agent, update reports the
+   target and reason and rolls back copies still owned by that attempt.
+   Targets detected as changed by another writer are preserved. If ownership is lost or restoration
+   fails, it reports the problem and any retained recovery path. The
+   next update that re-expands the affected tap group retries that skill
    (unless it is a dry run).
 
 ## Skill references
@@ -439,7 +439,12 @@ phones home.
 **How does `crew update` know when to skip a skill?** Skills pinned to an
 exact SHA are skipped unless `--force`. Skills pinned to a tag are
 re-resolved: if the tag moved and `--force` is given, the new commit is
-installed. Everything else updates to whatever the ref resolves to now.
+installed. If no recorded agent supports the install's scope, the skill is
+skipped. Its recorded revision stays unchanged until at least one target completes
+without a hard target failure, so an update with no completed targets can retry.
+If a local skill directory disappears during source inspection, update keeps
+the installed copy and continues. Invalid manifests and permission failures
+still report errors.
 
 **What about Linux? Windows?** Linux is supported for x86_64 and ARM64 hosts.
 Windows is future work because agent paths, scheduler integration, and binary
