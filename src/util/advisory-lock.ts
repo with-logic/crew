@@ -59,11 +59,7 @@ export function acquireLock(target: string, timeoutMs: number = defaultTimeoutMs
       try {
         owner.record();
       } catch (err) {
-        try {
-          release();
-        } catch {
-          // Native lock cleanup must not replace the owner-publication error (§14).
-        }
+        releaseNativeLock(release);
         throw err;
       }
       let released = false;
@@ -71,11 +67,7 @@ export function acquireLock(target: string, timeoutMs: number = defaultTimeoutMs
         release(): void {
           if (released) return;
           released = true;
-          try {
-            release();
-          } catch {
-            /* ignore double-release etc. */
-          }
+          releaseNativeLock(release);
         },
       };
     } catch (err) {
@@ -91,6 +83,15 @@ export function acquireLock(target: string, timeoutMs: number = defaultTimeoutMs
       }
       Bun.sleepSync(pollMs);
     }
+  }
+}
+
+/** Keep native release best-effort without masking the operation's primary error (§14). */
+function releaseNativeLock(release: () => void): void {
+  try {
+    release();
+  } catch {
+    // A native cleanup failure must not replace an owner-publication or callback error.
   }
 }
 

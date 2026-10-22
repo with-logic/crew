@@ -168,4 +168,18 @@ describe("crew tap", () => {
     const code = runCli(["search"], { home, streams: captureStreams().streams });
     expect(code).toBe(0);
   });
+
+  test("C-TAP-04 list shows fetched status after cloning a local tap", () => {
+    const home = makeCrewHome();
+    const repo = buildTapRepo();
+    expect(
+      runCli(["tap", "add", `file://${repo}`, "mytap"], {
+        home,
+        streams: captureStreams().streams,
+      }),
+    ).toBe(0);
+    const c = captureStreams();
+    expect(runCli(["tap", "list"], { home, streams: c.streams })).toBe(0);
+    expect(c.stdout()).toMatch(/mytap.+fetched (?:just now|\d+[mhd] ago|\d{4}-\d{2}-\d{2})/);
+  });
 });

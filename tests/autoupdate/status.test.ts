@@ -91,4 +91,18 @@ describe("autoupdate status", () => {
     runCli(["autoupdate", "status"], { home, streams: c.streams });
     expect(c.stdout()).toContain("every day");
   });
+
+  test("status renders the last scheduled run date and exit status", () => {
+    const home = makeCrewHome();
+    setLaunchctlRunner(() => true);
+    expect(runCli(["autoupdate", "enable"], { home, streams: captureStreams().streams })).toBe(0);
+    const p = paths(home);
+    mkdirSync(p.logsDir, { recursive: true });
+    writeFileSync(p.autoupdateLog, "crew-autoupdate 2026-04-20T10:00:00.000Z exit=1\n");
+    const c = captureStreams();
+    expect(runCli(["autoupdate", "status"], { home, streams: c.streams })).toBe(0);
+    expect(c.stdout()).toMatch(/last ran\s+.+\(2026-04-20\)/);
+    expect(c.stdout()).toMatch(/last exit\s+1/);
+    expect(c.stdout()).not.toContain("not yet");
+  });
 });

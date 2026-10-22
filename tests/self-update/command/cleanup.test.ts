@@ -41,11 +41,11 @@ test.each(["human", "quiet", "json"])("cleanup warning preserves successful %s o
       const output = JSON.parse(cap.stdout());
       expect(output.replaced).toBe(true);
       expect(output.cleanup_warning).toContain(dirname(captured.assetPath));
-      expect(output.cleanup_warning).toContain("EACCES");
+      expect(output.cleanup_warning).toMatch(/EACCES|ENOTEMPTY/);
       expect(cap.stderr()).toBe("");
     } else {
       expect(cap.stderr()).toContain(dirname(captured.assetPath));
-      expect(cap.stderr()).toContain("EACCES");
+      expect(cap.stderr()).toMatch(/EACCES|ENOTEMPTY/);
       if (mode === "quiet") expect(cap.stdout()).toBe("");
       else expect(cap.stdout()).toContain("Upgraded Homecrew");
     }

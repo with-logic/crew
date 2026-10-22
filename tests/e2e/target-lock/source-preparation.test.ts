@@ -10,6 +10,7 @@ import { type GitRunner, resetGitRunner, runGit, setGitRunner } from "../../../s
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import {
+  commitAll,
   makeGitRepo,
   makeSkill,
   makeTempDir,
@@ -107,3 +108,55 @@ const violation=takeRemoteGitFailure();if(violation)throw new Error(violation);`
     if (tracked) expect(result.output.tap_reexpand_rows[0].kind).toBe("tap_error");
   }, 25_000);
 }
+
+test("C-UPD-03 narrow exact-SHA updates skip per-entry source preparation", () => {
+  const home = makeCrewHome();
+  const cwd = makeTempDir();
+  const target = makeTempDir();
+  for (const adapter of ALL_AGENTS) {
+    adapter.userPath = () => target;
+    adapter.projectPath = () => join(cwd, "unused", adapter.name);
+    adapter.detect = () => adapter.name === "claude-code";
+  }
+  const invoke = (args: readonly string[]) => {
+    const c = captureStreams();
+    const code = runCli([...args, "--json"], { home, cwd, streams: c.streams });
+    return { code, output: JSON.parse(c.stdout()), stderr: c.stderr() };
+  };
+  expect(invoke(["tap", "remove", "core", "--force"]).code).toBe(0);
+  const repo = makeTempDir();
+  const skill = makeSkill(repo, "demo", skillFrontmatter({ name: "demo" }), "immutable bytes");
+  const { sha } = makeGitRepo(repo);
+  expect(invoke(["tap", "add", `file://${repo}`, "fixture"]).code).toBe(0);
+  expect(invoke(["install", `fixture/demo@${sha}`, "--agent", "claude-code"]).code).toBe(0);
+  const stateBefore = readState(home);
+  expect(stateBefore.installations[0]).toMatchObject({
+    pinned: true,
+    ref: sha,
+    resolved_sha: sha,
+  });
+  expect(stateBefore.installations[0]!.tracks_tap).not.toBe(true);
+  const markerBefore = readFileSync(join(target, "demo", ".crew.json"));
+  const manifestBefore = readFileSync(join(target, "demo", "SKILL.md"));
+  writeFileSync(join(skill, "new.txt"), "later upstream content");
+  expect(commitAll(repo, "advance upstream")).not.toBe(sha);
+  const gitCalls: string[][] = [];
+  let real: GitRunner;
+  real = setGitRunner((args, options) => {
+    gitCalls.push([...args]);
+    return real(args, options);
+  });
+  const result = invoke(["update", "demo"]);
+  expect(result.code, result.stderr).toBe(0);
+  expect(result.output.rows).toMatchObject([
+    { name: "demo", outcome: { kind: "skipped", reason: "pinned to exact SHA" } },
+  ]);
+  expect(result.output.tap_reexpand_rows).toEqual([]);
+  expect(
+    gitCalls.filter((args) => args[0] === "rev-parse" && args.some((arg) => arg.includes(sha))),
+  ).toEqual([]);
+  expect(readState(home)).toEqual(stateBefore);
+  expect(readFileSync(join(target, "demo", ".crew.json"))).toEqual(markerBefore);
+  expect(readFileSync(join(target, "demo", "SKILL.md"))).toEqual(manifestBefore);
+  expect(existsSync(join(target, "demo", "new.txt"))).toBe(false);
+}, 25_000);

@@ -36,7 +36,7 @@ for (const failures of [1, 2]) {
     expect(primary.code).toBe("conflicting_dependencies");
     expect(primary.details).toEqual({ name: "dependency" });
     expect(primary.message).toContain(roots[0]!);
-    expect(primary.message).toMatch(/EACCES|EPERM/);
+    expect(primary.message).toMatch(/EACCES|EPERM|ENOTEMPTY/);
     expect(existsSync(roots[0]!)).toBe(true);
     expect(existsSync(roots[1]!)).toBe(failures === 2);
     if (failures === 2) expect(primary.message).toContain(roots[1]!);

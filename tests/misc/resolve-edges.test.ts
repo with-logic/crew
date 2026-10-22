@@ -166,3 +166,25 @@ describe("install: qualified tap dep via tap/name", () => {
     expect(existsSync(join(ccRoot, "dep"))).toBe(true);
   });
 });
+
+test("C-DEP-07 local root conflicts identify both source directories", () => {
+  const home = makeCrewHome();
+  const root = makeTempDir();
+  const first = makeSkill(root, "first", skillFrontmatter({ name: "shared" }));
+  const second = makeSkill(root, "second", skillFrontmatter({ name: "shared" }));
+  const capture = captureStreams();
+  const code = runCli(["install", first, second, "--agent", "claude-code", "--json"], {
+    home,
+    streams: capture.streams,
+  });
+  expect(code).toBe(4);
+  expect(JSON.parse(capture.stdout()).error).toMatchObject({
+    name: "conflicting_dependencies",
+    details: {
+      name: "shared",
+      existing: "first (root, local)",
+      incoming: "second (root, local)",
+    },
+  });
+  expect(existsSync(join(ccRoot, "shared"))).toBe(false);
+});
