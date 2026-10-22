@@ -10,8 +10,8 @@ fresh plain/dry, and 100-root repair. These checks validate reproduction; they a
 not an optimized result or a replacement for the recorded 65-result matrix.
 
 Healthy repair's median command time was 12.781 / 46.728 / 186.562 ms at
-1 / 10 / 100 project roots. Its diagnostic pass took one state lock and built
-both the initial inventory and a new inventory under that lock. These results
+1 / 10 / 100 project roots. Its initial inventory ran before the state lock.
+Repair then took that lock, built a fresh inventory, and reconciled against it. These results
 establish the cost of the current behavior. They provide no measured optimized
 result or speedup and do not establish equivalence for moving initial checks
 under the lock. Keep the initial checks and authoritative fresh inventory.
@@ -22,6 +22,10 @@ on measurements supporting a change; these results do not justify that change.
 This report changes no CLI command, PRD contract or product source.
 
 ## Latency
+
+`plain` is `doctor --json`, `dry` is `doctor --repair --dry-run --json`, and
+`repair` is `doctor --repair --json`. The recorded mode names remain the original
+measurement keys.
 
 Each cell has one excluded warmup and five independent fixture samples, followed
 by one separate diagnostic pass. All 65 result records, including warmups and
