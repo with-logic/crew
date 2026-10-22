@@ -1,5 +1,5 @@
 /**
- * Human-friendly output for `crew update`.
+ * Human-friendly output for `crew update` (§10.1, §10.1.1, §13).
  *
  * Renders tap warnings, aligned per-skill rows, tap additions, and totals.
  * Row-level formatting lives in `./rows.ts`.
@@ -12,6 +12,7 @@ import { columns, plural } from "../../util/format.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
+import { displayField } from "./diagnostics.ts";
 import { projectTag } from "./location.ts";
 import { formatRowParts, groupAdditions, nameCell } from "./rows.ts";
 import { formatTotals, tally } from "./totals.ts";
@@ -41,10 +42,12 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
     if (tr.kind === "failed") {
       const code = tr.error?.code ?? "unreachable";
       lines.push(
-        `${style.symbol("warn")} couldn't refresh tap ${style.bold(tr.name)} ${style.dim(`(${code})`)}`,
+        `${style.symbol("warn")} couldn't refresh tap ${style.bold(displayField(tr.name))} ${style.dim(`(${code})`)}`,
       );
       lines.push(
-        style.dim(`  using the last-fetched copy; try \`crew tap update ${tr.name}\` later`),
+        style.dim(
+          `  using the last-fetched copy; try \`crew tap update ${displayField(tr.name)}\` later`,
+        ),
       );
     }
   }
@@ -56,11 +59,11 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
     const refreshed =
       c.kind === "tap" &&
       input.tapRows.some((row) => row.name === c.name && row.kind === "refreshed");
-    const empty = `No skills installed from ${c.kind} ${c.name}${refreshed ? " — refreshed it anyway." : "."}`;
+    const empty = `No skills installed from ${c.kind} ${displayField(c.name)}${refreshed ? " — refreshed it anyway." : "."}`;
     lines.push(
       c.count === 0
         ? `${style.symbol("muted")} ${style.dim(empty)}`
-        : `${style.bold(`Updating ${c.kind} ${c.name}`)} ${style.dim(`(${plural(c.count, "skill")})`)}`,
+        : `${style.bold(`Updating ${c.kind} ${displayField(c.name)}`)} ${style.dim(`(${plural(c.count, "skill")})`)}`,
     );
   }
 
@@ -103,7 +106,7 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
       const count = plural(group.names.length, "new skill");
       const verb = dryRun ? "would add " : "";
       lines.push(
-        `${sym} ${verb}${count} from ${style.bold(group.tap)}${projectTag(group, style)}: ${group.names.join(", ")}`,
+        `${sym} ${verb}${count} from ${style.bold(displayField(group.tap))}${projectTag(group, style)}: ${group.names.map(displayField).join(", ")}`,
       );
     }
   }
@@ -111,7 +114,7 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   for (const row of addedRows) {
     for (const warning of (row.kind === "added" ? row.warnings : undefined) ?? []) {
       lines.push(
-        `${style.symbol("warn")} ${style.bold(row.name)}${projectTag(row, style)} ${style.dim(`(from ${row.tap})`)}: ${warning}`,
+        `${style.symbol("warn")} ${style.bold(displayField(row.name))}${projectTag(row, style)} ${style.dim(`(from ${displayField(row.tap)})`)}: ${displayField(warning)}`,
       );
     }
   }
@@ -122,9 +125,9 @@ export function renderUpdate(input: RenderUpdateInput, style: Styler): string[] 
   for (const r of errorRows) {
     const code = r.error.code;
     lines.push(
-      `${style.symbol("fail")} ${style.bold(r.name)}${projectTag(r, style)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
+      `${style.symbol("fail")} ${style.bold(displayField(r.name))}${projectTag(r, style)} ${style.dim(`(from ${displayField(r.tap)})`)} ${style.red(code)}`,
     );
-    if (r.error.message) lines.push(style.dim(`  ${r.error.message}`));
+    if (r.error.message) lines.push(style.dim(`  ${displayField(r.error.message)}`));
     if (r.error.remedy)
       lines.push(style.dim(sanitizeLine(displayText(`  Next step: ${r.error.remedy}`))));
   }

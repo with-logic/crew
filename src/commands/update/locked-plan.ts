@@ -20,6 +20,7 @@ import { type CollectionSubject, entryIdentity } from "../../state/collections/i
 import { upsertEntry } from "../../state/load.ts";
 import { refreshTaps, type TapRefreshRow } from "../tap/refresh.ts";
 import type { CommandContext } from "../types.ts";
+import { displayUpdateErrors } from "./diagnostics.ts";
 import type { UpdatePlan, UpdateSelector } from "./plan.ts";
 import type { CollectionSummary } from "./render.ts";
 import { entriesAfterReexpansion, reexpandSelectionFor, withTransitive } from "./selection.ts";
@@ -180,8 +181,7 @@ function runTargetBatch(
   const warnings = discovery.warnings();
   return {
     state: current,
-    rows,
-    tapReexpandRows,
+    ...displayUpdateErrors({ rows, tapReexpandRows }),
     tapRows,
     hardFailure,
     collections,
