@@ -12,7 +12,7 @@
  *     longer referenced by state or any marker.
  */
 
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { crewHome, paths, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
@@ -21,6 +21,7 @@ import { atomicReplace, ensureDir } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { safePath } from "../util/redact.ts";
 import { copySourceFile, copySourceTree, hashSourceDirectory } from "./read.ts";
+import { withStoreStaging } from "./staging.ts";
 
 /** Record returned after staging. */
 export interface StoredSkill {
@@ -59,12 +60,13 @@ export function stageIntoStore(
   progress(`staging ${safePath(name)}@${shortSha} into ${safePath(storePath)}`);
 
   ensureDir(join(storePath, "..")); // parents
-  const staging = mkdtempSync(`${storePath}.staging-`);
-  if (isGistFile) {
-    assertSkillFile(sourcePath);
-    copySourceFile(sourcePath, join(staging, "SKILL.md"));
-  } else copySourceTree(sourcePath, staging, paths(home).storeDir);
-  atomicReplace(staging, storePath);
+  withStoreStaging(storePath, (staging) => {
+    if (isGistFile) {
+      assertSkillFile(sourcePath);
+      copySourceFile(sourcePath, join(staging, "SKILL.md"));
+    } else copySourceTree(sourcePath, staging, paths(home).storeDir);
+    atomicReplace(staging, storePath);
+  });
 
   const contentHash = hashDirectory(storePath);
   return { storePath, contentHash, shortSha, reused: false };

@@ -1,6 +1,6 @@
 /** File-mode staging keeps raw bytes and source/write failure boundaries (§9, §13). */
 import { expect, test } from "bun:test";
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { stageIntoStore } from "../../../src/sources/store.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
@@ -27,11 +27,10 @@ test("C-GIST-01 file staging copies exactly the original bytes", () => {
 
 test("C-GIST-01 file staging identifies an unreadable source file", () => {
   const source = sourceFile();
+  const home = makeCrewHome();
   chmodSync(source, 0);
   try {
-    expect(() =>
-      stageIntoStore(source, "selected", "a".repeat(40), makeCrewHome(), undefined, true),
-    ).toThrow(
+    expect(() => stageIntoStore(source, "selected", "a".repeat(40), home, undefined, true)).toThrow(
       expect.objectContaining({
         code: "source_unreachable",
         details: { path: source },
@@ -41,6 +40,7 @@ test("C-GIST-01 file staging identifies an unreadable source file", () => {
   } finally {
     chmodSync(source, 0o600);
   }
+  expect(readdirSync(join(home, "store"))).toEqual([]);
 });
 
 test("C-GIST-01 file staging retains native destination failures", () => {
@@ -54,4 +54,15 @@ test("C-GIST-01 file staging retains native destination failures", () => {
   } finally {
     chmodSync(home, 0o700);
   }
+});
+
+test("C-INST-23 rejected gist file type releases its private staging", () => {
+  const source = join(makeTempDir(), "became-directory");
+  mkdirSync(source);
+  const home = makeCrewHome();
+  expect(() => stageIntoStore(source, "selected", "a".repeat(40), home, undefined, true)).toThrow(
+    expect.objectContaining({ code: "invalid_skill", details: { path: source } }),
+  );
+  expect(readdirSync(join(home, "store"))).toEqual([]);
+  expect(readdirSync(source)).toEqual([]);
 });

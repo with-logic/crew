@@ -1055,6 +1055,22 @@ A 2-segment reference `foo/bar` is resolved with tap-first precedence: if `foo` 
 
 A 3-segment reference `tap/namespace/skill` is always unambiguous.
 
+**Rejected directory manifests on a final miss.** If no interpretation of a
+reference resolves, the existing `invalid_ref` message also reports rejected
+directory manifests encountered in the searched scope: each diagnostic names
+the configured tap, candidate path, `invalid_skill`, and validation reason.
+These are rejected locations, not inferred matches for the requested skill
+name. The original error message prefix, details, remedy, and exit 4 remain;
+JSON carries the diagnostics in `error.message` without adding fields.
+Successful resolution and ambiguity do not add these diagnostics. Bare-name
+and `--skill` misses report all rejections in searched taps; `--bundle` reports
+only the requested namespace, and `--tap` misses remain unchanged. A
+2-segment miss reports all rejections in its named-tap interpretation plus
+only matching-namespace rejections in other searched taps. A 3-segment miss
+reports only the named tap and namespace. Requested refs use the same
+captured commit tree as resolution (§9 step 3). Invalid gist files remain
+ignored (§9 step 5); diagnostics are escaped and redacted per §13.
+
 **Disambiguation flags.** The user may force an interpretation on `crew install`. These are presence flags; the name comes from the positional argument.
 - `--tap` — force every bare-name positional to be resolved as a tap name (install the whole tap). Errors if the positional is not a configured tap.
 - `--bundle` — force every bare-name positional to be resolved as a namespace name (install every skill in the namespace). Errors if the positional is not a namespace in exactly one configured tap.
@@ -1273,6 +1289,8 @@ Given one or more skill references on the command line, `crew install` proceeds 
    - **Conflict detection:** if two skills in the install set have the same `name` but come from different tap-relative source paths, or resolve to different SHAs, abort with `conflicting_dependencies` listing the conflict.
 7. **Determine agent set.** Start with every agent whose `detect()` returns true or that appears in `forced_agents`. Remove any listed in `disabled_agents`. Apply `--agent` restrictions if given. If this produces the empty set, abort with `no_agents`.
 8. **Stage into the store.** For each skill in the install set, create `~/.crew/store/<name>@<short-sha>/` (where `<short-sha>` is the first 8 chars of `resolved_sha`) and copy the skill's files into it. If the store entry already exists and its content hash matches, reuse it.
+
+   If staging or publication fails after allocating a private staging directory, remove only that attempt's staging directory and preserve the original failure. If removal also fails, append a diagnostic identifying the retained staging path and cleanup error while preserving the original error's name, exit code, details, and remedy. Escape control characters and redact credentials in the appended diagnostic (§5.2). This cleanup MUST NOT remove source paths, peer staging directories, reused store entries, or published canonical bytes.
 9. **Install into each agent.** For each skill × each agent in the agent set × the scope, run the install algorithm from §7.3. Record per-agent results (success, skipped-customized, skipped-untracked, failed). A failure in one (skill, agent) pair does not stop others.
 
    **Skill outcome.** After per-agent installs complete, each attempted skill has one of two outcomes:
@@ -2699,6 +2717,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-21 | §9 step 9 | Exit codes: `0` if every attempted skill succeeded; `1` if some succeeded and some failed; `4` with error `invalid_skill` if zero succeeded and ≥1 failed validation; `1` if zero succeeded and all failures were operational (non-validation). |
 | C-INST-21a | §9 step 9 | Two directly-named roots where one succeeds in ≥1 agent and the other fails in every selected agent: the run exits 1 and both roots appear in the output. |
 | C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
+| C-INST-23 | §9 step 8 | A staging or store publication failure releases only that attempt's private staging directory. If cleanup also fails, the original failure retains its name, exit code, details, and remedy, and reports the retained staging path and cleanup error with §5.2 escaping/redaction. Source paths, peer staging directories, reused entries, and published canonical bytes remain unchanged. |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
 
@@ -2887,6 +2906,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-08b | §16.6 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
 | C-TAP-08c | §16.6 | A same-name skill from a different tap/path is not marked installed in `crew search`; JSON reports `installed: false` and `same_name_installed: true`. |
 | C-TAP-08d | §9, §16.6 | Directory-tap candidates rejected during name-only indexing retain path-specific validation diagnostics without inferred names. Search reports invalid directory manifests in human stderr and JSON warnings, regardless of query, while healthy siblings remain hits and the command exits 0. Gist invalid files remain ignored. |
+| C-TAP-08e | §8.3, §9 | Final tap-source resolution misses retain `invalid_ref`, exit 4, original details and remedy, while human and JSON error messages report scoped rejected directory locations, validation code and reason without inferred names. Healthy resolution, ambiguity, `--tap` misses, requested-ref trees, known-tap suggestions, and ignored invalid gist files retain their existing behavior. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
 | C-TAP-12 | §16.3 | `crew tap add <url>//<subpath>` configures a tap rooted at `<subpath>` inside the repo. Skills at the top level of `<subpath>` are installable by bare name, just like a root tap. |
