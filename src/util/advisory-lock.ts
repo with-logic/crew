@@ -59,7 +59,11 @@ export function acquireLock(target: string, timeoutMs: number = defaultTimeoutMs
       try {
         owner.record();
       } catch (err) {
-        release();
+        try {
+          release();
+        } catch {
+          // Native lock cleanup must not replace the owner-publication error (§14).
+        }
         throw err;
       }
       let released = false;
