@@ -60,6 +60,7 @@ import { garbageCollectStore } from "../../maintenance/gc.ts";
 import { writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
+import { renderQuietUpdateErrors } from "./diagnostics.ts";
 import { planUpdate } from "./plan.ts";
 import { renderUpdate } from "./render.ts";
 
@@ -89,6 +90,7 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   return {
     exitCode: plan.hardFailure ? 1 : 0,
     human: renderUpdate({ rows, tapReexpandRows, tapRows, dryRun, collections }, ctx.style),
+    stderr: ctx.flags.quiet && plan.hardFailure ? renderQuietUpdateErrors(plan) : [],
     json: {
       rows,
       tap_reexpand_rows: tapReexpandRows,

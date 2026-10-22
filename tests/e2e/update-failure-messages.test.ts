@@ -20,7 +20,7 @@ beforeEach(() => {
 });
 afterEach(() => Object.assign(claudeCodeAdapter, original));
 
-test("C-UPD-41 normal update shows the real permission reason while other selected rows continue", () => {
+test("C-UPD-41 C-UPD-42 update keeps permission diagnostics while other selected rows continue", () => {
   const home = makeCrewHome();
   const source = makeSkill(makeTempDir(), "broken", skillFrontmatter({ name: "broken" }));
   const healthy = makeSkill(makeTempDir(), "healthy", skillFrontmatter({ name: "healthy" }));
@@ -63,6 +63,31 @@ test("C-UPD-41 normal update shows the real permission reason while other select
     expect(readFileSync(manifestPath)).toEqual(manifest);
     expect(human.stdout()).toContain(`source unreachable: ${failed.error.message}`);
     expect(human.stdout()).toContain("1 updated · 1 failure");
+    expect(human.stderr()).toBe("");
+    for (const args of [
+      ["update", "broken", "healthy"],
+      ["outdated", "broken"],
+    ]) {
+      const quiet = captureStreams();
+      expect(runCli([...args, "--quiet"], { home, streams: quiet.streams })).toBe(1);
+      expect(quiet.stdout()).toBe("");
+      expect(quiet.stderr()).toContain(
+        `broken: failed (source_unreachable): ${failed.error.message}`,
+      );
+      expect(quiet.stderr()).not.toContain("healthy");
+      expect(readFileSync(paths(home).stateFile)).toEqual(stateAfterHuman);
+      expect(readFileSync(markerPath)).toEqual(marker);
+      expect(readFileSync(manifestPath)).toEqual(manifest);
+    }
+    const jsonQuiet = captureStreams();
+    expect(
+      runCli(["update", "broken", "healthy", "--quiet", "--json"], {
+        home,
+        streams: jsonQuiet.streams,
+      }),
+    ).toBe(1);
+    expect(jsonQuiet.stdout()).toBe(json.stdout());
+    expect(jsonQuiet.stderr()).toBe("");
   } finally {
     chmodSync(source, 0o755);
   }
