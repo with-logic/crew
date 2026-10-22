@@ -1448,6 +1448,20 @@ already present in that message. Redact credentials throughout the displayed
 diagnostic and escape control characters. Preserve the raw JSON error fields,
 state/retry behavior, and exit codes.
 
+**Quiet failure diagnostics.** When `crew update` (including `--dry-run`)
+or `crew outdated` has a hard failure, `--quiet` suppresses the human
+summary but MUST report diagnostics on stderr for ordinary failed entries,
+failed per-target results, tap re-expansion errors, and refresh failures of
+explicitly selected taps. Include the affected skill, agent or tap, error
+code, and full primary message, preserving rollback and retained recovery
+paths already present. Redact credentials and escape controls throughout.
+Successful and soft-only quiet runs remain silent, including soft
+`tap_error` outcomes (`no_skills_found` or `invalid_ref` without a cleanup
+failure). A hard-failed run may include its existing soft `tap_error` rows
+among its diagnostics without changing their classification. Normal human
+output, raw JSON, failure isolation, exit codes, state, and retries are
+unchanged; JSON mode still emits its payload without human stderr.
+
 **Human per-target results.** When an existing skill's `updated` JSON
 outcome contains failed or safety-skipped targets, human output MUST name
 each affected agent and its error code/message or skip reason. Escape
@@ -2816,6 +2830,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-44 | §10.1 | After a local path skill root passes its availability check, a qualifying source hash/load lookup failure reports `source_gone` only when a fresh check finds that same root missing, non-directory, or a looping link. Normal and preview runs preserve the affected install, marker, and logical state entry, continue healthy selected entries, and exit 0 when this is the only abnormality. Previews leave installed/store/state bytes unchanged. Missing or invalid manifests in a still-resolvable directory, original permission failures, parser/validation errors, and other operational failures remain hard even if the root disappears later. |
 | C-UPD-45 | §10.1, §10.1.1, §11.1 | A moved skill with no applicable recorded agent targets (empty, unknown-only, or unsupported scope) reports a soft `skipped` outcome after source validation in real and preview runs, without staging or changing installed copies, markers, or its complete state entry. Other selected entries still process, and restoring an applicable recorded target permits retry. Any existing-entry update with zero completed targets, including all safety skips, preserves its complete state entry and remains retryable; per-target diagnostics, soft safety skips, successful partial updates, and hard-failure retry semantics are preserved. |
 | C-UPD-46 | §10.1, §10.1.1, §13 | Human `source_gone` rows and update summaries describe source absence without assuming remote/upstream removal, for both Git and local path sources; rows say that the installed copy is kept. Update, update preview, and outdated preserve the existing JSON shape/kind, soft exit code, install/marker/state preservation, and quiet suppression. |
+| C-UPD-42 | §5.2, §10.1, §10.1.1 | On a hard-failed run, human `--quiet` update (including dry run) and outdated suppress summaries while sending ordinary failed entries, failed targets, tap re-expansion errors, and explicitly selected tap refresh failures to stderr with affected subjects, error codes, full primary messages, and retained recovery paths. Diagnostics redact credentials and escape controls. Successful and soft-only quiet runs stay silent; a hard-failed run may include existing soft `tap_error` diagnostics without reclassification. Normal human output, raw JSON, isolation, exit codes, state, and retries remain unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
