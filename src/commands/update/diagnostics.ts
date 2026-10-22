@@ -1,6 +1,6 @@
 /** Error-only human diagnostics for hard-failed quiet update previews and runs (§5.2, §10.1). */
 
-import { displayText } from "../../refs/display-url.ts";
+import { withRemedy } from "../../util/error-remedy.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import { projectTag } from "./location.ts";
 import type { UpdatePlan } from "./plan.ts";
@@ -17,7 +17,9 @@ export function renderQuietUpdateErrors(
         : row.name;
     const outcome = row.outcome;
     if (outcome.kind === "failed") {
-      lines.push(failureLine(subject, outcome.error.code, outcome.error.message));
+      lines.push(
+        failureLine(subject, outcome.error.code, outcome.error.message, outcome.error.remedy),
+      );
     } else if (outcome.kind === "updated") {
       for (const target of outcome.per_target) {
         if (target.kind === "failed")
@@ -34,6 +36,7 @@ export function renderQuietUpdateErrors(
           `${row.name}${projectTag(row)} (from ${row.tap})`,
           row.error.code,
           row.error.message,
+          row.error.remedy,
         ),
       );
   }
@@ -48,6 +51,6 @@ export function renderQuietUpdateErrors(
   return lines;
 }
 
-function failureLine(subject: string, code: string, message: string): string {
-  return sanitizeLine(displayText(`${subject}: failed (${code}): ${message}`));
+function failureLine(subject: string, code: string, message: string, remedy?: string): string {
+  return sanitizeLine(withRemedy(`${subject}: failed (${code}): ${message}`, { remedy }));
 }

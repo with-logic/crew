@@ -1450,6 +1450,18 @@ already present in that message. Redact credentials throughout the displayed
 diagnostic and escape control characters. Preserve the raw JSON error fields,
 state/retry behavior, and exit codes.
 
+**Explicit remedy hints in aggregate results.** An ordinary per-skill
+`failed` outcome and a group or child `tap_error` result MUST preserve an
+explicit nonempty string remedy from the originating error as optional
+`error.remedy: string`. Omit the field for an undefined, null, or empty
+hint; do not substitute the error code's generic default remedy. Render
+that hint beside the existing diagnostic in normal and quiet human output
+for update, update previews, and outdated. Redact credentials and escape
+controls in the hint in both human and JSON results (§5.2, §13). Preserve
+the code and primary message, raw identity fields, outcome classification,
+quiet failure policy, exit code, state, and retry behavior. Without an
+explicit hint, error-object shapes and diagnostic text remain unchanged.
+
 **Quiet failure diagnostics.** When `crew update` (including `--dry-run`)
 or `crew outdated` has a hard failure, `--quiet` suppresses the human
 summary but MUST report diagnostics on stderr for ordinary failed entries,
@@ -2222,7 +2234,9 @@ The `--force` flag overrides `customized`, `untracked_directory`, `inconsistent_
 
 JSON error payloads remain the stable machine contract:
 `{ "error": { "name": string, "message": string, "details": object } }`.
-Human-mode remedy hints are not part of that payload.
+Human-mode remedy hints are not part of that top-level thrown-error
+payload. The optional aggregate-result `error.remedy` field in §10.1 is
+part of a command result and does not change this thrown-error contract.
 
 **Credentials never reach error output.** A git URL may legitimately
 carry userinfo or a credential-bearing query parameter, and an error
@@ -2559,6 +2573,15 @@ as one safe line. Only that skill is skipped; healthy hits continue, warnings
 appear on human stderr and in JSON `warnings` regardless of query, and the
 search exits 0. The invalid-manifest warning policy above is unchanged.
 
+Configured-tap source-read warnings MUST append an explicit nonempty
+error remedy to the same warning string beside the existing code and
+primary message. Undefined, null, and empty hints add no text; generic
+default remedies are not substituted. Redact credentials and escape
+controls throughout the composed diagnostic (§5.2, §13). Human stderr and
+JSON `warnings` contain the same strings; `warnings` remains `string[]`
+with the same cardinality, healthy hits, and soft exit behavior. No-hint
+warning text remains unchanged.
+
 **`--tap <name>`.** `crew search --tap <name> [<query>]` scopes the search
 (or the no-query catalog) to the single configured tap `<name>`. Only that
 tap is walked; every other configured tap is skipped, and known-tap registry
@@ -2863,6 +2886,7 @@ Implementations and test suites refer to criteria by ID.
 | C-UPD-46 | §10.1, §10.1.1, §13 | Human `source_gone` rows and update summaries describe source absence without assuming remote/upstream removal, for both Git and local path sources; rows say that the installed copy is kept. Update, update preview, and outdated preserve the existing JSON shape/kind, soft exit code, install/marker/state preservation, and quiet suppression. |
 | C-UPD-42 | §5.2, §10.1, §10.1.1 | On a hard-failed run, human `--quiet` update (including dry run) and outdated suppress summaries while sending ordinary failed entries, failed targets, tap re-expansion errors, and explicitly selected tap refresh failures to stderr with affected subjects, error codes, full primary messages, and retained recovery paths. Diagnostics redact credentials and escape controls. Successful and soft-only quiet runs stay silent; a hard-failed run may include existing soft `tap_error` diagnostics without reclassification. Normal human output, raw JSON, isolation, exit codes, state, and retries remain unchanged. |
 | C-UPD-43 | §10.1.1 | Every project-scope tap re-expansion result carries its originating recorded `project_root`; user-scope results omit the field. Real update, preview, and outdated preserve identity for additions, successful-addition warnings, validation and rejected-location errors, conflicting names, vanished sources, and group failures. Human addition summaries remain separate by tap/scope/project root, and project warnings and errors identify the location, including quiet errors, with safe path formatting. Source/state/marker identity, classification, retries, and exit codes are unchanged. |
+| C-UPD-47 | §5.2, §10.1, §10.1.1, §13 | Ordinary `failed` and group/child `tap_error` results preserve an originating explicit nonempty remedy as optional `error.remedy`, safely rendered beside the existing diagnostic in normal/quiet update, update preview, and outdated, and safely exposed in JSON. Undefined/null/empty hints omit the field and added text without generic defaults. Code, primary message, raw identity and project location, no-hint shapes/text, classification, quiet policy, state, retries, and exit behavior remain unchanged. |
 | C-UPD-20 | §10.1 | A tap whose fetch fails (network error, URL 404, etc.) produces a per-tap warning in the update summary but does NOT abort the run; other taps and per-skill updates continue to be processed. |
 | C-UPD-21 | §11.1 | `crew update` for a project-scope entry reinstalls at the entry's recorded `project_root`, NOT the user's current working directory. This holds whether update is run by the user from any shell, or by the autoupdate background scheduler from its scheduler-assigned cwd. |
 | C-UPD-22 | §11.1 | A project-scope entry whose `project_root` no longer exists on disk is reported as `missing_project_root` and SKIPPED on update — the local install is preserved and no files are written. |
@@ -2937,6 +2961,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-08d | §9, §16.6 | Directory-tap candidates rejected during name-only indexing retain path-specific validation diagnostics without inferred names. Search reports invalid directory manifests in human stderr and JSON warnings, regardless of query, while healthy siblings remain hits and the command exits 0. Gist invalid files remain ignored. |
 | C-TAP-08e | §8.3, §9 | Final tap-source resolution misses retain `invalid_ref`, exit 4, original details and remedy, while human and JSON error messages report scoped rejected directory locations, validation code and reason without inferred names. Healthy resolution, ambiguity, `--tap` misses, requested-ref trees, known-tap suggestions, and ignored invalid gist files retain their existing behavior. |
 | C-TAP-08f | §16.6 | When a directory skill passes name indexing but a later full-manifest read fails operationally, search emits one safe warning identifying the tap, indexed skill, source path, `source_unreachable`, and OS reason, regardless of query. Only the failed skill is skipped, healthy hits continue, human stderr and JSON warnings retain the diagnostic, and the command exits 0. Invalid-manifest warning behavior is unchanged. |
+| C-TAP-08h | §5.2, §13, §16.6 | Configured-tap source-read warnings append an originating explicit nonempty remedy to the existing warning string, with whole-diagnostic credential redaction and control escaping. Human stderr and JSON `warnings` contain the same strings; warning cardinality, `string[]` shape, healthy hits, and exit 0 remain unchanged. Undefined/null/empty hints and generic defaults add no text; no-hint warnings retain their existing text. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
 | C-TAP-12 | §16.3 | `crew tap add <url>//<subpath>` configures a tap rooted at `<subpath>` inside the repo. Skills at the top level of `<subpath>` are installable by bare name, just like a root tap. |

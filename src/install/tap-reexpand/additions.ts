@@ -9,6 +9,7 @@
 
 import { type CrewError, normalizeLocalError } from "../../core/errors.ts";
 import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
+import { explicitRemedy } from "../../util/error-remedy.ts";
 import {
   type InstalledSourceIndex,
   indexHasSameSource,
@@ -154,6 +155,6 @@ function childErrorRow(input: AdditionsInput, name: string, error: CrewError): T
     ...(input.scope === "project" && input.projectRoot ? { project_root: input.projectRoot } : {}),
     tap: input.tap.name,
     kind: "tap_error",
-    error: { code: error.code, message: error.message },
+    error: { code: error.code, message: error.message, ...explicitRemedy(error) },
   };
 }
