@@ -1,15 +1,14 @@
 /**
  * Per-run tap scan cache (§10.1.1).
  *
- * State entries are grouped by `(tap, scope, project_root)`, so one tap
- * can back several groups — a user install plus two project installs,
- * say. The clone is the same for all of them, so acquiring it, walking
- * its children, and validating each child are identical work repeated
- * per group.
+ * State entries are grouped by `(tap, scope, project_root, ref)`.
+ * This cache reuses no-ref/path acquisition by tap name, child walks by
+ * `(tap.name, rootDir)`, and validation by source path across groups.
  *
- * This memoises all three for the lifetime of one update run. Clone
- * locks are held across the run (see `sources/tap-lock.ts`), so the
- * snapshot cannot go stale underneath us.
+ * Git revision outcomes are prepared once per `(tap.name, ref)` before
+ * target locks, but each ref-based group gets its own scratch export,
+ * child walk, and validation. Clone locks protect the shared checkout
+ * throughout the run (see `sources/tap-lock.ts`).
  */
 
 import { CrewError } from "../../core/errors.ts";
