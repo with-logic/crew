@@ -1,16 +1,16 @@
 /**
  * Marker-index construction for `crew doctor`.
  *
- * Walks every adapter's user base once, then every distinct
+ * Visits every adapter's user base, then every distinct
  * `project_root` in state (plus the current cwd and retained scan
  * candidates) for project-scope markers. A root missing on disk is silently
  * skipped — `checkProjectRoots` already reports it, so reporting
  * again here would be noise.
  *
  * When multiple adapters share an install path (§7.2), the same
- * physical marker would be returned by `scanMarkers` once
- * per adapter. We dedupe by `(scope, installDir)` so each marker
- * appears exactly once in the index. A base can also serve both scopes
+ * physical inventory is read once per scope before owner projection.
+ * Every logical adapter/root observation retains its lexical paths;
+ * records are deduped by `(scope, installDir)`. A base can also serve both scopes
  * (for example when cwd is HOME); the marker owns its scope (§11.1),
  * so an alias reached through the other scope must not relabel it.
  */
@@ -21,10 +21,10 @@ import type { InstalledSkillRecord } from "../../../agents/adapter.ts";
 import { ALL_AGENTS } from "../../../agents/registry.ts";
 import type { Scope, StateEntry } from "../../../core/types.ts";
 import { hasUsableProjectRoot } from "../../../state/validation.ts";
-import type { Finding } from "../checks.ts";
+import type { Finding } from "../findings/index.ts";
 import { inventoryDirectory } from "./filesystem.ts";
 import { invalidMarkerFinding } from "./findings.ts";
-import { scanMarkers } from "./scan.ts";
+import { createMarkerScanner } from "./scan.ts";
 
 export interface MarkerEntry {
   record: InstalledSkillRecord;
@@ -45,6 +45,7 @@ export function buildMarkerIndex(
   const markers: MarkerEntry[] = [];
   const inventoryFindings = new Map<string, Finding>();
   const seen = new Set<string>();
+  const scanMarkers = createMarkerScanner();
   const sameBase = cachedPhysicalBaseComparison();
   // §11.2: a last-entry uninstall must not hide other markers at a previously scanned root.
   const projectRoots = new Set<string>([cwd, ...additionalProjectRoots]);

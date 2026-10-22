@@ -28,7 +28,7 @@ import {
   probeAutoupdate,
 } from "../../autoupdate/scheduler.ts";
 import type { Config } from "../../core/types.ts";
-import type { Finding } from "./checks.ts";
+import type { Finding } from "./findings/index.ts";
 
 /** Machine-readable outcome of one scheduler reconciliation. */
 export type AutoupdateRepairCode =
