@@ -7,12 +7,13 @@
  * `./entry.ts` so that file stays under the 200-line cap.
  */
 
-import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
+import type { AgentAdapter } from "../../agents/adapter.ts";
 import { installSkillIntoAgents } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
 import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { sanitizeLine } from "../../util/redact.ts";
+import { groupAgentsByDest } from "../group-agents-by-dest.ts";
 import type { PerAgentUpdate } from "./types.ts";
 
 export interface ReinstallInput {
@@ -34,18 +35,13 @@ export function groupRecordedTargets(
 ): ReadonlyMap<string, readonly AgentAdapter[]> {
   // Group by resolved install path (§7.2 path sharing) so shared-path
   // targets install once but every adapter reports its own outcome.
-  const groups = new Map<string, AgentAdapter[]>();
+  const adapters: AgentAdapter[] = [];
   for (const targetName of entry.agents) {
     const adapter = agentByName(targetName);
-    if (!adapter) continue;
-    const base = baseFor(adapter, entry.scope, entryCwd);
-    if (base === "") continue;
-    const dest = `${base}/${entry.name}`;
-    const existing = groups.get(dest);
-    if (existing) existing.push(adapter);
-    else groups.set(dest, [adapter]);
+    if (adapter) adapters.push(adapter);
   }
-  return groups;
+  const groups = groupAgentsByDest(adapters, entry.name, entry.scope, entryCwd);
+  return new Map(groups.map(({ dest, agents }) => [dest, agents]));
 }
 
 /** Reinstall one staged entry into each applicable destination group. */

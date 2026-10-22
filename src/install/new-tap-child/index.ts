@@ -9,7 +9,7 @@
  * Failed children have no state entry; later non-dry-run re-expansion retries them.
  */
 
-import { type AgentAdapter, baseFor } from "../../agents/adapter.ts";
+import type { AgentAdapter } from "../../agents/adapter.ts";
 import { installSkillIntoAgents } from "../../agents/install.ts";
 import { agentByName } from "../../agents/registry.ts";
 import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
@@ -18,6 +18,7 @@ import type { Scope, StateEntry, TapConfig } from "../../core/types.ts";
 import { isGistTap } from "../../sources/gist.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { nowIso } from "../../util/time.ts";
+import { groupAgentsByDest } from "../group-agents-by-dest.ts";
 import { ChildReplacement } from "./replacement.ts";
 
 export function installNewTapChild(
@@ -53,21 +54,16 @@ export function installNewTapChild(
   const successfulAgents: string[] = [];
   // Group adapters by resolved install path (path sharing, §7.2) so
   // shared-path targets install once but both get marked successful.
-  const groups = new Map<string, AgentAdapter[]>();
+  const adapters: AgentAdapter[] = [];
   for (const targetName of args.agents) {
     const adapter = agentByName(targetName);
-    if (!adapter) continue;
-    const base = baseFor(adapter, args.scope, childCwd);
-    if (base === "") continue;
-    const dest = `${base}/${args.skillName}`;
-    const existing = groups.get(dest);
-    if (existing) existing.push(adapter);
-    else groups.set(dest, [adapter]);
+    if (adapter) adapters.push(adapter);
   }
+  const groups = groupAgentsByDest(adapters, args.skillName, args.scope, childCwd);
   const failures: string[] = [];
   let firstFailure: CrewError | null = null;
   const replacements: ChildReplacement[] = [];
-  for (const [dest, group] of groups) {
+  for (const { dest, agents: group } of groups) {
     const replacement = new ChildReplacement(dest);
     replacements.push(replacement);
     try {
