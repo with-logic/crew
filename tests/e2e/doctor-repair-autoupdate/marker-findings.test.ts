@@ -69,7 +69,7 @@ for (const enabled of [true, false]) {
         path: "",
         ref: null,
         resolved_sha: null,
-        content_hash: "abc",
+        content_hash: `sha256:${"a".repeat(64)}`,
         installed_at: "2026-10-21T00:00:00.000Z",
         installed_by: "crew",
       };

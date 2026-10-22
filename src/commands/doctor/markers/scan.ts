@@ -1,62 +1,39 @@
-/** Doctor-local marker inventory preserves missing versus unreadable/invalid distinctions (§11.2). */
-import { lstatSync } from "node:fs";
-import { join } from "node:path";
-import { type AgentAdapter, baseFor, type InstalledSkillRecord } from "../../../agents/adapter.ts";
+/** Build-local physical marker snapshots precede every logical ownership projection (§11.2). */
+import { type AgentAdapter, baseFor } from "../../../agents/adapter.ts";
 import type { Scope } from "../../../core/types.ts";
-import { readJson } from "../../../util/json.ts";
-import type { Finding } from "../checks.ts";
-import {
-  inventoryDirectory,
-  inventoryLinkFailure,
-  inventoryNames,
-  inventoryReadFailure,
-} from "./filesystem.ts";
-import { invalidMarkerFinding } from "./findings.ts";
-import { isDoctorMarker } from "./validate.ts";
+import { inspectInventoryDirectory } from "./filesystem.ts";
+import type { InventoryProblem } from "./findings.ts";
+import { type ObservedMarkerInventory, projectMarkerInventory } from "./observations.ts";
+import { type PhysicalMarkerInventory, readPhysicalMarkerInventory } from "./physical.ts";
 
-/**
- * Return valid records and path-keyed findings for one adapter/scope. Missing
- * markers (ENOENT) are omitted; unreadable/invalid markers emit findings that block repair.
- */
+type MarkerScanner = (adapter: AgentAdapter, scope: Scope, cwd: string) => ObservedMarkerInventory;
+
+/** A fresh scanner per build keeps locked repair independent from initial marker snapshots. */
+export function createMarkerScanner(): MarkerScanner {
+  const inventories = new Map<string, PhysicalMarkerInventory>();
+  return (adapter, scope, cwd) => {
+    const base = baseFor(adapter, scope, cwd);
+    const problems: InventoryProblem[] = [];
+    const empty = { base, markers: [], problems };
+    if (base === "") return projectMarkerInventory(empty, adapter.name, scope, base);
+    // Reuse strict stat identity; each lexical alias still proves its own search access.
+    const entry = inspectInventoryDirectory(base, problems);
+    if (!entry) return projectMarkerInventory(empty, adapter.name, scope, base);
+    const key = `${scope}\0${entry.dev}\0${entry.ino}`;
+    let inventory = inventories.get(key);
+    if (!inventory) {
+      inventory = readPhysicalMarkerInventory(base);
+      inventories.set(key, inventory);
+    }
+    return projectMarkerInventory(inventory, adapter.name, scope, base);
+  };
+}
+
+/** Standalone scans retain their existing one-adapter contract and fresh inventory lifetime. */
 export function scanMarkers(
   adapter: AgentAdapter,
   scope: Scope,
   cwd: string,
-): { records: InstalledSkillRecord[]; findings: Map<string, Finding> } {
-  const base = baseFor(adapter, scope, cwd);
-  const records: InstalledSkillRecord[] = [];
-  const findings = new Map<string, Finding>();
-  if (base === "") return { records, findings };
-  for (const name of inventoryNames(base, findings)) {
-    const installDir = join(base, name);
-    if (!inventoryDirectory(installDir, findings, false)) continue;
-    const path = join(installDir, ".crew.json");
-    let marker: unknown = null;
-    try {
-      if (lstatSync(path).isSymbolicLink()) {
-        inventoryLinkFailure(path, findings);
-        continue;
-      }
-      marker = readJson<unknown>(path);
-    } catch (err) {
-      if (!(err instanceof SyntaxError)) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
-        inventoryReadFailure(path, err, findings);
-        continue;
-      }
-      // Malformed JSON leaves null so the field-validation path reports marker_invalid.
-    }
-    if (!isDoctorMarker(marker)) {
-      findings.set(
-        ...invalidMarkerFinding(
-          path,
-          "invalid marker; correct its JSON, field types, field values and tap metadata before repair",
-        ),
-      );
-      continue;
-    }
-    if (marker.agents.includes(adapter.name))
-      records.push({ adapter: adapter.name, scope, installDir, marker });
-  }
-  return { records, findings };
+): ObservedMarkerInventory {
+  return createMarkerScanner()(adapter, scope, cwd);
 }
