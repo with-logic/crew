@@ -11,28 +11,36 @@ import { resetSystemctlRunner } from "../../../src/autoupdate/systemd.ts";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 
-const savedLaunchAgentsDir = process.env["CREW_LAUNCH_AGENTS_DIR"];
-const savedSystemdDir = process.env["CREW_SYSTEMD_USER_DIR"];
-
 /**
  * Redirect both platforms' unit directories at a scratch home and undo
  * every seam afterwards. Imported for side effects by each test file.
  */
 export function useSchedulerSeams(): void {
+  let restoreDirectories: () => void;
   beforeEach(() => {
-    process.env["CREW_LAUNCH_AGENTS_DIR"] = makeCrewHome();
-    process.env["CREW_SYSTEMD_USER_DIR"] = makeCrewHome();
+    restoreDirectories = redirectSchedulerDirectories();
   });
 
   afterEach(() => {
-    if (savedLaunchAgentsDir === undefined) delete process.env["CREW_LAUNCH_AGENTS_DIR"];
-    else process.env["CREW_LAUNCH_AGENTS_DIR"] = savedLaunchAgentsDir;
-    if (savedSystemdDir === undefined) delete process.env["CREW_SYSTEMD_USER_DIR"];
-    else process.env["CREW_SYSTEMD_USER_DIR"] = savedSystemdDir;
+    restoreDirectories();
     resetAutoupdatePlatform();
     resetLaunchctlRunner();
     resetSystemctlRunner();
   });
+}
+
+/** Redirect scheduler files and restore the environment captured for this fixture. */
+export function redirectSchedulerDirectories(): () => void {
+  const savedLaunchAgentsDir = process.env["CREW_LAUNCH_AGENTS_DIR"];
+  const savedSystemdDir = process.env["CREW_SYSTEMD_USER_DIR"];
+  process.env["CREW_LAUNCH_AGENTS_DIR"] = makeCrewHome();
+  process.env["CREW_SYSTEMD_USER_DIR"] = makeCrewHome();
+  return () => {
+    if (savedLaunchAgentsDir === undefined) delete process.env["CREW_LAUNCH_AGENTS_DIR"];
+    else process.env["CREW_LAUNCH_AGENTS_DIR"] = savedLaunchAgentsDir;
+    if (savedSystemdDir === undefined) delete process.env["CREW_SYSTEMD_USER_DIR"];
+    else process.env["CREW_SYSTEMD_USER_DIR"] = savedSystemdDir;
+  };
 }
 
 /** Write `autoupdate.enabled` (and its interval) into the config. */

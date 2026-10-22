@@ -6,12 +6,13 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   statSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { acquireLock } from "../../src/util/advisory-lock.ts";
+import { acquireLock, withLock } from "../../src/util/advisory-lock.ts";
 import { lockOwnerFs } from "../../src/util/lock-owner.ts";
 import { makeTempDir } from "../helpers/fixtures.ts";
 
@@ -119,4 +120,47 @@ catch (err) { process.exit(err.code === "state_locked" ? 0 : 2); }`,
     ancient(`${target}.lock`);
     expect(() => acquireLock(target)).toThrow();
   });
+});
+
+test("C-CONC-01 callback errors survive failed native release without removing unrelated bytes", () => {
+  const target = join(makeTempDir(), "target");
+  const unrelated = join(`${target}.lock`, "README.md");
+  const primary = new Error("callback failure");
+  let failure: unknown;
+  try {
+    withLock(
+      target,
+      () => {
+        writeFileSync(unrelated, "keep bytes");
+        throw primary;
+      },
+      100,
+    );
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBe(primary);
+  expect(readFileSync(unrelated, "utf8")).toBe("keep bytes");
+});
+
+test("C-CONC-01 failed native release stays idempotent across a successor acquisition", () => {
+  const target = join(makeTempDir(), "target");
+  const lock = `${target}.lock`;
+  const unrelated = join(lock, "README.md");
+  const held = acquireLock(target, 100);
+  writeFileSync(unrelated, "keep bytes");
+  held.release();
+  expect(readFileSync(unrelated, "utf8")).toBe("keep bytes");
+  rmSync(unrelated);
+  held.release();
+  expect(statSync(lock).isDirectory()).toBe(true);
+  rmSync(lock, { recursive: true });
+  const successor = acquireLock(target, 100);
+  try {
+    held.release();
+    expect(statSync(lock).isDirectory()).toBe(true);
+  } finally {
+    successor.release();
+  }
+  expect(existsSync(lock)).toBe(false);
 });

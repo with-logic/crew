@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readConfig, writeConfig } from "../../src/config/load.ts";
 import { writeText } from "../../src/util/fs.ts";
@@ -92,4 +92,27 @@ describe("atomic writeText", () => {
     writeConfig(readConfig(makeTempDir("crew-atomic-src-")), home);
     expect(readConfig(home).taps.length).toBeGreaterThan(0);
   });
+});
+
+test("writeText preserves the open failure when temporary cleanup also fails", () => {
+  const dir = makeTempDir("crew-atomic-");
+  const target = join(dir, "config.yaml");
+  writeFileSync(target, "old: 1\n");
+  chmodSync(dir, 0);
+  let failure: unknown;
+  try {
+    try {
+      writeText(target, "new: 2\n");
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).toMatchObject({ code: "EACCES", syscall: "open" });
+    expect((failure as NodeJS.ErrnoException).path).toStartWith(`${target}.tmp-${process.pid}-`);
+    expect((failure as Error).stack).toContain("writeFileSync");
+  } finally {
+    chmodSync(dir, 0o700);
+  }
+  expect(readFileSync(target, "utf8")).toBe("old: 1\n");
+  expect(readdirSync(dir)).toEqual(["config.yaml"]);
 });

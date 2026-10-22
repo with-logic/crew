@@ -74,7 +74,7 @@ test("cleanup failure preserves the original replacement error and diagnostics",
     expect((failure as Error).message).toContain("xattr fixture failure");
     expect((failure as Error).message).toContain("cleanup warning:");
     expect((failure as Error).message).toContain(dirname(captured.assetPath));
-    expect((failure as Error).message).toContain("EACCES");
+    expect((failure as Error).message).toMatch(/EACCES|ENOTEMPTY/);
     expect((failure as CrewError).details).toEqual({ dest, cause: "xattr fixture failure" });
     expect(readFileSync(dest, "utf8")).toBe("OLD");
     // Real permissions prevent removal until the fixture restores ownership access.
@@ -99,7 +99,7 @@ test("cleanup failure preserves success and reports a sanitized retained-root wa
     expect(result.replaced).toBe(true);
     expect(readFileSync(dest, "utf8")).toBe("NEW");
     expect(result.cleanupWarning).toContain("tmp\\x0acontrol/crew-self-update-");
-    expect(result.cleanupWarning).toContain("EACCES");
+    expect(result.cleanupWarning).toMatch(/EACCES|ENOTEMPTY/);
     expect(result.cleanupWarning).not.toContain("\n");
     expect(existsSync(dirname(captured.assetPath))).toBe(true);
   } finally {

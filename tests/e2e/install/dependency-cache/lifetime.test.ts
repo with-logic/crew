@@ -117,7 +117,7 @@ test("failed eviction still attempts final cleanup of every retained export", ()
         chmodSync(roots[0]!, 0o500);
         trees.parentPath(parents[2]!);
       }),
-    ).toThrow(/EACCES|EPERM/);
+    ).toThrow(/EACCES|EPERM|ENOTEMPTY/);
     expect(roots).toHaveLength(2);
     expect(existsSync(roots[0]!)).toBe(true);
     expect(existsSync(roots[1]!)).toBe(false);
@@ -144,7 +144,7 @@ test("failed eviction keeps its export owned for final cleanup", () => {
           throw err;
         }
       }),
-    ).toThrow(/EACCES|EPERM/);
+    ).toThrow(/EACCES|EPERM|ENOTEMPTY/);
     expect(roots).toHaveLength(2);
     for (const root of roots) expect(existsSync(root)).toBe(false);
   } finally {

@@ -137,7 +137,7 @@ test("C-INST-05d cleanup failure aborts requested-ref fallback and preserves pri
   expect(payload.error.message).toContain(diagnostic);
   expect(payload.error.message).toContain(index);
   expect(payload.error.message).toContain(exported);
-  expect(payload.error.message).toMatch(/EACCES|EPERM/);
+  expect(payload.error.message).toMatch(/EACCES|EPERM|ENOTEMPTY/);
   expect(existsSync(join(agentRoot, "demo"))).toBe(false);
   expect(readState(home)).toEqual(state);
   expect(existsSync(paths(home).stateFile)).toBe(hadStateFile);

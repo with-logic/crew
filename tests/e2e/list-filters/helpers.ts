@@ -6,6 +6,7 @@
  * emits. Adapter redirection stays an explicit call in each test file.
  */
 
+import { strictEqual } from "node:assert";
 import { join } from "node:path";
 import type { AgentAdapter } from "../../../src/agents/adapter.ts";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
@@ -80,12 +81,10 @@ export function seed(home: string): string {
   const beta = makeSkill(b, "beta", skillFrontmatter({ name: "beta" }));
   const gamma = makeSkill(g, "gamma", skillFrontmatter({ name: "gamma" }));
   const alphaArgs = ["install", "--agent", "claude-code", "--agent", "codex", alpha];
-  if (runCli(alphaArgs, { home, streams: quiet() }) !== 0) throw new Error("alpha");
-  if (runCli(["install", "--agent", "codex", beta], { home, streams: quiet() }) !== 0)
-    throw new Error("beta");
+  strictEqual(runCli(alphaArgs, { home, streams: quiet() }), 0);
+  strictEqual(runCli(["install", "--agent", "codex", beta], { home, streams: quiet() }), 0);
   const gammaArgs = ["install", "--scope", "project", "--agent", "codex", gamma];
-  if (runCli(gammaArgs, { home, cwd: projectRoot, streams: quiet() }) !== 0)
-    throw new Error("gamma");
+  strictEqual(runCli(gammaArgs, { home, cwd: projectRoot, streams: quiet() }), 0);
   return projectRoot;
 }
 

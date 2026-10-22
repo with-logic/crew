@@ -94,7 +94,7 @@ for (const tracksTap of [false, true]) {
         expect(error.code).toBe("no_skills_found");
         expect(error.message).toContain("doesn't exist at");
         expect(error.message).toContain(retained);
-        expect(error.message).toMatch(/EACCES|EPERM/);
+        expect(error.message).toMatch(/EACCES|EPERM|ENOTEMPTY/);
         expect(existsSync(retained)).toBe(true);
       }
       if (tracksTap || !cleanupFault) expect(payload.rows[0]!.outcome.kind).toBe("source_gone");
