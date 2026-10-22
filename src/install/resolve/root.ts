@@ -14,6 +14,7 @@
 import type { Config, ResolvedSkill, TapConfig } from "../../core/types.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { withAcquiredTap } from "../../sources/acquire/index.ts";
+import type { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
 import { attributeRef } from "../tap-attribution.ts";
@@ -29,12 +30,13 @@ export function enqueueRoot(
   kindHint: KindHint,
   recursive: boolean,
   requireTap: (tap: TapConfig) => void,
+  discovery?: GitDiscoveryWarnings,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const source = parseRef(raw, cwd);
 
   // Bare-name (`<skill>`) and qualified (`<tap>/<skill>`, `<tap>/<ns>/<skill>`) tap refs.
   if (source.type === "tap") {
-    return enqueueTapRef(source, config, home, true, kindHint);
+    return enqueueTapRef(source, config, home, true, kindHint, discovery);
   }
 
   // Git URL or path: find or create the tap. This is always a
@@ -54,6 +56,7 @@ export function enqueueRoot(
       true,
       true,
       home,
+      discovery,
     ),
   );
   return { items: expansion.items, config: attrib.config, skipped: expansion.skipped };

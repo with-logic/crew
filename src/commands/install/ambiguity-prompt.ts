@@ -14,6 +14,7 @@ import type { Config } from "../../core/types.ts";
 import { type NameCandidate, scanNameCandidates } from "../../install/attribute-bare-name.ts";
 import { ambiguityError } from "../../install/resolve-ref/errors.ts";
 import { shortLabelFor } from "../../install/resolve-ref/format.ts";
+import type { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { withTapLocks } from "../../sources/tap-lock.ts";
 import { safePath } from "../../util/redact.ts";
 import type { CommandContext } from "../types.ts";
@@ -50,9 +51,13 @@ export function promptBareNameAmbiguity(
   config: Config,
   trimmed: string,
   raw: string,
+  discovery?: GitDiscoveryWarnings,
 ): string {
   const candidates = withTapLocks(config.taps, ctx.home, () =>
-    filterForAmbiguity(scanNameCandidates(trimmed, config, ctx.home).candidates, trimmed),
+    filterForAmbiguity(
+      scanNameCandidates(trimmed, config, ctx.home, {}, discovery).candidates,
+      trimmed,
+    ),
   );
   if (candidates.length <= 1) return raw;
   // `--yes` skips this prompt but does NOT pick a default candidate

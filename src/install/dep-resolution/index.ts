@@ -24,6 +24,7 @@ import { tapClonePath } from "../../core/repo-path.ts";
 import type { Config, GitSource, PathSource, SkillMetadata, TapConfig } from "../../core/types.ts";
 import { hasSkillMd, loadSkill, loadSkillName } from "../../skill/load.ts";
 import { tapRootDir } from "../../sources/acquire/index.ts";
+import type { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { isGistTap } from "../../sources/gist.ts";
 import { isSourceDirectory, listSourceDirectory } from "../../sources/read.ts";
 import { attributeRef } from "../tap-attribution.ts";
@@ -53,6 +54,7 @@ export function findSiblingDep(
   depName: string,
   home: string,
   config: Config,
+  discovery?: GitDiscoveryWarnings,
 ): SiblingHit | null {
   const tapClone = tapClonePath(parent.tap, home);
   const tapRoot = tapRootDir(tapClone, parent.tap);
@@ -72,7 +74,12 @@ export function findSiblingDep(
   const matches: { dirName: string; siblingDir: string; loaded: SkillMetadata }[] = [];
   for (const dirName of listSourceDirectory(siblingParent)) {
     const siblingDir = join(siblingParent, dirName);
-    if (!(isSourceDirectory(siblingDir, parent.tap.kind === "path") && hasSkillMd(siblingDir)))
+    if (
+      !(
+        isSourceDirectory(siblingDir, parent.tap.kind === "path", discovery) &&
+        hasSkillMd(siblingDir)
+      )
+    )
       continue;
     if (siblingName(siblingDir) !== depName) continue;
     const loaded = loadSkill(siblingDir);

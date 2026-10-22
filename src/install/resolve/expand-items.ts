@@ -4,6 +4,7 @@
 
 import type { Source, TapConfig } from "../../core/types.ts";
 import { loadSkillMetadata } from "../../skill/load.ts";
+import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { expandSkills, type SkippedSkill } from "../../sources/expand.ts";
 import { gistCandidates, isGistTap, noGistSkillsFound } from "../../sources/gist.ts";
 import { stageIntoStore } from "../../sources/store.ts";
@@ -32,6 +33,7 @@ export function expandSkillsAsItems(
   explicit: boolean,
   tracksTap: boolean,
   home: string,
+  discovery = new GitDiscoveryWarnings(),
 ): ExpansionItems {
   const isGistFile = isGistTap(tap);
   const { valid, skipped } = isGistFile
@@ -42,6 +44,7 @@ export function expandSkillsAsItems(
     : expandSkills(sourcePath, {
         recursive: tap.discovery === "recursive",
         followStandardLayoutSymlinks: tap.kind === "path",
+        discovery,
       });
   if (isGistFile && valid.length === 0) throw noGistSkillsFound(sourcePath);
   const items: PendingItem[] = [];

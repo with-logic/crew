@@ -8,6 +8,7 @@
 import type { Config, TapConfig, TapSource } from "../../../core/types.ts";
 import { parseRef } from "../../../refs/parse.ts";
 import { withAcquiredTap } from "../../../sources/acquire/index.ts";
+import type { GitDiscoveryWarnings } from "../../../sources/discovery.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { findSiblingDep } from "../../dep-resolution/index.ts";
 import { attributeRef } from "../../tap-attribution.ts";
@@ -38,6 +39,7 @@ export function enqueueDeps(
   home: string,
   requireTap: (tap: TapConfig) => void,
   trees: DependencyTrees,
+  discovery?: GitDiscoveryWarnings,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const items: PendingItem[] = [];
   const skipped: SkippedSkill[] = [];
@@ -68,6 +70,7 @@ export function enqueueDeps(
         dep.source.name,
         home,
         current,
+        discovery,
       );
       // A miss falls through to the cross-tap search below, which
       // does not need the parent's tree.
@@ -81,7 +84,7 @@ export function enqueueDeps(
   }
 
   for (const depRef of [...unresolved, ...others]) {
-    const enqueued = enqueueDep(depRef, current, cwd, home, requireTap);
+    const enqueued = enqueueDep(depRef, current, cwd, home, requireTap, discovery);
     current = enqueued.config;
     items.push(...enqueued.items);
     skipped.push(...enqueued.skipped);
@@ -97,10 +100,11 @@ export function enqueueDep(
   cwd: string,
   home: string,
   requireTap: (tap: TapConfig) => void,
+  discovery?: GitDiscoveryWarnings,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   const source = parseRef(depRef, cwd);
 
-  if (source.type === "tap") return enqueueTapRef(source, config, home, false, null);
+  if (source.type === "tap") return enqueueTapRef(source, config, home, false, null, discovery);
 
   // Git or path dep ref. Dep edges don't subscribe the user to every
   // sibling of the dep's source.
@@ -118,6 +122,7 @@ export function enqueueDep(
       false,
       false,
       home,
+      discovery,
     ),
   );
   return { items: expansion.items, config: attrib.config, skipped: expansion.skipped };

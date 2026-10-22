@@ -17,6 +17,7 @@ import { CrewError } from "../../core/errors.ts";
 import { crewHome } from "../../core/paths.ts";
 import type { Config, ResolvedSkill, TapConfig } from "../../core/types.ts";
 import { withDiscoveredTapLocks } from "../../sources/discovered-tap-locks.ts";
+import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { KindHint } from "../resolve-ref/index.ts";
 import { topoSort } from "../topo.ts";
@@ -27,6 +28,7 @@ import { enqueueRoot, sameInstallSetSource, sourceLabel } from "./root.ts";
 
 /** Options for resolution. */
 export interface ResolveOptions {
+  readonly discovery: GitDiscoveryWarnings;
   readonly cwd: string;
   readonly home: string;
   /**
@@ -65,9 +67,10 @@ export function resolveInstallSet(
   options: Partial<ResolveOptions> = {},
 ): ResolveResult {
   const home = options.home ?? crewHome();
+  const discovery = options.discovery ?? new GitDiscoveryWarnings();
   return withDiscoveredTapLocks(startingConfig.taps, home, (requireTap) =>
     withDependencyTrees(home, (trees) =>
-      resolveLockedInstallSet(refs, startingConfig, options, requireTap, trees),
+      resolveLockedInstallSet(refs, startingConfig, options, requireTap, trees, discovery),
     ),
   );
 }
@@ -78,6 +81,7 @@ function resolveLockedInstallSet(
   options: Partial<ResolveOptions>,
   requireTap: (tap: TapConfig) => void,
   trees: DependencyTrees,
+  discovery: GitDiscoveryWarnings,
 ): ResolveResult {
   const cwd = options.cwd ?? process.cwd();
   const home = options.home ?? crewHome();
@@ -92,7 +96,16 @@ function resolveLockedInstallSet(
 
   // Step 1–5: resolve every root reference.
   for (const raw of refs) {
-    const enqueued = enqueueRoot(raw, config, cwd, home, kindHint, recursive, requireTap);
+    const enqueued = enqueueRoot(
+      raw,
+      config,
+      cwd,
+      home,
+      kindHint,
+      recursive,
+      requireTap,
+      discovery,
+    );
     config = enqueued.config;
     pending.push(...enqueued.items);
     skipped.push(...enqueued.skipped);
@@ -147,7 +160,7 @@ function resolveLockedInstallSet(
     // commit is exported once for all of them, not once per edge.
     const deps = item.loaded.frontmatter.metadata?.crew?.dependencies ?? [];
     if (deps.length > 0) {
-      const enqueued = enqueueDeps(deps, item, config, cwd, home, requireTap, trees);
+      const enqueued = enqueueDeps(deps, item, config, cwd, home, requireTap, trees, discovery);
       config = enqueued.config;
       skipped.push(...enqueued.skipped);
       for (const depItem of enqueued.items) {

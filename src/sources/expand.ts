@@ -27,6 +27,7 @@ import { CrewError } from "../core/errors.ts";
 import type { LoadedSkill } from "../core/types.ts";
 import { hasSkillMd, loadSkill } from "../skill/load.ts";
 import { isSourceReadFailure } from "../util/source-read.ts";
+import type { GitDiscoveryWarnings } from "./discovery.ts";
 import { isSourceDirectory, listSourceDirectory } from "./read.ts";
 import { findRecursiveSkillDirs } from "./recursive.ts";
 
@@ -48,6 +49,7 @@ export interface ExpansionResult {
 
 /** Options that affect multi-skill discovery. */
 export interface ExpandOptions {
+  readonly discovery?: GitDiscoveryWarnings;
   /**
    * If standard expansion finds no candidates, search recursively for
    * skill-shaped directories. This fallback always excludes linked descendant directories.
@@ -74,12 +76,13 @@ export function expandSkills(rootDir: string, options: ExpandOptions = {}): Expa
     return { valid, skipped };
   }
   const skillsDir = join(rootDir, "skills");
-  const result = isSourceDirectory(skillsDir, followSymlinks)
-    ? collectWithNamespaces(skillsDir, followSymlinks)
-    : collectSkillChildren(rootDir, followSymlinks);
+  const discovery = followSymlinks ? undefined : options.discovery;
+  const result = isSourceDirectory(skillsDir, followSymlinks, discovery)
+    ? collectWithNamespaces(skillsDir, followSymlinks, discovery)
+    : collectSkillChildren(rootDir, followSymlinks, discovery);
   if (result.valid.length > 0 || result.skipped.length > 0) return result;
   if (options.recursive) {
-    const recursive = collectRecursive(rootDir);
+    const recursive = collectRecursive(rootDir, discovery);
     if (recursive.valid.length > 0 || recursive.skipped.length > 0) return recursive;
   }
   throw noSkillsFound(rootDir);
@@ -97,12 +100,16 @@ function noSkillsFound(rootDir: string): CrewError {
  * Walk `skills/` one level deep, descending into namespace dirs
  * (children that lack a `SKILL.md` but contain child skill dirs).
  */
-function collectWithNamespaces(skillsDir: string, followSymlinks: boolean): ExpansionResult {
+function collectWithNamespaces(
+  skillsDir: string,
+  followSymlinks: boolean,
+  discovery?: GitDiscoveryWarnings,
+): ExpansionResult {
   const valid: LoadedSkill[] = [];
   const skipped: SkippedSkill[] = [];
   for (const name of listSourceDirectory(skillsDir)) {
     const candidate = join(skillsDir, name);
-    if (!isSourceDirectory(candidate, followSymlinks)) continue;
+    if (!isSourceDirectory(candidate, followSymlinks, discovery)) continue;
     if (hasSkillMd(candidate)) {
       pushSoft(candidate, valid, skipped);
       continue;
@@ -110,29 +117,33 @@ function collectWithNamespaces(skillsDir: string, followSymlinks: boolean): Expa
     // `candidate` has no SKILL.md — treat as a namespace if at least
     // one grandchild has a SKILL.md. Non-namespace dirs under
     // `skills/` (e.g. docs, scripts) are silently ignored.
-    const inner = collectSkillChildren(candidate, followSymlinks);
+    const inner = collectSkillChildren(candidate, followSymlinks, discovery);
     valid.push(...inner.valid);
     skipped.push(...inner.skipped);
   }
   return { valid, skipped };
 }
 
-function collectSkillChildren(dir: string, followSymlinks: boolean): ExpansionResult {
+function collectSkillChildren(
+  dir: string,
+  followSymlinks: boolean,
+  discovery?: GitDiscoveryWarnings,
+): ExpansionResult {
   const valid: LoadedSkill[] = [];
   const skipped: SkippedSkill[] = [];
   for (const name of listSourceDirectory(dir)) {
     const candidate = join(dir, name);
-    if (!isSourceDirectory(candidate, followSymlinks)) continue;
+    if (!isSourceDirectory(candidate, followSymlinks, discovery)) continue;
     if (!hasSkillMd(candidate)) continue;
     pushSoft(candidate, valid, skipped);
   }
   return { valid, skipped };
 }
 
-function collectRecursive(rootDir: string): ExpansionResult {
+function collectRecursive(rootDir: string, discovery?: GitDiscoveryWarnings): ExpansionResult {
   const valid: LoadedSkill[] = [];
   const skipped: SkippedSkill[] = [];
-  for (const dir of findRecursiveSkillDirs(rootDir)) {
+  for (const dir of findRecursiveSkillDirs(rootDir, discovery)) {
     pushSoft(dir, valid, skipped);
   }
   return { valid, skipped };

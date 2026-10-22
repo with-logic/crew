@@ -14,6 +14,7 @@
 import { CrewError } from "../../core/errors.ts";
 import type { TapConfig } from "../../core/types.ts";
 import { countSkills } from "../../install/collision-check.ts";
+import type { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { withTapLocks } from "../../sources/tap-lock.ts";
 import type { CommandContext } from "../types.ts";
 
@@ -22,8 +23,11 @@ export function promptForCollision(
   collision: { tap: TapConfig; otherTaps: readonly TapConfig[] },
   trimmed: string,
   raw: string,
+  discovery?: GitDiscoveryWarnings,
 ): string {
-  const count = withTapLocks([collision.tap], ctx.home, () => countSkills(collision.tap, ctx.home));
+  const count = withTapLocks([collision.tap], ctx.home, () =>
+    countSkills(collision.tap, ctx.home, discovery),
+  );
   const skillsLine = count === null ? "" : ` (${count} skill${count === 1 ? "" : "s"})`;
   const qualifiedFor = (t: TapConfig): string => `${t.name}/${trimmed}`;
 

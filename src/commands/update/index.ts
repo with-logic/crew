@@ -87,16 +87,21 @@ export function updateCommand(ctx: CommandContext): CommandOutput {
   if (!dryRun) garbageCollectStore(plan.state, home);
 
   const { rows, tapReexpandRows, tapRows, collections, selectors } = plan;
+  const warnings = plan.warnings ?? [];
   return {
     exitCode: plan.hardFailure ? 1 : 0,
     human: renderUpdate({ rows, tapReexpandRows, tapRows, dryRun, collections }, ctx.style),
-    stderr: ctx.flags.quiet && plan.hardFailure ? renderQuietUpdateErrors(plan) : [],
+    stderr: [
+      ...(ctx.flags.quiet && plan.hardFailure ? renderQuietUpdateErrors(plan) : []),
+      ...warnings,
+    ],
     json: {
       rows,
       tap_reexpand_rows: tapReexpandRows,
       tap_rows: tapRows,
       dry_run: dryRun,
       selectors,
+      ...(warnings.length > 0 ? { warnings } : {}),
     },
   };
 }

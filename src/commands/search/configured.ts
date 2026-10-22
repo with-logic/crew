@@ -7,6 +7,7 @@ import type { TapConfig } from "../../core/types.ts";
 import { indexTap, type SkillLocation } from "../../install/tap-index.ts";
 import { displayText } from "../../refs/display-url.ts";
 import { loadSkill } from "../../skill/load.ts";
+import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { withRemedy } from "../../util/error-remedy.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import { isSourceReadFailure, sourceReadFailure } from "../../util/source-read.ts";
@@ -21,7 +22,10 @@ export function collectConfiguredHits(
 ): ConfiguredSearchResult {
   const hits: SearchHit[] = [];
   const warnings: string[] = [];
-  for (const tap of taps) collectHitsFromTap(tap, query, installIndex, home, hits, warnings);
+  const discovery = new GitDiscoveryWarnings();
+  for (const tap of taps)
+    collectHitsFromTap(tap, query, installIndex, home, hits, warnings, discovery);
+  warnings.push(...discovery.warnings());
   hits.sort(compareSearchHits);
   return { hits, warnings };
 }
@@ -33,10 +37,11 @@ function collectHitsFromTap(
   home: string,
   hits: SearchHit[],
   warnings: string[],
+  discovery: GitDiscoveryWarnings,
 ): void {
   let index: ReturnType<typeof indexTap>;
   try {
-    index = indexTap(tap, home);
+    index = indexTap(tap, home, undefined, discovery);
   } catch (err) {
     // §16.6 makes an unreachable tap a warning, not a failure. A tap
     // whose stored subpath escapes its clone is a different matter:

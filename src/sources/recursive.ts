@@ -9,6 +9,7 @@
 import { basename } from "node:path";
 import { hasSkillMd } from "../skill/load.ts";
 import type { WalkedEntry } from "../util/fs.ts";
+import type { GitDiscoveryWarnings } from "./discovery.ts";
 import { sourceRelativePath } from "./path.ts";
 import { assertSourceDirectorySearchable, walkSourceDirectory } from "./read.ts";
 
@@ -27,9 +28,16 @@ const SKIPPED_DIRS = new Set([
 ]);
 
 /** Return skill directories discovered recursively, in deterministic order. */
-export function findRecursiveSkillDirs(rootDir: string): string[] {
+export function findRecursiveSkillDirs(
+  rootDir: string,
+  discovery?: GitDiscoveryWarnings,
+): string[] {
   const dirs: string[] = [];
   for (const entry of walkSourceDirectory(rootDir, {
+    shouldEmit: (entry) => {
+      if (entry.isSymlink && !shouldSkipDirectory(entry.absPath)) discovery?.recordSkippedSymlink();
+      return true;
+    },
     shouldDescend: (entry) => shouldDescendInto(entry, rootDir),
   })) {
     if (!entry.isDirectory) continue;

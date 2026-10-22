@@ -21,6 +21,7 @@ import { attributeRef } from "../../install/tap-attribution.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { hasSkillMd, loadSkill } from "../../skill/load.ts";
 import { withDiscoveredTapLocks } from "../../sources/discovered-tap-locks.ts";
+import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { readState } from "../../state/load.ts";
 import { resolveStateSubject } from "../../state/subjects.ts";
 import { isAutoTapSource, sourceLabel, tapIndex } from "../source-label/index.ts";
@@ -56,18 +57,19 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
   }
 
   const source = parseRef(arg, ctx.cwd);
+  const discovery = new GitDiscoveryWarnings();
   // An `@ref` tail previews that commit's content, not the clone's HEAD (§9.1).
   const ref = source.type === "path" ? null : source.ref;
   const { tap, skills } = withDiscoveredTapLocks(config.taps, ctx.home, (requireTap) => {
     if (source.type === "tap" && source.tap === null) {
       const namedTap = config.taps.find((t) => t.name === source.name);
       if (namedTap) {
-        return { tap: namedTap, skills: skillsAtRef(namedTap, ref, ctx.home) };
+        return { tap: namedTap, skills: skillsAtRef(namedTap, ref, ctx.home, discovery) };
       }
-      return tapCandidate(source, config, ref, ctx.home);
+      return tapCandidate(source, config, ref, ctx.home, discovery);
     }
     if (source.type === "tap") {
-      return tapCandidate(source, config, ref, ctx.home);
+      return tapCandidate(source, config, ref, ctx.home, discovery);
     }
     const matched = config.taps.find((t) => {
       if (source.type === "git")
@@ -75,17 +77,19 @@ export function infoCommand(ctx: CommandContext): CommandOutput {
       return t.kind === "path" && t.path === source.path;
     });
     if (matched) {
-      return { tap: matched, skills: skillsAtRef(matched, ref, ctx.home) };
+      return { tap: matched, skills: skillsAtRef(matched, ref, ctx.home, discovery) };
     }
     const attrib = attributeRef(source, config);
     requireTap(attrib.tap);
-    return { tap: attrib.tap, skills: skillsAtRef(attrib.tap, ref, ctx.home) };
+    return { tap: attrib.tap, skills: skillsAtRef(attrib.tap, ref, ctx.home, discovery) };
   });
 
+  const warnings = discovery.warnings();
   return {
     exitCode: 0,
     human: renderSkills(skills, tap, ctx.style, ctx.width),
-    json: { skills },
+    stderr: warnings,
+    json: { skills, ...(warnings.length > 0 ? { warnings } : {}) },
   };
 }
 

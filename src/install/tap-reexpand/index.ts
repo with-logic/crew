@@ -25,6 +25,7 @@
 import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import type { PreparedSources } from "../../sources/acquire/revision.ts";
+import type { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { entryIdentity } from "../../state/collections/index.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import { isDirectory } from "../../util/fs.ts";
@@ -65,6 +66,7 @@ export function reexpandTaps(
   missingProjectRoots?: ReadonlySet<string>,
   prepared?: PreparedSources,
   baseFailures?: TargetBaseFailures,
+  discovery?: GitDiscoveryWarnings,
 ): TapReexpandResult {
   const added: StateEntry[] = [];
   const updated: StateEntry[] = [];
@@ -73,7 +75,7 @@ export function reexpandTaps(
   let hardFailure = false;
   // One tap backs several (scope, project_root) groups; acquire, walk
   // and validate it once per run rather than once per group.
-  const cache = makeTapScanCache(prepared);
+  const cache = makeTapScanCache(prepared, discovery);
   const installedIndex = buildInstalledSourceIndex(state, config);
 
   // Group state entries by (tap-name, scope, project_root, ref). Entries

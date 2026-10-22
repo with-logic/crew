@@ -239,11 +239,14 @@ acme-skills/
 ```
 
 Any top-level directory with a valid `SKILL.md` is a skill; the install name
-comes from the `name` field inside `SKILL.md`. Everything else is ignored.
+comes from the `name` field inside `SKILL.md`.
 Prefer to keep skills under a `skills/` directory? That works too — if
 `skills/` exists at the root, Homecrew indexes its children instead of the root.
 For trusted repos that don't follow either layout, `crew tap add --recursive`
 keeps the standard layouts first and falls back to bounded recursive discovery.
+Git skill discovery skips symlink entries without following their targets and
+reports one warning when its chosen layout excludes any. Skill assets and
+trusted path-tap links keep their existing behavior.
 
 ### Namespaces
 

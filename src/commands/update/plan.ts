@@ -35,6 +35,7 @@ export interface UpdateSelector {
 
 /** What an update run would do: the resulting state plus every output row. */
 export interface UpdatePlan {
+  readonly warnings?: readonly string[];
   readonly state: StateFile;
   readonly rows: readonly UpdateRow[];
   readonly tapReexpandRows: readonly TapReexpandRow[];

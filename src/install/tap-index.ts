@@ -1,21 +1,9 @@
 /**
- * Shallow index of a single tap's layout — just what we need for
- * reference resolution (§8.3). Directory layouts read only the declared
- * `name` from SKILL.md; gist layouts fully validate candidate frontmatter.
- *
- * Given a tap, produces:
- *   - `skills`: every declared skill name findable under the tap (root,
- *     skills/<name>, skills/<namespace>/<name>, or original top-level gist filenames).
- *   - `namespaces`: every namespace name and its skill children.
- *   - `skipped`: rejected directory locations and their validation diagnostics.
- *
- * Directory indexing is intentionally optimistic: full SKILL.md validation
- * still happens at install or search-render time. Invalid gist files are
- * excluded during candidate discovery (§9 step 5).
- *
- * Namespace rules (§9 step 5 case 2): a namespace is a directory
- * directly under `skills/` that contains no `SKILL.md` of its own
- * but contains child directories with a `SKILL.md`.
+ * Tap layout indexing for reference resolution (§8.3, §9 step 5).
+ * Directory indexing reads declared names optimistically, retaining invalid
+ * manifests separately; gist discovery fully validates literal top-level files.
+ * Namespaces are immediate skills/ children without their own SKILL.md.
+ * Excluded Git links contribute only to the caller's aggregate warning.
  */
 
 import { join } from "node:path";
@@ -25,6 +13,7 @@ import type { SkillFrontmatter, TapConfig } from "../core/types.ts";
 import { ensureClone } from "../git/repo/index.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
+import type { GitDiscoveryWarnings } from "../sources/discovery.ts";
 import type { SkippedSkill } from "../sources/expand.ts";
 import { gistCandidates, isGistTap } from "../sources/gist.ts";
 import { migrateTapClone } from "../sources/migrate-clones.ts";
@@ -86,7 +75,12 @@ export function tapRoot(tap: TapConfig, home: string): string {
  * would fail to find something that exists perfectly well at the
  * requested commit (§9 step 3).
  */
-export function indexTap(tap: TapConfig, home: string, rootOverride?: string): TapIndex {
+export function indexTap(
+  tap: TapConfig,
+  home: string,
+  rootOverride?: string,
+  discovery?: GitDiscoveryWarnings,
+): TapIndex {
   const root = rootOverride ?? tapRoot(tap, home);
   const skills = new Map<string, SkillLocation[]>();
   const namespaces = new Map<string, SkillLocation[]>();
@@ -131,11 +125,11 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
   }
 
   const skillsDir = join(root, "skills");
-  if (isSourceDirectory(skillsDir, followSymlinks)) {
+  if (isSourceDirectory(skillsDir, followSymlinks, discovery)) {
     // Case 2: walk under skills/
     for (const name of listSourceDirectory(skillsDir)) {
       const child = join(skillsDir, name);
-      if (!isSourceDirectory(child, followSymlinks)) continue;
+      if (!isSourceDirectory(child, followSymlinks, discovery)) continue;
       if (hasSkillMd(child)) {
         addDirectorySkill({ path: child, namespace: null, tapRelativePath: `skills/${name}` });
         continue;
@@ -143,7 +137,7 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
       // Possibly a namespace: look at its children.
       for (const childName of listSourceDirectory(child)) {
         const grandchild = join(child, childName);
-        if (!isSourceDirectory(grandchild, followSymlinks)) continue;
+        if (!isSourceDirectory(grandchild, followSymlinks, discovery)) continue;
         if (!hasSkillMd(grandchild)) continue;
         addDirectorySkill({
           path: grandchild,
@@ -157,13 +151,14 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
       root,
       index: { skills, namespaces, skipped },
       addDirectorySkill,
+      discovery: followSymlinks ? undefined : discovery,
     });
   }
 
   // Case 3: walk one level under root.
   for (const name of listSourceDirectory(root)) {
     const child = join(root, name);
-    if (!isSourceDirectory(child, followSymlinks)) continue;
+    if (!isSourceDirectory(child, followSymlinks, discovery)) continue;
     if (!hasSkillMd(child)) continue;
     addDirectorySkill({ path: child, namespace: null, tapRelativePath: name });
   }
@@ -172,6 +167,7 @@ export function indexTap(tap: TapConfig, home: string, rootOverride?: string): T
     root,
     index: { skills, namespaces, skipped },
     addDirectorySkill,
+    discovery: followSymlinks ? undefined : discovery,
   });
 }
 
@@ -180,16 +176,18 @@ function maybeRecursiveIndex({
   root,
   index,
   addDirectorySkill,
+  discovery,
 }: {
   readonly tap: TapConfig;
   readonly root: string;
   readonly index: TapIndex;
   readonly addDirectorySkill: (input: DirectorySkillInput) => void;
+  readonly discovery: GitDiscoveryWarnings | undefined;
 }): TapIndex {
   // §9 step 5.4: invalid standard candidates also prevent recursive fallback.
   if (index.skills.size > 0 || index.skipped.length > 0 || tap.discovery !== "recursive")
     return index;
-  for (const dir of findRecursiveSkillDirs(root)) {
+  for (const dir of findRecursiveSkillDirs(root, discovery)) {
     const tapRelativePath = sourceRelativePath(root, dir);
     addDirectorySkill({ path: dir, namespace: null, tapRelativePath });
   }

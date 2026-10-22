@@ -9,6 +9,7 @@
 import { join } from "node:path";
 import type { Config, SkillMetadata, TapConfig } from "../../core/types.ts";
 import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
+import type { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import type { StoredSkill } from "../../sources/store.ts";
 import { type KindHint, resolveTapRef } from "../resolve-ref/index.ts";
@@ -54,6 +55,7 @@ export function enqueueTapRef(
   home: string,
   explicit: boolean,
   kindHint: KindHint,
+  discovery?: GitDiscoveryWarnings,
 ): { items: PendingItem[]; config: Config; skipped: readonly SkippedSkill[] } {
   // Whole-tap install short-circuit: bare `<name>` that is the name of
   // a configured tap. Cross-tap collisions are handled earlier in the
@@ -77,6 +79,7 @@ export function enqueueTapRef(
           explicit,
           true,
           home,
+          discovery,
         ),
       );
       return { items: expansion.items, config, skipped: expansion.skipped };
@@ -97,6 +100,7 @@ export function enqueueTapRef(
       home,
       kindHint,
       roots,
+      discovery,
     );
 
     if (candidate.kind === "namespace") {
@@ -114,6 +118,7 @@ export function enqueueTapRef(
             explicit,
             true,
             home,
+            discovery,
           );
           items.push(...expansion.items);
           skipped.push(...expansion.skipped);
@@ -136,6 +141,7 @@ export function enqueueTapRef(
         explicit,
         false,
         home,
+        discovery,
       );
     const expansion = acquired
       ? expand(acquired)

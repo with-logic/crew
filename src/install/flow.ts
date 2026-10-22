@@ -1,16 +1,8 @@
 /**
  * End-to-end `crew install` flow (§9, §14).
  *
- * This module ties the pieces together:
- *
- *   1. Parse each ref → acquire → validate → expand → resolve deps
- *      (in `./resolve/index.ts`).
- *   2. Compute the active target set (in `./agent-set.ts`).
- *   3. Detect "already installed" and "name conflict" against the current
- *      state (§5.4; in `./duplicate-rules/index.ts`).
- *   4. Perform the installs (in `./perform/index.ts`).
- *   5. Write state back under the lock, and return a structured summary
- *      the CLI layer can format.
+ * Resolves references and dependencies, computes agent targets, applies
+ * duplicate rules, installs, and writes state under the lock.
  */
 
 import { withTargetLocks } from "../agents/target-lock/index.ts";
@@ -18,6 +10,7 @@ import { readConfig, writeConfig } from "../config/load.ts";
 import { crewHome } from "../core/paths.ts";
 import type { Config, ResolvedSkill, Scope } from "../core/types.ts";
 import { garbageCollectAutoTaps } from "../maintenance/auto-taps.ts";
+import { GitDiscoveryWarnings } from "../sources/discovery.ts";
 import type { SkippedSkill } from "../sources/expand.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
@@ -45,6 +38,7 @@ export interface InstallOptions {
   readonly kindHint?: KindHint;
   /** Opt direct git/path refs into recursive fallback discovery. */
   readonly recursive?: boolean;
+  readonly discovery?: GitDiscoveryWarnings;
 }
 
 /** Full result: summary plus any "already installed" short-circuit records. */
@@ -85,6 +79,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     home,
     kindHint: options.kindHint ?? null,
     recursive: options.recursive ?? false,
+    discovery: options.discovery ?? new GitDiscoveryWarnings(),
   });
 
   // Apply §5.4 — duplicate installs. An install with a new active

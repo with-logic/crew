@@ -15,6 +15,7 @@ import { updateOneEntry } from "../../install/update/entry.ts";
 import { rowFor } from "../../install/update/row.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
 import type { PreparedSources } from "../../sources/acquire/revision.ts";
+import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { type CollectionSubject, entryIdentity } from "../../state/collections/index.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { refreshTaps, type TapRefreshRow } from "../tap/refresh.ts";
@@ -66,6 +67,7 @@ function runTargetBatch(
 ): UpdatePlan {
   const { ctx, config, home, dryRun, transitiveSources, subjects, initialSelected } = input;
   const rows: UpdateRow[] = [];
+  const discovery = new GitDiscoveryWarnings();
   const tapReexpandRows: TapReexpandRow[] = [];
   let hardFailure = false;
   let current = input.state;
@@ -105,6 +107,7 @@ function runTargetBatch(
     missingProjectRoots,
     prepared,
     baseFailures,
+    discovery,
   );
   tapReexpandRows.push(...reexpanded.rows);
   if (reexpanded.hardFailure) hardFailure = true;
@@ -174,6 +177,7 @@ function runTargetBatch(
     if (bumpHardFailure) hardFailure = true;
   }
 
+  const warnings = discovery.warnings();
   return {
     state: current,
     rows,
@@ -182,5 +186,6 @@ function runTargetBatch(
     hardFailure,
     collections,
     selectors,
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 }

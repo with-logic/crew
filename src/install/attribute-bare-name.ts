@@ -13,6 +13,7 @@
  */
 
 import type { Config, TapConfig } from "../core/types.ts";
+import type { GitDiscoveryWarnings } from "../sources/discovery.ts";
 import type { RejectedReferenceSkill } from "./resolve-ref/diagnostics.ts";
 import { indexTapAt, type ReferenceTapIndex } from "./resolve-ref/tap-index-lookup.ts";
 import type { SkillLocation } from "./tap-index.ts";
@@ -44,6 +45,7 @@ export function scanNameCandidates(
   config: Config,
   home: string,
   roots: Readonly<Record<string, string | undefined>> = {},
+  discovery?: GitDiscoveryWarnings,
 ): {
   readonly candidates: readonly NameCandidate[];
   readonly rejected: readonly RejectedReferenceSkill[];
@@ -56,7 +58,7 @@ export function scanNameCandidates(
     }
     let index: ReferenceTapIndex;
     try {
-      index = indexTapAt(tap, home, roots);
+      index = indexTapAt(tap, home, roots, discovery);
     } catch {
       // Soft-fail unreachable taps; same policy as search.
       continue;

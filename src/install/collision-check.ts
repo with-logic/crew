@@ -20,6 +20,7 @@ import { tapClonePath } from "../core/repo-path.ts";
 import type { Config, TapConfig } from "../core/types.ts";
 import { hasSkillMd, loadSkillName } from "../skill/load.ts";
 import { tapRootDir } from "../sources/acquire/index.ts";
+import type { GitDiscoveryWarnings } from "../sources/discovery.ts";
 import { isGistTap } from "../sources/gist.ts";
 import { isDirectory } from "../util/fs.ts";
 import { indexTap } from "./tap-index.ts";
@@ -35,14 +36,19 @@ export interface Collision {
  * Return a `Collision` if the positional matches both a tap name and
  * a same-named skill in another tap; otherwise `null`.
  */
-export function detectCollision(name: string, config: Config, home: string): Collision | null {
+export function detectCollision(
+  name: string,
+  config: Config,
+  home: string,
+  discovery?: GitDiscoveryWarnings,
+): Collision | null {
   const tap = config.taps.find((t) => t.name === name);
   if (!tap) return null;
   const otherTaps: TapConfig[] = [];
   for (const other of config.taps) {
     if (other.name === tap.name) continue;
     try {
-      const index = indexTap(other, home);
+      const index = indexTap(other, home, undefined, discovery);
       if (index.skills.has(name)) otherTaps.push(other);
     } catch {
       // Same soft-fail policy as search / bare-name install.
@@ -58,12 +64,17 @@ export function detectCollision(name: string, config: Config, home: string): Col
  * (SKILL.md at the root) counts as 1. Returns `null` when the tap
  * can't be materialized locally.
  */
-export function countSkills(tap: TapConfig, home: string): number | null {
+export function countSkills(
+  tap: TapConfig,
+  home: string,
+  discovery?: GitDiscoveryWarnings,
+): number | null {
   const root = tapRootOnDisk(tap, home);
   if (root === null) return null;
   if (!isGistTap(tap) && hasSkillMd(root)) return rootSkillCount(root);
   let count = 0;
-  for (const locs of indexTap(tap, home).skills.values()) count += locs.length;
+  for (const locs of indexTap(tap, home, undefined, discovery).skills.values())
+    count += locs.length;
   return count;
 }
 

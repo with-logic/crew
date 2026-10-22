@@ -11,11 +11,18 @@ import {
   readSourceFile,
   sourceReadFailure,
 } from "../util/source-read.ts";
+import type { GitDiscoveryWarnings } from "./discovery.ts";
 
 /** Missing paths are absent; inaccessible source directories are operational failures. */
-export function isSourceDirectory(path: string, followSymlinks = true): boolean {
+export function isSourceDirectory(
+  path: string,
+  followSymlinks = true,
+  discovery?: GitDiscoveryWarnings,
+): boolean {
   try {
-    if (!(followSymlinks ? statSync(path) : lstatSync(path)).isDirectory()) return false;
+    const entry = followSymlinks ? statSync(path) : lstatSync(path);
+    if (!followSymlinks && entry.isSymbolicLink()) discovery?.recordSkippedSymlink();
+    if (!entry.isDirectory()) return false;
     accessSync(path, constants.X_OK);
     return true;
   } catch (err) {
