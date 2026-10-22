@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.12.0] — 2026-10-22
+
+### Added
+- Install skills from GitHub gists, or add a gist as a tap. Valid top-level skill files work with search, dependencies, previews and updates.
+- `crew outdated` previews available updates without changing installed skills.
+- Install from GitHub, GitLab and Bitbucket browser URLs, scheme-less hosts, or `crew install --from-git <source>`. References accept `@ref` before or after a subpath.
+- Filter `crew list` by agent or tap and `crew search` by tap. Update and uninstall accept tap and namespace selectors; `crew uninstall --all` operates at the selected scope.
+- Command aliases, conventional help/version flags, and verbose progress on stderr.
+- List and info display recognizable sources. Install reports source re-attribution, including in JSON.
+
+### Changed
+- Taps from the same repository share a clone. Installing a requested tag, branch or SHA uses that revision's content.
+- Removing a tap with installed skills requires `--force` or `--uninstall`.
+- Commands with different `CREW_HOME` roots coordinate writes to shared agent install directories.
+- Search and updates report rejected manifests, skipped discovery symlinks, unreadable sources and unusable recorded project roots more clearly.
+- Update and outdated preserve primary failure reasons and recovery instructions, including quiet output. Credential-bearing primary diagnostics are redacted in human and JSON output; raw JSON identity fields remain unchanged.
+- Doctor repair leaves all repairs pending when its inventory is incomplete or untrusted, and reports what prevented a complete scan.
+
+### Fixed
+- Dry runs and scope filters now apply consistently across mutating commands.
+- Failed update targets, new tap children and tap promotions remain retryable. Vanished local or individual Git source paths preserve installed skills.
+- Tap additions preserve source ownership, failure isolation and project identity; updating one skill preserves unselected siblings.
+- Copying, source discovery and doctor inventory enforce symlink containment and reject untrusted manifests or markers.
+- Cleanup preserves primary errors and in-flight source files, removes owned staging after failures, and removes self-update temporary directories.
+- Large manifest scans and file hashing use bounded memory. Literal backslashes in source paths are preserved.
+- Terminal controls and credential-shaped text are handled safely in the affected metadata and diagnostic output; search install suggestions are quoted as one argument.
+- Doctor avoids duplicate inventory of overlapping locations and repairs scheduler drift under its state lock. Advisory locks remain retryable after owner-record write failures.
+
 ## [0.10.1] — 2026-07-03
 
 ### Changed
