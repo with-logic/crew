@@ -15,6 +15,7 @@ import type { CrewError } from "../../core/errors.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
 import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { upsertEntry } from "../../state/load.ts";
+import { explicitRemedy } from "../../util/error-remedy.ts";
 import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { updateOne } from "./execute.ts";
 import { rowFor } from "./row.ts";
@@ -89,7 +90,11 @@ export function updateOneEntry(
     return {
       row: rowFor(entry, {
         kind: "failed",
-        error: { code: ce.code ?? "usage_error", message: ce.message },
+        error: {
+          code: ce.code ?? "usage_error",
+          message: ce.message,
+          ...explicitRemedy(ce),
+        },
       }),
       updatedState: state,
       bumpHardFailure: true,

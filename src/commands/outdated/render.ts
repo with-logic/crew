@@ -15,7 +15,9 @@
 
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
+import { displayText } from "../../refs/display-url.ts";
 import { columns, plural } from "../../util/format.ts";
+import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler } from "../../util/term.ts";
 import type { TapRefreshRow } from "../tap/refresh.ts";
 import { projectTag } from "../update/location.ts";
@@ -79,6 +81,8 @@ export function renderOutdated(input: RenderOutdatedInput, style: Styler): strin
         `${style.symbol("warn")} ${style.bold(r.name)}${projectTag(r, style)} ${style.dim(`(from ${r.tap})`)} ${style.red(code)}`,
       );
       if (r.error.message) lines.push(style.dim(`  ${r.error.message}`));
+      if (r.error.remedy)
+        lines.push(style.dim(sanitizeLine(displayText(`  Next step: ${r.error.remedy}`))));
     }
   }
   if (lines.length > 0) lines.push("");

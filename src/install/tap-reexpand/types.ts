@@ -18,7 +18,11 @@ export type TapReexpandRow = TapReexpandRowBase &
     | { readonly kind: "would_add" | "source_gone"; readonly error?: never }
     | {
         readonly kind: "tap_error";
-        readonly error: { readonly code: string; readonly message: string };
+        readonly error: {
+          readonly code: string;
+          readonly message: string;
+          readonly remedy?: string;
+        };
       }
   );
 

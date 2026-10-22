@@ -12,7 +12,7 @@
 import type { Scope } from "../../core/types.ts";
 import type { TapReexpandRow } from "../../install/tap-reexpand/index.ts";
 import type { Outcome, UpdateRow } from "../../install/update/types.ts";
-import { displayText } from "../../refs/display-url.ts";
+import { withRemedy } from "../../util/error-remedy.ts";
 import { shortenHome } from "../../util/format.ts";
 import { sanitizeLine } from "../../util/redact.ts";
 import type { Styler, SymbolKind } from "../../util/term.ts";
@@ -87,7 +87,7 @@ export function formatRowParts(row: UpdateRow, style: Styler): RowParts {
   return {
     status: style.red("failed"),
     detail: style.red(
-      sanitizeLine(displayText(`${o.error.code.replace(/_/g, " ")}: ${o.error.message}`)),
+      sanitizeLine(withRemedy(`${o.error.code.replace(/_/g, " ")}: ${o.error.message}`, o.error)),
     ),
     required,
   };

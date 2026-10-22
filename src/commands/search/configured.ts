@@ -7,7 +7,9 @@ import type { TapConfig } from "../../core/types.ts";
 import { indexTap, type SkillLocation } from "../../install/tap-index.ts";
 import { displayText } from "../../refs/display-url.ts";
 import { loadSkill } from "../../skill/load.ts";
+import { withRemedy } from "../../util/error-remedy.ts";
 import { sanitizeLine } from "../../util/redact.ts";
+import { isSourceReadFailure, sourceReadFailure } from "../../util/source-read.ts";
 import { type SearchInstallIndex, searchInstallStatus } from "./install-state.ts";
 import type { ConfiguredSearchResult, SearchHit } from "./types.ts";
 
@@ -51,7 +53,9 @@ function collectHitsFromTap(
       typeof err.details["path"] === "string";
     if (isSourceReadFailure) {
       warnings.push(
-        `warning: tap \`${sanitizeLine(tap.name)}\` skipped (${err.code}) — ${displayText(err.message)}`,
+        sanitizeLine(
+          withRemedy(`warning: tap \`${tap.name}\` skipped (${err.code}) — ${err.message}`, err),
+        ),
       );
       return;
     }
@@ -92,6 +96,24 @@ function collectSkillHit(
       ...searchInstallStatus(installIndex, name, tap.name, loc.tapRelativePath),
     });
   } catch (err) {
+    const native = err as NodeJS.ErrnoException | null | undefined;
+    const readError =
+      err instanceof Error &&
+      native?.syscall === "lstat" &&
+      typeof native.path === "string" &&
+      typeof native.code === "string" &&
+      native.code !== ""
+        ? sourceReadFailure(native.path, err)
+        : err;
+    if (isSourceReadFailure(readError))
+      warnings.push(
+        sanitizeLine(
+          withRemedy(
+            `warning: skill \`${loc.name}\` skipped (${readError.code}) — ${readError.message} (tap \`${tap.name}\`)`,
+            readError,
+          ),
+        ),
+      );
     if (err instanceof CrewError && err.code === "invalid_skill")
       warnings.push(
         invalidManifestWarning({ tap: tap.name, path: loc.path, message: err.message }),

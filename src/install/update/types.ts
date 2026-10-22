@@ -41,7 +41,7 @@ export type Outcome =
   /** §10.1: the entry's tap is no longer in config. Soft; install is kept. */
   | { kind: "tap_missing"; tap: string }
   | { kind: "missing_project_root"; root: string }
-  | { kind: "failed"; error: { code: string; message: string } };
+  | { kind: "failed"; error: { code: string; message: string; readonly remedy?: string } };
 
 export interface UpdateRow {
   readonly name: string;
