@@ -78,6 +78,9 @@ for (const query of ["", "needle"]) {
       expect(warning).toContain(`skill \`${blocked.name}\``);
       expect(warning).toContain("source_unreachable");
       expect(warning).toContain("EACCES");
+      expect(warning).toContain(
+        "; next step: Check that the source file exists and that you can read it and access its parent directories.",
+      );
       expect(warning).toContain("lstat");
       expect(warning).toContain(
         manifest.replaceAll("\n", "\\x0a").replaceAll("\x1b", "\\x1b").replaceAll("\x85", "\\x85"),
@@ -92,7 +95,6 @@ for (const query of ["", "needle"]) {
         "back online",
         "cloned yet",
         "crew tap update",
-        "Check that the source file",
       ]) {
         expect(warning).not.toContain(omitted);
       }

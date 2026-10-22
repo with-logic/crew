@@ -108,8 +108,9 @@ function collectSkillHit(
     if (isSourceReadFailure(readError))
       warnings.push(
         sanitizeLine(
-          displayText(
+          withRemedy(
             `warning: skill \`${loc.name}\` skipped (${readError.code}) — ${readError.message} (tap \`${tap.name}\`)`,
+            readError,
           ),
         ),
       );
