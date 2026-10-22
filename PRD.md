@@ -1055,6 +1055,22 @@ A 2-segment reference `foo/bar` is resolved with tap-first precedence: if `foo` 
 
 A 3-segment reference `tap/namespace/skill` is always unambiguous.
 
+**Rejected directory manifests on a final miss.** If no interpretation of a
+reference resolves, the existing `invalid_ref` message also reports rejected
+directory manifests encountered in the searched scope: each diagnostic names
+the configured tap, candidate path, `invalid_skill`, and validation reason.
+These are rejected locations, not inferred matches for the requested skill
+name. The original error message prefix, details, remedy, and exit 4 remain;
+JSON carries the diagnostics in `error.message` without adding fields.
+Successful resolution and ambiguity do not add these diagnostics. Bare-name
+and `--skill` misses report all rejections in searched taps; `--bundle` reports
+only the requested namespace, and `--tap` misses remain unchanged. A
+2-segment miss reports all rejections in its named-tap interpretation plus
+only matching-namespace rejections in other searched taps. A 3-segment miss
+reports only the named tap and namespace. Requested refs use the same
+captured commit tree as resolution (§9 step 3). Invalid gist files remain
+ignored (§9 step 5); diagnostics are escaped and redacted per §13.
+
 **Disambiguation flags.** The user may force an interpretation on `crew install`. These are presence flags; the name comes from the positional argument.
 - `--tap` — force every bare-name positional to be resolved as a tap name (install the whole tap). Errors if the positional is not a configured tap.
 - `--bundle` — force every bare-name positional to be resolved as a namespace name (install every skill in the namespace). Errors if the positional is not a namespace in exactly one configured tap.
@@ -2890,6 +2906,7 @@ Implementations and test suites refer to criteria by ID.
 | C-TAP-08b | §16.6 | `crew search` (no query) lists every skill in every configured tap. Installed skills are marked `✓` in human output and `installed: true` in JSON. |
 | C-TAP-08c | §16.6 | A same-name skill from a different tap/path is not marked installed in `crew search`; JSON reports `installed: false` and `same_name_installed: true`. |
 | C-TAP-08d | §9, §16.6 | Directory-tap candidates rejected during name-only indexing retain path-specific validation diagnostics without inferred names. Search reports invalid directory manifests in human stderr and JSON warnings, regardless of query, while healthy siblings remain hits and the command exits 0. Gist invalid files remain ignored. |
+| C-TAP-08e | §8.3, §9 | Final tap-source resolution misses retain `invalid_ref`, exit 4, original details and remedy, while human and JSON error messages report scoped rejected directory locations, validation code and reason without inferred names. Healthy resolution, ambiguity, `--tap` misses, requested-ref trees, known-tap suggestions, and ignored invalid gist files retain their existing behavior. |
 | C-TAP-10 | §16.3 | `crew tap <git-url> [<name>]` behaves identically to `crew tap add <git-url> [<name>]` when the first positional is a recognized git source (URL, `gh:`, `@owner/repo`, etc.). |
 | C-TAP-11 | §16.3 | `crew tap <unknown-word>` where `<unknown-word>` is neither a subcommand nor a git source is a `usage_error` whose message names the word and directs the user to `crew help tap`. Bare `crew tap` (no arguments) shows the help page with exit 0. |
 | C-TAP-12 | §16.3 | `crew tap add <url>//<subpath>` configures a tap rooted at `<subpath>` inside the repo. Skills at the top level of `<subpath>` are installable by bare name, just like a root tap. |
