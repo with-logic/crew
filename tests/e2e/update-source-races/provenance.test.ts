@@ -95,6 +95,12 @@ for (const dryRun of [false, true]) {
           error: {
             code: failure instanceof CrewError ? failure.code : "usage_error",
             message: failure.message,
+            ...(mode === "permission"
+              ? {
+                  remedy:
+                    "Check that the source file exists and that you can read it and access its parent directories.",
+                }
+              : {}),
           },
         });
       expect(result.hardFailure).toBe(true);

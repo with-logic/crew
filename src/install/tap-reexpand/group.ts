@@ -3,6 +3,7 @@
 import type { CrewError } from "../../core/errors.ts";
 import type { StateEntry, TapConfig } from "../../core/types.ts";
 import { type AcquiredTap, withAcquiredTap } from "../../sources/acquire/index.ts";
+import { explicitRemedy } from "../../util/error-remedy.ts";
 import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { isSourceReadFailure } from "../../util/source-read.ts";
 import type { InstalledSourceIndex } from "../installed-lookup.ts";
@@ -105,7 +106,11 @@ function failedGroup(input: GroupInput, error: CrewError): TapReexpandResult {
         : {}),
       tap: input.tap.name,
       kind: "tap_error",
-      error: { code: error.code ?? "source_unreachable", message: error.message },
+      error: {
+        code: error.code ?? "source_unreachable",
+        message: error.message,
+        ...explicitRemedy(error),
+      },
     })),
   };
 }

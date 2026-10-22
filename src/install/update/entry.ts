@@ -19,6 +19,7 @@ import { isGistTap } from "../../sources/gist.ts";
 import { stageIntoStore } from "../../sources/store.ts";
 import { upsertEntry } from "../../state/load.ts";
 import { hasUsableProjectRoot } from "../../state/validation.ts";
+import { explicitRemedy } from "../../util/error-remedy.ts";
 import { hasExportCleanupFailure } from "../../util/export-cleanup.ts";
 import { peekResolvedSha } from "./peek.ts";
 import { groupRecordedTargets, reinstallIntoAgents } from "./reinstall.ts";
@@ -84,7 +85,11 @@ export function updateOneEntry(
     return {
       row: rowFor(entry, {
         kind: "failed",
-        error: { code: ce.code ?? "usage_error", message: ce.message },
+        error: {
+          code: ce.code ?? "usage_error",
+          message: ce.message,
+          ...explicitRemedy(ce),
+        },
       }),
       updatedState: state,
       bumpHardFailure: true,
