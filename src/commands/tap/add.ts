@@ -18,6 +18,7 @@ import { withSourceMaintenanceLock } from "../../cli/maintenance.ts";
 import { readConfig, writeConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { Config, TapConfig } from "../../core/types.ts";
+import { UNUSABLE_PROJECT_ROOT_WARNING } from "../../install/metadata-warning.ts";
 import { rewriteTapMarkers } from "../../install/rewrite-tap-markers.ts";
 import { displayText } from "../../refs/display-url.ts";
 import { NAME_PATTERN } from "../../refs/parse.ts";
@@ -84,16 +85,22 @@ export function tapAdd(ctx: CommandContext, args: readonly string[]): CommandOut
   // Wrap in an object so TS doesn't narrow the literal type via the
   // initial assignment — `withStateLock`'s callback assigns later but
   // TS doesn't trace control flow into closures.
-  const out: { value: TapAddOutcome } = { value: "added" };
+  const out: { value: TapAddOutcome; unusableProjectRoots: boolean } = {
+    value: "added",
+    unusableProjectRoots: false,
+  };
   withSourceMaintenanceLock(ctx, () =>
     withStateLock(() => {
       const config = readConfig(ctx.home);
       const plan = planAdd(config, input);
-      applyAdd(ctx, config, plan, input);
+      out.unusableProjectRoots = applyAdd(ctx, config, plan, input);
       out.value = plan.outcome;
     }, ctx.home),
   );
-  return renderTapAdd(out.value, name, target, false, ctx.style);
+  return {
+    ...renderTapAdd(out.value, name, target, false, ctx.style),
+    ...(out.unusableProjectRoots ? { stderr: [UNUSABLE_PROJECT_ROOT_WARNING] } : {}),
+  };
 }
 
 /**
@@ -134,13 +141,18 @@ function planAdd(config: Config, input: TapAddInput): TapAddPlan {
  * handled by name, so a new outcome is a compile error at the
  * `satisfies` below rather than silently inheriting clone-and-write.
  */
-function applyAdd(ctx: CommandContext, config: Config, plan: TapAddPlan, input: TapAddInput): void {
+function applyAdd(
+  ctx: CommandContext,
+  config: Config,
+  plan: TapAddPlan,
+  input: TapAddInput,
+): boolean {
   const { name, explicitName, target, recursive } = input;
-  if (plan.outcome === "no-op") return;
+  if (plan.outcome === "no-op") return false;
   if (plan.outcome === "updated") {
     const existing = plan.sameTarget;
     const entries = readState(ctx.home).installations;
-    withTargetLocks(markerTargetBases(entries, ctx.cwd), (_failures, unavailableBases) => {
+    return withTargetLocks(markerTargetBases(entries, ctx.cwd), (_failures, unavailableBases) => {
       writeConfig(
         {
           ...config,
@@ -150,18 +162,16 @@ function applyAdd(ctx: CommandContext, config: Config, plan: TapAddPlan, input: 
         },
         ctx.home,
       );
-      rewriteTapMarkers(
+      return rewriteTapMarkers(
         { oldName: existing.name, newName: existing.name, discovery: "recursive" },
         entries,
         ctx.cwd,
         unavailableBases,
       );
     });
-    return;
   }
   if (plan.outcome === "promoted") {
-    promoteExistingTap(ctx.home, ctx.cwd, config, plan.sameTarget, explicitName, recursive);
-    return;
+    return promoteExistingTap(ctx.home, ctx.cwd, config, plan.sameTarget, explicitName, recursive);
   }
   // `added` is the only remaining variant. `satisfies` makes a newly
   // added `TapAddPlan` outcome a compile error here rather than letting
@@ -170,4 +180,5 @@ function applyAdd(ctx: CommandContext, config: Config, plan: TapAddPlan, input: 
   plan satisfies Extract<TapAddPlan, { outcome: "added" }>;
   if (target.kind === "git") cloneNewTap(target.url, ctx.home);
   writeConfig({ ...config, taps: [...config.taps, newTapOf(name, target, recursive)] }, ctx.home);
+  return false;
 }

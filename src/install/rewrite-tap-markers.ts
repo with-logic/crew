@@ -24,11 +24,14 @@ export function rewriteTapMarkers(
   stateEntries: readonly StateEntry[],
   cwd: string,
   unavailableBases?: ReadonlySet<string>,
-): void {
-  if (rewrite.oldName === rewrite.newName && rewrite.discovery === undefined) return;
+): boolean {
+  if (rewrite.oldName === rewrite.newName && rewrite.discovery === undefined) return false;
+  let unusableProjectRoots = false;
   const projectRoots = new Set<string>([cwd]);
   for (const e of stateEntries) {
-    if (e.scope === "project" && hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
+    if (e.scope !== "project") continue;
+    if (hasUsableProjectRoot(e)) projectRoots.add(e.project_root);
+    else if (e.source.tap === rewrite.oldName) unusableProjectRoots = true;
   }
   const scan = (adapter: AgentAdapter, scope: Scope, root: string) => {
     if (unavailableBases?.has(baseFor(adapter, scope, root))) return;
@@ -39,6 +42,7 @@ export function rewriteTapMarkers(
     scan(adapter, "user", cwd);
     for (const root of projectRoots) scan(adapter, "project", root);
   }
+  return unusableProjectRoots;
 }
 
 function maybeRewrite(installDir: string, marker: Marker, rewrite: TapMarkerRewrite): void {

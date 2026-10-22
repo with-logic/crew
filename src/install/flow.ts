@@ -1,8 +1,7 @@
 /**
  * End-to-end `crew install` flow (§9, §14).
  *
- * Resolves references and dependencies, computes agent targets, applies
- * duplicate rules, installs, and writes state under the lock.
+ * Resolves sources, analyzes duplicates and performs installs under state/target locks.
  */
 
 import { withTargetLocks } from "../agents/target-lock/index.ts";
@@ -58,6 +57,7 @@ export interface InstallFlowResult {
    * (those hard-fail before reaching here).
    */
   readonly skipped: readonly SkippedSkill[];
+  readonly unusableProjectRoots?: boolean;
 }
 
 /** Run the install flow end-to-end. */
@@ -120,6 +120,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
   // snapshot and lock acquisition would otherwise let us report a skill
   // as "already installed" that is no longer there.
   let alreadyInstalled: readonly AlreadyInstalled[] = [];
+  let unusableProjectRoots = false;
   const summary = withStateLock(() => {
     // Replay resolver additions onto fresh config under the lock (§14),
     // retaining concurrent removals and rejecting source replacements.
@@ -152,7 +153,9 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     );
     const installed = withTargetLocks(bases, (baseFailures, unavailableBases) => {
       for (const rewrite of rewrites)
-        rewriteTapMarkers(rewrite, freshState.installations, cwd, unavailableBases);
+        unusableProjectRoots =
+          rewriteTapMarkers(rewrite, freshState.installations, cwd, unavailableBases) ||
+          unusableProjectRoots;
       // §5.4: entries that reached the same source through a narrower
       // auto tap move onto the incoming tap before the install runs, so
       // `performInstall` sees the attribution it is about to write.
@@ -180,7 +183,7 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
     return installed;
   }, home);
 
-  return { summary, alreadyInstalled, resolved: resolvedAll, skipped };
+  return { summary, alreadyInstalled, resolved: resolvedAll, skipped, unusableProjectRoots };
 }
 
 // Keep `RequiredByMap` exported under this module's name for consumers.
