@@ -100,9 +100,83 @@ jobs:
           echo "version=$new_version" >> "$GITHUB_OUTPUT"
           echo "tag=$candidate_tag" >> "$GITHUB_OUTPUT"
 
-  build-and-release:
+  secret-scan:
+    name: Scan release source
     needs: resolve
     if: needs.resolve.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+    env:
+      GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f # v8.30.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve publication source
+        id: source
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Prepare official Gitleaks image
+        run: docker image inspect "$GITLEAKS_IMAGE" >/dev/null 2>&1 || docker pull "$GITLEAKS_IMAGE"
+      - name: Scan publication history offline
+        env:
+          SCAN_HEAD: ${{ steps.source.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly FINDINGS_EXIT_CODE=20
+          readonly SCAN_TIMEOUT_SECONDS=300 # Leave time for checkout and image preparation.
+          [[ $(git rev-parse HEAD) == "$SCAN_HEAD" ]]
+          [[ $(git rev-parse --is-shallow-repository) == false ]]
+          range=$SCAN_HEAD
+          umask 077
+          report=$(mktemp -d)
+          trap 'rm -rf "$report"' EXIT
+          mkdir "$report/objects"
+          status=0
+          docker run --rm --pull=never --network none --user "$(id -u):$(id -g)" \
+            -e GIT_CONFIG_GLOBAL=/dev/null \
+            -v "$GITHUB_WORKSPACE:/repo:ro" -v "$report:/reports" \
+            -e GIT_CONFIG_COUNT=3 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo \
+            -e GIT_CONFIG_KEY_1=color.ui -e GIT_CONFIG_VALUE_1=false \
+            -e GIT_CONFIG_KEY_2=color.diff -e GIT_CONFIG_VALUE_2=false \
+            -e GIT_NO_REPLACE_OBJECTS=1 -e GIT_NO_LAZY_FETCH=1 \
+            -e GIT_OBJECT_DIRECTORY=/reports/objects -e GIT_ALTERNATE_OBJECT_DIRECTORIES=/repo/.git/objects \
+            "$GITLEAKS_IMAGE" git /repo \
+            --log-opts="$range --full-history --diff-merges=remerge --text --no-ext-diff --no-textconv" \
+            --redact=100 --no-banner --log-level error --timeout "$SCAN_TIMEOUT_SECONDS" --exit-code "$FINDINGS_EXIT_CODE" \
+            --report-format json --report-path /reports/findings.json \
+            >/dev/null 2>"$report/errors" || status=$?
+          # Upstream can log a Git-source error while returning zero.
+          if [[ "$status" == 125 || "$status" == 126 || "$status" == 127 ]]; then
+            echo "Secret scan could not start Docker or Gitleaks (exit $status)." >&2
+            exit 1
+          elif [[ -s "$report/errors" || ( "$status" != 0 && "$status" != "$FINDINGS_EXIT_CODE" ) ]]; then
+            category='scanner execution'
+            if grep -Eiq 'config|toml|allowlist' "$report/errors"; then
+              category='configuration'
+            elif grep -Eiq 'permission denied|read-only file system|report|no such file' "$report/errors"; then
+              category='filesystem/report'
+            elif grep -Eiq 'git|repository|revision|object|fatal:' "$report/errors"; then
+              category='Git history'
+            fi
+            echo "Secret scan error: $category (exit $status); raw diagnostics are withheld." >&2
+            exit 1
+          fi
+          jq -c '.[] | {rule: .RuleID, file: .File, line: .StartLine, commit: .Commit, "ignore-id": .Fingerprint}' "$report/findings.json"
+          count=$(jq length "$report/findings.json")
+          echo "finding-count=$count" >> "$GITHUB_OUTPUT"
+          echo "Gitleaks: $count potential finding(s). See docs/secret-scanning.md for remediation and native exceptions."
+          exit "$status"
+
+  build-and-release:
+    needs: [resolve, secret-scan]
+    if: needs.resolve.outputs.should_release == 'true' && needs.secret-scan.result == 'success'
     # Bun cross-compiles cleanly, so a Linux runner builds every
     # supported binary and saves on GitHub minutes.
     runs-on: ubuntu-latest
@@ -110,6 +184,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ needs.secret-scan.outputs.commit }}
           fetch-depth: 0
 
       # When the trigger isn't a tag push, create the tag pointing at
