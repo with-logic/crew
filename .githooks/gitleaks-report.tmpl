@@ -1,0 +1,2 @@
+{{ range . }}rule={{ printf "%q" .RuleID }} file={{ printf "%q" .File }} line={{ .StartLine }} ignore-id={{ printf "%q" .Fingerprint }}
+{{ end }}
