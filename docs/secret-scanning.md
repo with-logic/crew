@@ -83,7 +83,9 @@ release. Findings and scanner errors block publication.
 
 ## Local staged scans
 
-Install the native CLI once, then scan only the Git index:
+Install the native CLI once, then scan only the Git index. Homebrew installs
+its current version; use the [official 8.30.1 release](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1)
+when exact parity with CI is needed:
 
 ```sh
 brew install gitleaks
@@ -92,8 +94,10 @@ gitleaks git --pre-commit --staged --redact=100
 ```
 
 The native scan needs no network access. Disabling Git color prevents the 8.30.1
-diff parser from silently missing staged content. Use 8.30.1 for matching CI rules. Shared
-Utils hooks add this scan to existing linting in participating checkouts; their
-installation does not change this repository's hook configuration automatically.
-The organization-wide six-hour history sweep and Slack alerts are still rollout
-work; do not rely on them until activation is confirmed.
+diff parser from silently missing staged content. The [shared Utils hooks](https://github.com/with-logic/utils/tree/main/githooks)
+add this scan to existing linting in participating checkouts; follow their setup
+instructions to configure them. This change does not install a hook here, so
+run the staged command manually until one is configured.
+See the [rollout dashboard](https://github.com/with-logic/pipeline/issues/121)
+and [shared scanning guide](https://github.com/with-logic/pipeline/blob/main/docs/secret-scanning.md)
+for the organization-wide six-hour history sweep and Slack activation status.

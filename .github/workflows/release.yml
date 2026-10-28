@@ -170,8 +170,7 @@ jobs:
           fi
           jq -c '.[] | {rule: .RuleID, file: .File, line: .StartLine, commit: .Commit, "ignore-id": .Fingerprint}' "$report/findings.json"
           count=$(jq length "$report/findings.json")
-          echo "finding-count=$count" >> "$GITHUB_OUTPUT"
-          echo "Gitleaks: $count potential finding(s). See docs/secret-scanning.md for remediation and native exceptions."
+          echo "Secret scan: Gitleaks found $count potential finding(s). See docs/secret-scanning.md for remediation and native exceptions."
           exit "$status"
 
   build-and-release:
