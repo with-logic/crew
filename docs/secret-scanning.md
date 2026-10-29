@@ -11,8 +11,11 @@ credential patterns; it does not verify whether a match is a live, private secre
 PRs scan base-to-head history, so adding a credential and deleting it in a later
 commit still fails. Pushes scan the pushed range. First pushes to non-default
 branches scan from the merge base with the fetched default branch, excluding inherited history.
-Missing required bases fail. New tags, first default-branch pushes, and manual
-runs scan history reachable from the selected head.
+Missing required bases fail. In this audit workflow, new tag pushes, first
+default-branch pushes, and manual runs scan history reachable from the selected
+head and warn on historical findings during triage. Tag updates with a nonzero
+base SHA scan the pushed range and fail on findings. Separate publication and
+deployment gates remain strict.
 Ignored and untracked local files such as `.env` are outside the scan. A
 force-added or previously tracked `.env` is Git content and is checked.
 
@@ -31,6 +34,21 @@ The public log shows the rule, introducing commit, and line. Run native Gitleaks
 privately at that commit for the full path and **Ignore ID**; native redaction
 does not hide those fields. Inspect findings privately; do not paste possible
 credentials into PRs, Slack, or issues.
+
+To inspect history through a reported commit, replace `<introducing-commit>`
+with its SHA and run this privately from the repository root. It uses the
+current checkout's exceptions without changing your checkout:
+
+```sh
+GIT_NO_LAZY_FETCH=1 \
+GIT_CONFIG_PARAMETERS="${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }'color.ui=false' 'color.diff=false'" \
+gitleaks git . --redact=100 --verbose --no-color \
+  --log-opts='<introducing-commit> --full-history --diff-merges=remerge --text --no-ext-diff --no-textconv'
+```
+
+This scans committed history, not the staged diff. Paths and fingerprints
+(Ignore IDs) are private metadata; `--redact=100` does not redact them. Any
+reported scanner or Git error means no clean result was obtained.
 
 - **Real credential:** revoke or rotate it if exposed, replace it with an
   environment-variable or secret-store reference, and remove it from every
