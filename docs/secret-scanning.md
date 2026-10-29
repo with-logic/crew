@@ -1,14 +1,21 @@
 # Secret scanning
 
 The **Secret scan** check runs native, MIT-licensed Gitleaks 8.30.1 on PRs,
-branch/tag pushes, merge queues, and manual runs. Findings and scanner errors
-fail the check. Require this check in branch protection while preserving existing
-requirements. Gitleaks recognizes credential patterns; it does not verify whether
-a match is a live, private secret.
+branch/tag pushes, merge queues, and manual runs. PR, merge-queue, and pushed
+commit-range scans report failure on findings. Non-publication full-history
+audits temporarily warn while historical findings are reviewed. Scanner, Git,
+and configuration errors fail the job. Secret-scan results are advisory for
+merging to `main`; publication gates remain blocking. Gitleaks recognizes
+credential patterns; it does not verify whether a match is a live, private secret.
 
 PRs scan base-to-head history, so adding a credential and deleting it in a later
-commit still fails. Pushes scan the pushed range when the previous commit is
-available; new refs and manual runs scan history reachable from the selected head.
+commit still fails. Pushes scan the pushed range. First pushes to non-default
+branches scan from the merge base with the fetched default branch, excluding inherited history.
+Missing required bases fail. In this audit workflow, new tag pushes, first
+default-branch pushes, and manual runs scan history reachable from the selected
+head and warn on historical findings during triage. Tag updates with a nonzero
+base SHA scan the pushed range and fail on findings. Separate publication and
+deployment gates remain strict.
 Ignored and untracked local files such as `.env` are outside the scan. A
 force-added or previously tracked `.env` is Git content and is checked.
 
@@ -18,13 +25,30 @@ Gitleaks account or license signup is needed. A separate `pull_request_target`
 run uses trusted workflow code to scan PR data and comment on findings/errors,
 including fork PRs. It never runs project scripts, dependencies, or local actions.
 These comments start after the workflow reaches the default branch. They link to
-redacted metadata in the run log and never include detected values.
+rule, introducing commit, and line metadata. Detected values, raw paths, and
+Ignore IDs are omitted from public output.
 
 ## Investigate a finding
 
-The log shows the rule, file/line, introducing commit, and **Ignore ID**. Inspect
-the reported location privately; do not paste possible credentials into PRs,
-Slack, or issues.
+The public log shows the rule, introducing commit, and line. Run native Gitleaks
+privately at that commit for the full path and **Ignore ID**; native redaction
+does not hide those fields. Inspect findings privately; do not paste possible
+credentials into PRs, Slack, or issues.
+
+To inspect history through a reported commit, replace `<introducing-commit>`
+with its SHA and run this privately from the repository root. It uses the
+current checkout's exceptions without changing your checkout:
+
+```sh
+GIT_NO_LAZY_FETCH=1 \
+GIT_CONFIG_PARAMETERS="${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }'color.ui=false' 'color.diff=false'" \
+gitleaks git . --redact=100 --verbose --no-color \
+  --log-opts='<introducing-commit> --full-history --diff-merges=remerge --text --no-ext-diff --no-textconv'
+```
+
+This scans committed history, not the staged diff. Paths and fingerprints
+(Ignore IDs) are private metadata; `--redact=100` does not redact them. Any
+reported scanner or Git error means no clean result was obtained.
 
 - **Real credential:** revoke or rotate it if exposed, replace it with an
   environment-variable or secret-store reference, and remove it from every
@@ -41,11 +65,12 @@ Slack, or issues.
 Each repo owns its root `.gitleaks.toml` and `.gitleaksignore`. Native Gitleaks
 reads policy from the scanned checkout, including inline `gitleaks:allow`
 comments. A proposed exception can therefore affect its own PR scan. These
-changes need trusted human review, just like workflow changes; the required
-check does not technically enforce exception approval.
+changes need trusted human review, just like workflow changes; the scan does not
+technically enforce exception approval.
 
-For one historical finding, copy its complete Ignore ID into `.gitleaksignore`,
-one per line, with the reason and review reference on a separate comment line:
+For one historical finding, copy its complete Ignore ID from a private local scan
+into `.gitleaksignore`, one per line, with the reason and review reference on a
+separate comment line:
 
 ```text
 # Generated frontend demo value; reviewed in <review link>.
@@ -81,23 +106,46 @@ for main pushes, tag pushes, and manual runs. The build checks out that exact
 scanned commit before creating tags, signing binaries, or publishing the GitHub
 release. Findings and scanner errors block publication.
 
-## Local staged scans
+## Local Git hook
 
-Install the native CLI once, then scan only the Git index. Homebrew installs
-its current version; use the [official 8.30.1 release](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1)
-when exact parity with CI is needed:
+Use local staged scans only with trusted staged changes; native Git diff may
+invoke an already configured textconv driver.
+
+Install native Gitleaks once and activate this checkout's hooks from the
+repository root. Homebrew installs its current formula; use the
+[official 8.30.1 release](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1)
+for exact CI parity, and verify the installed version:
+
+Before setting `core.hooksPath`, inspect your active hooks (`git config --get
+core.hooksPath`, or the default `.git/hooks`). Setting it to `.githooks` replaces
+that hook directory. Migrate or chain existing hooks, or add
+`./.githooks/scan-secrets` to your existing `prepare-commit-msg` instead, before
+activating these hooks.
 
 ```sh
 brew install gitleaks
-GIT_CONFIG_PARAMETERS="${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }'color.ui=false' 'color.diff=false'" \
-gitleaks git --pre-commit --staged --redact=100
+gitleaks version
+git config core.hooksPath .githooks
 ```
 
-The native scan needs no network access. Disabling Git color prevents the 8.30.1
-diff parser from silently missing staged content. The [shared Utils hooks](https://github.com/with-logic/utils/tree/main/githooks)
-add this scan to existing linting in participating checkouts; follow their setup
-instructions to configure them. This change does not install a hook here, so
-run the staged command manually until one is configured.
-See the [rollout dashboard](https://github.com/with-logic/pipeline/issues/121)
-and [shared scanning guide](https://github.com/with-logic/pipeline/blob/main/docs/secret-scanning.md)
-for the organization-wide six-hour history sweep and Slack activation status.
+To run the staged check manually, use `./.githooks/scan-secrets`.
+
+The `prepare-commit-msg` hook scans staged changes after any normal pre-commit
+checks. `--no-verify` skips those pre-commit checks but still runs the scan.
+The scanner runs offline and never downloads tools during a commit. Ignored
+`.env` files, untracked files, and unstaged edits are excluded. Partially staged
+files are checked using their staged changes; force-added credentials are checked.
+Findings, a missing Gitleaks binary, and scanner errors block the commit.
+
+Stage root `.gitleaks.toml` and `.gitleaksignore` changes before committing;
+untracked policy files or unstaged policy changes block the scan. The reviewed,
+per-repository native exceptions above also apply to local scans. Quotes in
+hook output are display delimiters: copy a normal `ignore-id` into
+`.gitleaksignore` without those quotes. Prefer an exact-value TOML exception
+for recurring public/test fixtures.
+
+The hook scans text presented by native Git diff. Git attributes can mark paths
+as binary or apply textconv, changing what the hook sees. The separate CI commit
+scan forces text and disables textconv. See the
+[shared guide](https://github.com/with-logic/pipeline/blob/main/docs/secret-scanning.md)
+for remediation and native exceptions.
