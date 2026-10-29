@@ -172,10 +172,6 @@ jobs:
           jq -c '.[] | {rule: .RuleID, line: .StartLine, commit: .Commit}' "$report/findings.json"
           count=$(jq length "$report/findings.json")
           echo "Secret scan: Gitleaks found $count potential finding(s). See docs/secret-scanning.md for remediation and native exceptions."
-          if [[ "$status" == "$FINDINGS_EXIT_CODE" ]]; then
-            echo '::warning::Historical publication findings are temporarily warning-only; PR and pushed-range findings still block.'
-            exit 0
-          fi
           exit "$status"
 
   build-and-release:
