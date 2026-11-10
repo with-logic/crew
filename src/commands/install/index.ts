@@ -18,7 +18,7 @@ import type { CommandContext, CommandOutput } from "../types.ts";
 import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
-import { manifestForBareInstall, noAgentsOutcome } from "./manifest.ts";
+import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest.ts";
 import { syncManifestOwnership } from "./manifest-sync.ts";
 import { renderDropped } from "./render/dropped.ts";
 import { renderInstall } from "./render/index.ts";
@@ -46,6 +46,11 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   // §9.2: with nothing named on the command line, the project's manifest names the skills.
   const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";
   const manifest = isBare ? manifestForBareInstall(ctx) : null;
+  if (manifest?.entries.length === 0) {
+    // Declaring nothing still drops whatever the manifest used to own (§9.2).
+    const dropped = syncManifestOwnership(ctx, manifest.projectRoot, new Set());
+    return nothingToInstall(manifest, ctx, `${manifest.file} declares no skills.`, dropped);
+  }
   const kindHint = readKindHint(ctx);
   rejectRecursiveTapRefs(ctx);
   const config = readConfig(ctx.home);
@@ -62,7 +67,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   if (typeof fromGit === "string") refs.push(normalizeFromGit(fromGit, ctx.cwd));
   // A manifest's skills belong to its project: relative paths resolve
   // against the manifest's directory, which is also the project root.
-  const cwd = manifest?.root ?? ctx.cwd;
+  const cwd = manifest?.projectRoot ?? ctx.cwd;
   const installOptions = {
     refs,
     scope: manifest ? ("project" as const) : ctx.flags.scope,

@@ -6,7 +6,7 @@
  * higher up — a home directory's, say — never claims an unrelated project.
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { MANIFEST_FILENAME, type ManifestEntry, parseManifest } from "./parse.ts";
 
@@ -14,8 +14,8 @@ import { MANIFEST_FILENAME, type ManifestEntry, parseManifest } from "./parse.ts
 export interface Manifest {
   /** Absolute path of the `.crewrc` file. */
   readonly file: string;
-  /** The project root: the directory containing the manifest. */
-  readonly root: string;
+  /** The directory containing the manifest; skills install under it at project scope. */
+  readonly projectRoot: string;
   readonly entries: readonly ManifestEntry[];
 }
 
@@ -24,7 +24,9 @@ export function findManifest(cwd: string): string | null {
   let dir = resolve(cwd);
   for (;;) {
     const candidate = join(dir, MANIFEST_FILENAME);
-    if (statSync(candidate, { throwIfNoEntry: false })?.isFile()) return candidate;
+    // lstat, not stat: a symlinked `.crewrc` is not a manifest. Following one
+    // would read whatever file a checkout chose to point it at.
+    if (lstatSync(candidate, { throwIfNoEntry: false })?.isFile()) return candidate;
     const parent = dirname(dir);
     if (parent === dir || existsSync(join(dir, ".git"))) return null;
     dir = parent;
@@ -35,7 +37,7 @@ export function findManifest(cwd: string): string | null {
 export function loadManifest(file: string): Manifest {
   return {
     file,
-    root: dirname(file),
+    projectRoot: dirname(file),
     entries: parseManifest({ text: readFileSync(file, "utf8"), file }),
   };
 }
