@@ -65,6 +65,8 @@ export function buildStateEntry(
     explicit,
     ...(tracksTap ? { tracks_tap: true } : {}),
     required_by,
+    // Manifest ownership survives a reinstall or update of the skill (§9.2).
+    ...(existing?.manifest === true ? { manifest: true } : {}),
     ...(scope === "project" ? { project_root: cwd } : {}),
   };
 }

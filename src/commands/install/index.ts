@@ -18,6 +18,8 @@ import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall } from "./manifest.ts";
+import { syncManifestOwnership } from "./manifest-sync.ts";
+import { renderDropped } from "./render/dropped.ts";
 import { renderInstall } from "./render/index.ts";
 
 /** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
@@ -97,18 +99,29 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     exitCode = 1; // Zero succeeded; purely operational failures.
   }
 
-  const human = renderInstall(
-    {
-      records: result.summary.records,
-      alreadyInstalled: result.alreadyInstalled,
-      resolved: result.resolved,
-      skipped: result.skipped,
-      dryRun: ctx.flags.dryRun,
-      cwd,
-      width: ctx.width,
-    },
-    ctx.style,
-  );
+  // §9.2: a manifest owns what it declares and drops what it stops
+  // declaring — but only once everything it does declare has landed.
+  const removed =
+    manifest && failed === 0
+      ? syncManifestOwnership(ctx, cwd, new Set(result.resolved.map((skill) => skill.name)))
+      : [];
+  if (removed.some((record) => record.failures.length > 0)) exitCode = 1;
+
+  const human = [
+    ...renderInstall(
+      {
+        records: result.summary.records,
+        alreadyInstalled: result.alreadyInstalled,
+        resolved: result.resolved,
+        skipped: result.skipped,
+        dryRun: ctx.flags.dryRun,
+        cwd,
+        width: ctx.width,
+      },
+      ctx.style,
+    ),
+    ...renderDropped(removed, ctx),
+  ];
 
   const warnings = discovery.warnings();
   return {
@@ -120,7 +133,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       records: result.summary.records,
       skipped: result.skipped,
       dry_run: ctx.flags.dryRun,
-      ...(manifest ? { manifest: manifest.file } : {}),
+      ...(manifest ? { manifest: manifest.file, removed } : {}),
       ...(warnings.length > 0 ? { warnings } : {}),
     },
   };
