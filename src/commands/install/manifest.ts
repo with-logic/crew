@@ -10,7 +10,9 @@
 import { CrewError } from "../../core/errors.ts";
 import { findManifest, loadManifest, type Manifest } from "../../manifest/load.ts";
 import { MANIFEST_FILENAME } from "../../manifest/parse.ts";
-import type { CommandContext } from "../types.ts";
+import type { CommandContext, CommandOutput } from "../types.ts";
+import type { UninstallRecord } from "../uninstall/core.ts";
+import { renderDropped } from "./render/dropped.ts";
 
 /** Flags that reinterpret references; meaningless without references on the command line. */
 const REFERENCE_FLAGS = ["recursive", "tap", "bundle", "skill"] as const;
@@ -27,7 +29,7 @@ export function manifestForBareInstall(ctx: CommandContext): Manifest {
   if (ctx.flags.scopeGiven && ctx.flags.scope === "user") {
     throw new CrewError(
       "usage_error",
-      `\`crew install\` with no references installs \`${MANIFEST_FILENAME}\` at project scope — \`--scope user\` needs explicit references`,
+      `\`crew install\` with no references installs the skills listed in \`${MANIFEST_FILENAME}\` at project scope — \`--scope user\` needs explicit references`,
     );
   }
   for (const flag of REFERENCE_FLAGS) {
@@ -38,4 +40,30 @@ export function manifestForBareInstall(ctx: CommandContext): Manifest {
     );
   }
   return loadManifest(file);
+}
+
+/**
+ * The outcome of a bare install that has nothing to install (§9.2).
+ * Decided before agents are selected or any source is touched, so it
+ * succeeds on a machine with no agent at all. `removed` reports skills
+ * dropped because the manifest no longer declares them.
+ */
+export function nothingToInstall(
+  manifest: Manifest,
+  ctx: CommandContext,
+  human: string,
+  removed: readonly UninstallRecord[],
+): CommandOutput {
+  return {
+    exitCode: removed.some((record) => record.failures.length > 0) ? 1 : 0,
+    human: [human, ...renderDropped(removed, ctx)],
+    json: {
+      already_installed: [],
+      records: [],
+      skipped: [],
+      dry_run: ctx.flags.dryRun,
+      manifest: manifest.file,
+      removed,
+    },
+  };
 }
