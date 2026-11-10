@@ -30,10 +30,18 @@ export interface ManifestEntry {
 const TAP_REASON =
   "names a skill through a tap, which depends on each machine's configured taps; " +
   "use a git source such as `@owner/repo//path` or a path inside the project";
-const tick = (ref: string): string => `\`${ref}\``;
+const wrapInBackticks = (ref: string): string => `\`${ref}\``;
 
-/** Parse manifest `text` read from the absolute path `file`. */
-export function parseManifest(text: string, file: string): readonly ManifestEntry[] {
+/** A manifest's contents and where they were read from. */
+export interface ManifestInput {
+  /** The manifest's full text. */
+  readonly text: string;
+  /** Absolute path of the manifest; its directory is the project root. */
+  readonly file: string;
+}
+
+/** Parse a manifest's text into its declared references. */
+export function parseManifest({ text, file }: ManifestInput): readonly ManifestEntry[] {
   const root = dirname(file);
   const entries: ManifestEntry[] = [];
   const firstLineOf = new Map<string, number>();
@@ -50,7 +58,7 @@ export function parseManifest(text: string, file: string): readonly ManifestEntr
       });
     };
     const earlier = firstLineOf.get(ref);
-    if (earlier !== undefined) reject(`${tick(ref)} repeats line ${earlier}`);
+    if (earlier !== undefined) reject(`${wrapInBackticks(ref)} repeats line ${earlier}`);
     firstLineOf.set(ref, line);
     entries.push({ line, ref, source: parsePortable(ref, root, reject) });
   }
@@ -70,14 +78,16 @@ function parsePortable(
     // parseRef reports a malformed reference as an Error whose message names it.
     return reject((err as Error).message);
   }
-  if (source.type === "tap") return reject(`${tick(ref)} ${TAP_REASON}`);
+  if (source.type === "tap") return reject(`${wrapInBackticks(ref)} ${TAP_REASON}`);
   if (source.type === "git") return source;
   if (!(ref.startsWith("./") || ref.startsWith("../"))) {
-    return reject(`${tick(ref)} must be a path relative to the project, starting with \`./\``);
+    return reject(
+      `${wrapInBackticks(ref)} must be a path relative to the project, starting with \`./\``,
+    );
   }
   const fromRoot = relative(root, source.path);
   if (fromRoot === ".." || fromRoot.startsWith(`..${sep}`)) {
-    return reject(`${tick(ref)} points outside the project`);
+    return reject(`${wrapInBackticks(ref)} points outside the project`);
   }
   return source;
 }
