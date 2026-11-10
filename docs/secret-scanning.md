@@ -11,6 +11,7 @@ credential patterns; it does not verify whether a match is a live, private secre
 PRs scan base-to-head history, so adding a credential and deleting it in a later
 commit still fails. Pushes scan the pushed range. First pushes to non-default
 branches scan from the merge base with the fetched default branch, excluding inherited history.
+Force-pushes to non-default branches do the same, because the replaced head is no longer fetched.
 Missing required bases fail. In this audit workflow, new tag pushes, first
 default-branch pushes, and manual runs scan history reachable from the selected
 head and warn on historical findings during triage. Tag updates with a nonzero

@@ -52,7 +52,8 @@ test("module fixtures remain usable across tests", () => {
           },
         );
         expect(result.exitCode).toBe(fail ? 1 : 0);
-        expect(result.stderr.toString()).toContain("module fixtures remain usable across tests");
+        // The summary, not a per-test line: Bun omits passing-test lines under an AI agent.
+        expect(result.stderr.toString()).toContain("Ran 2 tests across 1 file");
         expect(readdirSync(childTmp)).toEqual(["crew-unowned"]);
         expect(statSync(join(childTmp, "crew-unowned")).mode & 0o777).toBe(0o500);
       },
