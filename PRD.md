@@ -1497,6 +1497,25 @@ command exit 1.
 uninstall record (§7.4) per skill removed or attempted, empty when there are
 none. Human output lists them under a heading that names `.crewrc`.
 
+**As a project setup step.** A project may run bare `crew install` from its
+own setup (an npm `postinstall` script, a Makefile target), so it runs on every
+machine and every time. Three properties make that safe:
+
+- **No active agent.** When no `--agent` was given and the agent set of §9
+  step 7 would be empty, a bare install exits 0, reports that there is nothing
+  to install into, and MUST NOT acquire, clone, or fetch any source. A CI
+  runner with no agent and no access to a private skill repository therefore
+  succeeds. The `--json` result carries `no_agents: true` and empty `records`,
+  `already_installed`, `skipped`, and `removed`. With `--agent`, an empty agent
+  set remains `no_agents` (§13): the user asked for a specific agent.
+- **Nothing to do.** When every declared skill is already installed at its
+  declared source, a bare install MUST succeed without reaching any git
+  source, so it works offline and when a source has since become unreachable.
+- **All or nothing.** When any declared reference cannot be acquired, the
+  command fails with that reference's error (`source_unreachable`, exit 5, for
+  an unreachable source) and installs none of the manifest's other skills. A
+  project is never left with part of its manifest.
+
 ## 10. Update and autoupdate
 
 ### 10.1 `crew update`
@@ -3438,6 +3457,10 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-19 | §9.2, §7.4 | A dropped skill whose removal aborts on a §7.4 safety check keeps its files and state entry, is reported, and the command exits 1. |
 | C-RC-20 | §9.2 | When a declared reference fails to install, nothing is removed, including skills whose lines were dropped. |
 | C-RC-21 | §9.2, §11.1 | `manifest: true` survives `crew update` of the skill, so a later dropped line still removes it. |
+| C-RC-22 | §9.2 | With no active agent and no `--agent`, bare `crew install` exits 0 with `no_agents: true` in `--json`, and acquires no source: it succeeds even when a declared source is unreachable. |
+| C-RC-23 | §9.2, §13 | With no active agent, bare `crew install --agent <name>` fails with `no_agents`, exit 4. |
+| C-RC-24 | §9.2 | When every declared skill is already installed, bare `crew install` exits 0 even though the declared git source can no longer be reached. |
+| C-RC-25 | §9.2 | When one declared source is unreachable, bare `crew install` fails with `source_unreachable`, exit 5, and installs none of the manifest's other skills. |
 
 ### 18.4 Worked examples
 

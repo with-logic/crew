@@ -10,7 +10,7 @@
 import { CrewError } from "../../core/errors.ts";
 import { findManifest, loadManifest, type Manifest } from "../../manifest/load.ts";
 import { MANIFEST_FILENAME } from "../../manifest/parse.ts";
-import type { CommandContext } from "../types.ts";
+import type { CommandContext, CommandOutput } from "../types.ts";
 
 /** Flags that reinterpret references; meaningless without references on the command line. */
 const REFERENCE_FLAGS = ["recursive", "tap", "bundle", "skill"] as const;
@@ -38,4 +38,27 @@ export function manifestForBareInstall(ctx: CommandContext): Manifest {
     );
   }
   return loadManifest(file);
+}
+
+/**
+ * The outcome of a bare install on a machine with no active agent (§9.2).
+ *
+ * A project's setup step runs `crew install` everywhere, including CI
+ * runners that have no agent and often no access to the skill sources.
+ * There is nothing to install into, so this succeeds without touching one.
+ */
+export function noAgentsOutcome(manifest: Manifest, ctx: CommandContext): CommandOutput {
+  return {
+    exitCode: 0,
+    human: [`No agent coders detected — nothing to install from ${manifest.file}.`],
+    json: {
+      already_installed: [],
+      records: [],
+      skipped: [],
+      dry_run: ctx.flags.dryRun,
+      manifest: manifest.file,
+      removed: [],
+      no_agents: true,
+    },
+  };
 }
