@@ -36,6 +36,6 @@ export function loadManifest(file: string): Manifest {
   return {
     file,
     root: dirname(file),
-    entries: parseManifest(readFileSync(file, "utf8"), file),
+    entries: parseManifest({ text: readFileSync(file, "utf8"), file }),
   };
 }
