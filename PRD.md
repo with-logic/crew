@@ -57,6 +57,8 @@ Homecrew installs skills by copying files into each agent tool's expected direct
 
 **State.** The ledger at `~/.crew/state.json` recording every installed skill.
 
+**Manifest.** A file named `.crewrc` at a project root listing the skills that project expects, one reference per line (§9.2).
+
 **Marker.** A file named `.crew.json` written inside each installed skill directory (at the agent location), recording what Homecrew installed there.
 
 ## 4. Skill format
@@ -1385,6 +1387,49 @@ matching installed state.
 Source previews include the aggregate Git discovery warning from §9 step 5
 when applicable. Installed-state info performs no discovery and adds no warning.
 
+### 9.2 Project manifest (`.crewrc`)
+
+A project manifest is a file named `.crewrc` that lists the skills a project
+expects. It is meant to be checked in, so its contents MUST mean the same thing
+on every machine that reads it.
+
+**Format.** The file is UTF-8 text read line by line:
+
+- Leading and trailing whitespace on a line is ignored, including the carriage
+  return of a CRLF line ending. A byte-order mark at the start of the file is
+  ignored.
+- A line that is empty after trimming is ignored.
+- A line whose first character after trimming is `#` is a comment and is
+  ignored. A `#` anywhere else is part of the reference.
+- Every other line is exactly one skill reference in the grammar of §8.4, as
+  it would be written on the `crew install` command line.
+
+There are no other keys, sections, or settings. A manifest with no reference
+lines is valid and declares no skills.
+
+**Accepted references.** A manifest line MUST be one of:
+
+- A git source (§8.2), in any form §8.4 accepts.
+- A path source (§8.1) written relative to the manifest, starting with `./` or
+  `../`, that resolves to the manifest's directory or a location beneath it.
+  The path is resolved against the directory containing the manifest, never
+  against the working directory.
+
+**Rejected references.** Each of the following makes the manifest invalid:
+
+- A tap source (§8.3) — a bare skill name, a tap-qualified name, or a tap
+  name. Its meaning depends on the taps each machine has configured.
+- An absolute path, or a path starting with `~`.
+- A relative path that resolves outside the manifest's directory.
+- A line that is not a valid reference under §8.4.
+- A line identical, after trimming, to an earlier reference line.
+
+An invalid manifest fails with `manifest_invalid` (§13). The message MUST name
+the manifest file and the 1-based line number, and the `--json` `details`
+object MUST carry `file` (the manifest's absolute path), `line`, and `ref`
+(the line as written, trimmed). A manifest is valid or invalid as a whole: an
+implementation MUST NOT act on the valid lines of an invalid manifest.
+
 ## 10. Update and autoupdate
 
 ### 10.1 `crew update`
@@ -2293,6 +2338,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 | `not_installed_here` | 6 | Uninstall agent has no marker. |
 | `no_agents` | 4 | No agent tools detected or all disabled. |
 | `config_invalid` | 4 | `config.yaml` did not parse, or a tap name is not a single directory component (contains `/`, `\`, or is `.`/`..`). |
+| `manifest_invalid` | 4 | A project manifest (`.crewrc`) contains a line that is not an accepted reference, or repeats a line (§9.2). |
 | `state_locked` | 7 | Could not acquire a coordination lock within the timeout — the state lock (`state.json.lock`), maintenance lock, per-repository clone lock, or shared physical-target lock (§14). |
 | `autoupdate_failure` | 8 | Autoupdate enable/disable couldn't load/unload the platform scheduler. |
 | `self_update_unavailable` | 5 | `crew self-update` couldn't reach the release feed, the asset is missing for the current arch, or the named `--version` doesn't exist. |
@@ -2500,7 +2546,7 @@ Homecrew mutates state from multiple entry points (interactive commands, autoupd
 | 0 | Success, or partial success where every attempted skill — every root named on the command line plus every dependency pulled in with it — succeeded in at least one agent. |
 | 1 | General failure; used when `crew update` has any skill hard-fail. |
 | 2 | Reserved. Not emitted by any command today. (Earlier drafts assigned it to "nothing was attempted"; those cases are exit 0 when everything was already installed — §5.4, §9 step 9 — and exit 4 `no_skills_found` when a source expands to nothing.) |
-| 4 | User error: invalid arguments, invalid skill, unresolvable references, no agents available, config invalid. |
+| 4 | User error: invalid arguments, invalid skill, unresolvable references, no agents available, config invalid, manifest invalid. |
 | 5 | Network / source failure: could not reach git, ref does not exist, release feed unreachable. |
 | 6 | Safety-check abort: untracked directory, customized skill, bad marker. |
 | 7 | Could not acquire a coordination lock (§14). |

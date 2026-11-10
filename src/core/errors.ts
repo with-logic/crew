@@ -27,6 +27,7 @@ export type CrewErrorName =
   | "not_installed_here"
   | "no_agents"
   | "config_invalid"
+  | "manifest_invalid"
   | "state_locked"
   | "autoupdate_failure"
   | "self_update_unavailable"
@@ -58,6 +59,7 @@ export const EXIT_CODES: Record<CrewErrorName, number> = {
   not_installed_here: 6,
   no_agents: 4,
   config_invalid: 4,
+  manifest_invalid: 4,
   state_locked: 7,
   autoupdate_failure: 8,
   self_update_unavailable: 5,

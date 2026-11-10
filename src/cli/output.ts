@@ -147,6 +147,8 @@ const REMEDIES: Partial<Record<CrewErrorName, string>> = {
     "No agent coders are active. Run `crew agents` to see detection status, or `crew agents enable <name>` to force one on.",
   config_invalid:
     "Homecrew couldn't parse `~/.crew/config.yaml`. Fix the YAML or delete the file to get defaults back.",
+  manifest_invalid:
+    "Fix that line of `.crewrc`. Each line is one git source (`@owner/repo`, `gh:owner/repo//path@v1.2.0`) or a path inside the project (`./skills/foo`); a line starting with `#` is a comment.",
   state_locked:
     "Another `crew` process is holding the lock. Wait a few seconds and try again; if it's really stuck, run `crew doctor --repair`.",
   autoupdate_failure:

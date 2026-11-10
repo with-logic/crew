@@ -126,6 +126,7 @@ src/
 ├── refs/                 # skill reference parser (§8)
 ├── sources/              # acquire path/git/tap, store staging, expand
 ├── install/              # install flow (resolve deps, perform installs)
+├── manifest/             # project manifest (.crewrc) parsing (§9.2)
 ├── agents/               # adapter interface + per-agent adapters (claude-code/codex/…)
 ├── git/                  # git exec seam + high-level repo ops
 ├── hash/                 # content hashing (§12.1)
