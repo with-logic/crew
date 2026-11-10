@@ -8,9 +8,11 @@ import { MANIFEST_FILENAME, parseManifest } from "../../src/manifest/parse.ts";
 
 const FILE = `/work/app/${MANIFEST_FILENAME}`;
 
+const parse = (text: string) => parseManifest({ text, file: FILE });
+
 function rejection(text: string): CrewError {
   try {
-    parseManifest(text, FILE);
+    parse(text);
   } catch (err) {
     return err as CrewError;
   }
@@ -19,17 +21,17 @@ function rejection(text: string): CrewError {
 
 describe("parseManifest: line format", () => {
   test("an empty manifest declares nothing", () => {
-    expect(parseManifest("", FILE)).toEqual([]);
-    expect(parseManifest("\n\n  \n", FILE)).toEqual([]);
+    expect(parse("")).toEqual([]);
+    expect(parse("\n\n  \n")).toEqual([]);
   });
 
   test("blank lines and # comment lines are ignored", () => {
     const text = "# shared skills\n\n@acme/skills\n   # indented comment\n";
-    expect(parseManifest(text, FILE).map((e) => e.ref)).toEqual(["@acme/skills"]);
+    expect(parse(text).map((e) => e.ref)).toEqual(["@acme/skills"]);
   });
 
   test("each entry keeps its 1-based line number and its reference as written", () => {
-    const entries = parseManifest("# one\n@acme/skills\n\ngh:acme/tools//pdf@v1\n", FILE);
+    const entries = parse("# one\n@acme/skills\n\ngh:acme/tools//pdf@v1\n");
     expect(entries.map((e) => [e.line, e.ref])).toEqual([
       [2, "@acme/skills"],
       [4, "gh:acme/tools//pdf@v1"],
@@ -37,17 +39,21 @@ describe("parseManifest: line format", () => {
   });
 
   test("surrounding whitespace, CRLF line endings, and a leading BOM are not part of a reference", () => {
-    const entries = parseManifest("﻿  @acme/skills\t\r\n./skills/pdf\r\n", FILE);
+    const entries = parse("﻿  @acme/skills\t\r\n./skills/pdf\r\n");
     expect(entries.map((e) => e.ref)).toEqual(["@acme/skills", "./skills/pdf"]);
   });
 
   test("a # inside a line is part of the reference, not a comment", () => {
-    const [entry] = parseManifest("./skills/c#\n", FILE);
+    const [entry] = parse("./skills/c#\n");
     expect(entry?.source).toEqual({ type: "path", path: "/work/app/skills/c#" });
   });
 
-  test("a repeated line is rejected, naming both lines", () => {
-    const err = rejection("@acme/skills\n# again\n@acme/skills\n");
+  test("a final line with no newline is still a reference", () => {
+    expect(parse("@acme/skills").map((e) => [e.line, e.ref])).toEqual([[1, "@acme/skills"]]);
+  });
+
+  test("a line repeated after trimming is rejected, naming both lines", () => {
+    const err = rejection("@acme/skills\n# again\n  @acme/skills\t\n");
     expect(err.code).toBe("manifest_invalid");
     expect(err.message).toContain("line 3");
     expect(err.message).toContain("repeats line 1");
@@ -56,7 +62,7 @@ describe("parseManifest: line format", () => {
 
 describe("parseManifest: accepted references", () => {
   test("git sources parse exactly as they do on the command line", () => {
-    const entries = parseManifest("@acme/skills\ngh:acme/tools@v1.4.0//skills/pdf\n", FILE);
+    const entries = parse("@acme/skills\ngh:acme/tools@v1.4.0//skills/pdf\n");
     expect(entries.map((e) => e.source)).toEqual([
       { type: "git", url: "https://github.com/acme/skills.git", ref: null, subpath: "" },
       {
@@ -69,15 +75,16 @@ describe("parseManifest: accepted references", () => {
   });
 
   test("a relative path resolves against the manifest's directory, not the working directory", () => {
-    const [entry] = parseManifest("./tools/skills/notes\n", FILE);
+    const [entry] = parse("./tools/skills/notes\n");
     expect(entry?.source).toEqual({ type: "path", path: "/work/app/tools/skills/notes" });
   });
 
   test("a path may use .. as long as it stays inside the project", () => {
-    const entries = parseManifest("./a/../skills/pdf\n./\n", FILE);
+    const entries = parse("./a/../skills/pdf\n./\n../app/skills/docx\n");
     expect(entries.map((e) => e.source)).toEqual([
       { type: "path", path: "/work/app/skills/pdf" },
       { type: "path", path: "/work/app" },
+      { type: "path", path: "/work/app/skills/docx" },
     ]);
   });
 });
@@ -105,6 +112,6 @@ describe("parseManifest: rejected references", () => {
   }
 
   test("nothing is returned when any line is invalid", () => {
-    expect(() => parseManifest("@acme/skills\npython-testing\n", FILE)).toThrow(CrewError);
+    expect(() => parse("@acme/skills\npython-testing\n")).toThrow(CrewError);
   });
 });
