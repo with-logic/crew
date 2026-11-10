@@ -2,13 +2,14 @@ import type { CommandHelp } from "./types.ts";
 
 export const installHelp: CommandHelp = {
   name: "install",
-  synopsis: "crew install <skill> [<skill>...] | crew install --from-git <source>",
+  synopsis: "crew install <skill> [<skill>...] | crew install --from-git <source> | crew install",
   summary: [
     "Install a skill and make it available in every agent coder on your machine.",
     "Homecrew installs the same skill into every supported agent coder you have — Claude Code, Codex, Cursor, Gemini, and more. One command, all your agents. You don't have to think about where the skill goes; Homecrew figures out the right place for each tool.",
     "You can install by name (from a collection you've already added), by GitHub URL, from any git repo, or from a local folder — see REFERENCE FORMS below for the full list of shapes you can pass.",
     "If a name isn't in your taps but appears in a trusted tap you haven't added yet, Homecrew tells you the tap to add first.",
     "Point at a folder full of skills and you get all of them at once. New ones added later show up automatically when you run `crew update`.",
+    "Run `crew install` with nothing after it inside a project that has a `.crewrc` file, and Homecrew installs the skills that file lists, just for that project. A `.crewrc` is a plain list: one git reference or in-project path per line, with `#` for comments.",
   ],
   flags: [
     {
@@ -73,6 +74,10 @@ export const installHelp: CommandHelp = {
     {
       command: "crew install --from-git acme/skills",
       description: "Force a git interpretation: `acme/skills` is the GitHub repo, not a tap.",
+    },
+    {
+      command: "crew install",
+      description: "Install the skills listed in this project's `.crewrc`.",
     },
     {
       command: "crew install --scope project team/conventions",
