@@ -1436,7 +1436,11 @@ implementation MUST NOT act on the valid lines of an invalid manifest.
 
 1. **Find the manifest.** Starting at the working directory and moving up one
    directory at a time, the first directory containing a regular file named
-   `.crewrc` supplies the manifest. The search stops, without a result, after
+   `.crewrc` supplies the manifest. A symbolic link named `.crewrc` is not a
+   manifest and MUST NOT be followed or read: a checkout could otherwise point
+   it at any readable file and have that file's contents echoed in a
+   `manifest_invalid` diagnostic. A directory named `.crewrc` is not a
+   manifest either. The search stops, without a result, after
    checking a directory that contains a `.git` entry (a repository root) or
    the filesystem root. A manifest above a repository root therefore never
    governs that repository. With no manifest the command is a `usage_error`
@@ -1452,7 +1456,8 @@ implementation MUST NOT act on the valid lines of an invalid manifest.
 The existing rules apply to each reference unchanged: a skill already
 installed at the declared source and commit is reported as already installed
 (§5.4), so a repeat run with nothing new exits 0 and writes nothing. A manifest
-that declares no skills installs nothing and exits 0.
+that declares no skills installs nothing and exits 0; that is decided before
+agents are selected, so it holds on a machine with no active agent.
 
 A bare install is always project scope. `--scope user` with no references is a
 `usage_error`; `--scope project` is accepted and redundant. Flags that change
@@ -3376,13 +3381,13 @@ Implementations and test suites refer to criteria by ID.
 | ID | Ref | Assertion |
 |---|---|---|
 | C-RC-01 | §9.2 | Bare `crew install` installs every skill the manifest declares, from git and in-project path lines alike, at project scope under the manifest's directory; nothing is written at user scope and each state entry's `project_root` is the manifest's directory. |
-| C-RC-02 | §9.2 | Run from a subdirectory, bare `crew install` uses the nearest manifest above it; skills land under the manifest's directory, not the working directory, and relative path lines resolve against the manifest's directory. |
+| C-RC-02 | §9.2 | Run from a subdirectory, bare `crew install` uses the nearest manifest above it; skills land under the manifest's directory, not the working directory, and relative path lines resolve against the manifest's directory. With manifests at two levels, only the nearest is used. |
 | C-RC-03 | §9.2, §5.4 | A repeat bare `crew install` with nothing new exits 0, reports the skills as already installed, and installs nothing. Its `--json` result carries `manifest`, the manifest's absolute path. |
-| C-RC-04 | §9.2 | A manifest with no reference lines installs nothing and exits 0. |
+| C-RC-04 | §9.2 | A manifest with no reference lines installs nothing and exits 0, including when no agent is active. |
 | C-RC-05 | §9.2, §5.2 | Bare `crew install --dry-run` reports the declared skills and writes no skill and no state. |
 | C-RC-06 | §9.2 | Bare `crew install` with no manifest at or above the working directory is a `usage_error`, exit 4, whose message mentions `.crewrc`. |
-| C-RC-07 | §9.2 | A manifest above a repository root does not govern that repository: bare `crew install` inside the repository is a `usage_error` and installs nothing. |
-| C-RC-08 | §9.2 | A directory named `.crewrc` is not a manifest. |
+| C-RC-07 | §9.2 | A manifest above a repository root does not govern that repository, whether the root's `.git` entry is a directory or a file: bare `crew install` inside the repository is a `usage_error` and installs nothing. |
+| C-RC-08 | §9.2 | A directory named `.crewrc` is not a manifest. A symbolic link named `.crewrc` is not a manifest, and its target's contents never appear in output. |
 | C-RC-09 | §9.2, §13 | An invalid manifest fails with `manifest_invalid`, exit 4, with `details` carrying `file`, `line`, and `ref`; none of its lines is installed, including valid ones. |
 | C-RC-10 | §9.2 | Bare `crew install --scope user` is a `usage_error` and installs nothing; bare `crew install --scope project` behaves as bare `crew install`. |
 | C-RC-11 | §9.2 | Bare `crew install --recursive` is a `usage_error` and installs nothing. |

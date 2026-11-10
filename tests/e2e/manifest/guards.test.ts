@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
@@ -27,22 +27,45 @@ describe("bare crew install guards", () => {
     expect(run.stderr).toContain(".crewrc");
   });
 
-  test("C-RC-07 a manifest above the repository root does not govern the repository", () => {
-    const home = makeCrewHome();
-    const outer = makeProject(["./tools/gamma"]);
-    addLocalSkill(outer, "tools", "gamma");
-    const repo = join(outer, "repo");
-    mkdirSync(join(repo, ".git"), { recursive: true });
-    mkdirSync(join(repo, "src"));
+  for (const kind of ["directory", "file"] as const) {
+    test(`C-RC-07 a manifest above a repository root (.git ${kind}) does not govern the repository`, () => {
+      const home = makeCrewHome();
+      const outer = makeProject(["./tools/gamma"]);
+      addLocalSkill(outer, "tools", "gamma");
+      const repo = join(outer, "repo");
+      mkdirSync(join(repo, "src"), { recursive: true });
+      // A worktree's `.git` is a file; a clone's is a directory.
+      if (kind === "directory") mkdirSync(join(repo, ".git"));
+      else writeFileSync(join(repo, ".git"), "gitdir: elsewhere\n");
 
-    expect(crew(home, join(repo, "src"), ["install"]).code).toBe(4);
-    expect(installed(home)).toEqual([]);
-  });
+      const run = crew(home, join(repo, "src"), ["install", "--json"]);
+
+      expect(run.code).toBe(4);
+      expect((JSON.parse(run.stdout) as { error: { name: string } }).error.name).toBe(
+        "usage_error",
+      );
+      expect(installed(home)).toEqual([]);
+    });
+  }
 
   test("C-RC-08 a directory named .crewrc is not a manifest", () => {
     const project = makeTempDir("crew-proj-");
     mkdirSync(join(project, ".crewrc"));
     expect(crew(makeCrewHome(), project, ["install"]).code).toBe(4);
+  });
+
+  test("C-RC-08 a symbolic link named .crewrc is not a manifest and is never read", () => {
+    const home = makeCrewHome();
+    const project = makeTempDir("crew-proj-");
+    const target = join(makeTempDir("crew-secret-"), "secrets.env");
+    writeFileSync(target, "API_TOKEN=do-not-print\n");
+    symlinkSync(target, join(project, ".crewrc"));
+
+    const run = crew(home, project, ["install", "--json"]);
+
+    expect(run.code).toBe(4);
+    expect((JSON.parse(run.stdout) as { error: { name: string } }).error.name).toBe("usage_error");
+    expect(run.stdout + run.stderr).not.toContain("do-not-print");
   });
 
   test("C-RC-09 an invalid manifest is manifest_invalid and installs none of its lines", () => {
