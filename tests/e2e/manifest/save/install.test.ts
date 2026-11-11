@@ -18,6 +18,7 @@ import {
   ownedNames,
   skillDir,
 } from "../helpers.ts";
+import { manifestOf } from "./helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -26,8 +27,6 @@ beforeEach(() => {
 afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
-
-const manifestOf = (project: string): string => readFileSync(join(project, ".crewrc"), "utf8");
 
 describe("crew install --save", () => {
   test("C-RC-51 adds the reference to .crewrc, installs it, and the manifest owns it", () => {

@@ -10,6 +10,7 @@ import { makeCrewHome } from "../../../helpers/env.ts";
 import { makeSkill, makeTempDir } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import { addLocalSkill, crew, installed, makeProject, makeSkillRepo } from "../helpers.ts";
+import { manifestOf, projectWithTwoSkills } from "./helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -18,8 +19,6 @@ beforeEach(() => {
 afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
-
-const manifestOf = (project: string): string => readFileSync(join(project, ".crewrc"), "utf8");
 
 describe("crew install --save that does not go through", () => {
   test.each([
@@ -95,10 +94,7 @@ describe("crew install --save that does not go through", () => {
 
   test("C-RC-53 a failed run that had nothing to add still puts the lockfile back", () => {
     const home = makeCrewHome();
-    const alpha = makeSkillRepo(["alpha"]);
-    const beta = makeSkillRepo(["beta"]);
-    const project = makeProject([alpha, beta]);
-    expect(crew(home, project, ["install"]).code).toBe(0);
+    const { project, alpha, beta } = projectWithTwoSkills(home);
     // beta's line is dropped but its skill cannot be removed, so the next install exits 1.
     writeFileSync(join(project, ".crewrc"), `${alpha}\n`);
     rmSync(join(project, ".claude", "skills", "beta", ".crew.json"));

@@ -21,11 +21,20 @@ afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
 
+/** The skill file and marker of each installed skill, as text. */
+function installedFilesOf(project: string): string[] {
+  return ["alpha", "beta"].flatMap((name) => [
+    readFileSync(join(skillDir(project, name), "SKILL.md"), "utf8"),
+    readFileSync(join(skillDir(project, name), ".crew.json"), "utf8"),
+  ]);
+}
+
 describe("crew uninstall --save that does not go through", () => {
   test("C-RC-56 a reference the manifest does not list is a usage_error and nothing changes", () => {
     const home = makeCrewHome();
     const { project, alpha, beta } = projectWithTwoSkills(home);
     const before = manifestOf(project);
+    const filesBefore = installedFilesOf(project);
 
     const run = crew(home, project, ["uninstall", "--save", alpha, "alpha", "--json"]);
 
@@ -37,6 +46,7 @@ describe("crew uninstall --save that does not go through", () => {
     expect(error.details.refs).toEqual(["alpha"]);
     expect(manifestOf(project)).toBe(before);
     expect(installed(home)).toEqual([`alpha@${project}`, `beta@${project}`]);
+    expect(installedFilesOf(project)).toEqual(filesBefore);
     expect(beta).not.toBe(alpha);
   });
 
@@ -49,12 +59,29 @@ describe("crew uninstall --save that does not go through", () => {
     const human = crew(home, project, ["uninstall", "--save", secret]);
 
     expect(json.code).toBe(4);
-    expect(json.stdout).toContain("usage_error");
+    const { error } = JSON.parse(json.stdout) as {
+      error: { name: string; details: { refs: string[] } };
+    };
+    expect(error.name).toBe("usage_error");
+    expect(error.details.refs).toHaveLength(1);
+    expect(error.details.refs[0]).toContain("example.com/acme/skills");
     expect(json.stdout).not.toContain("hunter2");
     expect(human.code).toBe(4);
     expect(human.stderr).toContain("usage_error");
     expect(human.stderr).toContain("has no line");
     expect(human.stderr).not.toContain("hunter2");
+  });
+
+  test("C-RC-56 a lockfile that did not exist before a failed run does not exist after it", () => {
+    const home = makeCrewHome();
+    const { project, beta } = projectWithTwoSkills(home);
+    rmSync(join(project, ".crewrc.lock"));
+    rmSync(join(skillDir(project, "beta"), ".crew.json"));
+
+    const run = crew(home, project, ["uninstall", "--save", beta]);
+
+    expect(run.code).toBe(1);
+    expect(existsSync(join(project, ".crewrc.lock"))).toBe(false);
   });
 
   test("C-RC-56 when the removal that follows aborts, .crewrc and its lockfile are put back", () => {
@@ -78,6 +105,11 @@ describe("crew uninstall --save that does not go through", () => {
     expect(json.code).toBe(1);
     expect((JSON.parse(json.stdout) as { unsaved: string[] }).unsaved).toEqual([]);
     expect(manifestOf(project)).toBe(before);
+
+    // `--force` reaches the removal, as it does for a plain bare install.
+    expect(crew(home, project, ["uninstall", "--save", beta, "--force"]).code).toBe(0);
+    expect(existsSync(skillDir(project, "beta"))).toBe(false);
+    expect(manifestOf(project)).not.toContain(beta);
   });
 
   test.each([

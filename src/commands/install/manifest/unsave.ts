@@ -20,8 +20,8 @@ import {
   rejectUnsavableFlags,
 } from "./save.ts";
 
-/** Flags of `crew uninstall` that select skills some other way than a manifest line. */
-const SELECTION_FLAGS = ["all", "prune"] as const;
+/** Flags of `crew uninstall` that have no meaning when a manifest line is what is being removed. */
+const INCOMPATIBLE_FLAGS = ["all", "prune"] as const;
 
 /**
  * Remove the command line's references from the manifest and run `install`,
@@ -32,7 +32,7 @@ export function unsaveThenInstall(
   install: (bare: CommandContext) => CommandOutput,
 ): CommandOutput {
   rejectUnsavableFlags(ctx);
-  for (const flag of SELECTION_FLAGS) {
+  for (const flag of INCOMPATIBLE_FLAGS) {
     if (!ctx.flags.extras[flag]) continue;
     throw new CrewError(
       "usage_error",
@@ -48,7 +48,7 @@ export function unsaveThenInstall(
   if (ctx.positional.length === 0) {
     throw new CrewError(
       "usage_error",
-      `\`crew uninstall --save\` needs at least one reference to remove from \`${MANIFEST_FILENAME}\` — a git reference as the file writes it, or a path relative to where you are`,
+      `\`crew uninstall --save\` needs at least one reference to remove from \`${MANIFEST_FILENAME}\` — a git reference as the file writes it, or a path starting with \`./\` or \`../\` from where you are`,
     );
   }
   const { file, before } = manifestToEdit(ctx.cwd);
@@ -68,7 +68,7 @@ export function unsaveThenInstall(
   if (absent.length > 0) {
     throw new CrewError(
       "usage_error",
-      `${safePath(file)} has no line \`${absent[0]}\` — give a git reference exactly as the file writes it, or a path relative to where you are`,
+      `${safePath(file)} has no line \`${absent[0]}\` — give a git reference exactly as the file writes it, or a path starting with \`./\` or \`../\` from where you are`,
       { file, refs: absent },
     );
   }
