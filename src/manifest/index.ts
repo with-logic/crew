@@ -4,6 +4,14 @@
  */
 
 export { loadManifestFor, type Manifest } from "./load.ts";
+export {
+  isLockable,
+  LOCK_FILENAME,
+  type Lock,
+  parseLock,
+  pinnedRef,
+  serializeLock,
+} from "./lock.ts";
 export { claimForManifest, isManifestOwned } from "./ownership.ts";
 export {
   MANIFEST_FILENAME,
