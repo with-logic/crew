@@ -29,6 +29,17 @@ afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
 
+/** From a `--json` result: the names removed, and the names its warnings say were kept. */
+function removedAndKept(stdout: string): { removed: string[]; kept: string[] } {
+  const result = JSON.parse(stdout) as { removed: { name: string }[]; warnings?: string[] };
+  const kept: string[] = [];
+  for (const warning of result.warnings ?? []) {
+    const named = /kept `([^`]+)`/.exec(warning);
+    if (named?.[1]) kept.push(named[1]);
+  }
+  return { removed: result.removed.map((record) => record.name), kept };
+}
+
 describe("install sites that are not provably the project's own", () => {
   test("C-RC-30 a project skills directory that is a link to the user's never costs the user a skill", () => {
     const home = makeCrewHome();
@@ -43,7 +54,7 @@ describe("install sites that are not provably the project's own", () => {
     const run = crew(home, project, ["install", "--json"]);
 
     expect(run.code).toBe(0);
-    expect((JSON.parse(run.stdout) as { removed: unknown[] }).removed).toEqual([]);
+    expect(removedAndKept(run.stdout)).toEqual({ removed: [], kept: ["alpha"] });
     expect(existsSync(join(redirected.userRoot, "alpha", "SKILL.md"))).toBe(true);
     expect(installed(home)).toEqual([`alpha@${project}`, "alpha@user"]);
   });
@@ -59,8 +70,10 @@ describe("install sites that are not provably the project's own", () => {
     expect(crew(home, project, ["install"]).code).toBe(0);
 
     writeManifest(project, []);
-    expect(crew(home, project, ["install"]).code).toBe(0);
+    const run = crew(home, project, ["install", "--json"]);
 
+    expect(run.code).toBe(0);
+    expect(removedAndKept(run.stdout)).toEqual({ removed: [], kept: ["alpha"] });
     expect(existsSync(join(skillDir(other, "alpha"), "SKILL.md"))).toBe(true);
     expect(installed(home)).toEqual([`alpha@${other}`, `alpha@${project}`].sort());
   });
@@ -102,7 +115,10 @@ describe("install sites that are not provably the project's own", () => {
     const run = crew(home, project, ["install", "--force", "--json"]);
 
     expect(run.code).toBe(0);
-    expect((JSON.parse(run.stdout) as { removed: unknown[] }).removed).toEqual([]);
+    expect(removedAndKept(run.stdout)).toEqual({
+      removed: [],
+      kept: [`../../../${basename(victim)}`],
+    });
     expect(existsSync(join(victim, "keep.txt"))).toBe(true);
     rmSync(victim, { recursive: true });
   });
@@ -115,7 +131,7 @@ describe("install sites that are not provably the project's own", () => {
       const home = makeCrewHome();
       const project = makeProject([makeSkillRepo(["alpha"])]);
       expect(crew(home, project, ["install"]).code).toBe(0);
-      // A same-named directory in the working directory, where a base of "" would point.
+      // A same-named directory in the project, which must be left exactly as it is.
       mkdirSync(join(project, "beta"));
       writeFileSync(join(project, "beta", "keep.txt"), "not crew's\n");
       const state = readState(home);

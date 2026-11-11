@@ -96,26 +96,29 @@ test("C-RC-30 a directory that becomes a link after the pre-checks is still not 
   expect(crew(home, project, ["install"]).code).toBe(0);
   writeManifest(project, []);
   const elsewhere = makeTempDir("crew-elsewhere-");
+  let other = "";
 
   // While the first of the two is being removed, swap the other's directory for a link.
-  const swapTheOther = (): void => {
-    const [other] = ["alpha", "beta"].filter((name) =>
-      existsSync(join(skillDir(project, name), ".crew.json")),
-    ) as [string];
-    renameSync(skillDir(project, other), join(elsewhere, other));
-    symlinkSync(join(elsewhere, other), skillDir(project, other));
-  };
   const run = runBareInstallWithProgressHook(
     home,
     project,
-    swapTheOther,
-    [],
+    (progressLine) => {
+      other = progressLine.includes("removing alpha ") ? "beta" : "alpha";
+      renameSync(skillDir(project, other), join(elsewhere, other));
+      symlinkSync(join(elsewhere, other), skillDir(project, other));
+    },
+    ["--json"],
     /removing (alpha|beta) /,
   );
 
   expect(run).toMatchObject({ code: 0, hookRan: true });
-  const kept = ["alpha", "beta"].filter((name) => existsSync(join(elsewhere, name, "SKILL.md")));
-  expect(kept).toHaveLength(1);
-  expect(run.stderr).toContain(`kept \`${kept[0]}\``);
-  expect(installed(home)).toEqual([`${kept[0]}@${project}`]);
+  const first = other === "alpha" ? "beta" : "alpha";
+  const { removed, warnings } = JSON.parse(run.stdout) as {
+    removed: { name: string }[];
+    warnings: string[];
+  };
+  expect(removed.map((record) => record.name)).toEqual([first]);
+  expect(warnings.join("\n")).toContain(`kept \`${other}\``);
+  expect(existsSync(join(elsewhere, other, "SKILL.md"))).toBe(true);
+  expect(installed(home)).toEqual([`${other}@${project}`]);
 });

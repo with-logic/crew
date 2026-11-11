@@ -5,12 +5,19 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { makeCrewHome } from "../../../helpers/env.ts";
-import { makeSkill, skillFrontmatter } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
-import { crew, installed, makeProject, ownedNames, skillDir, writeManifest } from "../helpers.ts";
+import {
+  addSkillsWithDependencies,
+  crew,
+  installed,
+  makeProject,
+  ownedNames,
+  skillDir,
+  writeManifest,
+} from "../helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -19,18 +26,6 @@ beforeEach(() => {
 afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
-
-/** Skills under `<project>/tools`; each maps to the one skill it depends on, or null. */
-function addSkillsWithDependencies(
-  project: string,
-  dependenciesBySkill: Record<string, string | null>,
-): void {
-  mkdirSync(join(project, "tools"), { recursive: true });
-  for (const [name, dependency] of Object.entries(dependenciesBySkill)) {
-    const dependencies = dependency === null ? [] : [dependency];
-    makeSkill(join(project, "tools"), name, skillFrontmatter({ name, dependencies }));
-  }
-}
 
 /** Empty the manifest, run a bare install, and return the names it reports removed. */
 function dropEverything(home: string, project: string): { code: number; removed: string[] } {
@@ -144,6 +139,7 @@ describe("removal order", () => {
 
     expect(installed(home)).toEqual([`ping@${project}`, `pong@${project}`]);
     expect(existsSync(join(skillDir(project, "ping"), "SKILL.md"))).toBe(true);
+    expect(existsSync(join(skillDir(project, "pong"), "SKILL.md"))).toBe(true);
     expect(ownedNames(home)).toEqual(["ping", "pong"]);
   });
 
@@ -159,6 +155,7 @@ describe("removal order", () => {
     expect(run.code).toBe(0);
     expect((JSON.parse(run.stdout) as { removed: unknown[] }).removed).toEqual([]);
     expect(installed(home)).toEqual([`base@${project}`, `top@${project}`]);
+    expect(ownedNames(home)).toEqual(["base", "top"]);
     expect(existsSync(join(skillDir(project, "base"), "SKILL.md"))).toBe(true);
   });
 });
