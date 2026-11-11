@@ -69,8 +69,10 @@ export function readFileAt(file: string): FileAtPath {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT") return { kind: "absent" };
     if (code === "ELOOP") return { kind: "other" }; // A symbolic link.
-    // Anything else means the file is there and cannot be read. Treating a
-    // manifest that way as absent would let one further up govern the project.
+    // Anything else means something is there that could not be opened.
+    // Callers must be able to tell that from absence: a manifest read as
+    // absent would let one further up govern the project, and a lockfile
+    // read as absent would let its lines install unpinned.
     throw new CrewError(
       "source_unreachable",
       `couldn't read \`${file}\` (${code})`,

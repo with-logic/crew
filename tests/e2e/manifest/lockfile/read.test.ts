@@ -9,17 +9,19 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  readlinkSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { LOCK_HEADER } from "../../../../src/manifest/lock.ts";
+import { serializeLock } from "../../../../src/manifest/index.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { commitAll, makeTempDir } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
-import { crew, makeProject, makeSkillRepo, writeManifest } from "../helpers.ts";
-import { dirOf, headOf, lockFile } from "./helpers.ts";
+import { crew, installed, makeProject, makeSkillRepo, writeManifest } from "../helpers.ts";
+import { dirOf, headSha, lockFile } from "./helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -38,9 +40,9 @@ function publish(repo: string, note: string): string {
   return commitAll(dirOf(repo), note);
 }
 
-/** Write a lockfile for `project` holding `entries` as `[commit, reference]` pairs. */
+/** Write a valid lockfile for `project` holding `entries` as `[reference, commit]` pairs. */
 function writeLock(project: string, entries: readonly (readonly [string, string])[]): string {
-  const text = [LOCK_HEADER, ...entries.map(([sha, ref]) => `${sha} ${ref}`), ""].join("\n");
+  const text = serializeLock(new Map(entries));
   writeFileSync(lockFile(project), text);
   return text;
 }
@@ -51,7 +53,7 @@ describe("reading the project lockfile", () => {
     const v1 = publish(repo, "v1\n");
     publish(repo, "v2\n");
     const project = makeProject([repo]);
-    const lock = writeLock(project, [[v1, repo]]);
+    const lock = writeLock(project, [[repo, v1]]);
 
     expect(crew(makeCrewHome(), project, ["install"]).code).toBe(0);
 
@@ -77,12 +79,12 @@ describe("reading the project lockfile", () => {
     const v1 = publish(repo, "v1\n");
     const v2 = publish(repo, "v2\n");
     const project = makeProject([repo]);
-    writeLock(project, [[v1, repo]]);
+    writeLock(project, [[repo, v1]]);
     expect(crew(home, project, ["install"]).code).toBe(0);
     expect(installedNote(project)).toBe("v1\n");
 
     // As after pulling a commit that updated the lockfile.
-    writeLock(project, [[v2, repo]]);
+    writeLock(project, [[repo, v2]]);
     expect(crew(home, project, ["install"]).code).toBe(0);
 
     expect(installedNote(project)).toBe("v2\n");
@@ -96,46 +98,64 @@ describe("reading the project lockfile", () => {
     const project = makeProject([pinnedLine]);
     // Neither commit below exists anywhere; using either would fail the install.
     writeLock(project, [
-      ["d".repeat(40), makeSkillRepo(["beta"])],
-      ["e".repeat(40), pinnedLine],
+      [makeSkillRepo(["beta"]), "d".repeat(40)],
+      [pinnedLine, "e".repeat(40)],
     ]);
+    const home = makeCrewHome();
 
-    expect(crew(makeCrewHome(), project, ["install"]).code).toBe(0);
+    expect(crew(home, project, ["install"]).code).toBe(0);
 
     expect(installedNote(project)).toBe("v1\n");
+    expect(installed(home)).toEqual([`alpha@${project}`]);
   });
 
-  for (const kind of ["malformed text", "a symbolic link", "a directory"] as const) {
+  for (const kind of ["malformed text", "a symbolic link", "a directory", "a FIFO"] as const) {
     test(`C-RC-41 ${kind} at the lock path is manifest_invalid, and nothing is installed or changed`, () => {
       const home = makeCrewHome();
       const repo = makeSkillRepo(["alpha"]);
       const project = makeProject([repo]);
       const target = join(makeTempDir("crew-target-"), "old.lock");
-      writeFileSync(target, `${LOCK_HEADER}\n${headOf(repo)} ${repo}\n`);
+      const targetText = serializeLock(new Map([[repo, headSha(repo)]]));
+      writeFileSync(target, targetText);
       if (kind === "a directory") mkdirSync(lockFile(project));
       else if (kind === "a symbolic link") symlinkSync(target, lockFile(project));
+      else if (kind === "a FIFO") Bun.spawnSync(["mkfifo", lockFile(project)]);
       else writeFileSync(lockFile(project), "not a lockfile\n");
-      const before = lstatSync(lockFile(project));
+      const describePath = (): string => {
+        const stat = lstatSync(lockFile(project));
+        if (stat.isSymbolicLink()) return `link:${readlinkSync(lockFile(project))}`;
+        if (stat.isDirectory()) return `dir:${readdirSync(lockFile(project)).join(",")}`;
+        return stat.isFile() ? `file:${readFileSync(lockFile(project), "utf8")}` : "other";
+      };
+      const before = describePath();
 
       const run = crew(home, project, ["install", "--json"]);
 
       expect(run.code).toBe(4);
       const { error } = JSON.parse(run.stdout) as {
-        error: { name: string; details: Record<string, unknown> };
+        error: { name: string; message: string; details: Record<string, unknown> };
       };
       expect(error.name).toBe("manifest_invalid");
+      expect(error.message).toContain(`${lockFile(project)} line 1`);
       expect(error.details).toEqual({ file: lockFile(project), line: 1 });
       expect(existsSync(join(project, ".claude"))).toBe(false);
-      expect(lstatSync(lockFile(project)).mode).toBe(before.mode);
-      expect(readFileSync(target, "utf8")).toContain(repo);
+      expect(describePath()).toBe(before);
+      expect(readFileSync(target, "utf8")).toBe(targetText);
     });
   }
 
-  test("C-RC-41 an invalid lockfile is an error even when the manifest declares nothing", () => {
+  test("C-RC-41 an invalid lockfile is manifest_invalid even when the manifest declares nothing", () => {
     const project = makeProject([makeSkillRepo(["alpha"])]);
     writeManifest(project, []);
     writeFileSync(lockFile(project), "not a lockfile\n");
 
-    expect(crew(makeCrewHome(), project, ["install"]).code).toBe(4);
+    const run = crew(makeCrewHome(), project, ["install", "--json"]);
+
+    expect(run.code).toBe(4);
+    const { error } = JSON.parse(run.stdout) as {
+      error: { name: string; details: Record<string, unknown> };
+    };
+    expect(error.name).toBe("manifest_invalid");
+    expect(error.details).toEqual({ file: lockFile(project), line: 1 });
   });
 });

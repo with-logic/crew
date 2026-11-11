@@ -12,7 +12,6 @@
  */
 
 import { CrewError } from "../core/errors.ts";
-import type { GitSource } from "../core/types.ts";
 import type { ManifestEntry } from "./parse.ts";
 
 /** The lockfile's name; it lives in the manifest's directory. */
@@ -24,9 +23,6 @@ export const LOCK_HEADER = "# crew lockfile v1 — written by `crew install`; do
 // A ref may spell a commit in either case (§12.2); lock records are lowercase only.
 const FULL_SHA = /^[0-9a-f]{40}$/i;
 const LOCK_LINE = /^([0-9a-f]{40}) (\S.*)$/;
-
-/** A manifest line that is a git source. */
-export type GitManifestEntry = ManifestEntry & { readonly source: GitSource };
 
 /** Commits by manifest reference, exactly as the reference is written in `.crewrc`. */
 export type Lock = ReadonlyMap<string, string>;
@@ -83,7 +79,7 @@ export function serializeLock(lock: Lock): string {
  * already name a full commit. A path line has no commit, and a line pinned
  * to a full commit is its own lock.
  */
-export function needsLockEntry(entry: ManifestEntry): entry is GitManifestEntry {
+export function needsLockEntry(entry: ManifestEntry): boolean {
   const { source } = entry;
   return source.type === "git" && !(source.ref !== null && FULL_SHA.test(source.ref));
 }

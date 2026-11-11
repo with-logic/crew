@@ -4,10 +4,11 @@
 
 import { join } from "node:path";
 import { runGit } from "../../../../src/git/exec.ts";
+import { LOCK_FILENAME } from "../../../../src/manifest/index.ts";
 
 /** The lockfile path for `project`. */
 export function lockFile(project: string): string {
-  return join(project, ".crewrc.lock");
+  return join(project, LOCK_FILENAME);
 }
 
 /** The directory behind a `file://` repository reference. */
@@ -16,6 +17,6 @@ export function dirOf(repo: string): string {
 }
 
 /** The commit currently checked out in `repo`. */
-export function headOf(repo: string): string {
+export function headSha(repo: string): string {
   return runGit(["rev-parse", "HEAD"], { cwd: dirOf(repo) }).stdout.trim();
 }
