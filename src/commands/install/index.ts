@@ -10,13 +10,12 @@ import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import { runInstall } from "../../install/flow.ts";
 import { UNUSABLE_PROJECT_ROOT_WARNING } from "../../install/metadata-warning.ts";
-import type { KindHint } from "../../install/resolve-ref/index.ts";
-import { parseRef } from "../../refs/parse.ts";
 import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { safePath } from "../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { resolveCollisions } from "./collisions.ts";
 import { installOutcome } from "./exit-code.ts";
+import { readKindHint, rejectRecursiveTapRefs } from "./flags.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest/index.ts";
@@ -27,35 +26,31 @@ import {
   wantsLatest,
 } from "./manifest/latest.ts";
 import { readLock, refsToInstall } from "./manifest/lockfile.ts";
+import { installEveryProject } from "./manifest/projects.ts";
 import { EMPTY_RECONCILIATION, reconcileManifestInstalls } from "./manifest/reconcile.ts";
 import { reportReconciliation } from "./manifest/report.ts";
 import { saveThenInstall, wantsSave } from "./manifest/save.ts";
 import { renderInstall } from "./render/index.ts";
 
-/** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
-function readKindHint(ctx: CommandContext): KindHint {
-  const tap = Boolean(ctx.flags.extras["tap"]);
-  const bundle = Boolean(ctx.flags.extras["bundle"]);
-  const skill = Boolean(ctx.flags.extras["skill"]);
-  const count = Number(tap) + Number(bundle) + Number(skill);
-  if (count > 1) {
-    throw new CrewError(
-      "usage_error",
-      "`--tap`, `--bundle`, and `--skill` are mutually exclusive — pick one",
-    );
-  }
-  if (tap) return "tap";
-  if (bundle) return "namespace";
-  if (skill) return "skill";
-  return null;
+/** True when nothing is named on the command line: the project's manifest names the skills (§9.2). */
+function isBareInstall(ctx: CommandContext): boolean {
+  return ctx.positional.length === 0 && typeof ctx.flags.extras["from-git"] !== "string";
 }
 
 export function installCommand(ctx: CommandContext): CommandOutput {
-  // §9.2: `--save` edits the manifest, then runs this command again as a bare install.
-  if (wantsSave(ctx)) return saveThenInstall(ctx, installCommand);
+  // §9.2: `--save` edits one manifest, then installs that one project from it.
+  if (wantsSave(ctx)) return saveThenInstall(ctx, installOneProject);
+  // §9.2: a bare install covers the governing manifest and every one beneath it.
+  return isBareInstall(ctx) ? installEveryProject(ctx, installOneProject) : installOneProject(ctx);
+}
+
+/**
+ * Install the references on the command line, or, for a bare install, the
+ * single project whose manifest governs `ctx.cwd`.
+ */
+export function installOneProject(ctx: CommandContext): CommandOutput {
   const fromGit = ctx.flags.extras["from-git"];
-  // §9.2: with nothing named on the command line, the project's manifest names the skills.
-  const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";
+  const isBare = isBareInstall(ctx);
   const manifest = isBare ? manifestForBareInstall(ctx) : rejectLatestWithReferences(ctx);
   if (manifest?.entries.length === 0) {
     // §9.3: an invalid lockfile is an error even with nothing to install,
@@ -162,16 +157,4 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       ...(warnings.length > 0 ? { warnings } : {}),
     },
   };
-}
-
-function rejectRecursiveTapRefs(ctx: CommandContext): void {
-  if (!ctx.flags.extras["recursive"]) return;
-  for (const raw of ctx.positional) {
-    const source = parseRef(raw, ctx.cwd);
-    if (source.type !== "tap") continue;
-    throw new CrewError(
-      "usage_error",
-      "`--recursive` only applies to direct git or path sources — for tap-name installs, run `crew tap add --recursive <url-or-path> <name>` first",
-    );
-  }
 }

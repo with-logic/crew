@@ -1542,6 +1542,42 @@ as if the line had been typed by hand.
   is that of the bare install plus `saved`: the array of references added,
   as written, empty when all were already listed.
 
+**Several manifests in one repository.** A repository may hold more than
+one project, each with its own `.crewrc` in its own directory. A bare install
+applies the manifest governing the current directory and then every manifest
+in a directory beneath that manifest's directory. When no manifest governs
+the current directory, it applies every manifest in a directory beneath the
+current directory; with none there either, it is the `usage_error` above.
+
+- **Which manifests.** The directories are found by asking git for the
+  `.crewrc` files it tracks or would track: those in the index and untracked
+  ones that no ignore rule excludes. A manifest that `.gitignore` excludes
+  (under `node_modules`, say) or that lies inside another repository nested
+  in this one is not applied. Outside a git work tree no directory beneath is
+  searched: only the governing manifest is applied.
+- **Each is its own project.** Every manifest is applied exactly as a bare
+  install run in its directory would apply it: skills install under that
+  directory, its lockfile sits beside it, and ownership, reconciling, and
+  removal are per manifest. Manifests do not merge, and a skill two of them
+  declare is installed once under each.
+- **Order and failure.** The governing manifest is applied first, then the
+  others in ascending order of directory path. When one exits non-zero the
+  rest are still applied, and the command exits with the first non-zero
+  code. When one raises an error (`source_unreachable`, `manifest_invalid`),
+  the command fails with that error and the manifests after it are not
+  applied; what earlier ones did stands.
+- **Flags** apply to every manifest in the run, `--latest` and `--dry-run`
+  included. `--save` is the exception: it edits one manifest and installs
+  that one project only.
+- **Output.** When only one manifest is applied, output is as described
+  above. Otherwise human output reports each project in order under a line
+  giving its manifest's path, and the `--json` result is the governing
+  manifest's result plus `nested`: an array of the other manifests' results
+  in the order applied, each with its own `manifest_path`. With no governing
+  manifest the top level carries empty `records`, `already_installed`,
+  `skipped`, and `removed`, no `manifest_path`, and every result is in
+  `nested`.
+
 **Ownership.** A manifest owns the skills in its **resolved install set**:
 every skill its lines expand to, plus every dependency resolved with them (§9
 step 6). Ownership is recorded as `manifest_owned: true` on the state entry (§11.1).
@@ -3788,6 +3824,10 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-52 | §9.2 | Under `--save`, a path given from a subdirectory is written relative to the manifest's directory and no manifest is created in the subdirectory. A reference already listed is not written again: the file is byte-for-byte unchanged and `saved` is empty. |
 | C-RC-53 | §9.2 | Under `--save`, a tap skill name, a path outside the project, an absolute path, a reference carrying a credential, or a malformed reference fails with `manifest_invalid` without modifying or creating `.crewrc`, and without printing the credential. When the install that follows fails (an unreachable source, a skill that fails validation), `.crewrc` is restored byte-for-byte, or removed if the run created it, and stderr says it was left as it was. |
 | C-RC-54 | §9.2 | `--save` with `--dry-run`, with `--scope user`, with `--recursive`, with `--latest`, or with no reference is a `usage_error` and leaves `.crewrc` unchanged. |
+| C-RC-58 | §9.2 | In a git repository with a `.crewrc` at the root and in two directories beneath it, bare `crew install` at the root installs each project's skills under that project's own directory, marks each `manifest_owned`, and writes each project's lockfile beside its manifest. `--json` carries the root's result at the top level and the others in `nested`, in path order, each with its `manifest_path`; human output reports each under its manifest's path. With no manifest at the root, the manifests beneath are still applied, all in `nested`. |
+| C-RC-59 | §9.2 | Run in a project's directory, bare `crew install` applies that project and those beneath it and leaves its parent and siblings untouched. A `.crewrc` that git ignores is not applied, and outside a git work tree no manifest beneath the governing one is applied. |
+| C-RC-60 | §9.2 | With several manifests, one that exits non-zero sets the command's exit code and the others are still applied; one that raises an error fails the command with that error, later manifests are not applied, and earlier ones stay installed. With no active agent every project reports `no_agents: true` and nothing is installed. |
+| C-RC-61 | §9.2 | A line dropped from a nested manifest removes that project's copy of the skill and leaves another project's copy of the same skill installed. `crew install --save` edits and installs the governing project only: its result has no `nested`. |
 
 ### 18.4 Worked examples
 
