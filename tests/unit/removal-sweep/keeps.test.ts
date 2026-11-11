@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, renameSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { readState } from "../../../src/state/load.ts";
 import { crew } from "../../e2e/manifest/helpers.ts";
@@ -83,10 +83,26 @@ describe("processDroppedEntries keeps", () => {
 
     const { outcome, before } = sweep(installed, { force: true });
 
-    expect(outcome?.keptAsUnsafe).toEqual(["top"]);
+    expect(outcome?.keptForUnverifiedInstallSites).toEqual(["top"]);
     expect(outcome?.records).toEqual([]);
     expect(outcome?.state).toBe(before);
+    expect(lstatSync(skillDir(project, "top")).isSymbolicLink()).toBe(true);
     expect(existsSync(join(elsewhere, "SKILL.md"))).toBe(true);
     expect(existsSync(skillDir(project, "base"))).toBe(true);
+  });
+
+  test("everything under a skills directory that is a link, without writing a lock into it", () => {
+    const installed = installProject({ alpha: null }, ["alpha"]);
+    const { project } = installed;
+    const elsewhere = join(makeTempDir("crew-elsewhere-"), "skills");
+    renameSync(join(project, ".claude", "skills"), elsewhere);
+    rmSync(join(elsewhere, ".crew-target"), { force: true });
+    symlinkSync(elsewhere, join(project, ".claude", "skills"));
+
+    const { outcome } = sweep(installed);
+
+    expect(outcome?.keptForUnverifiedInstallSites).toEqual(["alpha"]);
+    expect(existsSync(join(elsewhere, "alpha", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(elsewhere, ".crew-target"))).toBe(false);
   });
 });

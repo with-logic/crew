@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, renameSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { readState } from "../../../src/state/load.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
@@ -52,10 +52,11 @@ describe("processDroppedEntries, before each deletion", () => {
       },
     });
 
-    expect(outcome?.keptAsUnsafe).toEqual(["top"]);
+    expect(outcome?.keptForUnverifiedInstallSites).toEqual(["top"]);
     expect(outcome?.interrupted).toBe(false);
     expect(outcome?.records).toEqual([]);
     expect(outcome?.state).toBe(before);
+    expect(lstatSync(skillDir(project, "top")).isSymbolicLink()).toBe(true);
     expect(existsSync(join(elsewhere, "SKILL.md"))).toBe(true);
     expect(existsSync(skillDir(project, "base"))).toBe(true);
   });
@@ -72,7 +73,10 @@ describe("processDroppedEntries, before each deletion", () => {
     });
 
     expect(outcome?.records.map((record) => record.name)).toEqual(["top"]);
-    expect(outcome?.records[0]?.failures).toHaveLength(1);
+    expect(outcome?.records[0]?.failures.map((failure) => failure.error.code)).toEqual([
+      "untracked_directory",
+    ]);
+    expect(existsSync(join(skillDir(project, "top"), "SKILL.md"))).toBe(true);
     expect(namesIn(outcome?.state ?? readState(installed.home))).toEqual(["base", "top"]);
     expect(existsSync(skillDir(project, "base"))).toBe(true);
   });

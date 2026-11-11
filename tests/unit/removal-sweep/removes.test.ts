@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { readState } from "../../../src/state/load.ts";
 import { crew } from "../../e2e/manifest/helpers.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
@@ -26,7 +27,7 @@ describe("processDroppedEntries", () => {
 
     expect(outcome?.records.map((record) => record.name)).toEqual(["top", "base"]);
     expect(outcome?.records.flatMap((record) => record.failures)).toEqual([]);
-    expect(outcome?.keptAsUnsafe).toEqual([]);
+    expect(outcome?.keptForUnverifiedInstallSites).toEqual([]);
     expect(outcome?.interrupted).toBe(false);
     expect(namesIn(outcome?.state ?? readState(installed.home))).toEqual([]);
     expect(existsSync(skillDir(installed.project, "top"))).toBe(false);
@@ -36,8 +37,9 @@ describe("processDroppedEntries", () => {
   test("returns the new state without writing it", () => {
     const installed = installProject({ alpha: null }, ["alpha"]);
 
-    sweep(installed);
+    const { outcome } = sweep(installed);
 
+    expect(outcome?.state.installations).toEqual([]);
     expect(namesIn(readState(installed.home))).toEqual(["alpha"]);
   });
 
@@ -71,18 +73,46 @@ describe("processDroppedEntries", () => {
     const { outcome } = sweep(installed, { dryRun: true });
 
     expect(outcome?.records.map((record) => record.name)).toEqual(["top", "base"]);
+    for (const record of outcome?.records ?? []) {
+      expect(record.removedFrom).toEqual(["claude-code"]);
+      expect(record.failures).toEqual([]);
+    }
     expect(existsSync(skillDir(installed.project, "top"))).toBe(true);
     expect(existsSync(skillDir(installed.project, "base"))).toBe(true);
   });
 
-  test("does nothing when the manifest is no longer current before it starts", () => {
-    const installed = installProject({ alpha: null }, ["alpha"]);
+  test.each([false, true])(
+    "does nothing when the manifest is no longer current before it starts (dry run: %p)",
+    (dryRun) => {
+      const installed = installProject({ alpha: null }, ["alpha"]);
 
-    for (const dryRun of [false, true]) {
       const { outcome } = sweep(installed, { dryRun, isStillCurrent: () => false });
-      expect(outcome).toBeNull();
-    }
 
-    expect(existsSync(skillDir(installed.project, "alpha"))).toBe(true);
-  });
+      expect(outcome).toBeNull();
+      expect(existsSync(skillDir(installed.project, "alpha"))).toBe(true);
+    },
+  );
+
+  test.each([
+    { dryRun: false, held: true },
+    { dryRun: true, held: false },
+  ])(
+    "holds the target lock while it works, except on a dry run (dry run: $dryRun)",
+    ({ dryRun, held }) => {
+      const installed = installProject({ alpha: null }, ["alpha"]);
+      const lock = join(installed.project, ".claude", "skills", ".crew-target.lock");
+      const seen: boolean[] = [];
+
+      sweep(installed, {
+        dryRun,
+        isStillCurrent: () => {
+          seen.push(existsSync(lock));
+          return true;
+        },
+      });
+
+      expect(seen).toEqual([held, held]);
+      expect(existsSync(lock)).toBe(false);
+    },
+  );
 });

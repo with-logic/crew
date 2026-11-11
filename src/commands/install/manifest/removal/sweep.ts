@@ -23,14 +23,19 @@ import type { CommandContext } from "../../../types.ts";
 import { removeOne, type UninstallRecord } from "../../../uninstall/core.ts";
 import { areProjectInstallPathsSafeToRemove, type ProjectStateEntry } from "./install-site.ts";
 import { removalOrder } from "./order.ts";
+import { type Preflight, preflight, type Uninstall } from "./preflight.ts";
 
 /** State after processing, and what happened to each dropped entry it did not silently keep. */
 export interface RemovalOutcome {
   readonly state: StateFile;
   /** One removal record per entry attempted: completed, previewed, or aborted. */
   readonly records: readonly UninstallRecord[];
-  /** Names kept because their install directories are not provably the project's own. */
-  readonly keptAsUnsafe: readonly string[];
+  /**
+   * Names kept because their install directories are not verifiably the
+   * project's own. Entries kept because an uninstall safety check aborted
+   * are not here: each of those has a record in `records` with its failure.
+   */
+  readonly keptForUnverifiedInstallSites: readonly string[];
   /** True when the sweep stopped early because the manifest stopped being current. */
   readonly interrupted: boolean;
 }
@@ -46,6 +51,10 @@ interface RemovalRequest {
    * the one on disk. Asked before the pre-checks and again before every
    * deletion. On a normal run that happens with the target locks held; a
    * dry run previews without locks.
+   *
+   * It must not throw: a manifest that can no longer be read or parsed is
+   * not current, and the answer is false. An exception here would escape
+   * the sweep and lose the state of the removals already done.
    */
   readonly isStillCurrent: () => boolean;
 }
@@ -67,21 +76,43 @@ export function processDroppedEntries(
     return isHere && !resolvedSkillNames.has(entry.name);
   };
   const dropped = state.installations.filter(isDropped);
-  const run = (unavailableBases?: ReadonlySet<string>): RemovalOutcome | null =>
-    isStillCurrent() ? removeInOrder(state, dropped, request, unavailableBases) : null;
+  const run = (unavailableBases?: ReadonlySet<string>): RemovalOutcome | null => {
+    if (!isStillCurrent()) return null;
+    const previewContext: CommandContext = { ...ctx, flags: { ...ctx.flags, dryRun: true } };
+    const uninstall: Uninstall = (from, entry, preview) => {
+      const subject = { raw: entry.name, name: entry.name, entries: [entry] };
+      const isPruned = false;
+      const everyAgent: readonly string[] | null = null;
+      const deferStateEntryDrops = false;
+      return removeOne(
+        from,
+        subject,
+        preview ? previewContext : ctx,
+        isPruned,
+        everyAgent,
+        deferStateEntryDrops,
+        unavailableBases,
+      );
+    };
+    return removeInOrder(state, dropped, preflight(state, dropped, uninstall), {
+      uninstall,
+      isStillCurrent,
+    });
+  };
   if (ctx.flags.dryRun) return run();
-  return withTargetLocks(entryTargetBases(dropped, projectRoot, false), (_failures, unavailable) =>
+  // Preparing a target lock writes into the skills directory it guards, so
+  // locks are taken only for entries whose directories pass the install-site
+  // rule. The rest are not going to be removed, and need no lock.
+  const lockable = dropped.filter(areProjectInstallPathsSafeToRemove);
+  return withTargetLocks(entryTargetBases(lockable, projectRoot, false), (_failures, unavailable) =>
     run(unavailable),
   );
 }
 
 /**
- * Decide everything first, then remove.
- *
- * Each dropped entry is pre-checked without touching it: the install-site
- * rule, and the uninstall safety checks by way of a dry run. Those that
- * fail are staying, and `removalOrder` keeps whatever they require. Only
- * then does removal start, so no skill is taken away on the strength of a
+ * Remove what the pre-checks left removable, in the order `removalOrder`
+ * gives: it keeps whatever a staying entry requires. Everything is decided
+ * before this starts, so no skill is taken away on the strength of a
  * removal that turns out not to happen.
  *
  * On a normal run the caller holds the target locks throughout; a dry run
@@ -90,49 +121,19 @@ export function processDroppedEntries(
 function removeInOrder(
   initial: StateFile,
   dropped: readonly ProjectStateEntry[],
-  request: RemovalRequest,
-  unavailableBases?: ReadonlySet<string>,
+  decided: Preflight,
+  steps: { readonly uninstall: Uninstall; readonly isStillCurrent: () => boolean },
 ): RemovalOutcome {
-  const { ctx, isStillCurrent } = request;
-  const preview: CommandContext = { ...ctx, flags: { ...ctx.flags, dryRun: true } };
-  /** Uninstall `entry` from every agent it is on, returning the state without it. */
-  const uninstall = (state: StateFile, entry: StateEntry, uninstallContext: CommandContext) => {
-    const subject = { raw: entry.name, name: entry.name, entries: [entry] };
-    const isPruned = false;
-    const everyAgent: readonly string[] | null = null;
-    const deferStateEntryDrops = false;
-    return removeOne(
-      state,
-      subject,
-      uninstallContext,
-      isPruned,
-      everyAgent,
-      deferStateEntryDrops,
-      unavailableBases,
-    );
-  };
-  const records: UninstallRecord[] = [];
-  const keptAsUnsafe: string[] = [];
-  const staying = new Set<string>();
-  for (const entry of dropped) {
-    if (!areProjectInstallPathsSafeToRemove(entry)) {
-      staying.add(entry.name);
-      keptAsUnsafe.push(entry.name);
-      continue;
-    }
-    const { rec } = uninstall(initial, entry, preview);
-    if (rec.failures.length === 0) continue;
-    staying.add(entry.name);
-    records.push(rec);
-  }
+  const records = [...decided.aborted];
+  const keptForUnverifiedInstallSites = [...decided.keptForUnverifiedInstallSites];
   let state = initial;
   const byName = new Map(dropped.map((entry) => [entry.name, entry]));
   let interrupted = false;
-  for (const name of removalOrder(dropped, staying)) {
+  for (const name of removalOrder(dropped, decided.staying)) {
     const entry = byName.get(name) as ProjectStateEntry;
     // `.crewrc` is not covered by any lock, so it is confirmed before every
     // delete, not only the first: an edit mid-sweep stops the sweep there.
-    if (!isStillCurrent()) {
+    if (!steps.isStillCurrent()) {
       interrupted = true;
       break;
     }
@@ -141,16 +142,17 @@ function removeInOrder(
     // stops here: what comes later in the order may be a dependency of this
     // entry, which is now staying.
     if (!areProjectInstallPathsSafeToRemove(entry)) {
-      keptAsUnsafe.push(entry.name);
+      keptForUnverifiedInstallSites.push(entry.name);
       break;
     }
-    const removal = uninstall(state, entry, ctx);
+    // On a dry run this is a preview too: the context it runs under says so.
+    const removal = steps.uninstall(state, entry, false);
     state = removal.updatedState;
     records.push(removal.rec);
     // The pre-check passed (and on a normal run the target locks are held),
-    // so this is not expected. Stop rather than remove something the
-    // survivor may still need.
+    // so a failure is not expected, and it leaves the entry in state. Stop
+    // rather than remove something the survivor may still need.
     if (removal.rec.failures.length > 0) break;
   }
-  return { state, records, keptAsUnsafe, interrupted };
+  return { state, records, keptForUnverifiedInstallSites, interrupted };
 }
