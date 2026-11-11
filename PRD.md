@@ -59,6 +59,8 @@ Homecrew installs skills by copying files into each agent tool's expected direct
 
 **Manifest.** A file named `.crewrc` at a project root listing the skills that project expects, one reference per line (§9.2).
 
+**Lockfile.** A file named `.crewrc.lock` beside a manifest, recording the commit each of its git lines resolved to (§9.3).
+
 **Marker.** A file named `.crew.json` written inside each installed skill directory (at the agent location), recording what Homecrew installed there.
 
 ## 4. Skill format
@@ -1550,6 +1552,50 @@ machine and every time. Three properties make that safe:
   an unreachable source) and installs none of the manifest's other skills. A
   project is never left with part of its manifest.
 
+### 9.3 Project lockfile (`.crewrc.lock`)
+
+A project lockfile is a file named `.crewrc.lock` in the same directory as a
+project manifest (§9.2). It records the commit each git line of the manifest
+resolved to, so that every checkout of the project installs the same bytes
+even for a line that names a branch, a tag, or no ref at all. Homecrew writes
+it. It is meant to be checked in and is not meant to be edited by hand.
+
+**Format.** UTF-8 text, one entry per line, LF line endings, ending with a
+newline:
+
+- The first line is exactly
+  ``# crew lockfile v1 — written by `crew install`; do not edit by hand.``
+  It identifies the format and its version. A file whose first line is
+  anything else is not a lockfile this version understands.
+- Any later line that is empty or starts with `#` is ignored.
+- Every other line is `<commit> <reference>`: a full 40-character lowercase
+  hexadecimal commit SHA, one space, and a manifest reference exactly as it is
+  written in `.crewrc` after trimming. The reference runs to the end of the
+  line and may contain spaces.
+- A reference appears at most once.
+
+Homecrew writes the entries sorted by reference in code-unit order, so that
+two branches which each add a manifest line produce lockfiles that merge
+without conflict.
+
+**Which lines are locked.** A manifest line has a lock entry if it is a git
+source whose ref is not already a full 40-character commit SHA, in either
+case (§12.2). A line pinned
+to a full commit is its own lock, and a path line has no commit to record.
+
+**Pinned form.** The reference that installs a locked line at its recorded
+commit is the line's clone URL, `@`, the commit, and then `//` and the line's
+subpath if it has one (the ref-first form of §8.4). It names the same
+repository and subpath as the line, with the commit in place of whatever ref
+the line carried.
+
+**Invalid lockfiles.** A lockfile that breaks any rule above fails with
+`manifest_invalid` (§13). The message names the lockfile and the 1-based line
+number, and `details` carries `file` and `line`. For an unrecognized first
+line the suggested remedy is to upgrade Homecrew, since a newer version may
+have written the file; deleting it is a last resort, because every line not
+pinned to a commit would then be free to move.
+
 ## 10. Update and autoupdate
 
 ### 10.1 `crew update`
@@ -2468,7 +2514,7 @@ Two entries in this table — `source_gone` and `tap_missing` — are **soft out
 | `not_installed_here` | 6 | Uninstall agent has no marker. |
 | `no_agents` | 4 | No agent tools detected or all disabled. |
 | `config_invalid` | 4 | `config.yaml` did not parse, or a tap name is not a single directory component (contains `/`, `\`, or is `.`/`..`). |
-| `manifest_invalid` | 4 | A project manifest (`.crewrc`) contains a line that is not an accepted reference, or repeats a line (§9.2). |
+| `manifest_invalid` | 4 | A project manifest (`.crewrc`) contains a line that is not an accepted reference, or repeats a line (§9.2); or a project lockfile (`.crewrc.lock`) is not in the expected format (§9.3). |
 | `state_locked` | 7 | Could not acquire a coordination lock within the timeout — the state lock (`state.json.lock`), maintenance lock, per-repository clone lock, or shared physical-target lock (§14). |
 | `autoupdate_failure` | 8 | Autoupdate enable/disable couldn't load/unload the platform scheduler. |
 | `self_update_unavailable` | 5 | `crew self-update` couldn't reach the release feed, the asset is missing for the current arch, or the named `--version` doesn't exist. |
