@@ -1530,15 +1530,17 @@ own setup (an npm `postinstall` script, a Makefile target), so it runs on every
 machine and every time. Three properties make that safe:
 
 - **No active agent.** When no `--agent` was given and the agent set of §9
-  step 7 would be empty, a bare install exits 0, reports that there is nothing
-  to install into, and MUST NOT acquire, clone, or fetch any source. A CI
+  step 7 would be empty, a bare install exits 0, reports that no agent is
+  active, and MUST NOT acquire, clone, or fetch any source. A CI
   runner with no agent and no access to a private skill repository therefore
   succeeds. Nothing else is done on such a run. The `--json` result carries
   `no_agents: true` and empty `records`, `already_installed`, and `skipped`. With `--agent`, an empty agent
   set remains `no_agents` (§13): the user asked for a specific agent.
 - **Nothing to do.** When every declared skill is already installed at its
-  declared source, a bare install MUST succeed without reaching any git
-  source, so it works offline and when a source has since become unreachable.
+  declared source, a bare install contacts no git remote: it resolves each
+  reference from the tap's existing local clone, under the network policy of
+  §16.6. It therefore succeeds offline and when the remote has since become
+  unreachable, as long as that local clone is present.
 - **All or nothing.** When any declared reference cannot be acquired, the
   command fails with that reference's error (`source_unreachable`, exit 5, for
   an unreachable source) and installs none of the manifest's other skills. A
@@ -3488,9 +3490,9 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-19 | §9.2, §10.1.1 | The same source installed by hand under another project root is still updated and re-expanded by `crew update`, and its entries stay unowned. |
 | C-RC-26 | §9.2 | A manifest path line that reaches outside the project through a symbolic link is `manifest_invalid`, with `details` naming its line; nothing from outside the project is installed. |
 | C-RC-31 | §9.2 | When `.crewrc` is replaced, becomes invalid, or is deleted while a bare `crew install` is running, that run marks no entry `manifest_owned`, warns on stderr and in `warnings` of the `--json` result, and exits as it otherwise would. |
-| C-RC-34 | §9.2 | With no active agent and no `--agent`, bare `crew install` exits 0 with `no_agents: true` in `--json`, and acquires no source: it succeeds even when a declared source is unreachable. |
+| C-RC-34 | §9.2 | With no active agent and no `--agent`, bare `crew install` exits 0 with `no_agents: true` and empty `records`, `already_installed`, and `skipped` in `--json`, acquires no source (it succeeds even when a declared source is unreachable), and writes no state and no skill. An agent that is not detected but is force-enabled counts as active. |
 | C-RC-35 | §9.2, §13 | With no active agent, bare `crew install --agent <name>` fails with `no_agents`, exit 4. |
-| C-RC-36 | §9.2 | When every declared skill is already installed, bare `crew install` exits 0 even though the declared git source can no longer be reached. |
+| C-RC-36 | §9.2, §16.6 | When every declared skill is already installed and its tap's local clone is present, bare `crew install` exits 0 even though the git remote can no longer be reached. |
 | C-RC-37 | §9.2 | When one declared source is unreachable, bare `crew install` fails with `source_unreachable`, exit 5, and installs none of the manifest's other skills. |
 
 ### 18.4 Worked examples

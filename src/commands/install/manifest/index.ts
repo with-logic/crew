@@ -73,7 +73,7 @@ export function nothingToInstall(
 export function noAgentsOutcome(manifest: Manifest, ctx: CommandContext): CommandOutput {
   return {
     exitCode: 0,
-    human: [`No agent coders detected — nothing to install from ${safePath(manifest.file)}.`],
+    human: [`No active agent coders — nothing to install from ${safePath(manifest.file)}.`],
     json: {
       already_installed: [],
       records: [],

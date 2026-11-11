@@ -30,7 +30,7 @@ function noAgentsDetected(): void {
 const unreachable = (): string => `file://${join(makeTempDir("crew-gone-"), "no-such-repo")}`;
 
 describe("bare crew install as a setup step", () => {
-  test("C-RC-34 with no active agent it exits 0 without acquiring any source", () => {
+  test("C-RC-34 with no active agent it exits 0 without acquiring any source or writing anything", () => {
     noAgentsDetected();
     const home = makeCrewHome();
     const project = makeProject([unreachable()]);
@@ -38,10 +38,29 @@ describe("bare crew install as a setup step", () => {
     const run = crew(home, project, ["install", "--json"]);
 
     expect(run.code).toBe(0);
-    const payload = JSON.parse(run.stdout) as { no_agents: boolean; records: unknown[] };
-    expect(payload.no_agents).toBe(true);
-    expect(payload.records).toEqual([]);
-    expect(crew(home, project, ["install"]).stdout).toContain("No agent coders detected");
+    expect(JSON.parse(run.stdout)).toEqual({
+      already_installed: [],
+      records: [],
+      skipped: [],
+      dry_run: false,
+      manifest_path: join(project, ".crewrc"),
+      no_agents: true,
+    });
+    expect(existsSync(join(home, "state.json"))).toBe(false);
+    expect(existsSync(join(project, ".claude"))).toBe(false);
+    expect(crew(home, project, ["install"]).stdout).toContain("No active agent coders");
+  });
+
+  test("C-RC-34 an agent that is force-enabled but not detected counts as active", () => {
+    redirected = redirectClaudeCode();
+    noAgentsDetected();
+    const home = makeCrewHome();
+    expect(crew(home, home, ["agents", "enable", "claude-code"]).code).toBe(0);
+    const project = makeProject([makeSkillRepo(["alpha"])]);
+
+    expect(crew(home, project, ["install"]).code).toBe(0);
+
+    expect(installed(home)).toEqual([`alpha@${project}`]);
   });
 
   test("C-RC-35 naming an agent that is not active is still no_agents", () => {
@@ -55,20 +74,24 @@ describe("bare crew install as a setup step", () => {
     expect(run.stderr).toContain("no_agents");
   });
 
-  test("C-RC-36 when everything declared is installed, it needs no source and exits 0", () => {
+  test("C-RC-36 when everything declared is installed, it contacts no remote and exits 0", () => {
     redirected = redirectClaudeCode();
     const home = makeCrewHome();
     const repo = makeSkillRepo(["alpha"]);
     const project = makeProject([repo]);
     expect(crew(home, project, ["install"]).code).toBe(0);
-    // Take the source away: any attempt to reach it now fails.
+    // Take the remote away: any attempt to contact it now fails. The local
+    // clone crew made on the first install is still in place.
     const repoDir = repo.slice("file://".length);
     renameSync(repoDir, `${repoDir}-moved`);
+    try {
+      const run = crew(home, project, ["install"]);
 
-    const run = crew(home, project, ["install"]);
-
-    expect(run.code).toBe(0);
-    expect(installed(home)).toEqual([`alpha@${project}`]);
+      expect(run.code).toBe(0);
+      expect(installed(home)).toEqual([`alpha@${project}`]);
+    } finally {
+      renameSync(`${repoDir}-moved`, repoDir);
+    }
   });
 
   test("C-RC-37 one unreachable source fails the whole install and installs nothing", () => {

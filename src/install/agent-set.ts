@@ -15,9 +15,16 @@ import { assertKnownAgents } from "../agents/validate.ts";
 import { CrewError } from "../core/errors.ts";
 import type { Config } from "../core/types.ts";
 
-/** Steps 1–2: every detected or forced adapter that is not disabled. May be empty. */
-export function detectActiveAgents(config: Config): AgentAdapter[] {
-  const active: AgentAdapter[] = [];
+/** Compute the active set of agent adapters. */
+export function computeAgentSet(
+  config: Config,
+  restrictTo: readonly string[] = [],
+): AgentAdapter[] {
+  // `no_agents`, not `usage_error`: an unresolvable restriction here
+  // means the install has no targets at all (§13).
+  assertKnownAgents(restrictTo, "no_agents");
+
+  let active: AgentAdapter[] = [];
   for (const adapter of ALL_AGENTS) {
     const forced = config.forced_agents.includes(adapter.name);
     const detected = adapter.detect();
@@ -29,19 +36,6 @@ export function detectActiveAgents(config: Config): AgentAdapter[] {
     }
     active.push(adapter);
   }
-  return active;
-}
-
-/** Compute the active set of agent adapters. */
-export function computeAgentSet(
-  config: Config,
-  restrictTo: readonly string[] = [],
-): AgentAdapter[] {
-  // `no_agents`, not `usage_error`: an unresolvable restriction here
-  // means the install has no targets at all (§13).
-  assertKnownAgents(restrictTo, "no_agents");
-
-  let active = detectActiveAgents(config);
   if (restrictTo.length > 0) {
     const set = new Set(restrictTo);
     active = active.filter((a) => set.has(a.name));

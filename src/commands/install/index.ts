@@ -8,7 +8,6 @@
 
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import { detectActiveAgents } from "../../install/agent-set.ts";
 import { runInstall } from "../../install/flow.ts";
 import { UNUSABLE_PROJECT_ROOT_WARNING } from "../../install/metadata-warning.ts";
 import type { KindHint } from "../../install/resolve-ref/index.ts";
@@ -56,12 +55,6 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const kindHint = readKindHint(ctx);
   rejectRecursiveTapRefs(ctx);
   const config = readConfig(ctx.home);
-  // §9.2: checked before any source is acquired. Naming an agent with
-  // `--agent` is a request for that agent, so it still fails as `no_agents`.
-  const noAgentRequested = ctx.flags.agent.length === 0;
-  if (manifest && noAgentRequested && detectActiveAgents(config).length === 0) {
-    return noAgentsOutcome(manifest, ctx);
-  }
   const discovery = new GitDiscoveryWarnings();
   const refs = manifest
     ? manifest.entries.map((entry) => entry.ref)
@@ -88,6 +81,13 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     result = runInstall(config, installOptions);
   } catch (err) {
     if (!(err instanceof CrewError)) throw err;
+    // §9.2: `runInstall` selects agents before it acquires any source, so
+    // this is reached with nothing fetched. Naming an agent with `--agent`
+    // is a request for that agent, so it still fails as `no_agents`.
+    const noAgentRequested = ctx.flags.agent.length === 0;
+    if (manifest && noAgentRequested && err.code === "no_agents") {
+      return noAgentsOutcome(manifest, ctx);
+    }
     throw withKnownTapInstallSuggestions(err, refs, config, cwd, kindHint);
   }
 
