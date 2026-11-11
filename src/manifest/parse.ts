@@ -138,7 +138,12 @@ export function isOutside(root: string, path: string): boolean {
  */
 function carriesCredential(ref: string, source: GitSource): boolean {
   // Keys are compared after decoding, so `%74oken` is `token`.
-  const query = ref.includes("?") ? ref.slice(ref.indexOf("?") + 1) : "";
+  // The query is what lies between the first `?` and any fragment; a `?`
+  // after a `#` is fragment text, which §8.2 discards.
+  const beforeFragment = ref.split("#", 1)[0] as string;
+  const query = beforeFragment.includes("?")
+    ? beforeFragment.slice(beforeFragment.indexOf("?") + 1)
+    : "";
   for (const key of new URLSearchParams(query).keys()) {
     if (SENSITIVE_QUERY_PARAMS.has(key.toLowerCase())) return true;
   }

@@ -139,8 +139,9 @@ describe("parseManifest: rejected references", () => {
       "https://HOST.example/acme/skills",
       "https://github.com/acme/skills?tab=readme-ov-file",
       "https://github.com/acme/skills/tree/main/pdf?plain=1",
+      "https://github.com/acme/skills#readme?token=note",
     ];
-    expect(parse(`${accepted.join("\n")}\n`).map((e) => e.line)).toEqual([1, 2, 3, 4]);
+    expect(parse(`${accepted.join("\n")}\n`).map((e) => e.line)).toEqual([1, 2, 3, 4, 5]);
   });
 
   test("a password is a credential on any URL with a scheme, including ssh://", () => {
