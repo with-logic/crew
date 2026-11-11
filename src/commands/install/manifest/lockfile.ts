@@ -75,17 +75,27 @@ export function refsToInstall(manifest: Manifest, lock: Lock): string[] {
  * find no entry, the later write stands. What settles a project's versions
  * is the lockfile that gets committed.
  *
+ * `latest` holds the entries of a `--latest` run, which were just looked up
+ * on their remotes and installed: those replace what the lockfile holds.
+ *
  * The file is written only if it would change. No file is created when no
  * line needs an entry, though an existing one may be rewritten down to its
  * header.
  */
-export function recordLock(manifest: Manifest, resolved: readonly ResolvedSkill[]): void {
+export function recordLock(
+  manifest: Manifest,
+  resolved: readonly ResolvedSkill[],
+  latest: Lock = NO_LOCK,
+): void {
   const onDisk = readLock(manifest);
   const resolvedByRepository = groupByRepository(resolved);
   const next = new Map<string, string>();
   for (const entry of manifest.entries) {
     if (!needsLockEntry(entry)) continue;
-    const sha = onDisk.get(entry.ref) ?? resolvedCommitOf(entry.source, resolvedByRepository);
+    const sha =
+      latest.get(entry.ref) ??
+      onDisk.get(entry.ref) ??
+      resolvedCommitOf(entry.source, resolvedByRepository);
     if (sha) next.set(entry.ref, sha);
   }
   const text = serializeLock(next);
