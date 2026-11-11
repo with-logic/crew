@@ -10,6 +10,7 @@ import { baseFor } from "../../../agents/adapter.ts";
 import { agentByName } from "../../../agents/registry.ts";
 import type { InstallRecord, PerAgentResult } from "../../../install/perform/index.ts";
 import { shortenHome } from "../../../util/format.ts";
+import { safePath } from "../../../util/redact.ts";
 import type { Styler } from "../../../util/term.ts";
 
 /** Remedy hints shown when a target install fails. Plain English only. */
@@ -32,7 +33,9 @@ export function renderAgentLine(
   const name = result.agent;
   if (result.kind === "installed" || result.kind === "up_to_date") {
     const adapter = agentByName(name);
-    const installPath = adapter ? shortenHome(join(baseFor(adapter, scope, cwd), skillName)) : "";
+    // §5.2: a project install's path embeds the cwd, so escape it.
+    const installDir = adapter ? join(baseFor(adapter, scope, cwd), skillName) : "";
+    const installPath = safePath(shortenHome(installDir));
     const status = result.kind === "up_to_date" ? style.dim("already up to date") : "";
     const pathSuffix = installPath ? `${style.dim("→")} ${style.dim(installPath)}` : "";
     const parts = [style.symbol("ok"), name, pathSuffix, status].filter((s) => s.length > 0);
