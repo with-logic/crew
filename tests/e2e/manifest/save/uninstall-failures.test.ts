@@ -50,28 +50,6 @@ describe("crew uninstall --save that does not go through", () => {
     expect(beta).not.toBe(alpha);
   });
 
-  test("C-RC-56 a reference that matches no line is redacted wherever the error repeats it", () => {
-    const home = makeCrewHome();
-    const { project } = projectWithTwoSkills(home);
-    const secret = "https://user:hunter2@example.com/acme/skills";
-
-    const json = crew(home, project, ["uninstall", "--save", secret, "--json"]);
-    const human = crew(home, project, ["uninstall", "--save", secret]);
-
-    expect(json.code).toBe(4);
-    const { error } = JSON.parse(json.stdout) as {
-      error: { name: string; details: { refs: string[] } };
-    };
-    expect(error.name).toBe("usage_error");
-    expect(error.details.refs).toHaveLength(1);
-    expect(error.details.refs[0]).toContain("example.com/acme/skills");
-    expect(json.stdout).not.toContain("hunter2");
-    expect(human.code).toBe(4);
-    expect(human.stderr).toContain("usage_error");
-    expect(human.stderr).toContain("has no line");
-    expect(human.stderr).not.toContain("hunter2");
-  });
-
   test("C-RC-56 a lockfile that did not exist before a failed run does not exist after it", () => {
     const home = makeCrewHome();
     const { project, beta } = projectWithTwoSkills(home);

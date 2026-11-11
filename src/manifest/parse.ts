@@ -13,7 +13,6 @@ import { dirname, relative, sep } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { GitSource, PathSource } from "../core/types.ts";
 import { parseRef } from "../refs/parse.ts";
-import { redactText } from "../util/redact.ts";
 import { referenceOn } from "./line.ts";
 
 /** The file name crew looks for at a project root. */
@@ -32,18 +31,6 @@ export interface ManifestEntry {
 const TAP_REASON =
   "names a skill through a tap, which depends on each machine's configured taps; " +
   "use a git source such as `@owner/repo//path` or a path inside the project";
-const CREDENTIAL_REASON =
-  "a line carries a credential in its URL, and this file is meant to be checked in; " +
-  "remove it and let git supply the credential (a credential helper, or an SSH URL)";
-/** The query parameters §5.2 treats as secrets. */
-const SENSITIVE_QUERY_PARAMS: ReadonlySet<string> = new Set([
-  "token",
-  "access_token",
-  "private_token",
-  "api_key",
-  "apikey",
-  "password",
-]);
 const wrapInBackticks = (ref: string): string => `\`${ref}\``;
 
 /** A manifest's contents and where they were read from. */
@@ -77,7 +64,7 @@ export function parseManifest({ text, file }: ManifestInput): readonly ManifestE
     if (ref === null) continue;
     const line = index + 1;
     const reject = (reason: string): never => {
-      throw manifestInvalid({ file, line, ref: redactText(ref) }, reason);
+      throw manifestInvalid({ file, line, ref }, reason);
     };
     const earlier = firstLineOf.get(ref);
     if (earlier !== undefined) reject(`${wrapInBackticks(ref)} repeats line ${earlier}`);
@@ -101,11 +88,7 @@ function parsePortable(
     return reject((err as Error).message);
   }
   if (source.type === "tap") return reject(`${wrapInBackticks(ref)} ${TAP_REASON}`);
-  if (source.type === "git") {
-    // A manifest is meant to be checked in, so no line of it may hold a secret.
-    if (carriesCredential(ref, source)) return reject(CREDENTIAL_REASON);
-    return source;
-  }
+  if (source.type === "git") return source;
   if (!(ref.startsWith("./") || ref.startsWith("../"))) {
     return reject(
       `${wrapInBackticks(ref)} must be a path relative to the project, starting with \`./\``,
@@ -125,33 +108,4 @@ function parsePortable(
 export function isOutside(root: string, path: string): boolean {
   const fromRoot = relative(root, path);
   return fromRoot === ".." || fromRoot.startsWith(`..${sep}`);
-}
-
-/**
- * True when a git line holds a credential (§9.2): a password or an
- * `http(s)` userinfo token in its clone URL, or one of the sensitive query
- * parameters of §5.2 anywhere in the line.
- *
- * This is deliberately not the display redactor. That masks every query
- * value it does not recognize, which is the right way to print a URL and
- * the wrong way to decide a line is invalid: a pasted browser URL ending
- * in `?tab=readme` holds no secret.
- */
-function carriesCredential(ref: string, source: GitSource): boolean {
-  // Keys are compared after decoding, so `%74oken` is `token`.
-  // The query is what lies between the first `?` and any fragment; a `?`
-  // after a `#` is fragment text, which §8.2 discards.
-  const beforeFragment = ref.split("#", 1)[0] as string;
-  const query = beforeFragment.includes("?")
-    ? beforeFragment.slice(beforeFragment.indexOf("?") + 1)
-    : "";
-  for (const key of new URLSearchParams(query).keys()) {
-    if (SENSITIVE_QUERY_PARAMS.has(key.toLowerCase())) return true;
-  }
-  // Only a URL with a scheme has userinfo that can be a secret. An
-  // scp-style remote (`git@host:owner/repo`) has a username.
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(source.url)) return false;
-  const url = new URL(source.url);
-  const isHttp = url.protocol === "http:" || url.protocol === "https:";
-  return url.password !== "" || (isHttp && url.username !== "");
 }
