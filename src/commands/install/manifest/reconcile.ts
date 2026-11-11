@@ -12,7 +12,7 @@ import { garbageCollectAutoTaps } from "../../../maintenance/auto-taps.ts";
 import { claimForManifest, loadManifestFor, type Manifest } from "../../../manifest/index.ts";
 import { readState, writeState } from "../../../state/load.ts";
 import { withStateLock } from "../../../state/lock.ts";
-import { safePath } from "../../../util/redact.ts";
+import { safePath, sanitizeLine } from "../../../util/redact.ts";
 import type { CommandContext } from "../../types.ts";
 import type { UninstallRecord } from "../../uninstall/core.ts";
 import { processDroppedEntries, type RemovalOutcome } from "./removal/index.ts";
@@ -99,7 +99,7 @@ function reconciliationOf(outcome: RemovalOutcome): Reconciliation {
 export function reconciliationWarnings(reconciled: Reconciliation): string[] {
   const warnings = reconciled.keptAsUnsafe.map(
     (name) =>
-      `warning: kept \`${safePath(name)}\`, which .crewrc no longer lists: its install directory is linked or shared, so crew cannot be sure it is this project's own. Remove it by hand if you want it gone.`,
+      `warning: kept \`${safePath(name)}\`, which .crewrc no longer requires: crew could not verify that its install directory is this project's own. Remove it by hand if you want it gone.`,
   );
   if (reconciled.manifestUnconfirmed) {
     warnings.push(
@@ -109,14 +109,17 @@ export function reconciliationWarnings(reconciled: Reconciliation): string[] {
   return warnings;
 }
 
-/** stderr lines for removals that aborted, for runs whose human output is suppressed (§5.2). */
+/**
+ * stderr lines for removals that aborted, for a plain `--quiet` run, whose
+ * human report is suppressed (§5.2). Each carries the failure's own message.
+ */
 export function quietRemovalFailures(reconciled: Reconciliation, ctx: CommandContext): string[] {
   if (!ctx.flags.quiet || ctx.flags.json) return [];
   const lines: string[] = [];
   for (const record of reconciled.removed) {
     for (const failure of record.failures) {
       lines.push(
-        `error: could not remove \`${safePath(record.name)}\` from ${failure.agent}: ${failure.error.code}`,
+        `error: could not remove \`${safePath(record.name)}\` from ${failure.agent} (${failure.error.code}): ${sanitizeLine(failure.error.message)} Pass --force to remove it anyway.`,
       );
     }
   }

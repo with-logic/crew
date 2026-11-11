@@ -155,4 +155,23 @@ describe("install sites that are not provably the project's own", () => {
       expect(existsSync(join(project, "beta", "keep.txt"))).toBe(true);
     });
   }
+
+  test("C-RC-30 an entry that records no agent is kept, with a warning", () => {
+    const home = makeCrewHome();
+    const project = makeProject([makeSkillRepo(["alpha"])]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    const state = readState(home);
+    const alpha = state.installations.find((entry) => entry.name === "alpha");
+    expect(alpha?.manifest_owned).toBe(true);
+    writeState({ ...state, installations: [{ ...alpha!, agents: [] }] }, home);
+
+    writeManifest(project, []);
+    const run = crew(home, project, ["install"]);
+
+    expect(run.code).toBe(0);
+    expect(run.stderr).toContain("kept `alpha`");
+    expect(run.stderr).toContain("could not verify");
+    expect(installed(home)).toEqual([`alpha@${project}`]);
+    expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
+  });
 });

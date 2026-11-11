@@ -14,7 +14,7 @@ export function renderDropped(records: readonly UninstallRecord[], ctx: CommandC
   if (records.length === 0) return [];
   return [
     "",
-    ctx.style.bold(`No longer in ${MANIFEST_FILENAME}`),
+    ctx.style.bold(`No longer required by ${MANIFEST_FILENAME}`),
     ...renderUninstall(records, ctx.flags.dryRun, ctx.style),
   ];
 }

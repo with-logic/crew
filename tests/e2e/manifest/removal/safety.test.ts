@@ -1,7 +1,7 @@
 /**
- * What a bare `crew install` refuses to remove (§9.2): a skill something
- * else still needs, a skill whose install directory is really the user's,
- * and anything at all when the manifest could not be satisfied.
+ * Removal fail-safes (§9.2): a removal that aborts on an uninstall safety
+ * check, and the ways an install can fail without costing the project a
+ * skill it already has.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -148,5 +148,20 @@ describe("removal safety", () => {
     expect(run.stdout).toBe("");
     expect(run.stderr).toContain("could not remove `alpha`");
     expect(run.stderr).toContain("untracked_directory");
+    expect(run.stderr).toContain("--force");
+  });
+
+  test("C-RC-27 when a declared source cannot be reached, a dropped skill stays and stays owned", () => {
+    const home = makeCrewHome();
+    const project = makeProject([makeSkillRepo(["alpha"])]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    writeManifest(project, [`file://${join(project, "no-such-repo")}`]);
+
+    const run = crew(home, project, ["install"]);
+
+    expect(run.code).toBe(5);
+    expect(run.stderr).toContain("source_unreachable");
+    expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
+    expect(ownedNames(home)).toEqual(["alpha"]);
   });
 });

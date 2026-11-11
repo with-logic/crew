@@ -78,7 +78,7 @@ describe("removal order", () => {
     const run = crew(home, project, ["install"]);
 
     expect(run.code).toBe(1);
-    expect(run.stdout).toContain("No longer in .crewrc");
+    expect(run.stdout).toContain("No longer required by .crewrc");
     expect(run.stdout).toContain("top");
     expect(run.stdout).toContain("something else owns that folder");
     expect(installed(home)).toEqual([`base@${project}`, `top@${project}`]);
@@ -145,5 +145,20 @@ describe("removal order", () => {
     expect(installed(home)).toEqual([`ping@${project}`, `pong@${project}`]);
     expect(existsSync(join(skillDir(project, "ping"), "SKILL.md"))).toBe(true);
     expect(ownedNames(home)).toEqual(["ping", "pong"]);
+  });
+
+  test("C-RC-28 a dependency whose own line is dropped stays while a declared skill requires it", () => {
+    const home = makeCrewHome();
+    const project = makeProject(["./tools/top", "./tools/base"]);
+    addSkillsWithDependencies(project, { base: null, top: "base" });
+    expect(crew(home, project, ["install"]).code).toBe(0);
+
+    writeManifest(project, ["./tools/top"]);
+    const run = crew(home, project, ["install", "--json"]);
+
+    expect(run.code).toBe(0);
+    expect((JSON.parse(run.stdout) as { removed: unknown[] }).removed).toEqual([]);
+    expect(installed(home)).toEqual([`base@${project}`, `top@${project}`]);
+    expect(existsSync(join(skillDir(project, "base"), "SKILL.md"))).toBe(true);
   });
 });

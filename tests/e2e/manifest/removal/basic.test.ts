@@ -59,7 +59,7 @@ describe("removing dropped skills", () => {
     const run = crew(home, project, ["install"]);
 
     expect(run.code).toBe(0);
-    expect(run.stdout).toContain("No longer in .crewrc");
+    expect(run.stdout).toContain("No longer required by .crewrc");
     for (const name of ["alpha", "beta"]) {
       expect(run.stdout).toContain(name);
       expect(existsSync(skillDir(project, name))).toBe(false);
@@ -125,7 +125,7 @@ describe("removing dropped skills", () => {
     const run = crew(home, project, ["install", "--dry-run"]);
 
     expect(run.code).toBe(0);
-    expect(run.stdout).toContain("No longer in .crewrc");
+    expect(run.stdout).toContain("No longer required by .crewrc");
     expect(run.stdout).toContain("alpha");
     expect(installed(home)).toEqual([`alpha@${project}`, `gamma@${project}`]);
   });

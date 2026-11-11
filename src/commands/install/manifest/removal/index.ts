@@ -88,13 +88,13 @@ function removeInOrder(
   const { ctx, isStillCurrent } = request;
   const preview: CommandContext = { ...ctx, flags: { ...ctx.flags, dryRun: true } };
   /** Uninstall `entry` from every agent it is on, fully, updating `state` as it goes. */
-  const uninstall = (state: StateFile, entry: StateEntry, as: CommandContext) => {
+  const uninstall = (state: StateFile, entry: StateEntry, uninstallContext: CommandContext) => {
     const subject = { raw: entry.name, name: entry.name, entries: [entry] };
     const options = { pruned: false, agentFilter: null, deferStateEntryDrops: false };
     return removeOne(
       state,
       subject,
-      as,
+      uninstallContext,
       options.pruned,
       options.agentFilter,
       options.deferStateEntryDrops,
@@ -124,12 +124,16 @@ function removeInOrder(
     const entry = byName.get(name) as ProjectEntry;
     // Looked at again right before the delete, to keep the gap between
     // checking a directory and removing it as short as it can be.
-    if (!areProjectInstallPathsSafeToRemove(entry)) break;
+    if (!areProjectInstallPathsSafeToRemove(entry)) {
+      keptAsUnsafe.push(entry.name);
+      break;
+    }
     const removal = uninstall(state, entry, ctx);
     state = removal.updatedState;
     records.push(removal.rec);
-    // The pre-check passed and the locks are held, so this is not expected.
-    // Stop rather than remove something the survivor may still need.
+    // The pre-check passed (and on a normal run the target locks are held),
+    // so this is not expected. Stop rather than remove something the
+    // survivor may still need.
     if (removal.rec.failures.length > 0) break;
   }
   return { state, records, keptAsUnsafe };

@@ -1562,16 +1562,18 @@ so a later bare install removes it once the reason is gone:
   record, and is named in a warning on stderr and in `warnings` of the
   `--json` result. `--force` does not override these.
   - The entry's name is a valid skill name (§4): one path segment.
-  - Every agent recorded on the entry is a supported adapter (§7.2) that has
-    a project-scope skills directory.
+  - The entry records at least one agent, and every agent it records is a
+    supported adapter (§7.2) that has a project-scope skills directory.
   - Each directory the entry is installed into lies physically inside the
     project root, at the same relative path it has by name — it is reached
     from the project root without crossing a symbolic link. A project skills
     directory that is a link may be the user-scope directory, another
     project's, or one recorded under another crew home.
-  - That directory is not physically the same as the agent's user-scope
-    directory for the skill. A project rooted at the home directory shares
-    that path with no link involved.
+  - That directory is not the same directory on disk as the agent's
+    user-scope directory for the skill, judged by device and inode rather
+    than by path. A project rooted at the home directory shares that path
+    with no link involved, and a bind mount shares the directory under a
+    different path.
 
   These checks are made before any entry is removed and again immediately
   before each one is. They describe the filesystem at the moment they run:
@@ -1589,7 +1591,8 @@ skill it already has.
 `--json` result of a bare install carries `removed`: an array with one
 uninstall record (§7.4) per entry removed or attempted — a record may describe
 a completed removal, a preview, or an aborted attempt — empty when there are
-none. Human output lists them under a heading that names `.crewrc`.
+none. Human output lists them under a heading that names `.crewrc`. Under a
+plain `--quiet`, each aborted removal is written to stderr with its reason.
 **As a project setup step.** A project may run bare `crew install` from its
 own setup (an npm `postinstall` script, a Makefile target), so it runs on every
 machine and every time. Three properties make that safe:
@@ -3568,7 +3571,7 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-27 | §9.2 | When a declared reference fails to resolve, a declared skill fails validation, a declared skill cannot be installed into its directory, or the manifest is invalid, nothing is removed and dropped skills keep `manifest_owned: true`. |
 | C-RC-28 | §9.2 | Dropped skills that a hand-installed skill requires, directly or down a chain or cycle, stay installed and stay owned; a dropped skill nothing requires is still removed. Once the hand-installed skill is uninstalled, the next bare `crew install` removes them. |
 | C-RC-29 | §9.2 | When a dropped dependent's removal aborts, the dependency it requires stays installed and owned. |
-| C-RC-30 | §9.2 | A dropped skill is kept, gets no removal record, and is named in a warning when its install directory is reached through a symbolic link (to the user-scope directory, to another project's, or anywhere else), when it is physically the agent's user-scope directory for that skill, when its recorded name is not a valid skill name, or when it is recorded for an agent that is unknown or has no project-scope directory. `--force` does not change this, and the files at that location remain. |
+| C-RC-30 | §9.2 | A dropped skill is kept, gets no removal record, and is named in a warning when its install directory is reached through a symbolic link (to the user-scope directory, to another project's, or anywhere else), when it is the same directory on disk as the agent's user-scope directory for that skill, when its recorded name is not a valid skill name, when it records no agent, or when it records an agent that is unknown or has no project-scope directory. `--force` does not change this, and the files at that location remain. |
 | C-RC-31 | §9.2 | When `.crewrc` is replaced, becomes invalid, or is deleted while a bare `crew install` is running, that run marks no entry `manifest_owned`, warns on stderr and in `warnings` of the `--json` result, and exits as it otherwise would. |
 | C-RC-32 | §9.2 | A dropped dependency chain that nothing else needs is removed in full, dependents first. A dropped dependency cycle is removed in full when nothing kept needs it, and kept in full, with exit 1, when one member's removal would abort. |
 | C-RC-33 | §9.2 | A bare `crew install` that read a manifest since replaced removes nothing, including skills the manifest it read had dropped. |
