@@ -8,17 +8,32 @@
  * result.
  */
 
+import { CrewError } from "../core/errors.ts";
+import { referenceOn } from "./line.ts";
+
 /** A manifest's text after an edit, and the references the edit acted on. */
 export interface ManifestEdit {
   readonly text: string;
-  /** The references added or removed, in the order given, each once. */
-  readonly changed: readonly string[];
+  /** The references added or removed, trimmed, in the order given, each once. */
+  readonly changedRefs: readonly string[];
 }
 
-/** The reference a line holds, or null for a blank line or a comment. */
-function referenceOn(line: string): string | null {
-  const ref = line.trim();
-  return ref === "" || ref.startsWith("#") ? null : ref;
+/**
+ * The references to act on: each trimmed, each once, in the order given.
+ * One that is empty or spans lines is a `usage_error`. Parsing the edited
+ * manifest could not catch it, because it would read as no line or as
+ * several valid ones.
+ */
+function singleLineRefs(refs: readonly string[]): string[] {
+  const unique = new Set<string>();
+  for (const raw of refs) {
+    const ref = raw.trim();
+    if (ref === "" || /[\r\n]/.test(ref)) {
+      throw new CrewError("usage_error", "a skill reference must be one non-empty line");
+    }
+    unique.add(ref);
+  }
+  return [...unique];
 }
 
 /**
@@ -32,39 +47,34 @@ export function addManifestLines(text: string, refs: readonly string[]): Manifes
     const ref = referenceOn(line);
     if (ref !== null) present.add(ref);
   }
-  const changed: string[] = [];
-  for (const raw of refs) {
-    const ref = raw.trim();
-    if (present.has(ref)) continue;
-    present.add(ref);
-    changed.push(ref);
-  }
-  if (changed.length === 0) return { text, changed };
+  const changedRefs = singleLineRefs(refs).filter((ref) => !present.has(ref));
+  if (changedRefs.length === 0) return { text, changedRefs };
   const start = text === "" || text.endsWith("\n") ? text : `${text}\n`;
-  return { text: `${start}${changed.join("\n")}\n`, changed };
+  return { text: `${start}${changedRefs.join("\n")}\n`, changedRefs };
 }
 
 /**
  * Delete the line of each of `refs` the manifest lists. A reference it does
- * not list is left out of `changed`; the caller decides whether that is an
- * error. Every other line keeps its text and its line ending, and what is
- * left ends with a newline.
+ * not list is left out of `changedRefs`; the caller decides whether that is
+ * an error. Every line that stays keeps its text and its line ending.
  */
 export function removeManifestLines(text: string, refs: readonly string[]): ManifestEdit {
-  const wanted = new Set(refs.map((ref) => ref.trim()));
+  const wanted = singleLineRefs(refs);
   const found = new Set<string>();
+  const lines = text.split("\n");
   const kept: string[] = [];
-  for (const line of text.split("\n")) {
+  for (const [index, line] of lines.entries()) {
     const ref = referenceOn(line);
-    if (ref !== null && wanted.has(ref)) found.add(ref);
-    else kept.push(line);
+    if (ref === null || !wanted.includes(ref)) {
+      kept.push(line);
+      continue;
+    }
+    found.add(ref);
+    // A removed last line that had no newline of its own: the line before
+    // it had one, which rejoining would otherwise drop.
+    const isUnterminatedLastLine = index === lines.length - 1;
+    if (isUnterminatedLastLine) kept.push("");
   }
-  const changed: string[] = [];
-  for (const ref of wanted) {
-    if (found.has(ref)) changed.push(ref);
-  }
-  if (changed.length === 0) return { text, changed };
-  // Removing a last line that had no newline leaves the line before it last.
-  const rest = kept.join("\n");
-  return { text: rest === "" || rest.endsWith("\n") ? rest : `${rest}\n`, changed };
+  const changedRefs = wanted.filter((ref) => found.has(ref));
+  return { text: changedRefs.length === 0 ? text : kept.join("\n"), changedRefs };
 }

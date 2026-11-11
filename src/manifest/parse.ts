@@ -14,6 +14,7 @@ import { CrewError } from "../core/errors.ts";
 import type { GitSource, PathSource } from "../core/types.ts";
 import { parseRef } from "../refs/parse.ts";
 import { redactText } from "../util/redact.ts";
+import { referenceOn } from "./line.ts";
 
 /** The file name crew looks for at a project root. */
 export const MANIFEST_FILENAME = ".crewrc";
@@ -72,8 +73,8 @@ export function parseManifest({ text, file }: ManifestInput): readonly ManifestE
   const firstLineOf = new Map<string, number>();
   const lines = text.replace(/^﻿/, "").split("\n");
   for (const [index, rawLine] of lines.entries()) {
-    const ref = rawLine.trim();
-    if (ref === "" || ref.startsWith("#")) continue;
+    const ref = referenceOn(rawLine);
+    if (ref === null) continue;
     const line = index + 1;
     const reject = (reason: string): never => {
       throw manifestInvalid({ file, line, ref: redactText(ref) }, reason);
