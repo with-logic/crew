@@ -3,10 +3,13 @@
  * (§9.2, §9.3): remove what the manifest no longer accounts for, record the
  * lockfile, then claim what the manifest resolved to.
  *
- * All of it happens under one hold of the state lock, and only while the
- * manifest on disk is still the one this run installed from. Two overlapping
- * installs that read different versions of `.crewrc` would otherwise each
- * sweep away what the other had just claimed.
+ * On a run that writes, all of it happens under one hold of the state lock,
+ * and only while the manifest on disk is still the one this run installed
+ * from. Two overlapping installs that read different versions of `.crewrc`
+ * would otherwise each sweep away what the other had just claimed.
+ *
+ * A dry run takes no lock: it previews the removals from the state it reads,
+ * and another run may change that state before the preview is acted on.
  */
 
 import type { ResolvedSkill } from "../../../core/types.ts";
@@ -49,9 +52,10 @@ const MANIFEST_CHANGED: Reconciliation = { ...EMPTY_RECONCILIATION, manifestChan
  *
  * In order: uninstall what the manifest owns that is no longer among them,
  * record the lockfile, and mark them as owned. Each step runs only while
- * `.crewrc` is still the manifest this run read. Claims come last so that a
- * run which finds the manifest changed, at any earlier step, has claimed
- * nothing. A dry run previews the removals and writes nothing.
+ * `.crewrc` is still the manifest this run read, and the manifest is
+ * confirmed one last time immediately before the claims, so a run that
+ * finds it changed at any point has claimed nothing. A dry run previews the
+ * removals, without the state lock, and writes nothing.
  */
 export function reconcileManifestInstalls(
   ctx: CommandContext,
@@ -70,23 +74,26 @@ export function reconcileManifestInstalls(
     return preview ? reconciliationOf(preview) : MANIFEST_CHANGED;
   }
   return withStateLock(() => {
-    // Removal runs on the unclaimed state, so that if the manifest stops
-    // being current partway through, what is written holds the removals
-    // already done and none of this run's claims.
     const before = readState(ctx.home);
     const outcome = processDroppedEntries(before, request);
     if (outcome === null) return MANIFEST_CHANGED;
-    // `recordLock` returns false, having written nothing, when it finds the
-    // manifest changed. It runs before the claims so that they are never
-    // recorded by a run that went on to detect a change.
+    // The removals are persisted on their own, before the lockfile step,
+    // which can fail: state must not go on listing a skill that is gone.
+    if (outcome.state !== before) {
+      writeState(outcome.state, ctx.home);
+      // A dropped line may have been the last use of its auto tap (§16.5).
+      garbageCollectAutoTaps(outcome.state, ctx.home);
+    }
+    // The manifest is confirmed last of all, after the lockfile step and
+    // immediately before the claims, whichever path `recordLock` took.
+    // (`recordLock` returns false, having written nothing, when it finds
+    // the manifest changed.)
     const isConfirmed =
-      !outcome.interrupted && request.isStillCurrent() && recordLock(manifest, resolved);
-    const after = isConfirmed
-      ? claimForManifest(outcome.state, manifest.projectRoot, resolvedSkillNames)
-      : outcome.state;
-    if (after !== before) writeState(after, ctx.home);
-    // A dropped line may have been the last use of its auto tap (§16.5).
-    if (outcome.state !== before) garbageCollectAutoTaps(after, ctx.home);
+      !outcome.interrupted && recordLock(manifest, resolved) && request.isStillCurrent();
+    if (isConfirmed) {
+      const claimed = claimForManifest(outcome.state, manifest.projectRoot, resolvedSkillNames);
+      if (claimed !== outcome.state) writeState(claimed, ctx.home);
+    }
     return { ...reconciliationOf(outcome), manifestChanged: !isConfirmed };
   }, ctx.home);
 }

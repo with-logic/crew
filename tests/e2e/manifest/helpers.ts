@@ -67,16 +67,18 @@ export function ownedNames(home: string): string[] {
 }
 
 /**
- * Run a verbose bare install, calling `onFirstSkillInstalling` once, when the
- * first skill starts installing: after the manifest and lockfile were
- * read, before ownership is reconciled or the lockfile written. `hookRan`
- * says whether that moment came.
+ * Run a verbose bare install, calling `hook` once, the first time a progress
+ * line matches `moment`. By default that is when the first skill starts
+ * installing: after the manifest and lockfile were read, before ownership
+ * is reconciled or the lockfile written. `hookRan` says whether that moment
+ * came.
  */
 export function runBareInstallWithMidInstallHook(
   home: string,
   project: string,
-  onFirstSkillInstalling: () => void,
+  hook: () => void,
   extraArgs: readonly string[] = [],
+  moment: RegExp = /installing/,
 ) {
   let hookRan = false;
   let stdout = "";
@@ -90,9 +92,9 @@ export function runBareInstallWithMidInstallHook(
       },
       stderr: (chunk) => {
         stderr += chunk;
-        if (hookRan || !chunk.includes("installing")) return;
+        if (hookRan || !moment.test(chunk)) return;
         hookRan = true;
-        onFirstSkillInstalling();
+        hook();
       },
     },
   });

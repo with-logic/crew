@@ -1519,9 +1519,11 @@ user scope or under another project root are never touched.
 under a single hold of the state lock, and only while the manifest on disk
 still lists exactly the references this run read. That is checked before
 anything is removed, again immediately before each deletion, again before
-the lockfile is written (§9.3), and only then is anything claimed. Claims
-come last, so a run that finds the manifest changed at any of those points
-has claimed nothing. If `.crewrc` has changed — or can no longer
+the lockfile is written (§9.3), and a final time immediately before anything
+is claimed. Claims come last, so a run that finds the manifest changed at any
+of those points has claimed nothing. `state.json` is written once for the
+removals, before the lockfile step, and once more for the claims. A
+`--dry-run` takes no lock and previews from the state it reads. If `.crewrc` has changed — or can no longer
 be read or parsed — the run stops reconciling at that point: it removes
 nothing if it had not started and nothing further if it had, claims nothing,
 and leaves the lockfile as it was. Removals already done stand. The run
@@ -1543,10 +1545,11 @@ with no entries, the tap is garbage-collected (§16.5).
 Three kinds of dropped entry are kept. Each keeps its `manifest_owned` flag,
 so a later bare install removes it once the reason is gone:
 
-- **Still needed.** A dropped entry is *needed* while something that is
-  staying at that install location lists it in `required_by`: a skill that is
-  not dropped, a dropped entry that is itself being kept, or another needed
-  entry. A needed entry is not uninstalled. Among the rest, dependents are
+- **Still needed.** A dropped entry is *needed* while its own `required_by`
+  (§11.1: the skills that depend on it) names a skill that is staying at
+  that install location: a skill that is not dropped, a dropped entry that
+  is itself being kept, or another needed entry. A needed entry is not
+  uninstalled. Among the rest, dependents are
   removed before the skills they depend on. Dependency cycles are legal
   (C-DEP-08): a dropped cycle is removed whole when nothing kept needs it,
   and kept whole otherwise.
