@@ -24,7 +24,7 @@ import {
   serializeLock,
 } from "../../../manifest/index.ts";
 import { writeText } from "../../../util/fs.ts";
-import { hasChangedOnDisk } from "./reconcile.ts";
+import { hasChangedOnDisk } from "./freshness.ts";
 
 function lockPathFor(manifest: Manifest): string {
   return join(manifest.projectRoot, LOCK_FILENAME);
@@ -82,10 +82,11 @@ export function refsToInstall(manifest: Manifest, lock: Lock): string[] {
  */
 export function recordLock(manifest: Manifest, resolved: readonly ResolvedSkill[]): boolean {
   const onDisk = readLock(manifest);
+  const resolvedByRepository = groupByRepository(resolved);
   const next = new Map<string, string>();
   for (const entry of manifest.entries) {
     if (!needsLockEntry(entry)) continue;
-    const sha = onDisk.get(entry.ref) ?? resolvedCommitOf(entry.source as GitSource, resolved);
+    const sha = onDisk.get(entry.ref) ?? resolvedCommitOf(entry.source, resolvedByRepository);
     if (sha) next.set(entry.ref, sha);
   }
   const text = serializeLock(next);
@@ -94,6 +95,25 @@ export function recordLock(manifest: Manifest, resolved: readonly ResolvedSkill[
   if (hasChangedOnDisk(manifest)) return false;
   writeText(lockPathFor(manifest), text);
   return true;
+}
+
+/** Where in its repository a resolved skill came from, and at what ref and commit. */
+interface LocatedSkill {
+  readonly location: string;
+  readonly ref: string | null;
+  readonly resolvedSha: string | null;
+}
+
+/** The resolved skills of each repository, keyed by its canonical URL. */
+function groupByRepository(resolved: readonly ResolvedSkill[]): Map<string, LocatedSkill[]> {
+  const groups = new Map<string, LocatedSkill[]>();
+  for (const skill of resolved) {
+    const { root, location } = sourceIdentityOf(skill.tap, skill.tapRelativePath);
+    const group = groups.get(root) ?? [];
+    group.push({ location, ref: skill.ref, resolvedSha: skill.resolvedSha });
+    groups.set(root, group);
+  }
+  return groups;
 }
 
 /**
@@ -109,14 +129,16 @@ export function recordLock(manifest: Manifest, resolved: readonly ResolvedSkill[
  */
 function resolvedCommitOf(
   source: GitSource,
-  resolved: readonly ResolvedSkill[],
+  resolvedByRepository: ReadonlyMap<string, readonly LocatedSkill[]>,
 ): string | null | undefined {
-  const root = canonicalRepoUrl(source.url);
-  const skillsFromLocation = resolved.filter((skill) => {
-    const { root: skillRoot, location } = sourceIdentityOf(skill.tap, skill.tapRelativePath);
-    const isBeneath = source.subpath === "" || `${location}/`.startsWith(`${source.subpath}/`);
-    return skillRoot === root && isBeneath;
-  });
-  const atOwnRef = skillsFromLocation.find((skill) => skill.ref === source.ref);
-  return (atOwnRef ?? skillsFromLocation[0])?.resolvedSha;
+  const fromRepository = resolvedByRepository.get(canonicalRepoUrl(source.url)) ?? [];
+  let atAnotherRef: LocatedSkill | undefined;
+  for (const skill of fromRepository) {
+    const isBeneath =
+      source.subpath === "" || `${skill.location}/`.startsWith(`${source.subpath}/`);
+    if (!isBeneath) continue;
+    if (skill.ref === source.ref) return skill.resolvedSha;
+    atAnotherRef ??= skill;
+  }
+  return atAnotherRef?.resolvedSha;
 }

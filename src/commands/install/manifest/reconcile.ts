@@ -9,9 +9,10 @@
  * sweep away what the other had just claimed.
  */
 
-import { claimForManifest, loadManifestFor, type Manifest } from "../../../manifest/index.ts";
+import { claimForManifest, type Manifest } from "../../../manifest/index.ts";
 import { readState, writeState } from "../../../state/load.ts";
 import { withStateLock } from "../../../state/lock.ts";
+import { hasChangedOnDisk } from "./freshness.ts";
 
 /** What reconciling did. */
 export interface Reconciliation {
@@ -42,17 +43,6 @@ export function reconcileOwnership(reconcile: {
     if (claimed !== state) writeState(claimed, home);
     return IN_STEP_WITH_MANIFEST;
   }, home);
-}
-
-/** True unless the manifest governing the project still lists exactly the same references. */
-export function hasChangedOnDisk(snapshot: Manifest): boolean {
-  const identity = (manifest: Manifest | null): string =>
-    JSON.stringify([manifest?.file, manifest?.entries.map((entry) => entry.ref)]);
-  try {
-    return identity(loadManifestFor(snapshot.projectRoot)) !== identity(snapshot);
-  } catch {
-    return true; // Unreadable or invalid now: not the manifest this run installed from.
-  }
 }
 
 /** The warnings a run owes the user when `.crewrc` changed underneath it. */

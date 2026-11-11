@@ -53,10 +53,10 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   if (manifest?.entries.length === 0) {
     // §9.3: with nothing to install, the lockfile is still checked, and
     // emptied of entries for lines that have gone — except on a dry run.
-    let isLockRecorded = true;
+    let manifestChanged = false;
     if (ctx.flags.dryRun) readLock(manifest);
-    else isLockRecorded = recordLock(manifest, []);
-    const stale = staleManifestWarnings({ manifestChanged: !isLockRecorded });
+    else manifestChanged = !recordLock(manifest, []);
+    const stale = staleManifestWarnings({ manifestChanged });
     return nothingToInstall(manifest, ctx, `${safePath(manifest.file)} declares no skills.`, stale);
   }
   const kindHint = readKindHint(ctx);
@@ -135,9 +135,10 @@ export function installCommand(ctx: CommandContext): CommandOutput {
         resolvedSkillNames: new Set(result.resolved.map((skill) => skill.name)),
       })
     : IN_STEP_WITH_MANIFEST;
-  const isLockRecorded =
-    !mayPersist || reconciled.manifestChanged || recordLock(manifest, result.resolved);
-  const persisted = { manifestChanged: reconciled.manifestChanged || !isLockRecorded };
+  // `recordLock` returns false when it found `.crewrc` changed and wrote nothing.
+  const changedBeforeLockWrite =
+    mayPersist && !reconciled.manifestChanged && !recordLock(manifest, result.resolved);
+  const persisted = { manifestChanged: reconciled.manifestChanged || changedBeforeLockWrite };
 
   const human = renderInstall(
     {

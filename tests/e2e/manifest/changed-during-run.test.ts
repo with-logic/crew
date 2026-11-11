@@ -7,10 +7,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { runCli } from "../../../src/cli/main.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
-import { installed, makeProject, makeSkillRepo, ownedNames, writeManifest } from "./helpers.ts";
+import {
+  installed,
+  makeProject,
+  makeSkillRepo,
+  ownedNames,
+  runBareInstallWithMidInstallHook,
+  writeManifest,
+} from "./helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -21,9 +27,9 @@ afterEach(() => {
 });
 
 /**
- * Run a verbose bare install and rewrite `.crewrc` to `lines` the moment
- * (or delete it, for `null`) the first skill starts installing — after the manifest was read, before
- * ownership is reconciled.
+ * Run a bare install and rewrite `.crewrc` to `lines` (or delete it, for
+ * `null`) partway through: after the manifest was read, before ownership is
+ * reconciled.
  */
 function installWhileManifestBecomes(
   home: string,
@@ -31,26 +37,11 @@ function installWhileManifestBecomes(
   lines: readonly string[] | null,
   extraArgs: readonly string[] = [],
 ) {
-  let rewritten = false;
-  let stdout = "";
-  let stderr = "";
-  const code = runCli(["install", "--verbose", ...extraArgs], {
-    home,
-    cwd: project,
-    streams: {
-      stdout: (chunk) => {
-        stdout += chunk;
-      },
-      stderr: (chunk) => {
-        stderr += chunk;
-        if (rewritten || !chunk.includes("installing")) return;
-        rewritten = true;
-        if (lines === null) rmSync(join(project, ".crewrc"));
-        else writeManifest(project, lines);
-      },
-    },
-  });
-  return { code, stdout, stderr, rewritten };
+  const rewrite = (): void => {
+    if (lines === null) rmSync(join(project, ".crewrc"));
+    else writeManifest(project, lines);
+  };
+  return runBareInstallWithMidInstallHook(home, project, rewrite, extraArgs);
 }
 
 describe("a manifest that changes during the run", () => {
@@ -66,7 +57,7 @@ describe("a manifest that changes during the run", () => {
 
       const human = installWhileManifestBecomes(home, project, becomes());
 
-      expect(human.rewritten).toBe(true);
+      expect(human.hookRan).toBe(true);
       expect(human.code).toBe(0);
       expect(human.stderr).toContain("crew stopped bringing the project in line with it");
       expect(installed(home)).toEqual([`alpha@${project}`]);

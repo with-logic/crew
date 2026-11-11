@@ -55,4 +55,16 @@ describe("lockfile entries for dropped lines", () => {
     writeFileSync(lockFile(project), "not a lockfile\n");
     expect(crew(home, project, ["install"]).code).toBe(4);
   });
+
+  test("C-RC-41 an invalid lockfile is manifest_invalid on a dry run of an emptied manifest", () => {
+    const project = makeProject([]);
+    writeFileSync(lockFile(project), "not a lockfile\n");
+
+    const run = crew(makeCrewHome(), project, ["install", "--dry-run", "--json"]);
+
+    expect(run.code).toBe(4);
+    const { error } = JSON.parse(run.stdout) as { error: { name: string } };
+    expect(error.name).toBe("manifest_invalid");
+    expect(readFileSync(lockFile(project), "utf8")).toBe("not a lockfile\n");
+  });
 });
