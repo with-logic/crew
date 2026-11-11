@@ -130,19 +130,21 @@ describe("removing dropped skills", () => {
     expect(installed(home)).toEqual([`alpha@${project}`, `gamma@${project}`]);
   });
 
-  test("C-RC-21 an emptied manifest removes what it owned even with no agent coder active", () => {
-    const home = makeCrewHome();
-    const project = makeProject([makeSkillRepo(["alpha"])]);
-    expect(crew(home, project, ["install"]).code).toBe(0);
-    writeManifest(project, []);
-    const detect = claudeCodeAdapter.detect;
-    (claudeCodeAdapter as { detect: () => boolean }).detect = () => false;
-    try {
+  for (const args of [["install"], ["install", "--agent", "claude-code"]]) {
+    test(`C-RC-21 an emptied manifest removes what it owned with no agent coder active (crew ${args.join(" ")})`, () => {
+      const home = makeCrewHome();
+      const project = makeProject([makeSkillRepo(["alpha"])]);
       expect(crew(home, project, ["install"]).code).toBe(0);
-    } finally {
-      (claudeCodeAdapter as { detect: () => boolean }).detect = detect;
-    }
-    expect(installed(home)).toEqual([]);
-    expect(existsSync(skillDir(project, "alpha"))).toBe(false);
-  });
+      writeManifest(project, []);
+      const detect = claudeCodeAdapter.detect;
+      (claudeCodeAdapter as { detect: () => boolean }).detect = () => false;
+      try {
+        expect(crew(home, project, args).code).toBe(0);
+      } finally {
+        (claudeCodeAdapter as { detect: () => boolean }).detect = detect;
+      }
+      expect(installed(home)).toEqual([]);
+      expect(existsSync(skillDir(project, "alpha"))).toBe(false);
+    });
+  }
 });

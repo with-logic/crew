@@ -51,11 +51,13 @@ const MANIFEST_CHANGED: Reconciliation = { ...EMPTY_RECONCILIATION, manifestChan
  * skills the manifest resolved to. Call only when all of them have landed.
  *
  * In order: uninstall what the manifest owns that is no longer among them,
- * record the lockfile, and mark them as owned. Each step runs only while
- * `.crewrc` is still the manifest this run read, and the manifest is
- * confirmed one last time immediately before the claims, so a run that
- * finds it changed at any point has claimed nothing. A dry run previews the
- * removals, without the state lock, and writes nothing.
+ * confirm one last time that `.crewrc` is still the manifest this run read,
+ * then record the lockfile and mark the resolved skills as owned. A run that
+ * finds the manifest changed, before or during the removals or at that last
+ * confirmation, writes neither the lockfile nor any claim. A change after
+ * the last confirmation is not seen by this run; the next bare install
+ * reconciles against it. A dry run previews the removals, without the state
+ * lock, and writes nothing.
  */
 export function reconcileManifestInstalls(
   ctx: CommandContext,
@@ -84,17 +86,17 @@ export function reconcileManifestInstalls(
       // A dropped line may have been the last use of its auto tap (§16.5).
       garbageCollectAutoTaps(outcome.state, ctx.home);
     }
-    // The manifest is confirmed last of all, after the lockfile step and
-    // immediately before the claims, whichever path `recordLock` took.
-    // (`recordLock` returns false, having written nothing, when it finds
-    // the manifest changed.)
-    const isConfirmed =
-      !outcome.interrupted && recordLock(manifest, resolved) && request.isStillCurrent();
-    if (isConfirmed) {
-      const claimed = claimForManifest(outcome.state, manifest.projectRoot, resolvedSkillNames);
-      if (claimed !== outcome.state) writeState(claimed, ctx.home);
+    if (outcome.interrupted || !request.isStillCurrent()) {
+      return { ...reconciliationOf(outcome), manifestChanged: true };
     }
-    return { ...reconciliationOf(outcome), manifestChanged: !isConfirmed };
+    // That was the last look at `.crewrc`. From here the run only writes:
+    // the lockfile, then the claims, both from the manifest just confirmed.
+    // Nothing is checked between or after the two, so a run that reports a
+    // changed manifest has written neither.
+    recordLock(manifest, resolved);
+    const claimed = claimForManifest(outcome.state, manifest.projectRoot, resolvedSkillNames);
+    if (claimed !== outcome.state) writeState(claimed, ctx.home);
+    return reconciliationOf(outcome);
   }, ctx.home);
 }
 

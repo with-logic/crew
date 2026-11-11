@@ -15,7 +15,7 @@ import {
   makeProject,
   makeSkillRepo,
   ownedNames,
-  runBareInstallWithMidInstallHook,
+  runBareInstallWithProgressHook,
   writeManifest,
 } from "./helpers.ts";
 
@@ -42,7 +42,7 @@ function installWhileManifestBecomes(
     if (lines === null) rmSync(join(project, ".crewrc"));
     else writeManifest(project, lines);
   };
-  return runBareInstallWithMidInstallHook(home, project, rewrite, extraArgs);
+  return runBareInstallWithProgressHook(home, project, rewrite, extraArgs);
 }
 
 describe("a manifest that changes during the run", () => {

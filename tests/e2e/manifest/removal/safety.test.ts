@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { makeSkill } from "../../../helpers/fixtures.ts";
@@ -49,6 +49,38 @@ describe("removal safety", () => {
     ]);
     expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
     expect(installed(home)).toEqual([`alpha@${project}`]);
+  });
+
+  test("C-RC-25 human output names the skill that was kept and why", () => {
+    const home = makeCrewHome();
+    const project = makeProject([makeSkillRepo(["alpha"])]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    rmSync(join(skillDir(project, "alpha"), ".crew.json"));
+    writeManifest(project, []);
+
+    const run = crew(home, project, ["install"]);
+
+    expect(run.code).toBe(1);
+    expect(run.stdout).toContain("No longer required by .crewrc");
+    expect(run.stdout).toContain("alpha");
+    expect(run.stdout).toContain("something else owns that folder (pass --force to remove anyway)");
+  });
+
+  test("C-RC-41 an invalid lockfile stops an emptied manifest before anything is removed", () => {
+    const home = makeCrewHome();
+    const project = makeProject([makeSkillRepo(["alpha"])]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    writeFileSync(join(project, ".crewrc.lock"), "not a lockfile\n");
+    writeManifest(project, []);
+
+    const run = crew(home, project, ["install"]);
+
+    expect(run.code).toBe(4);
+    expect(run.stderr).toContain("manifest_invalid");
+    expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
+    expect(installed(home)).toEqual([`alpha@${project}`]);
+    expect(ownedNames(home)).toEqual(["alpha"]);
+    expect(readFileSync(join(project, ".crewrc.lock"), "utf8")).toBe("not a lockfile\n");
   });
 
   test("C-RC-25 an aborted removal also fails an install that otherwise succeeded", () => {

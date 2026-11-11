@@ -13,7 +13,7 @@ import {
   makeProject,
   makeSkillRepo,
   ownedNames,
-  runBareInstallWithMidInstallHook,
+  runBareInstallWithProgressHook,
   skillDir,
   writeManifest,
 } from "../helpers.ts";
@@ -38,7 +38,7 @@ test("C-RC-33 a manifest replaced partway through the removals stops them there"
   const lockBefore = readFileSync(join(project, ".crewrc.lock"), "utf8");
 
   // While the first of the two is being removed, the manifest lists them again.
-  const run = runBareInstallWithMidInstallHook(
+  const run = runBareInstallWithProgressHook(
     home,
     project,
     () => writeManifest(project, [repo]),

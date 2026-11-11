@@ -1518,12 +1518,15 @@ user scope or under another project root are never touched.
 **Reconciling.** Removal, described below, and claiming happen together
 under a single hold of the state lock, and only while the manifest on disk
 still lists exactly the references this run read. That is checked before
-anything is removed, again immediately before each deletion, again before
-the lockfile is written (§9.3), and a final time immediately before anything
-is claimed. Claims come last, so a run that finds the manifest changed at any
-of those points has claimed nothing. `state.json` is written once for the
-removals, before the lockfile step, and once more for the claims. A
-`--dry-run` takes no lock and previews from the state it reads. If `.crewrc` has changed — or can no longer
+anything is removed, again immediately before each deletion, and a final
+time once the removals are done. After that final confirmation the run only
+writes: the lockfile (§9.3), then the claims. It does not look at `.crewrc`
+between or after those two writes, so a run that reports a changed manifest
+has written neither. A change made after the final confirmation is not seen
+by this run; the next bare install reconciles against it. `state.json` is
+written for the removals, if there were any, before the lockfile, and again
+for the claims, if any entry's ownership changed. A `--dry-run` takes no lock
+and previews from the state it reads. If `.crewrc` has changed — or can no longer
 be read or parsed — the run stops reconciling at that point: it removes
 nothing if it had not started and nothing further if it had, claims nothing,
 and leaves the lockfile as it was. Removals already done stand. The run
@@ -1712,9 +1715,9 @@ declared skill succeeded, the lockfile is brought in line with the manifest:
   moves to the committed one on its next bare install.
 - **Nothing is written** on `--dry-run`, when a declared skill failed to
   install, when the lockfile or manifest is invalid, or when `.crewrc` is no
-  longer the manifest the run read. That last condition is checked
-  immediately before the write, and reported with the warning of §9.2,
-  "Reconciling".
+  longer the manifest the run read. That last condition is the final
+  confirmation of §9.2, "Reconciling", made immediately before the write and
+  reported with the warning described there.
 
 `crew update` neither reads nor writes the lockfile; it leaves manifest-owned
 skills alone (§9.2, "Updates").

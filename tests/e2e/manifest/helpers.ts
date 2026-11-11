@@ -68,17 +68,17 @@ export function ownedNames(home: string): string[] {
 
 /**
  * Run a verbose bare install, calling `hook` once, the first time a progress
- * line matches `moment`. By default that is when the first skill starts
+ * line matches `progressPattern`. By default that is when the first skill starts
  * installing: after the manifest and lockfile were read, before ownership
  * is reconciled or the lockfile written. `hookRan` says whether that moment
  * came.
  */
-export function runBareInstallWithMidInstallHook(
+export function runBareInstallWithProgressHook(
   home: string,
   project: string,
   hook: () => void,
   extraArgs: readonly string[] = [],
-  moment: RegExp = /installing/,
+  progressPattern: RegExp = /installing/,
 ) {
   let hookRan = false;
   let stdout = "";
@@ -92,7 +92,7 @@ export function runBareInstallWithMidInstallHook(
       },
       stderr: (chunk) => {
         stderr += chunk;
-        if (hookRan || !moment.test(chunk)) return;
+        if (hookRan || !progressPattern.test(chunk)) return;
         hookRan = true;
         hook();
       },
