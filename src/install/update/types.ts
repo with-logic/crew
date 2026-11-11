@@ -11,7 +11,8 @@ export type PerAgentSkipReason = "customized" | "untracked_directory" | "inconsi
 export type UpdateSkipReason =
   | "pinned to exact SHA"
   | "pinned to tag; upstream moved"
-  | "no applicable agent targets";
+  | "no applicable agent targets"
+  | "managed by .crewrc";
 
 export type PerAgentUpdate =
   | { readonly agent: string; readonly kind: "installed" | "up_to_date" }

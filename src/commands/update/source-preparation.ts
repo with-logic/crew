@@ -1,10 +1,12 @@
 /** Finish update-only transport before target admission, sharing pair outcomes (§10.1, §14). */
+import { isManifestOwned } from "../../manifest/index.ts";
 import {
   acquireGitRevision,
   type GitRevision,
   type PreparedSources,
   revisionKey,
 } from "../../sources/acquire/revision.ts";
+
 import { hasUsableProjectRoot } from "../../state/validation.ts";
 import type { LockedPlanInput } from "./locked-plan.ts";
 import { updateTargetEntries } from "./target-set.ts";
@@ -19,6 +21,8 @@ export function prepareUpdateSources(input: LockedPlanInput): PreparedSources {
     if (entry.scope === "project" && !hasUsableProjectRoot(entry)) continue;
     const tap = input.config.taps.find((candidate) => candidate.name === entry.source.tap);
     if (!tap || tap.kind === "path") continue;
+    // Manifest-owned entries are never updated (§9.2), so no revision is acquired for them.
+    if (isManifestOwned(entry)) continue;
     // Exact-SHA ordinary entries skip acquisition; tracked groups still scan to discover new children.
     if (
       entry.pinned &&
