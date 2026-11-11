@@ -67,8 +67,8 @@ export function ownedNames(home: string): string[] {
 }
 
 /**
- * Run a verbose bare install, calling `hook` once, the first time a progress
- * line matches `progressPattern`. By default that is when the first skill starts
+ * Run a verbose bare install, calling `hook` once, with the first progress
+ * line that matches `progressPattern`. By default that is when the first skill starts
  * installing: after the manifest and lockfile were read, before ownership
  * is reconciled or the lockfile written. `hookRan` says whether that moment
  * came.
@@ -76,7 +76,7 @@ export function ownedNames(home: string): string[] {
 export function runBareInstallWithProgressHook(
   home: string,
   project: string,
-  hook: () => void,
+  hook: (progressLine: string) => void,
   extraArgs: readonly string[] = [],
   progressPattern: RegExp = /installing/,
 ) {
@@ -94,7 +94,7 @@ export function runBareInstallWithProgressHook(
         stderr += chunk;
         if (hookRan || !progressPattern.test(chunk)) return;
         hookRan = true;
-        hook();
+        hook(chunk);
       },
     },
   });
@@ -104,4 +104,19 @@ export function runBareInstallWithProgressHook(
 /** Where claude-code installs `name` at project scope under `project`. */
 export function skillDir(project: string, name: string): string {
   return join(project, ".claude", "skills", name);
+}
+
+/**
+ * Add skills under `<project>/tools`. `dependenciesBySkill` names each
+ * skill and the one skill it depends on, or null.
+ */
+export function addSkillsWithDependencies(
+  project: string,
+  dependenciesBySkill: Record<string, string | null>,
+): void {
+  mkdirSync(join(project, "tools"), { recursive: true });
+  for (const [name, dependency] of Object.entries(dependenciesBySkill)) {
+    const dependencies = dependency === null ? [] : [dependency];
+    makeSkill(join(project, "tools"), name, skillFrontmatter({ name, dependencies }));
+  }
 }

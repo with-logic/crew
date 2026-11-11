@@ -1,11 +1,13 @@
 /**
- * The manifest is confirmed again right before each deletion (§9.2).
+ * Checks repeated right before each deletion (§9.2): the manifest must
+ * still be current, and the install directory still the project's own.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { makeCrewHome } from "../../../helpers/env.ts";
+import { makeTempDir } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import {
   crew,
@@ -86,4 +88,37 @@ test("C-RC-33 a manifest replaced during the last removal means no lockfile writ
   expect(installed(home)).toEqual([`gamma@${project}`]);
   expect(ownedNames(home)).toEqual([]);
   expect(readFileSync(join(project, ".crewrc.lock"), "utf8")).toBe(lockBefore);
+});
+
+test("C-RC-30 a directory that becomes a link after the pre-checks is still not deleted", () => {
+  const home = makeCrewHome();
+  const project = makeProject([makeSkillRepo(["alpha", "beta"])]);
+  expect(crew(home, project, ["install"]).code).toBe(0);
+  writeManifest(project, []);
+  const elsewhere = makeTempDir("crew-elsewhere-");
+  let other = "";
+
+  // While the first of the two is being removed, swap the other's directory for a link.
+  const run = runBareInstallWithProgressHook(
+    home,
+    project,
+    (progressLine) => {
+      other = progressLine.includes("removing alpha ") ? "beta" : "alpha";
+      renameSync(skillDir(project, other), join(elsewhere, other));
+      symlinkSync(join(elsewhere, other), skillDir(project, other));
+    },
+    ["--json"],
+    /removing (alpha|beta) /,
+  );
+
+  expect(run).toMatchObject({ code: 0, hookRan: true });
+  const first = other === "alpha" ? "beta" : "alpha";
+  const { removed, warnings } = JSON.parse(run.stdout) as {
+    removed: { name: string }[];
+    warnings: string[];
+  };
+  expect(removed.map((record) => record.name)).toEqual([first]);
+  expect(warnings.join("\n")).toContain(`kept \`${other}\``);
+  expect(existsSync(join(elsewhere, other, "SKILL.md"))).toBe(true);
+  expect(installed(home)).toEqual([`${other}@${project}`]);
 });

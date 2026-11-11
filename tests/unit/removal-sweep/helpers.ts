@@ -3,16 +3,13 @@
  * `.crewrc` installed real skills, and a direct call to the sweep.
  */
 
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
 import { processDroppedEntries } from "../../../src/commands/install/manifest/removal/index.ts";
 import type { CommandContext } from "../../../src/commands/types.ts";
 import type { StateFile } from "../../../src/core/types.ts";
 import { readState } from "../../../src/state/load.ts";
 import { makeStyler } from "../../../src/util/term.ts";
-import { crew, makeProject } from "../../e2e/manifest/helpers.ts";
+import { addSkillsWithDependencies, crew, makeProject } from "../../e2e/manifest/helpers.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
-import { makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
 
 export interface Installed {
   readonly home: string;
@@ -31,11 +28,7 @@ export function installProject(
   home: string = makeCrewHome(),
 ): Installed {
   const project = makeProject(declared.map((name) => `./tools/${name}`));
-  mkdirSync(join(project, "tools"));
-  for (const [name, dependency] of Object.entries(dependenciesBySkill)) {
-    const dependencies = dependency === null ? [] : [dependency];
-    makeSkill(join(project, "tools"), name, skillFrontmatter({ name, dependencies }));
-  }
+  addSkillsWithDependencies(project, dependenciesBySkill);
   const run = crew(home, project, ["install"]);
   if (run.code !== 0) throw new Error(run.stderr);
   return { home, project };
