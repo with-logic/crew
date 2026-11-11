@@ -32,7 +32,7 @@ import { unknownSkill } from "./unknown-skill.ts";
 import { untrackedDirectory } from "./untracked-directory.ts";
 import { usageError } from "./usage-error.ts";
 
-export const REMEDIES: Partial<Record<CrewErrorName, string>> = {
+export const REMEDIES: Record<CrewErrorName, string> = {
   invalid_ref: invalidRef,
   invalid_skill: invalidSkill,
   no_skills_found: noSkillsFound,
