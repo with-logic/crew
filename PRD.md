@@ -1485,8 +1485,9 @@ project instead.
 The existing rules apply to each reference unchanged: a skill already
 installed at the declared source and commit is reported as already installed
 (§5.4), so a repeat run with nothing new exits 0 and writes nothing. A manifest
-that declares no skills installs nothing and exits 0; that is decided before
-agents are selected, so it holds on a machine with no active agent.
+that declares no skills installs nothing; that is decided before agents are
+selected, so it needs no active agent. It still removes what the manifest
+used to own, and exits 0 unless one of those removals aborts.
 
 A bare install is always project scope. `--scope user` with no references is a
 `usage_error`; `--scope project` is accepted and redundant. Flags that change
@@ -1514,14 +1515,89 @@ manifest is invalid, or on a `--dry-run`. A skill installed in the project by
 hand that is not in the resolved install set is never claimed, and entries at
 user scope or under another project root are never touched.
 
-**Reconciling.** Claiming happens under the state lock, and only if the
-manifest on disk still lists exactly the references this run read. If
-`.crewrc` has changed since — or can no longer be read or parsed — the run
-claims nothing, reports a warning on stderr and in the `warnings` array of
-the `--json` result, and leaves its exit code unchanged. The next bare
-install reconciles against the current manifest. A run must not act on a
-manifest that is no longer the one on disk: two overlapping bare installs
-that read different versions could otherwise undo each other's work.
+**Reconciling.** Removal, described below, and claiming happen together
+under a single hold of the state lock, and only while the manifest on disk
+still lists exactly the references this run read. That is checked before
+anything is removed, again immediately before each deletion, and a final
+time once the removals are done. That one confirmation covers both writes
+that follow: the lockfile (§9.3), then the claims. Writing the lockfile reads
+`.crewrc.lock` again (§9.3), but the run does not look at `.crewrc`
+between or after those two writes, so a run that reports a changed manifest
+has written neither. A change made after the final confirmation is not seen
+by this run; the next bare install reconciles against it. `state.json` is
+written for the removals, if there were any, before the lockfile, and again
+for the claims, if any entry's ownership changed. A `--dry-run` takes no lock
+and previews from the state it reads. If `.crewrc` has changed — or can no longer
+be read or parsed — the run stops reconciling at that point: it removes
+nothing if it had not started and nothing further if it had, claims nothing,
+and leaves the lockfile as it was. Removals already done stand. The run
+reports a warning on stderr and in the `warnings` array of the `--json`
+result, and leaves its exit code unchanged. The next bare install reconciles
+against the current manifest. A run must not act on a manifest that is no
+longer the one on disk: two overlapping bare installs that read different
+versions could otherwise each remove what the other had just installed.
+
+**Removing dropped skills.** A manifest-owned skill that has left the
+resolved install set — its line was deleted, or it stopped being a dependency
+of anything declared — is uninstalled by the next bare install in which every
+declared skill succeeded. Every entry at the manifest's install location that
+carries `manifest_owned: true` and whose name is not in the resolved install
+set is a *dropped* entry, and each is uninstalled through the uninstall
+algorithm of §7.4, including its safety checks. If that leaves an auto tap
+with no entries, the tap is garbage-collected (§16.5).
+
+Three kinds of dropped entry are kept. Each keeps its `manifest_owned` flag,
+so a later bare install removes it once the reason is gone:
+
+- **Still needed.** A dropped entry is *needed* while its own `required_by`
+  (§11.1: the skills that depend on it) names a skill that is staying at
+  that install location: a skill that is not dropped, a dropped entry that
+  is itself being kept, or another needed entry. A needed entry is not
+  uninstalled. Among the rest, dependents are
+  removed before the skills they depend on. Dependency cycles are legal
+  (C-DEP-08): a dropped cycle is removed whole when nothing kept needs it,
+  and kept whole otherwise.
+- **Aborted.** Every dropped entry is checked against the §7.4 safety checks
+  before any entry is removed. One that would abort keeps its files and its
+  state entry, is reported, and makes the command exit 1. Deciding this first
+  is what keeps the rule above sound: no skill is removed on the strength of
+  another removal that then does not happen. `--force` overrides those checks
+  here as it does for `crew uninstall`.
+- **Not verifiably the project's own directory.** An entry is uninstalled
+  only if all of the following hold; if any does not, it is kept, gets no
+  removal record, and is named in a warning on stderr and in `warnings` of
+  the `--json` result. `--force` does not override these.
+  - The entry's name is a valid skill name (§4): one path segment.
+  - The entry records at least one agent, and every agent it records is a
+    supported adapter (§7.2) that has a project-scope skills directory.
+  - Each directory the entry is installed into lies physically inside the
+    project root, at the same relative path it has by name: it is reached
+    from the project root without crossing a symbolic link. A project skills
+    directory that is a link may be the user-scope directory, another
+    project's, or one recorded under another crew home. This is required of
+    the skills directory itself even when the skill's own directory is
+    absent from it.
+  - That directory is not the same directory on disk as any agent's
+    user-scope directory for the skill, judged by device and inode rather
+    than by path.
+
+  These checks are made before any entry is removed and again immediately
+  before each one is. They describe the filesystem at the moment they run:
+  they protect against a checkout that arrives with hostile links or state,
+  not against another process rewriting the project's directories at the
+  same instant, which no command that deletes by path can rule out.
+
+A skill installed in the project by hand and never claimed is never removed,
+and entries at user scope or under another project root are never touched. If
+any declared skill failed to install, or the manifest is invalid, nothing is
+removed: a manifest that cannot be fully satisfied MUST NOT cost the project a
+skill it already has.
+
+`--dry-run` reports the entries that would be removed and writes nothing. The
+`--json` result of a bare install carries `removed`: an array with one
+uninstall record (§7.4) per entry removed or attempted — a record may describe
+a completed removal, a preview, or an aborted attempt — empty when there are
+none. Human output lists them under a heading that names `.crewrc`.
 
 **Updates.** `crew update` and autoupdate never change a manifest-owned
 entry. Each one is reported as `skipped` with the reason `managed by .crewrc`
@@ -1542,12 +1618,13 @@ machine and every time. Three properties make that safe:
   step 7 would be empty, a bare install exits 0, reports that no agent is
   active, and MUST NOT acquire, clone, or fetch any source. A CI
   runner with no agent and no access to a private skill repository therefore
-  succeeds. Nothing else is done on such a run. The `--json` result carries
-  `no_agents: true` and empty `records`, `already_installed`, and `skipped`. With `--agent`, an empty agent
-  set remains `no_agents` (§13): the user asked for a specific agent. A
-  manifest that declares no skills is the exception to that exception: it
-  installs nothing and exits 0 before agents are selected, with or without
-  `--agent`.
+  succeeds. Nothing is claimed or removed on such a run. The `--json` result carries
+  `no_agents: true` and empty `records`, `already_installed`, `skipped`, and `removed`. With `--agent`, an empty agent
+  set remains `no_agents` (§13): the user asked for a specific agent. All of
+  this is about a manifest that declares at least one skill. A manifest that
+  declares none never reaches agent selection, with or without `--agent`: it
+  installs nothing, and it does remove what the manifest used to own (see
+  "Removing dropped skills"), which needs no active agent.
 - **Nothing to do.** When every declared skill is already installed at its
   declared source, a bare install contacts no git remote. A git reference is
   resolved from its tap's existing local clone, under the network policy of
@@ -1639,9 +1716,9 @@ declared skill succeeded, the lockfile is brought in line with the manifest:
   moves to the committed one on its next bare install.
 - **Nothing is written** on `--dry-run`, when a declared skill failed to
   install, when the lockfile or manifest is invalid, or when `.crewrc` is no
-  longer the manifest the run read. That last condition is checked
-  immediately before the write, and reported with the warning of §9.2,
-  "Reconciling".
+  longer the manifest the run read. That last condition is the final
+  confirmation of §9.2, "Reconciling", made immediately before the write and
+  reported with the warning described there.
 
 `crew update` neither reads nor writes the lockfile; it leaves manifest-owned
 skills alone (§9.2, "Updates").
@@ -3579,8 +3656,8 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-01 | §9.2 | Bare `crew install` installs every skill the manifest declares, from git and in-project path lines alike, at project scope under the manifest's directory; nothing is written at user scope and each state entry's `project_root` is the manifest's directory. |
 | C-RC-02 | §9.2 | Run from a subdirectory, bare `crew install` uses the nearest manifest above it; skills land under the manifest's directory, not the working directory, and relative path lines resolve against the manifest's directory. With manifests at two levels, only the nearest is used. |
 | C-RC-03 | §9.2, §5.4 | A repeat bare `crew install` with nothing new exits 0, reports the skills as already installed, and installs nothing. Its `--json` result carries `manifest_path`, the manifest's absolute path. |
-| C-RC-04 | §9.2 | A manifest with no reference lines installs nothing and exits 0. |
-| C-RC-05 | §9.2 | A manifest with no reference lines exits 0 when no agent is active: it is decided before agents are selected. Its `--json` result carries `manifest_path`, and `dry_run: true` under `--dry-run`. |
+| C-RC-04 | §9.2 | A manifest with no reference lines installs nothing and exits 0, unless a removal it triggers aborts (C-RC-25). |
+| C-RC-05 | §9.2 | A manifest with no reference lines needs no active agent: installing is decided before agents are selected. Removing what it owned still runs, so the C-RC-25 exception applies. Its `--json` result carries `manifest_path`, and `dry_run: true` under `--dry-run`. |
 | C-RC-06 | §9.2 | Bare `crew install` with no manifest at or above the working directory is a `usage_error`, exit 4, whose message mentions `.crewrc`. |
 | C-RC-07 | §9.2 | A manifest above a repository root does not govern that repository, whether the root's `.git` entry is a directory or a file: bare `crew install` inside the repository is a `usage_error` and installs nothing. |
 | C-RC-08 | §9.2 | A directory named `.crewrc` is not a manifest. A symbolic link named `.crewrc` is not a manifest, and its target's contents never appear in output. |
@@ -3595,9 +3672,17 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-17 | §9.2 | A repeat bare `crew install` with nothing new to claim leaves `state.json` byte-for-byte unchanged. |
 | C-RC-18 | §9.2, §10.1 | `crew update`, with or without `--force`, reports a manifest-owned skill as `skipped` with reason `managed by .crewrc`, leaves its files and state entry unchanged, and exits 0 even when that skill's source is unreachable. No sibling is added to a tap group containing an owned entry, even when the group also has a hand-installed member. An explicit reinstall of an owned skill keeps `manifest_owned: true`. |
 | C-RC-19 | §9.2, §10.1.1 | The same source installed by hand under another project root is still updated and re-expanded by `crew update`, and its entries stay unowned. |
+| C-RC-20 | §9.2 | After a line is dropped from the manifest, the next bare `crew install` uninstalls the skill it provided, reports it in `removed`, leaves the other declared skills installed, and garbage-collects the dropped line's auto tap when nothing else uses it. |
+| C-RC-21 | §9.2 | A manifest emptied of references removes every skill it owned that none of the kept cases covers, with or without an active agent; human output names each under a heading naming `.crewrc`, and their install directories are gone. |
+| C-RC-22 | §9.2 | A skill installed in the project with `crew install --scope project <ref>` and never claimed is not removed by any bare `crew install`. |
+| C-RC-23 | §9.2 | Removal is confined to the manifest's install location: the same skill at user scope, or under another project root, keeps its files and its state entry. A project install directory that is also a user-scope install directory, by being the same path or by being reached through a link, is left alone and named in a warning, with or without `--force`. |
+| C-RC-24 | §9.2, §5.2 | Bare `crew install --dry-run` lists the skills that would be removed in `removed` and in human output, removes none, and leaves state and config unchanged. |
+| C-RC-25 | §9.2, §7.4 | A dropped skill whose removal aborts on a §7.4 safety check keeps its files and state entry, appears in `removed` with that failure, and the command exits 1, whether or not other skills are still declared. An unrelated dropped skill is still removed. With `--force` it is removed. |
 | C-RC-26 | §9.2 | A manifest path line that reaches outside the project through a symbolic link is `manifest_invalid`, with `details` naming its line; nothing from outside the project is installed. |
+| C-RC-27 | §9.2 | When a declared reference fails to resolve, a declared skill fails validation, a declared skill cannot be installed into its directory, or the manifest is invalid, nothing is removed and dropped skills keep `manifest_owned: true`. |
 | C-RC-31 | §9.2 | When `.crewrc` is replaced, becomes invalid, or is deleted while a bare `crew install` is running, that run marks no entry `manifest_owned`, warns on stderr and in `warnings` of the `--json` result, and exits as it otherwise would. |
-| C-RC-34 | §9.2 | With no active agent and no `--agent`, bare `crew install` exits 0 with `no_agents: true` and empty `records`, `already_installed`, and `skipped` in `--json`, acquires no source (it succeeds even when a declared source is unreachable), and writes no state and no skill. An agent that is not detected but is force-enabled counts as active. |
+| C-RC-33 | §9.2 | A bare `crew install` that read a manifest since replaced removes nothing it would have dropped. If the manifest is replaced partway through the removals, no further skill is removed, and the run warns. |
+| C-RC-34 | §9.2 | With no active agent and no `--agent`, bare `crew install` of a manifest that declares at least one skill exits 0 with `no_agents: true` and empty `records`, `already_installed`, `skipped`, and `removed` in `--json`, acquires no source (it succeeds even when a declared source is unreachable), and writes no state and no skill. An agent that is not detected but is force-enabled counts as active. |
 | C-RC-35 | §9.2, §13 | With no active agent, bare `crew install --agent <name>` on a manifest that declares at least one skill fails with `no_agents`, exit 4. |
 | C-RC-36 | §9.2, §16.6 | When every declared skill is already installed and its tap's local clone is present, bare `crew install` exits 0 even though the git remote can no longer be reached. |
 | C-RC-37 | §9.2 | When one declared source is unreachable, bare `crew install` fails with `source_unreachable`, exit 5, and installs none of the manifest's other skills. |

@@ -7,9 +7,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { readState } from "../../../src/state/load.ts";
+import { skillDir } from "../../e2e/manifest/helpers.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
-import { installProject, namesIn, skillDir, sweep } from "./helpers.ts";
+import { installProject, namesIn, sweep } from "./helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {

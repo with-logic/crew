@@ -24,7 +24,6 @@ import {
   serializeLock,
 } from "../../../manifest/index.ts";
 import { writeText } from "../../../util/fs.ts";
-import { hasChangedOnDisk } from "./freshness.ts";
 
 function lockPathFor(manifest: Manifest): string {
   return join(manifest.projectRoot, LOCK_FILENAME);
@@ -67,8 +66,8 @@ export function refsToInstall(manifest: Manifest, lock: Lock): string[] {
  * keep the entry of each line that still needs one, add an entry for each
  * line that had none, and drop entries for lines that have left.
  *
- * Returns false, having written nothing, when `.crewrc` is no longer the
- * manifest this run read: its lines are not the ones to record.
+ * This does not look at `.crewrc` again. The caller confirms, immediately
+ * before calling, that it is still the manifest this run read.
  *
  * The lockfile is read again here, and an entry it holds for a line is
  * kept in preference to this run's own resolution. That is not a lock:
@@ -80,7 +79,7 @@ export function refsToInstall(manifest: Manifest, lock: Lock): string[] {
  * line needs an entry, though an existing one may be rewritten down to its
  * header.
  */
-export function recordLock(manifest: Manifest, resolved: readonly ResolvedSkill[]): boolean {
+export function recordLock(manifest: Manifest, resolved: readonly ResolvedSkill[]): void {
   const onDisk = readLock(manifest);
   const resolvedByRepository = groupByRepository(resolved);
   const next = new Map<string, string>();
@@ -90,11 +89,7 @@ export function recordLock(manifest: Manifest, resolved: readonly ResolvedSkill[
     if (sha) next.set(entry.ref, sha);
   }
   const text = serializeLock(next);
-  if (text === serializeLock(onDisk)) return true;
-  // Checked last, immediately before the write it guards.
-  if (hasChangedOnDisk(manifest)) return false;
-  writeText(lockPathFor(manifest), text);
-  return true;
+  if (text !== serializeLock(onDisk)) writeText(lockPathFor(manifest), text);
 }
 
 /** Where in its repository a resolved skill came from, and at what ref and commit. */

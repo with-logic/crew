@@ -6,8 +6,6 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { recordLock } from "../../../../src/commands/install/manifest/lockfile.ts";
-import { loadManifestFor, type Manifest } from "../../../../src/manifest/index.ts";
 import { LOCK_HEADER } from "../../../../src/manifest/lock.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { commitAll, makeSkill } from "../../../helpers/fixtures.ts";
@@ -16,7 +14,7 @@ import {
   crew,
   makeProject,
   makeSkillRepo,
-  runBareInstallWithMidInstallHook,
+  runBareInstallWithProgressHook,
   writeManifest,
 } from "../helpers.ts";
 import { dirOf, lockFile } from "./helpers.ts";
@@ -36,7 +34,7 @@ describe("leaving the lockfile alone", () => {
     const project = makeProject([repo]);
     const theirs = `${LOCK_HEADER}\n${"c".repeat(40)} ${repo}\n`;
 
-    const run = runBareInstallWithMidInstallHook(home, project, () =>
+    const run = runBareInstallWithProgressHook(home, project, () =>
       writeFileSync(lockFile(project), theirs),
     );
 
@@ -53,26 +51,11 @@ describe("leaving the lockfile alone", () => {
     const beta = makeSkillRepo(["beta"]);
     writeManifest(project, [beta]);
 
-    const run = runBareInstallWithMidInstallHook(home, project, () =>
+    const run = runBareInstallWithProgressHook(home, project, () =>
       writeManifest(project, [beta, "./tools/x"]),
     );
 
     expect(run).toMatchObject({ code: 0, hookRan: true });
-    expect(readFileSync(lockFile(project), "utf8")).toBe(before);
-  });
-
-  test("C-RC-45 the manifest is checked again right before the lockfile is written", () => {
-    const repo = makeSkillRepo(["alpha"]);
-    const project = makeProject(["./tools/alpha"]);
-    // A stale entry, so there is something to write: the line it was for has gone.
-    const before = `${LOCK_HEADER}\n${"c".repeat(40)} ${repo}\n`;
-    writeFileSync(lockFile(project), before);
-    const manifest = loadManifestFor(project) as Manifest;
-    // Ownership has been reconciled by now; only then does `.crewrc` change.
-    writeManifest(project, [repo]);
-
-    expect(recordLock(manifest, [])).toBe(false);
-
     expect(readFileSync(lockFile(project), "utf8")).toBe(before);
   });
 

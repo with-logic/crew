@@ -19,12 +19,9 @@ import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest/index.ts";
-import { readLock, recordLock, refsToInstall } from "./manifest/lockfile.ts";
-import {
-  IN_STEP_WITH_MANIFEST,
-  reconcileOwnership,
-  staleManifestWarnings,
-} from "./manifest/reconcile.ts";
+import { readLock, refsToInstall } from "./manifest/lockfile.ts";
+import { EMPTY_RECONCILIATION, reconcileManifestInstalls } from "./manifest/reconcile.ts";
+import { reportReconciliation } from "./manifest/report.ts";
 import { renderInstall } from "./render/index.ts";
 
 /** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
@@ -51,13 +48,13 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";
   const manifest = isBare ? manifestForBareInstall(ctx) : null;
   if (manifest?.entries.length === 0) {
-    // §9.3: with nothing to install, the lockfile is still checked, and
-    // emptied of entries for lines that have gone — except on a dry run.
-    let manifestChanged = false;
-    if (ctx.flags.dryRun) readLock(manifest);
-    else manifestChanged = !recordLock(manifest, []);
-    const stale = staleManifestWarnings({ manifestChanged });
-    return nothingToInstall(manifest, ctx, `${safePath(manifest.file)} declares no skills.`, stale);
+    // §9.3: an invalid lockfile is an error even with nothing to install,
+    // and before anything is removed.
+    readLock(manifest);
+    // §9.2: declaring nothing still drops whatever the manifest used to own.
+    const reconciled = reconcileManifestInstalls(ctx, manifest, []);
+    const human = `${safePath(manifest.file)} declares no skills.`;
+    return nothingToInstall(manifest, ctx, human, reconciled);
   }
   const kindHint = readKindHint(ctx);
   rejectRecursiveTapRefs(ctx);
@@ -123,37 +120,34 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     exitCode = 1; // Zero succeeded; purely operational failures.
   }
 
-  // §9.2, §9.3: ownership and the lockfile are brought up to date only once
-  // everything declared has landed, and never on a dry run.
-  const isBareInstall = manifest !== null;
+  // §9.2, §9.3: the project is brought in line with the manifest — dropped
+  // skills removed, ownership and the lockfile recorded — only once
+  // everything declared has landed.
   const everythingLanded = failed === 0;
-  const mayPersist = isBareInstall && everythingLanded && !ctx.flags.dryRun;
-  const reconciled = mayPersist
-    ? reconcileOwnership({
-        home: ctx.home,
-        manifest,
-        resolvedSkillNames: new Set(result.resolved.map((skill) => skill.name)),
-      })
-    : IN_STEP_WITH_MANIFEST;
-  // `recordLock` returns false when it found `.crewrc` changed and wrote nothing.
-  const changedBeforeLockWrite =
-    mayPersist && !reconciled.manifestChanged && !recordLock(manifest, result.resolved);
-  const persisted = { manifestChanged: reconciled.manifestChanged || changedBeforeLockWrite };
+  const reconciled =
+    manifest && everythingLanded
+      ? reconcileManifestInstalls(ctx, manifest, result.resolved)
+      : EMPTY_RECONCILIATION;
+  const reconciliation = reportReconciliation(reconciled, ctx);
+  if (reconciliation.hasAbortedRemoval) exitCode = 1;
 
-  const human = renderInstall(
-    {
-      records: result.summary.records,
-      alreadyInstalled: result.alreadyInstalled,
-      resolved: result.resolved,
-      skipped: result.skipped,
-      dryRun: ctx.flags.dryRun,
-      cwd,
-      width: ctx.width,
-    },
-    ctx.style,
-  );
+  const human = [
+    ...renderInstall(
+      {
+        records: result.summary.records,
+        alreadyInstalled: result.alreadyInstalled,
+        resolved: result.resolved,
+        skipped: result.skipped,
+        dryRun: ctx.flags.dryRun,
+        cwd,
+        width: ctx.width,
+      },
+      ctx.style,
+    ),
+    ...reconciliation.human,
+  ];
 
-  const warnings = [...discovery.warnings(), ...staleManifestWarnings(persisted)];
+  const warnings = [...discovery.warnings(), ...reconciliation.warnings];
   return {
     exitCode,
     human,
@@ -163,7 +157,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       records: result.summary.records,
       skipped: result.skipped,
       dry_run: ctx.flags.dryRun,
-      ...(manifest ? { manifest_path: manifest.file } : {}),
+      ...(manifest ? { manifest_path: manifest.file, removed: reconciled.removed } : {}),
       ...(warnings.length > 0 ? { warnings } : {}),
     },
   };

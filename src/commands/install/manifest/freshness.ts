@@ -1,9 +1,10 @@
 /**
  * Whether the manifest a run read is still the one on disk (§9.2, §9.3).
  *
- * A bare `crew install` records ownership and the lockfile at the end of
- * the run. Each of those steps asks this first, so neither acts on a
- * manifest that has since been replaced.
+ * A bare `crew install` asks this before removing anything, before each
+ * deletion, and one final time before it writes the lockfile and the
+ * ownership claims. That final answer covers both writes: nothing looks at
+ * `.crewrc` again once they have begun.
  */
 
 import { loadManifestFor, type Manifest } from "../../../manifest/index.ts";

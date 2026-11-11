@@ -7,10 +7,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { readState } from "../../../src/state/load.ts";
-import { crew } from "../../e2e/manifest/helpers.ts";
+import { crew, skillDir } from "../../e2e/manifest/helpers.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
-import { installProject, namesIn, skillDir, sweep } from "./helpers.ts";
+import { installProject, namesIn, sweep } from "./helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -103,6 +103,21 @@ describe("processDroppedEntries keeps", () => {
 
     expect(outcome?.keptForUnverifiedInstallSites).toEqual(["alpha"]);
     expect(existsSync(join(elsewhere, "alpha", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(elsewhere, ".crew-target"))).toBe(false);
+  });
+
+  test("a skill whose directory is absent under a linked skills directory, without writing a lock into it", () => {
+    const installed = installProject({ alpha: null }, ["alpha"]);
+    const { project } = installed;
+    const elsewhere = join(makeTempDir("crew-elsewhere-"), "skills");
+    renameSync(join(project, ".claude", "skills"), elsewhere);
+    rmSync(join(elsewhere, ".crew-target"), { force: true });
+    rmSync(join(elsewhere, "alpha"), { recursive: true });
+    symlinkSync(elsewhere, join(project, ".claude", "skills"));
+
+    const { outcome } = sweep(installed);
+
+    expect(outcome?.keptForUnverifiedInstallSites).toEqual(["alpha"]);
     expect(existsSync(join(elsewhere, ".crew-target"))).toBe(false);
   });
 });

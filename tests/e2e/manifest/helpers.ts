@@ -67,16 +67,18 @@ export function ownedNames(home: string): string[] {
 }
 
 /**
- * Run a verbose bare install, calling `onFirstSkillInstalling` once, when the
- * first skill starts installing: after the manifest and lockfile were
- * read, before ownership is reconciled or the lockfile written. `hookRan`
- * says whether that moment came.
+ * Run a verbose bare install, calling `hook` once, the first time a progress
+ * line matches `progressPattern`. By default that is when the first skill starts
+ * installing: after the manifest and lockfile were read, before ownership
+ * is reconciled or the lockfile written. `hookRan` says whether that moment
+ * came.
  */
-export function runBareInstallWithMidInstallHook(
+export function runBareInstallWithProgressHook(
   home: string,
   project: string,
-  onFirstSkillInstalling: () => void,
+  hook: () => void,
   extraArgs: readonly string[] = [],
+  progressPattern: RegExp = /installing/,
 ) {
   let hookRan = false;
   let stdout = "";
@@ -90,11 +92,16 @@ export function runBareInstallWithMidInstallHook(
       },
       stderr: (chunk) => {
         stderr += chunk;
-        if (hookRan || !chunk.includes("installing")) return;
+        if (hookRan || !progressPattern.test(chunk)) return;
         hookRan = true;
-        onFirstSkillInstalling();
+        hook();
       },
     },
   });
   return { code, stdout, stderr, hookRan };
+}
+
+/** Where claude-code installs `name` at project scope under `project`. */
+export function skillDir(project: string, name: string): string {
+  return join(project, ".claude", "skills", name);
 }
