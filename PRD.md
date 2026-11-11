@@ -1505,6 +1505,15 @@ manifest is invalid, or on a `--dry-run`. A skill installed in the project by
 hand that is not in the resolved install set is never claimed, and entries at
 user scope or under another project root are never touched.
 
+**Reconciling.** Claiming happens under the state lock, and only if the
+manifest on disk still lists exactly the references this run read. If
+`.crewrc` has changed since — or can no longer be read or parsed — the run
+claims nothing, reports a warning on stderr and in the `warnings` array of
+the `--json` result, and leaves its exit code unchanged. The next bare
+install reconciles against the current manifest. A run must not act on a
+manifest that is no longer the one on disk: two overlapping bare installs
+that read different versions could otherwise undo each other's work.
+
 **Updates.** `crew update` and autoupdate never change a manifest-owned
 entry. Each one is reported as `skipped` with the reason `managed by .crewrc`
 (§10.1), with or without `--force`, and no revision is acquired on its
@@ -3459,6 +3468,7 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-18 | §9.2, §10.1 | `crew update`, with or without `--force`, reports a manifest-owned skill as `skipped` with reason `managed by .crewrc`, leaves its files and state entry unchanged, and exits 0 even when that skill's source is unreachable. No sibling is added to a tap group containing an owned entry, even when the group also has a hand-installed member. An explicit reinstall of an owned skill keeps `manifest_owned: true`. |
 | C-RC-19 | §9.2, §10.1.1 | The same source installed by hand under another project root is still updated and re-expanded by `crew update`, and its entries stay unowned. |
 | C-RC-26 | §9.2 | A manifest path line that reaches outside the project through a symbolic link is `manifest_invalid`, with `details` naming its line; nothing from outside the project is installed. |
+| C-RC-31 | §9.2 | When `.crewrc` is replaced, or becomes invalid, while a bare `crew install` is running, that run marks no entry `manifest_owned`, warns on stderr and in `warnings` of the `--json` result, and exits as it otherwise would. |
 
 ### 18.4 Worked examples
 
