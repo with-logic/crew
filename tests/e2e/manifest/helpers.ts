@@ -56,3 +56,12 @@ export function installed(home: string): string[] {
     .installations.map((e) => `${e.name}@${e.scope === "user" ? "user" : e.project_root}`)
     .sort();
 }
+
+/** Names of the manifest-owned state entries, sorted. */
+export function ownedNames(home: string): string[] {
+  const names: string[] = [];
+  for (const entry of readState(home).installations) {
+    if (entry.manifest_owned === true) names.push(entry.name);
+  }
+  return names.sort();
+}

@@ -18,8 +18,12 @@ import type { CommandContext, CommandOutput } from "../types.ts";
 import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
-import { claimManifestOwnership } from "./manifest/claim.ts";
 import { manifestForBareInstall, nothingToInstall } from "./manifest/index.ts";
+import {
+  IN_STEP_WITH_MANIFEST,
+  reconcileOwnership,
+  staleManifestWarnings,
+} from "./manifest/reconcile.ts";
 import { renderInstall } from "./render/index.ts";
 
 /** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
@@ -104,12 +108,16 @@ export function installCommand(ctx: CommandContext): CommandOutput {
 
   // §9.2: the manifest owns what it resolved to — but only once all of it
   // has landed, and never on a dry run.
-  const everythingInstalled = failed === 0;
+  const noInstallFailures = failed === 0;
   const mayWriteState = !ctx.flags.dryRun;
-  if (manifest && everythingInstalled && mayWriteState) {
-    const resolvedSkillNames = new Set(result.resolved.map((skill) => skill.name));
-    claimManifestOwnership({ home: ctx.home, projectRoot: cwd, resolvedSkillNames });
-  }
+  const reconciled =
+    manifest && noInstallFailures && mayWriteState
+      ? reconcileOwnership({
+          home: ctx.home,
+          manifest,
+          resolvedSkillNames: new Set(result.resolved.map((skill) => skill.name)),
+        })
+      : IN_STEP_WITH_MANIFEST;
 
   const human = renderInstall(
     {
@@ -124,7 +132,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     ctx.style,
   );
 
-  const warnings = discovery.warnings();
+  const warnings = [...discovery.warnings(), ...staleManifestWarnings(reconciled)];
   return {
     exitCode,
     human,
