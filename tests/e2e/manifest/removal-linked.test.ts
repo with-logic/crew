@@ -5,8 +5,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, renameSync, symlinkSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
+import { readState, writeState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
@@ -80,5 +82,43 @@ describe("linked install directories", () => {
     expect((JSON.parse(run.stdout) as { removed: unknown[] }).removed).toEqual([]);
     expect(existsSync(join(elsewhere, "SKILL.md"))).toBe(true);
     expect(ownedNames(home)).toEqual(["alpha"]);
+  });
+
+  test("C-RC-30 a project whose install path is the user-scope path itself keeps the user's skill", () => {
+    const home = makeCrewHome();
+    const repo = makeSkillRepo(["alpha"]);
+    const project = makeProject([repo]);
+    // As for a project rooted at the home directory: one path, both scopes.
+    (claudeCodeAdapter as { userPath: () => string }).userPath = () =>
+      join(project, ".claude", "skills");
+    expect(crew(home, makeProject([]), ["install", repo]).code).toBe(0);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+
+    writeManifest(project, []);
+    const run = crew(home, project, ["install", "--force", "--json"]);
+
+    expect(run.code).toBe(0);
+    expect((JSON.parse(run.stdout) as { removed: unknown[] }).removed).toEqual([]);
+    expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
+    expect(installed(home)).toEqual([`alpha@${project}`, "alpha@user"]);
+  });
+
+  test("C-RC-30 an entry whose recorded name is not a skill name deletes nothing, even with --force", () => {
+    const home = makeCrewHome();
+    const project = makeProject([makeSkillRepo(["alpha"])]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    const victim = `${project}-victim`;
+    mkdirSync(victim);
+    writeFileSync(join(victim, "keep.txt"), "not crew's\n");
+    const state = readState(home);
+    const hostile = { ...state.installations[0]!, name: `../../../${basename(victim)}` };
+    writeState({ ...state, installations: [...state.installations, hostile] }, home);
+
+    const run = crew(home, project, ["install", "--force", "--json"]);
+
+    expect(run.code).toBe(0);
+    expect((JSON.parse(run.stdout) as { removed: unknown[] }).removed).toEqual([]);
+    expect(existsSync(join(victim, "keep.txt"))).toBe(true);
+    rmSync(victim, { recursive: true });
   });
 });

@@ -8,7 +8,7 @@
  *   - a skill something staying at that location still depends on;
  *   - a skill whose removal aborts on an uninstall safety check (§7.4);
  *   - a skill whose install directory is reached through a symbolic link,
- *     and so may be somebody else's directory (`./exclusive.ts`).
+ *     and so may be somebody else's directory (`./install-site.ts`).
  */
 
 import { entryTargetBases } from "../../../../agents/target-lock/bases.ts";
@@ -17,7 +17,7 @@ import type { StateEntry, StateFile } from "../../../../core/types.ts";
 import { isManifestOwned } from "../../../../manifest/index.ts";
 import type { CommandContext } from "../../../types.ts";
 import { removeOne, type UninstallRecord } from "../../../uninstall/core.ts";
-import { isExclusivelyInProject, type ProjectEntry } from "./exclusive.ts";
+import { hasExpectedProjectInstallPaths, type ProjectEntry } from "./install-site.ts";
 import { removalOrder } from "./order.ts";
 
 /** State after processing, and one removal record per entry attempted. */
@@ -32,7 +32,12 @@ export interface RemovalRequest {
   readonly projectRoot: string;
   /** Names in the manifest's resolved install set; everything else owned there is dropped. */
   readonly resolvedSkillNames: ReadonlySet<string>;
-  /** Asked once the target locks are held; removal proceeds only if it answers true. */
+  /**
+   * Whether the manifest this request came from is still the one on disk.
+   * Asked before the pre-checks and again just before the first deletion;
+   * on a normal run both happen with the target locks held, on a dry run
+   * without them.
+   */
   readonly isStillCurrent: () => boolean;
 }
 
@@ -52,7 +57,7 @@ export function processDroppedEntries(
   };
   const dropped = state.installations.filter(isDropped);
   const run = (unavailableBases?: ReadonlySet<string>): RemovalOutcome | null =>
-    isStillCurrent() ? removeInOrder(state, dropped, ctx, unavailableBases) : null;
+    isStillCurrent() ? removeInOrder(state, dropped, request, unavailableBases) : null;
   if (ctx.flags.dryRun) return run();
   return withTargetLocks(entryTargetBases(dropped, projectRoot, false), (_failures, unavailable) =>
     run(unavailable),
@@ -71,9 +76,10 @@ export function processDroppedEntries(
 function removeInOrder(
   initial: StateFile,
   dropped: readonly ProjectEntry[],
-  ctx: CommandContext,
+  request: RemovalRequest,
   unavailableBases?: ReadonlySet<string>,
-): RemovalOutcome {
+): RemovalOutcome | null {
+  const { ctx, isStillCurrent } = request;
   const preview: CommandContext = { ...ctx, flags: { ...ctx.flags, dryRun: true } };
   const subjectOf = (entry: StateEntry) => ({
     raw: entry.name,
@@ -83,7 +89,7 @@ function removeInOrder(
   const records: UninstallRecord[] = [];
   const staying = new Set<string>();
   for (const entry of dropped) {
-    if (!isExclusivelyInProject(entry)) {
+    if (!hasExpectedProjectInstallPaths(entry)) {
       staying.add(entry.name);
       continue;
     }
@@ -100,6 +106,9 @@ function removeInOrder(
     staying.add(entry.name);
     records.push(rec);
   }
+  // The pre-checks took time too. This is the last point before anything
+  // is deleted, so the manifest is confirmed once more.
+  if (!isStillCurrent()) return null;
   let state = initial;
   const byName = new Map(dropped.map((entry) => [entry.name, entry]));
   for (const name of removalOrder(dropped, staying)) {

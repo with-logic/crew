@@ -75,8 +75,12 @@ describe("removal order", () => {
     rmSync(join(skillDir(project, "top"), ".crew.json"));
 
     writeManifest(project, []);
-    expect(crew(home, project, ["install"]).code).toBe(1);
+    const run = crew(home, project, ["install"]);
 
+    expect(run.code).toBe(1);
+    expect(run.stdout).toContain("No longer in .crewrc");
+    expect(run.stdout).toContain("top");
+    expect(run.stdout).toContain("something else owns that folder");
     expect(installed(home)).toEqual([`base@${project}`, `top@${project}`]);
     expect(existsSync(join(skillDir(project, "base"), "SKILL.md"))).toBe(true);
     expect(ownedNames(home)).toEqual(["base", "top"]);

@@ -43,7 +43,7 @@ export function reconcileOwnership(
     ctx,
     projectRoot: manifest.projectRoot,
     resolvedSkillNames,
-    // Asked again once target locks are held: waiting for them takes time.
+    // Asked again after waiting for target locks and after the pre-checks.
     isStillCurrent: () => !hasChangedOnDisk(manifest),
   };
   if (ctx.flags.dryRun) {

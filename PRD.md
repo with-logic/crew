@@ -1509,7 +1509,8 @@ user scope or under another project root are never touched.
 **Reconciling.** Claiming, and the removal described below, happen together
 under a single hold of the state lock, and only if the manifest on disk still
 lists exactly the references this run read. That is checked again once the
-target locks removal needs are held, since waiting for them takes time. If
+target locks removal needs are held, and once more after the pre-checks
+below, immediately before the first deletion. If
 `.crewrc` has changed — or can no longer be read or parsed — the run claims
 nothing and removes nothing, reports a warning on stderr and in the
 `warnings` array of the `--json` result, and leaves its exit code unchanged.
@@ -1554,14 +1555,19 @@ so a later bare install removes it once the reason is gone:
   is what keeps the rule above sound: no skill is removed on the strength of
   another removal that then does not happen.
   `--force` overrides those checks here as it does for `crew uninstall`.
-- **Reached through a symbolic link.** An entry is uninstalled only if each
-  directory it is installed into lies physically inside the project root, at
-  the same relative path it has by name — that is, the directory is reached
-  from the project root without crossing a symbolic link. A project skills
-  directory that is a link may be the user-scope directory, another
-  project's, or one recorded under another crew home, and removing a skill
-  there would delete somebody else's. Such an entry is skipped without a
-  removal record.
+- **Not provably the project's own directory.** An entry is uninstalled only
+  if all of the following hold for each directory it is installed into; if
+  any does not, the entry is skipped without a removal record. `--force` does
+  not override these.
+  - The entry's name is a valid skill name (§4): one path segment.
+  - The directory lies physically inside the project root, at the same
+    relative path it has by name — it is reached from the project root
+    without crossing a symbolic link. A project skills directory that is a
+    link may be the user-scope directory, another project's, or one recorded
+    under another crew home.
+  - The directory is not physically the same as that agent's user-scope
+    directory for the skill. A project rooted at the home directory shares
+    that path with no link involved.
 
 A skill installed in the project by hand and never claimed is never removed,
 and entries at user scope or under another project root are never touched. If
@@ -3527,7 +3533,7 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-27 | §9.2 | When a declared reference fails to resolve, a declared skill fails validation, a declared skill cannot be installed into its directory, or the manifest is invalid, nothing is removed and dropped skills keep `manifest_owned: true`. |
 | C-RC-28 | §9.2 | Dropped skills that a hand-installed skill requires, directly or down a chain or cycle, stay installed and stay owned; a dropped skill nothing requires is still removed. Once the hand-installed skill is uninstalled, the next bare `crew install` removes them. |
 | C-RC-29 | §9.2 | When a dropped dependent's removal aborts, the dependency it requires stays installed and owned. |
-| C-RC-30 | §9.2 | A dropped skill whose install directory is reached through a symbolic link is not removed and gets no removal record, whether the link leads to the user-scope directory, to another project's, or anywhere else; the files at the link's target remain. |
+| C-RC-30 | §9.2 | A dropped skill is not removed, and gets no removal record, when its install directory is reached through a symbolic link (to the user-scope directory, to another project's, or anywhere else), when it is physically the agent's user-scope directory for that skill, or when its recorded name is not a valid skill name. `--force` does not change this, and the files at that location remain. |
 | C-RC-31 | §9.2 | When `.crewrc` is replaced, becomes invalid, or is deleted while a bare `crew install` is running, that run marks no entry `manifest_owned`, warns on stderr and in `warnings` of the `--json` result, and exits as it otherwise would. |
 | C-RC-32 | §9.2 | A dropped dependency chain that nothing else needs is removed in full, dependents first. A dropped dependency cycle is removed in full when nothing kept needs it, and kept in full, with exit 1, when one member's removal would abort. |
 | C-RC-33 | §9.2 | A bare `crew install` that read a manifest since replaced removes nothing, including skills the manifest it read had dropped. |

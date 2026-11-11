@@ -79,9 +79,7 @@ describe("removal safety", () => {
     const run = crew(home, project, ["install", "--json"]);
 
     expect(run.code).toBe(1);
-    const { records } = JSON.parse(run.stdout) as {
-      records: { name: string; perAgent: { error?: { code: string } }[] }[];
-    };
+    const { records } = JSON.parse(run.stdout) as { records: unknown[] };
     expect(JSON.stringify(records)).toContain("untracked_directory");
     expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
     expect(installed(home)).toEqual([`alpha@${project}`]);
@@ -100,6 +98,8 @@ describe("removal safety", () => {
 
     expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
     expect(installed(home)).toEqual([`alpha@${project}`, `gamma@${project}`]);
+    // alpha is still the manifest's to remove later; gamma was never claimed.
+    expect(ownedNames(home)).toEqual(["alpha"]);
   });
 
   test("C-RC-27 when the manifest cannot be satisfied, nothing is removed", () => {
