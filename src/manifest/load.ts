@@ -15,9 +15,15 @@ import {
   readFileSync,
   realpathSync,
 } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { CrewError } from "../core/errors.ts";
-import { MANIFEST_FILENAME, type ManifestEntry, manifestInvalid, parseManifest } from "./parse.ts";
+import {
+  isOutside,
+  MANIFEST_FILENAME,
+  type ManifestEntry,
+  manifestInvalid,
+  parseManifest,
+} from "./parse.ts";
 
 /** A manifest read from disk. */
 export interface Manifest {
@@ -60,7 +66,12 @@ function readRegularFile(file: string): string | null {
     if (code === "ENOENT" || code === "ELOOP") return null;
     // Anything else means a manifest is there and cannot be read. Skipping
     // it would let a manifest further up govern this project instead.
-    throw new CrewError("source_unreachable", `couldn't read \`${file}\` (${code})`, { file });
+    throw new CrewError(
+      "source_unreachable",
+      `couldn't read \`${file}\` (${code})`,
+      { file },
+      `Check that \`${MANIFEST_FILENAME}\` is readable and that the directories above it can be entered.`,
+    );
   }
   try {
     return fstatSync(fd).isFile() ? readFileSync(fd, "utf8") : null;
@@ -93,6 +104,5 @@ function buildManifest(file: string, text: string): Manifest {
  */
 function escapesThroughSymlink(path: string, physicalRoot: string): boolean {
   if (!existsSync(path)) return false;
-  const fromRoot = relative(physicalRoot, realpathSync(path));
-  return fromRoot === ".." || fromRoot.startsWith(`..${sep}`);
+  return isOutside(physicalRoot, realpathSync(path));
 }

@@ -93,9 +93,18 @@ function parsePortable(
       `${wrapInBackticks(ref)} must be a path relative to the project, starting with \`./\``,
     );
   }
-  const fromRoot = relative(root, source.path);
-  if (fromRoot === ".." || fromRoot.startsWith(`..${sep}`)) {
+  if (isOutside(root, source.path)) {
     return reject(`${wrapInBackticks(ref)} points outside the project`);
   }
   return source;
+}
+
+/**
+ * True when `path` is neither `root` nor beneath it. The one containment
+ * rule for manifest paths: the parser applies it to the path as written,
+ * the loader to the path's physical location.
+ */
+export function isOutside(root: string, path: string): boolean {
+  const fromRoot = relative(root, path);
+  return fromRoot === ".." || fromRoot.startsWith(`..${sep}`);
 }

@@ -44,6 +44,14 @@ describe("loadManifestFor: which manifest governs", () => {
     expect(manifest?.entries.map((e) => e.ref)).toEqual(["@acme/inner"]);
   });
 
+  test("an empty manifest still governs: it is not passed over for the one above", () => {
+    const { root, cwd } = project(["@acme/outer"], "packages/api");
+    writeFileSync(join(cwd, MANIFEST_FILENAME), "");
+    const manifest = loadManifestFor(cwd);
+    expect(manifest?.projectRoot).toBe(join(root, "packages", "api"));
+    expect(manifest?.entries).toEqual([]);
+  });
+
   test("there is no manifest when none exists up to the filesystem root", () => {
     expect(loadManifestFor(makeTempDir("crew-bare-"))).toBeNull();
   });
@@ -89,6 +97,7 @@ describe("loadManifestFor: what is not a manifest", () => {
     const err = rejection(cwd);
     expect(err.code).toBe("source_unreachable");
     expect(err.details).toEqual({ file });
+    expect(err.remedy).toContain("readable");
   });
 });
 
@@ -104,6 +113,12 @@ describe("loadManifestFor: physical containment of path lines", () => {
       line: 2,
       ref: "./linked/skill",
     });
+  });
+
+  test("a path through a symlink to the project's own parent is manifest_invalid", () => {
+    const { root, cwd } = project(["./up"]);
+    symlinkSync(join(root, ".."), join(root, "up"));
+    expect(rejection(cwd).code).toBe("manifest_invalid");
   });
 
   test("a symlink that stays inside the project is accepted", () => {
