@@ -1575,6 +1575,66 @@ is a manifest line.
   `unsaved`: the array of references removed. The skills removed are in
   `removed`, as for any bare install.
 
+**Several manifests in one repository.** A repository may hold more than
+one project, each with its own `.crewrc` in its own directory. A bare install
+applies the manifest governing the current directory and then every manifest
+in a directory beneath that manifest's directory. When no manifest governs
+the current directory, it applies every manifest in a directory beneath the
+current directory; with none there either, it is the `usage_error` above.
+
+- **Which manifests.** The directories are found by asking git for the
+  `.crewrc` files it tracks or would track: those in the index and untracked
+  ones that no ignore rule excludes. A manifest that `.gitignore` excludes
+  (under `node_modules`, say) or that lies inside another repository nested
+  in this one is not applied. Outside a git work tree no directory beneath is
+  searched: only the governing manifest is applied. Only git reporting that
+  the directory is not in a repository counts as being outside one; if git
+  fails for any other reason the command fails with that error, because
+  manifests it could not look for must not be silently skipped.
+- **Each must be a project in its own right.** Before any project is
+  installed, every directory git lists is checked, each directory on the way
+  down from the root without following links. One that no longer exists in
+  the work tree is passed over. One that is reached through a symbolic link,
+  wherever the link points and whether or not its target holds a `.crewrc`,
+  or whose `.crewrc` is not a regular file, fails the command with
+  `manifest_invalid` naming that file; nothing is installed. The same check
+  is made again for each project immediately before it is installed, since
+  earlier projects have been installed in the meantime, and that install
+  must find exactly the manifest that was checked: if the project has gone,
+  become a link, or is now governed by a different manifest, the command
+  fails with `manifest_invalid` there. Projects installed before that point
+  stay installed. These checks describe the filesystem at the moment they
+  run; like any command that acts on a path, they cannot rule out a change
+  in the instant after.
+- **Each is its own project.** The manifests are found once, and each is
+  then applied on its own, exactly once, with no further searching beneath
+  it: skills install under its directory, its lockfile sits beside it, and
+  ownership, reconciling, and removal are per manifest. Manifests do not merge, and a skill two of them
+  declare is installed once under each.
+- **Order and failure.** The governing manifest is applied first, then the
+  others in ascending order of directory path. When one exits non-zero the
+  rest are still applied, and the command exits with the first non-zero
+  code. When one raises an error (`source_unreachable` or `manifest_invalid`,
+  for example; any raised error counts),
+  the command fails with that error and the manifests after it are not
+  applied; what earlier ones did stands.
+- **Flags** apply to every manifest in the run, `--latest` and `--dry-run`
+  included. Under `--latest`, a source and ref that several manifests name
+  is looked up on its remote once per command, so all of them move to the
+  same commit. Spellings of one repository that §5.4 treats as the same are
+  one source here; different refs of it are looked up separately. `--save` is the exception: it edits one manifest and installs
+  that one project only.
+- **Output.** When the governing manifest is the only one applied, output is
+  as described above. In every other case, including a run with no governing
+  manifest that applies a single manifest beneath the current directory,
+  human output reports each project in order under a line
+  giving its manifest's path, and the `--json` result is the governing
+  manifest's result plus `nested`: an array of the other manifests' results
+  in the order applied, each with its own `manifest_path`. With no governing
+  manifest the top level carries empty `records`, `already_installed`,
+  `skipped`, and `removed`, no `manifest_path`, and every result is in
+  `nested`.
+
 **Ownership.** A manifest owns the skills in its **resolved install set**:
 every skill its lines expand to, plus every dependency resolved with them (§9
 step 6). Ownership is recorded as `manifest_owned: true` on the state entry (§11.1).
@@ -3824,6 +3884,11 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-55 | §9.2 | `crew uninstall --save <ref>` (and `crew remove --save <ref>`) deletes that line from the governing `.crewrc`, leaving its other lines and comments as they were, uninstalls the skill the line brought in, and drops its lockfile entry; `--json` carries the reference in `unsaved` and the skill in `removed`. A path given from a subdirectory matches the line written relative to the manifest. |
 | C-RC-56 | §9.2 | Under `crew uninstall --save`, a reference that is not a line of the manifest, including a skill name, is a `usage_error` listing it in `details.refs`, and neither `.crewrc` nor any skill changes even when other references given do match. A reference not found is redacted wherever the error repeats it. When the removal that follows aborts, the command exits 1, `.crewrc` and `.crewrc.lock` are restored byte-for-byte, and stderr says it was left as it was. |
 | C-RC-57 | §9.2 | `crew uninstall --save` with `--dry-run`, `--scope user`, `--all`, `--prune`, `--agent`, with no reference, or with no manifest governing the current directory is a `usage_error`; `.crewrc` is unchanged and none is created. |
+| C-RC-58 | §9.2 | In a git repository with a `.crewrc` at the root and in two directories beneath it, bare `crew install` at the root installs each project's skills under that project's own directory, marks each `manifest_owned`, and writes each project's lockfile beside its manifest. `--json` carries the root's result at the top level and the others in `nested`, in path order, each with its `manifest_path`; human output reports each under its manifest's path. With no manifest at the root, the manifests beneath are still applied, all in `nested`. |
+| C-RC-59 | §9.2 | Run in a project's directory, bare `crew install` applies that project and those beneath it and leaves its parent and siblings untouched. A `.crewrc` that git ignores is not applied, and outside a git work tree no manifest beneath the governing one is applied. An install with a reference on the command line does not look for nested manifests. |
+| C-RC-60 | §9.2 | With several manifests, one that exits non-zero sets the command's exit code (the first such code, when several do) and the others are still applied; one that raises an error fails the command with that error, later manifests are not applied, and earlier ones stay installed. With no active agent every project reports `no_agents: true` and nothing is installed. |
+| C-RC-61 | §9.2 | A line dropped from a nested manifest removes that project's copy of the skill and leaves another project's copy of the same skill installed. `crew install --save` and `crew uninstall --save` edit and install the governing project only: the result has no `nested` and projects beneath are untouched. Under `--latest`, a source and ref named by several manifests, in any spelling of the repository §5.4 treats as the same, is looked up once per command; different refs are looked up separately. |
+| C-RC-62 | §9.2 | A nested project directory that git lists but that is now a symbolic link out of the repository, and a nested `.crewrc` that is a symbolic link, each fail the command with `manifest_invalid` naming that manifest before anything is installed: neither the repository's other projects nor the link's target receive a skill. The same holds when the link's target has no `.crewrc`, or does not exist. A tracked project deleted from the work tree, with its directory or only its `.crewrc`, is passed over. A project removed or replaced by a link while an earlier project is being installed fails the command with `manifest_invalid` when its turn comes, and the earlier project stays installed. |
 
 ### 18.4 Worked examples
 
