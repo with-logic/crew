@@ -12,6 +12,7 @@
  */
 
 import { CrewError } from "../core/errors.ts";
+import type { GitSource } from "../core/types.ts";
 import type { ManifestEntry } from "./parse.ts";
 
 /** The lockfile's name; it lives in the manifest's directory. */
@@ -79,7 +80,9 @@ export function serializeLock(lock: Lock): string {
  * already name a full commit. A path line has no commit, and a line pinned
  * to a full commit is its own lock.
  */
-export function needsLockEntry(entry: ManifestEntry): boolean {
+export function needsLockEntry(
+  entry: ManifestEntry,
+): entry is ManifestEntry & { readonly source: GitSource } {
   const { source } = entry;
   return source.type === "git" && !(source.ref !== null && FULL_SHA.test(source.ref));
 }

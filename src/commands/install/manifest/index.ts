@@ -49,16 +49,19 @@ export function nothingToInstall(
   manifest: Manifest,
   ctx: CommandContext,
   human: string,
+  warnings: readonly string[] = [],
 ): CommandOutput {
   return {
     exitCode: 0,
     human: [human],
+    stderr: warnings,
     json: {
       already_installed: [],
       records: [],
       skipped: [],
       dry_run: ctx.flags.dryRun,
       manifest_path: manifest.file,
+      ...(warnings.length > 0 ? { warnings } : {}),
     },
   };
 }
