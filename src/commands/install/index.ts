@@ -16,6 +16,7 @@ import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { safePath } from "../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { resolveCollisions } from "./collisions.ts";
+import { installOutcome } from "./exit-code.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest/index.ts";
@@ -98,38 +99,17 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     throw withKnownTapInstallSuggestions(err, refs, config, cwd, kindHint);
   }
 
-  // Exit-code rules (PRD §9 step 9). Per-skill outcome is
-  // "succeeded" iff the skill validated AND at least one agent
-  // install succeeded. Validation failures land in result.skipped;
-  // agent-level failures live in result.summary.records with
-  // `anySuccess === false`.
-  const succeeded = result.summary.records.filter((r) => r.anySuccess).length;
-  const operationalFailures = result.summary.records.filter((r) => !r.anySuccess).length;
-  const validationFailures = result.skipped.length;
-  const failed = operationalFailures + validationFailures;
-  const allAlreadyInstalled =
-    result.alreadyInstalled.length > 0 && result.summary.records.length === 0;
-  let exitCode = 0;
-  if (failed === 0) {
-    exitCode = 0; // Every attempted skill succeeded, or nothing to do.
-  } else if (succeeded > 0 || allAlreadyInstalled) {
-    exitCode = 1; // Partial success.
-  } else if (validationFailures > 0) {
-    exitCode = 4; // Zero succeeded; at least one invalid skill.
-  } else {
-    exitCode = 1; // Zero succeeded; purely operational failures.
-  }
+  const { everythingLanded, exitCode: installExitCode } = installOutcome(result);
 
   // §9.2, §9.3: the project is brought in line with the manifest — dropped
   // skills removed, ownership and the lockfile recorded — only once
   // everything declared has landed.
-  const everythingLanded = failed === 0;
   const reconciled =
     manifest && everythingLanded
       ? reconcileManifestInstalls(ctx, manifest, result.resolved)
       : EMPTY_RECONCILIATION;
   const reconciliation = reportReconciliation(reconciled, ctx);
-  if (reconciliation.hasAbortedRemoval) exitCode = 1;
+  const exitCode = reconciliation.hasAbortedRemoval ? 1 : installExitCode;
 
   const human = [
     ...renderInstall(
