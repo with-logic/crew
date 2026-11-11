@@ -10,6 +10,8 @@
 import { CrewError } from "../../../core/errors.ts";
 import { loadManifestFor, MANIFEST_FILENAME, type Manifest } from "../../../manifest/index.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
+import type { UninstallRecord } from "../../uninstall/core.ts";
+import { renderDropped } from "../render/dropped.ts";
 
 /** Flags that reinterpret references; meaningless without references on the command line. */
 const REFERENCE_FLAGS = ["recursive", "tap", "bundle", "skill"] as const;
@@ -42,22 +44,25 @@ export function manifestForBareInstall(ctx: CommandContext): Manifest {
 /**
  * The outcome of a bare install that has nothing to install (§9.2).
  * Decided before agents are selected or any source is touched, so it
- * succeeds on a machine with no agent at all.
+ * succeeds on a machine with no agent at all. `removed` carries the
+ * removal records for skills the manifest no longer accounts for.
  */
 export function nothingToInstall(
   manifest: Manifest,
   ctx: CommandContext,
   human: string,
+  removed: readonly UninstallRecord[],
 ): CommandOutput {
   return {
-    exitCode: 0,
-    human: [human],
+    exitCode: removed.some((record) => record.failures.length > 0) ? 1 : 0,
+    human: [human, ...renderDropped(removed, ctx)],
     json: {
       already_installed: [],
       records: [],
       skipped: [],
       dry_run: ctx.flags.dryRun,
       manifest_path: manifest.file,
+      removed,
     },
   };
 }

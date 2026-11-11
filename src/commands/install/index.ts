@@ -15,11 +15,14 @@ import { parseRef } from "../../refs/parse.ts";
 import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { safePath } from "../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
+import type { UninstallRecord } from "../uninstall/core.ts";
 import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { claimManifestOwnership } from "./manifest/claim.ts";
 import { manifestForBareInstall, nothingToInstall } from "./manifest/index.ts";
+import { removeDroppedSkills } from "./manifest/removal.ts";
+import { renderDropped } from "./render/dropped.ts";
 import { renderInstall } from "./render/index.ts";
 
 /** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
@@ -46,7 +49,10 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";
   const manifest = isBare ? manifestForBareInstall(ctx) : null;
   if (manifest?.entries.length === 0) {
-    return nothingToInstall(manifest, ctx, `${safePath(manifest.file)} declares no skills.`);
+    // Declaring nothing still drops whatever the manifest used to own (§9.2).
+    const dropped = removeDroppedSkills(ctx, manifest.projectRoot, new Set());
+    const human = `${safePath(manifest.file)} declares no skills.`;
+    return nothingToInstall(manifest, ctx, human, dropped);
   }
   const kindHint = readKindHint(ctx);
   rejectRecursiveTapRefs(ctx);
@@ -102,27 +108,35 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     exitCode = 1; // Zero succeeded; purely operational failures.
   }
 
-  // §9.2: the manifest owns what it resolved to — but only once all of it
-  // has landed, and never on a dry run.
+  // §9.2: the manifest owns what it resolved to and drops what it no longer
+  // accounts for — but only once all of it has landed.
+  let removed: readonly UninstallRecord[] = [];
   const everythingInstalled = failed === 0;
-  const mayWriteState = !ctx.flags.dryRun;
-  if (manifest && everythingInstalled && mayWriteState) {
+  if (manifest && everythingInstalled) {
     const resolvedSkillNames = new Set(result.resolved.map((skill) => skill.name));
-    claimManifestOwnership({ home: ctx.home, projectRoot: cwd, resolvedSkillNames });
+    const mayWriteState = !ctx.flags.dryRun;
+    if (mayWriteState) {
+      claimManifestOwnership({ home: ctx.home, projectRoot: cwd, resolvedSkillNames });
+    }
+    removed = removeDroppedSkills(ctx, cwd, resolvedSkillNames);
+    if (removed.some((record) => record.failures.length > 0)) exitCode = 1;
   }
 
-  const human = renderInstall(
-    {
-      records: result.summary.records,
-      alreadyInstalled: result.alreadyInstalled,
-      resolved: result.resolved,
-      skipped: result.skipped,
-      dryRun: ctx.flags.dryRun,
-      cwd,
-      width: ctx.width,
-    },
-    ctx.style,
-  );
+  const human = [
+    ...renderInstall(
+      {
+        records: result.summary.records,
+        alreadyInstalled: result.alreadyInstalled,
+        resolved: result.resolved,
+        skipped: result.skipped,
+        dryRun: ctx.flags.dryRun,
+        cwd,
+        width: ctx.width,
+      },
+      ctx.style,
+    ),
+    ...renderDropped(removed, ctx),
+  ];
 
   const warnings = discovery.warnings();
   return {
@@ -134,7 +148,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       records: result.summary.records,
       skipped: result.skipped,
       dry_run: ctx.flags.dryRun,
-      ...(manifest ? { manifest_path: manifest.file } : {}),
+      ...(manifest ? { manifest_path: manifest.file, removed } : {}),
       ...(warnings.length > 0 ? { warnings } : {}),
     },
   };
