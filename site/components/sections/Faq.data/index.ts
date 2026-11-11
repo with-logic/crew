@@ -1,9 +1,10 @@
 /**
  * Homepage FAQ data: every question, in the order the page shows them.
  */
-import type { QA } from "../Faq.types";
+
 import { GENERAL } from "./general";
 import { PROJECTS } from "./projects";
+import type { QA } from "./types";
 
 /** Project questions sit right after the first general ones, beside the team questions. */
 const LAST_TEAM_QUESTION: (typeof GENERAL)[number]["id"] = "private-team";

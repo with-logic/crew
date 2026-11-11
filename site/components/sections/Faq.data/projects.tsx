@@ -1,7 +1,7 @@
 /**
  * Homepage FAQ data: project manifests (`.crewrc`, PRD §9.2 and §9.3).
  */
-import type { QA } from "../Faq.types";
+import type { QA } from "./types";
 
 export const PROJECTS: readonly QA[] = [
   {

@@ -311,7 +311,7 @@ per line. Check it in at the top of the project.
 ```
 
 Each line is a git source (`@owner/repo`, `gh:owner/repo@ref//subpath`, a git
-URL) or a path inside the project starting with `./`. Blank lines and lines
+URL) or a path inside the project starting with `./` or `../`. Blank lines and lines
 starting with `#` are ignored. Skill names from a tap and absolute paths are
 not allowed, because they mean different things on different machines.
 
@@ -328,9 +328,10 @@ What to expect:
   (for example `.claude/skills/`), not into your user-wide skills.
 - **The file is the source of truth.** Delete a line and the next
   `crew install` removes that skill, along with dependencies nothing else
-  needs. A skill that a remaining line depends on stays. Skills you installed in the project by hand are left alone.
-- **Commit `.crewrc.lock`.** For a line that names a branch, a tag, or no
-  version, Homecrew records the commit it installed. Everyone then gets that
+  needs. A skill that a remaining line depends on stays. Skills you installed
+  in the project by hand are left alone, unless `.crewrc` lists them.
+- **Commit `.crewrc.lock`.** For a git line that names a branch, a tag, or no
+  version (the default branch), Homecrew records the commit it installed. Everyone then gets that
   commit, even after the branch moves.
 - **Updates are deliberate.** `crew update` and autoupdate skip these skills.
   Run `crew install --latest` and commit the changed lockfile.
@@ -340,7 +341,7 @@ What to expect:
 **Run it from your setup step.** `crew install` exits 0 on a machine with no
 coding agent, without contacting any git remote, so it is safe in CI. When
 everything is already installed it does not touch the network either.
-These recipes skip quietly where Homecrew is not installed, and fail the setup
+These recipes skip with a note where Homecrew is not installed, and fail the setup
 step if `crew install` itself fails.
 
 ```jsonc

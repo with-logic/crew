@@ -1,7 +1,7 @@
 /**
  * Homepage FAQ data: what Homecrew is and how it behaves.
  */
-import type { QA } from "../Faq.types";
+import type { QA } from "./types";
 
 export const GENERAL = [
   {
