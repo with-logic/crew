@@ -7,7 +7,7 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
-import { runGit } from "../../src/git/exec.ts";
+import { runGit, setGitRunner } from "../../src/git/exec.ts";
 import { remoteCommitOf } from "../../src/git/repo/remote.ts";
 import { displayUrl } from "../../src/refs/display-url.ts";
 import { commitAll, makeGitRepo, makeTempDir, tagRepo } from "../helpers/fixtures.ts";
@@ -20,30 +20,55 @@ function makeRepo(): { dir: string; url: string; first: string } {
   return { dir, url: `file://${dir}`, first: sha };
 }
 
-/** Add a commit to `dir` and return it. */
-function commitMore(dir: string): string {
-  writeFileSync(join(dir, "a.txt"), `${Math.random()}\n`);
-  return commitAll(dir, "more");
-}
-
 function git(dir: string, ...args: string[]): string {
   return runGit(args, { cwd: dir }).stdout.trim();
 }
 
 describe("remoteCommitOf", () => {
-  test("no ref is the default branch's current commit", () => {
+  test("no ref is the default branch's current commit, whatever that branch is called", () => {
     const { dir, url, first } = makeRepo();
+    git(dir, "branch", "-m", "trunk");
     expect(remoteCommitOf(url, null)).toBe(first);
 
-    const second = commitMore(dir);
+    const second = commitAll(dir, "more");
     expect(remoteCommitOf(url, null)).toBe(second);
+  });
+
+  test("it asks with one ls-remote and neither clones nor fetches", () => {
+    const { url, first } = makeRepo();
+    const commands: string[] = [];
+    const real = setGitRunner((args, options) => {
+      commands.push(args.join(" "));
+      return real(args, options);
+    });
+    try {
+      expect(remoteCommitOf(url, "main")).toBe(first);
+    } finally {
+      setGitRunner(real);
+    }
+
+    expect(commands).toEqual([
+      `ls-remote -- ${url} refs/tags/main^{} refs/tags/main refs/heads/main`,
+    ]);
+  });
+
+  test("a failure to run git at all is passed on, not reported as an unreachable remote", () => {
+    const { url } = makeRepo();
+    const real = setGitRunner(() => {
+      throw new Error("spawn git ENOENT");
+    });
+    try {
+      expect(() => remoteCommitOf(url, null)).toThrow("spawn git ENOENT");
+    } finally {
+      setGitRunner(real);
+    }
   });
 
   test("a branch is that branch's current commit, not the default branch's", () => {
     const { dir, url, first } = makeRepo();
     const main = git(dir, "branch", "--show-current");
     git(dir, "checkout", "-q", "-b", "next");
-    const onNext = commitMore(dir);
+    const onNext = commitAll(dir, "more");
     git(dir, "checkout", "-q", main);
 
     expect(remoteCommitOf(url, "next")).toBe(onNext);
@@ -53,7 +78,7 @@ describe("remoteCommitOf", () => {
   test("a lightweight tag is the commit it names", () => {
     const { dir, url, first } = makeRepo();
     tagRepo(dir, "v1.0.0");
-    commitMore(dir);
+    commitAll(dir, "more");
 
     expect(remoteCommitOf(url, "v1.0.0")).toBe(first);
   });
@@ -71,7 +96,7 @@ describe("remoteCommitOf", () => {
     tagRepo(dir, "stable");
     const main = git(dir, "branch", "--show-current");
     git(dir, "checkout", "-q", "-b", "stable");
-    commitMore(dir);
+    commitAll(dir, "more");
     git(dir, "checkout", "-q", main);
 
     expect(remoteCommitOf(url, "stable")).toBe(first);
@@ -85,14 +110,15 @@ describe("remoteCommitOf", () => {
     expect(remoteCommitOf(url, "release")).toBeNull();
   });
 
-  test("a name with a pattern character names nothing, and is not sent to the remote", () => {
-    // Nothing is at this URL: asking it anything would be `source_unreachable`.
-    const url = `file://${join(makeTempDir("crew-remote-"), "missing")}`;
+  test.each(["rel*", "*", "ma?n", "[m]ain", "ma\\in"])(
+    "%s has a pattern character, so it names nothing and is not sent to the remote",
+    (name) => {
+      // Nothing is at this URL: asking it anything would be `source_unreachable`.
+      const url = `file://${join(makeTempDir("crew-remote-"), "missing")}`;
 
-    for (const name of ["rel*", "*", "ma?n", "[m]ain", "ma\\in"]) {
       expect(remoteCommitOf(url, name)).toBeNull();
-    }
-  });
+    },
+  );
 
   test("a ref the remote does not list, such as an abbreviated commit, is null", () => {
     const { url, first } = makeRepo();

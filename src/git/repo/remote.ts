@@ -5,27 +5,30 @@
 
 import { CrewError } from "../../core/errors.ts";
 import { displayText, displayUrl } from "../../refs/display-url.ts";
-import { type GitProcessError, runGit } from "../exec.ts";
+import { GitProcessError, runGit } from "../exec.ts";
 
 /**
- * The commit that `ref` names on the remote at `url`: a tag if there is one
- * by that name, otherwise a branch, the same precedence local resolution
- * uses. A null `ref` asks for the remote's default branch.
+ * The commit that the branch or tag `branchOrTag` names on the remote at
+ * `url`: a tag if there is one by that name, otherwise a branch, the same
+ * precedence local resolution uses. Null asks for the remote's default
+ * branch.
  *
- * Returns null when the remote has no branch or tag by that name, which is
- * what a ref that is an abbreviated commit looks like from here. An
- * unreachable remote is `source_unreachable`.
+ * Only a branch or tag name can be looked up. A commit, full or
+ * abbreviated, is not something a remote lists, so it returns null, the
+ * same as a name the remote does not have: null means "no branch or tag by
+ * that name", not "no such commit". An unreachable remote is
+ * `source_unreachable`.
  */
-export function remoteCommitOf(url: string, ref: string | null): string | null {
+export function remoteCommitOf(url: string, branchOrTag: string | null): string | null {
   // git reads these arguments as patterns. A ref name cannot contain a
   // pattern character (git-check-ref-format), so one that does names
   // nothing, and is not sent: `*` would ask for every ref the remote has.
-  if (ref !== null && /[*?[\\]/.test(ref)) return null;
-  const tag = `refs/tags/${ref}`;
+  if (branchOrTag !== null && /[*?[\\]/.test(branchOrTag)) return null;
+  const tag = `refs/tags/${branchOrTag}`;
   // An annotated tag is listed twice: the tag object, and `^{}` for the commit it points at.
   const peeledTag = `${tag}^{}`;
-  const branch = `refs/heads/${ref}`;
-  const wanted = ref === null ? ["HEAD"] : [peeledTag, tag, branch];
+  const branch = `refs/heads/${branchOrTag}`;
+  const wanted = branchOrTag === null ? ["HEAD"] : [peeledTag, tag, branch];
   const commits = listRemote(url, wanted);
   for (const name of wanted) {
     const sha = commits.get(name);
@@ -40,8 +43,9 @@ function listRemote(url: string, names: readonly string[]): Map<string, string> 
   try {
     stdout = runGit(["ls-remote", "--", url, ...names]).stdout;
   } catch (err) {
-    // `runGit` only ever throws `GitProcessError`, as in `cloneRepo`.
-    const ge = err as GitProcessError;
+    // Anything else, such as git failing to start, is not about the remote.
+    if (!(err instanceof GitProcessError)) throw err;
+    const ge = err;
     throw new CrewError(
       "source_unreachable",
       `couldn't reach \`${displayUrl(url)}\` — ${displayText(ge.result.stderr.trim())}`,
