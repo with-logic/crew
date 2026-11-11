@@ -55,16 +55,19 @@ export function hasAgentToInstallInto(config: Config, ctx: CommandContext): bool
 
 /**
  * Remote lookups already made by the command now running, by repository and ref.
- * Null outside `sharingRemoteLookups`, where every lookup goes to the remote.
+ * Null outside `withSharedRemoteLookups`, where every lookup goes to the remote.
  */
 let lookups: Map<string, string | null> | null = null;
+
+/** The sharing ends when `work` returns, so `work` must finish its lookups by then: no promises. */
+type NotAPromise<T> = T extends PromiseLike<unknown> ? never : T;
 
 /**
  * Run `work` with remote lookups shared: one command that installs several
  * projects asks each remote about each ref once, however many of the
  * projects name it. Nothing is remembered once `work` returns.
  */
-export function sharingRemoteLookups<T>(work: () => T): T {
+export function withSharedRemoteLookups<T>(work: () => NotAPromise<T>): T {
   lookups = new Map();
   try {
     return work();
@@ -89,7 +92,7 @@ function remoteCommit(url: string, ref: string | null): string | null {
  * the line names on its remote now. A line whose ref the remote lists as
  * neither a branch nor a tag (an abbreviated commit) keeps what it had.
  * Each line's URL and ref is looked up on its remote, unless this command
- * already looked that pair up (`sharingRemoteLookups`). An unreachable
+ * already looked that pair up (`withSharedRemoteLookups`). An unreachable
  * remote is `source_unreachable`.
  */
 export function latestLock(manifest: Manifest, lock: Lock): Lock {
