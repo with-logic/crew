@@ -28,30 +28,38 @@ import {
   wantsLatest,
 } from "./manifest/latest.ts";
 import { readLock, refsToInstall } from "./manifest/lockfile.ts";
+import { installEveryProject } from "./manifest/projects.ts";
 import { EMPTY_RECONCILIATION, reconcileManifestInstalls } from "./manifest/reconcile.ts";
 import { reportReconciliation } from "./manifest/report.ts";
 import { saveThenInstall, wantsSave } from "./manifest/save.ts";
 import { renderInstall } from "./render/index.ts";
 
-/** True when the command line names no reference, so the project manifest supplies them (§9.2). */
+/**
+ * True when the command line names no reference. Which projects such a run
+ * installs is decided by where the manifests are (§9.2), not here.
+ */
 function isBareInstall(ctx: CommandContext): boolean {
   return ctx.positional.length === 0 && typeof ctx.flags.extras["from-git"] !== "string";
 }
 
 export function installCommand(ctx: CommandContext): CommandOutput {
-  // §9.2: `--save` edits the manifest, then installs from it.
+  // §9.2: `--save` edits one manifest, then installs that one project from it.
   if (wantsSave(ctx)) return saveThenInstall(ctx, runOneInstall);
-  return runOneInstall(ctx);
+  // §9.2: a bare install covers the governing manifest and every one beneath it.
+  return isBareInstall(ctx) ? installEveryProject(ctx, runOneInstall) : runOneInstall(ctx);
 }
 
 /**
  * Install the references on the command line, or, for a bare install, the
- * single project whose manifest governs `ctx.cwd`.
+ * single project whose manifest governs `ctx.cwd`. A caller installing
+ * several projects passes `expectedManifestFile`, the manifest this run must find.
  */
-export function runOneInstall(ctx: CommandContext): CommandOutput {
+export function runOneInstall(ctx: CommandContext, expectedManifestFile?: string): CommandOutput {
   const fromGit = ctx.flags.extras["from-git"];
   const isBare = isBareInstall(ctx);
-  const manifest = isBare ? manifestForBareInstall(ctx) : rejectLatestWithReferences(ctx);
+  const manifest = isBare
+    ? manifestForBareInstall(ctx, expectedManifestFile)
+    : rejectLatestWithReferences(ctx);
   if (manifest?.entries.length === 0) {
     // §9.3: an invalid lockfile is an error even with nothing to install,
     // and before anything is removed.

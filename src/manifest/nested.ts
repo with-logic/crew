@@ -38,7 +38,10 @@ export function nestedProjectDirs(root: string): string[] {
  * repository in its own right.
  *
  * False when it is simply gone: git also lists a tracked manifest that has
- * been deleted from the work tree, with or without its directory. Raises
+ * been deleted from the work tree, with or without its directory. False too
+ * when a directory on the way holds a `.git`: it is now a repository of its
+ * own, which git still lists while this repository's index tracks the file.
+ * Raises
  * `manifest_invalid` when something is there that must not be applied: a
  * directory on the way that is a symbolic link, which may lead out of the
  * repository, or a `.crewrc` that is not a regular file, which a search
@@ -64,6 +67,9 @@ export function isOwnProject(at: { readonly root: string; readonly dir: string }
         { file },
       );
     }
+    // Another repository's work tree (a `.git` directory, or the file a
+    // submodule or linked work tree has): its manifests are not this one's.
+    if (lstatSync(join(path, ".git"), { throwIfNoEntry: false }) !== undefined) return false;
   }
   const found = readFileAt(file);
   if (found.kind === "absent") return false;

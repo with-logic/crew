@@ -17,9 +17,25 @@ import { reportReconciliation } from "./report.ts";
 /** Flags that reinterpret references; meaningless without references on the command line. */
 const REFERENCE_FLAGS = ["recursive", "tap", "bundle", "skill"] as const;
 
-/** Load the manifest governing `ctx.cwd`, or fail with the usage error a bare install earns. */
-export function manifestForBareInstall(ctx: CommandContext): Manifest {
+/**
+ * Load the manifest governing `ctx.cwd`, or fail with the usage error a
+ * bare install earns. `expectedManifestFile` does not choose the manifest:
+ * it is checked against the one found, which must be that file.
+ */
+export function manifestForBareInstall(
+  ctx: Pick<CommandContext, "cwd" | "flags">,
+  expectedManifestFile?: string,
+): Manifest {
   const manifest = loadManifestFor(ctx.cwd);
+  // A run over several projects names the manifest each install must find
+  // (§9.2). Finding another, or none, means it changed underneath the run.
+  if (expectedManifestFile !== undefined && manifest?.file !== expectedManifestFile) {
+    throw new CrewError(
+      "manifest_invalid",
+      `${expectedManifestFile} is no longer the manifest for its directory`,
+      { file: expectedManifestFile },
+    );
+  }
   if (manifest === null) {
     throw new CrewError(
       "usage_error",
