@@ -1559,7 +1559,10 @@ so a later bare install removes it once the reason is gone:
   and kept whole otherwise.
 - **Aborted.** Every dropped entry is checked against the §7.4 safety checks
   before any entry is removed. One that would abort keeps its files and its
-  state entry, is reported, and makes the command exit 1. Deciding this first
+  state entry, is reported, and makes the command exit 1. Under `--quiet`,
+  where the human report is suppressed, each such failure is written to
+  stderr (§5.2), naming the skill, the agent, the error code, and its
+  message. Deciding this first
   is what keeps the rule above sound: no skill is removed on the strength of
   another removal that then does not happen. `--force` overrides those checks
   here as it does for `crew uninstall`.
@@ -3677,7 +3680,7 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-22 | §9.2 | A skill installed in the project with `crew install --scope project <ref>` and never claimed is not removed by any bare `crew install`. |
 | C-RC-23 | §9.2 | Removal is confined to the manifest's install location: the same skill at user scope, or under another project root, keeps its files and its state entry. A project install directory that is also a user-scope install directory, by being the same path or by being reached through a link, is left alone and named in a warning, with or without `--force`. |
 | C-RC-24 | §9.2, §5.2 | Bare `crew install --dry-run` lists the skills that would be removed in `removed` and in human output, removes none, and leaves state and config unchanged. |
-| C-RC-25 | §9.2, §7.4 | A dropped skill whose removal aborts on a §7.4 safety check keeps its files and state entry, appears in `removed` with that failure, and the command exits 1, whether or not other skills are still declared. An unrelated dropped skill is still removed. With `--force` it is removed. |
+| C-RC-25 | §9.2, §7.4 | A dropped skill whose removal aborts on a §7.4 safety check keeps its files and state entry, appears in `removed` with that failure, and the command exits 1, whether or not other skills are still declared. An unrelated dropped skill is still removed. Under `--quiet` the failure is written to stderr, naming the skill, agent, and error code. With `--force` it is removed. |
 | C-RC-26 | §9.2 | A manifest path line that reaches outside the project through a symbolic link is `manifest_invalid`, with `details` naming its line; nothing from outside the project is installed. |
 | C-RC-27 | §9.2 | When a declared reference fails to resolve, a declared skill fails validation, a declared skill cannot be installed into its directory, or the manifest is invalid, nothing is removed and dropped skills keep `manifest_owned: true`. |
 | C-RC-31 | §9.2 | When `.crewrc` is replaced, becomes invalid, or is deleted while a bare `crew install` is running, that run marks no entry `manifest_owned`, warns on stderr and in `warnings` of the `--json` result, and exits as it otherwise would. |
