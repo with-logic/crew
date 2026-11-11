@@ -151,7 +151,11 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   return {
     exitCode,
     human,
-    stderr: result.unusableProjectRoots ? [UNUSABLE_PROJECT_ROOT_WARNING, ...warnings] : warnings,
+    stderr: [
+      ...(result.unusableProjectRoots ? [UNUSABLE_PROJECT_ROOT_WARNING] : []),
+      ...warnings,
+      ...reconciliation.quietDiagnostics,
+    ],
     json: {
       already_installed: result.alreadyInstalled,
       records: result.summary.records,

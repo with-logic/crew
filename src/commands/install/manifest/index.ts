@@ -59,7 +59,7 @@ export function nothingToInstall(
   return {
     exitCode: report.hasAbortedRemoval ? 1 : 0,
     human: [human, ...report.human],
-    stderr: report.warnings,
+    stderr: [...report.warnings, ...report.quietDiagnostics],
     json: {
       already_installed: [],
       records: [],

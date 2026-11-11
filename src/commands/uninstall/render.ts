@@ -22,6 +22,15 @@ const FAIL_REMEDIES: Record<string, string> = {
   not_installed_here: "wasn't installed here (pass --force to ignore)",
 };
 
+/**
+ * Why a removal failed, in words, for a failure's error code. Fixed text
+ * chosen by code: it never repeats the error's own message, which can carry
+ * text read from an install site. Says so when `--force` would override it.
+ */
+export function failureReason(code: string): string {
+  return FAIL_REMEDIES[code] ?? code.replace(/_/g, " ");
+}
+
 export function renderUninstall(
   records: readonly UninstallRecord[],
   dryRun: boolean,
@@ -114,8 +123,8 @@ function renderRecord(r: UninstallRecord, dryRun: boolean, style: Styler): strin
     lines.push(`    ${style.symbol("muted")} ${agent} ${style.dim(`(${verb})`)}`);
   }
   for (const fail of r.failures) {
-    const remedy = FAIL_REMEDIES[fail.error.code] ?? fail.error.code.replace(/_/g, " ");
-    lines.push(`    ${style.symbol("fail")} ${fail.agent}  ${style.red(remedy)}`);
+    const reason = failureReason(fail.error.code);
+    lines.push(`    ${style.symbol("fail")} ${fail.agent}  ${style.red(reason)}`);
   }
   if (r.removedFrom.length === 0 && r.absentFrom.length === 0 && r.failures.length === 0) {
     lines.push(`    ${style.dim("nothing to remove")}`);
