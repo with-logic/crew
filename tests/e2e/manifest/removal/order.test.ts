@@ -7,10 +7,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { makeCrewHome } from "../../helpers/env.ts";
-import { makeSkill, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
-import { crew, installed, makeProject, ownedNames, skillDir, writeManifest } from "./helpers.ts";
+import { makeCrewHome } from "../../../helpers/env.ts";
+import { makeSkill, skillFrontmatter } from "../../../helpers/fixtures.ts";
+import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
+import { crew, installed, makeProject, ownedNames, skillDir, writeManifest } from "../helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {

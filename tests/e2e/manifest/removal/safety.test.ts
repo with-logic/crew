@@ -7,9 +7,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { makeCrewHome } from "../../helpers/env.ts";
-import { makeSkill } from "../../helpers/fixtures.ts";
-import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
+import { makeCrewHome } from "../../../helpers/env.ts";
+import { makeSkill } from "../../../helpers/fixtures.ts";
+import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import {
   addLocalSkill,
   crew,
@@ -19,7 +19,7 @@ import {
   ownedNames,
   skillDir,
   writeManifest,
-} from "./helpers.ts";
+} from "../helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -133,5 +133,20 @@ describe("removal safety", () => {
 
     expect(existsSync(skillDir(project, "alpha"))).toBe(false);
     expect(installed(home)).toEqual([]);
+  });
+
+  test("C-RC-25 under --quiet an aborted removal is still explained on stderr", () => {
+    const home = makeCrewHome();
+    const project = makeProject([makeSkillRepo(["alpha"])]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    rmSync(join(skillDir(project, "alpha"), ".crew.json"));
+    writeManifest(project, []);
+
+    const run = crew(home, project, ["install", "--quiet"]);
+
+    expect(run.code).toBe(1);
+    expect(run.stdout).toBe("");
+    expect(run.stderr).toContain("could not remove `alpha`");
+    expect(run.stderr).toContain("untracked_directory");
   });
 });

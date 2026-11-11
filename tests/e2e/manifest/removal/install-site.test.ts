@@ -1,17 +1,17 @@
 /**
- * Linked install directories (§9.2): a dropped skill whose directory is
- * reached through a symbolic link is never removed, because the directory
- * may be somebody else's.
+ * Install sites removal refuses to delete (§9.2): a dropped skill is never
+ * removed when its directory is not provably this project's own, and the
+ * run says which skill it kept.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
-import { readState, writeState } from "../../../src/state/load.ts";
-import { makeCrewHome } from "../../helpers/env.ts";
-import { makeTempDir } from "../../helpers/fixtures.ts";
-import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
+import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
+import { readState, writeState } from "../../../../src/state/load.ts";
+import { makeCrewHome, withOriginalAdapter } from "../../../helpers/env.ts";
+import { makeTempDir } from "../../../helpers/fixtures.ts";
+import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import {
   crew,
   installed,
@@ -20,7 +20,7 @@ import {
   ownedNames,
   skillDir,
   writeManifest,
-} from "./helpers.ts";
+} from "../helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -30,7 +30,7 @@ afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
 
-describe("linked install directories", () => {
+describe("install sites that are not provably the project's own", () => {
   test("C-RC-30 a project skills directory that is a link to the user's never costs the user a skill", () => {
     const home = makeCrewHome();
     const repo = makeSkillRepo(["alpha"]);
@@ -76,12 +76,15 @@ describe("linked install directories", () => {
     symlinkSync(elsewhere, skillDir(project, "alpha"));
 
     writeManifest(project, []);
-    const run = crew(home, project, ["install", "--json"]);
+    const run = crew(home, project, ["install", "--force", "--json"]);
 
     expect(run.code).toBe(0);
-    expect((JSON.parse(run.stdout) as { removed: unknown[] }).removed).toEqual([]);
+    const payload = JSON.parse(run.stdout) as { removed: unknown[]; warnings: string[] };
+    expect(payload.removed).toEqual([]);
+    expect(payload.warnings.join("\n")).toContain("kept `alpha`");
     expect(existsSync(join(elsewhere, "SKILL.md"))).toBe(true);
     expect(ownedNames(home)).toEqual(["alpha"]);
+    expect(crew(home, project, ["install"]).stderr).toContain("kept `alpha`");
   });
 
   test("C-RC-30 a project whose install path is the user-scope path itself keeps the user's skill", () => {
@@ -111,7 +114,9 @@ describe("linked install directories", () => {
     mkdirSync(victim);
     writeFileSync(join(victim, "keep.txt"), "not crew's\n");
     const state = readState(home);
-    const hostile = { ...state.installations[0]!, name: `../../../${basename(victim)}` };
+    const alpha = state.installations.find((entry) => entry.name === "alpha");
+    expect(alpha?.manifest_owned).toBe(true);
+    const hostile = { ...alpha!, name: `../../../${basename(victim)}` };
     writeState({ ...state, installations: [...state.installations, hostile] }, home);
 
     const run = crew(home, project, ["install", "--force", "--json"]);
@@ -121,4 +126,33 @@ describe("linked install directories", () => {
     expect(existsSync(join(victim, "keep.txt"))).toBe(true);
     rmSync(victim, { recursive: true });
   });
+
+  for (const [what, agent] of [
+    ["an agent this build does not know", "ghost-agent"],
+    ["an agent with no project-scope directory", "nanobot"],
+  ] as const) {
+    test(`C-RC-30 an entry recorded for ${what} deletes nothing, even with --force`, () => {
+      const home = makeCrewHome();
+      const project = makeProject([makeSkillRepo(["alpha"])]);
+      expect(crew(home, project, ["install"]).code).toBe(0);
+      // A same-named directory in the working directory, where a base of "" would point.
+      mkdirSync(join(project, "beta"));
+      writeFileSync(join(project, "beta", "keep.txt"), "not crew's\n");
+      const state = readState(home);
+      const alpha = state.installations.find((entry) => entry.name === "alpha");
+      expect(alpha?.manifest_owned).toBe(true);
+      const odd = { ...alpha!, name: "beta", agents: [agent] };
+      writeState({ ...state, installations: [...state.installations, odd] }, home);
+
+      const run = withOriginalAdapter("nanobot", () =>
+        crew(home, project, ["install", "--force", "--json"]),
+      );
+
+      expect(run.code).toBe(0);
+      const payload = JSON.parse(run.stdout) as { removed: unknown[]; warnings: string[] };
+      expect(payload.removed).toEqual([]);
+      expect(payload.warnings.join("\n")).toContain("kept `beta`");
+      expect(existsSync(join(project, "beta", "keep.txt"))).toBe(true);
+    });
+  }
 });

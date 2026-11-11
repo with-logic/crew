@@ -17,13 +17,16 @@ import type { StateEntry, StateFile } from "../../../../core/types.ts";
 import { isManifestOwned } from "../../../../manifest/index.ts";
 import type { CommandContext } from "../../../types.ts";
 import { removeOne, type UninstallRecord } from "../../../uninstall/core.ts";
-import { hasExpectedProjectInstallPaths, type ProjectEntry } from "./install-site.ts";
+import { areProjectInstallPathsSafeToRemove, type ProjectEntry } from "./install-site.ts";
 import { removalOrder } from "./order.ts";
 
-/** State after processing, and one removal record per entry attempted. */
+/** State after processing, and what happened to each dropped entry it did not silently keep. */
 export interface RemovalOutcome {
   readonly state: StateFile;
+  /** One removal record per entry attempted: completed, previewed, or aborted. */
   readonly records: readonly UninstallRecord[];
+  /** Names kept because their install directories are not provably the project's own. */
+  readonly keptAsUnsafe: readonly string[];
 }
 
 /** What to remove, and the conditions it is removed under. */
@@ -33,10 +36,10 @@ export interface RemovalRequest {
   /** Names in the manifest's resolved install set; everything else owned there is dropped. */
   readonly resolvedSkillNames: ReadonlySet<string>;
   /**
-   * Whether the manifest this request came from is still the one on disk.
-   * Asked before the pre-checks and again just before the first deletion;
-   * on a normal run both happen with the target locks held, on a dry run
-   * without them.
+   * Whether the manifest this request came from is confirmed to still be
+   * the one on disk. Asked before the pre-checks and again just before the
+   * first deletion. On a normal run both happen with the target locks
+   * held; a dry run previews without locks.
    */
   readonly isStillCurrent: () => boolean;
 }
@@ -67,11 +70,14 @@ export function processDroppedEntries(
 /**
  * Decide everything first, then remove.
  *
- * Each dropped entry is pre-checked without touching it: the symlink rule,
- * and the uninstall safety checks by way of a dry run. Those that fail are
- * staying, and `removalOrder` keeps whatever they require. Only then does
- * removal start, so no skill is taken away on the strength of a removal
- * that turns out not to happen.
+ * Each dropped entry is pre-checked without touching it: the install-site
+ * rule, and the uninstall safety checks by way of a dry run. Those that
+ * fail are staying, and `removalOrder` keeps whatever they require. Only
+ * then does removal start, so no skill is taken away on the strength of a
+ * removal that turns out not to happen.
+ *
+ * On a normal run the caller holds the target locks throughout; a dry run
+ * previews without them.
  */
 function removeInOrder(
   initial: StateFile,
@@ -81,27 +87,30 @@ function removeInOrder(
 ): RemovalOutcome | null {
   const { ctx, isStillCurrent } = request;
   const preview: CommandContext = { ...ctx, flags: { ...ctx.flags, dryRun: true } };
-  const subjectOf = (entry: StateEntry) => ({
-    raw: entry.name,
-    name: entry.name,
-    entries: [entry],
-  });
-  const records: UninstallRecord[] = [];
-  const staying = new Set<string>();
-  for (const entry of dropped) {
-    if (!hasExpectedProjectInstallPaths(entry)) {
-      staying.add(entry.name);
-      continue;
-    }
-    const { rec } = removeOne(
-      initial,
-      subjectOf(entry),
-      preview,
-      false,
-      null,
-      false,
+  /** Uninstall `entry` from every agent it is on, fully, updating `state` as it goes. */
+  const uninstall = (state: StateFile, entry: StateEntry, as: CommandContext) => {
+    const subject = { raw: entry.name, name: entry.name, entries: [entry] };
+    const options = { pruned: false, agentFilter: null, deferStateEntryDrops: false };
+    return removeOne(
+      state,
+      subject,
+      as,
+      options.pruned,
+      options.agentFilter,
+      options.deferStateEntryDrops,
       unavailableBases,
     );
+  };
+  const records: UninstallRecord[] = [];
+  const keptAsUnsafe: string[] = [];
+  const staying = new Set<string>();
+  for (const entry of dropped) {
+    if (!areProjectInstallPathsSafeToRemove(entry)) {
+      staying.add(entry.name);
+      keptAsUnsafe.push(entry.name);
+      continue;
+    }
+    const { rec } = uninstall(initial, entry, preview);
     if (rec.failures.length === 0) continue;
     staying.add(entry.name);
     records.push(rec);
@@ -112,13 +121,16 @@ function removeInOrder(
   let state = initial;
   const byName = new Map(dropped.map((entry) => [entry.name, entry]));
   for (const name of removalOrder(dropped, staying)) {
-    const subject = subjectOf(byName.get(name) as ProjectEntry);
-    const removal = removeOne(state, subject, ctx, false, null, false, unavailableBases);
+    const entry = byName.get(name) as ProjectEntry;
+    // Looked at again right before the delete, to keep the gap between
+    // checking a directory and removing it as short as it can be.
+    if (!areProjectInstallPathsSafeToRemove(entry)) break;
+    const removal = uninstall(state, entry, ctx);
     state = removal.updatedState;
     records.push(removal.rec);
     // The pre-check passed and the locks are held, so this is not expected.
     // Stop rather than remove something the survivor may still need.
     if (removal.rec.failures.length > 0) break;
   }
-  return { state, records };
+  return { state, records, keptAsUnsafe };
 }

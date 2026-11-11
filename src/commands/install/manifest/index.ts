@@ -9,9 +9,15 @@
 
 import { CrewError } from "../../../core/errors.ts";
 import { loadManifestFor, MANIFEST_FILENAME, type Manifest } from "../../../manifest/index.ts";
+import { safePath } from "../../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
 import { renderDropped } from "../render/dropped.ts";
-import { type Reconciliation, staleManifestWarnings } from "./reconcile.ts";
+import {
+  IN_STEP_WITH_MANIFEST,
+  quietRemovalFailures,
+  type Reconciliation,
+  reconciliationWarnings,
+} from "./reconcile.ts";
 
 /** Flags that reinterpret references; meaningless without references on the command line. */
 const REFERENCE_FLAGS = ["recursive", "tap", "bundle", "skill"] as const;
@@ -54,11 +60,11 @@ export function nothingToInstall(
   reconciled: Reconciliation,
 ): CommandOutput {
   const { removed } = reconciled;
-  const warnings = staleManifestWarnings(reconciled);
+  const warnings = reconciliationWarnings(reconciled);
   return {
     exitCode: removed.some((record) => record.failures.length > 0) ? 1 : 0,
     human: [human, ...renderDropped(removed, ctx)],
-    stderr: warnings,
+    stderr: [...warnings, ...quietRemovalFailures(reconciled, ctx)],
     json: {
       already_installed: [],
       records: [],
@@ -69,4 +75,17 @@ export function nothingToInstall(
       ...(warnings.length > 0 ? { warnings } : {}),
     },
   };
+}
+
+/**
+ * The outcome of a bare install on a machine with no active agent (§9.2).
+ *
+ * A project's setup step runs `crew install` everywhere, including CI
+ * runners that have no agent and often no access to the skill sources.
+ * There is nothing to install into, so this succeeds without touching one.
+ */
+export function noAgentsOutcome(manifest: Manifest, ctx: CommandContext): CommandOutput {
+  const human = `No active agent coders — nothing to install from ${safePath(manifest.file)}.`;
+  const outcome = nothingToInstall(manifest, ctx, human, IN_STEP_WITH_MANIFEST);
+  return { ...outcome, json: { ...(outcome.json as object), no_agents: true } };
 }

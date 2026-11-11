@@ -6,13 +6,13 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { processDroppedEntries } from "../../../src/commands/install/manifest/removal/index.ts";
-import type { CommandContext } from "../../../src/commands/types.ts";
-import { readState } from "../../../src/state/load.ts";
-import { makeStyler } from "../../../src/util/term.ts";
-import { makeCrewHome } from "../../helpers/env.ts";
-import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
-import { crew, makeProject, makeSkillRepo, skillDir } from "./helpers.ts";
+import { processDroppedEntries } from "../../../../src/commands/install/manifest/removal/index.ts";
+import type { CommandContext } from "../../../../src/commands/types.ts";
+import { readState } from "../../../../src/state/load.ts";
+import { makeStyler } from "../../../../src/util/term.ts";
+import { makeCrewHome } from "../../../helpers/env.ts";
+import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
+import { crew, makeProject, makeSkillRepo, skillDir } from "../helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
