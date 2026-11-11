@@ -40,6 +40,18 @@ export interface ManifestInput {
   readonly file: string;
 }
 
+/** Where in a manifest an invalid reference sits; carried as the error's `details` (§9.2). */
+export interface ManifestLocation {
+  readonly file: string;
+  readonly line: number;
+  readonly ref: string;
+}
+
+/** Build the `manifest_invalid` error for the reference at `at`. */
+export function manifestInvalid(at: ManifestLocation, reason: string): CrewError {
+  return new CrewError("manifest_invalid", `${at.file} line ${at.line}: ${reason}`, { ...at });
+}
+
 /** Parse a manifest's text into its declared references. */
 export function parseManifest({ text, file }: ManifestInput): readonly ManifestEntry[] {
   const root = dirname(file);
@@ -51,11 +63,7 @@ export function parseManifest({ text, file }: ManifestInput): readonly ManifestE
     if (ref === "" || ref.startsWith("#")) continue;
     const line = index + 1;
     const reject = (reason: string): never => {
-      throw new CrewError("manifest_invalid", `${file} line ${line}: ${reason}`, {
-        file,
-        line,
-        ref,
-      });
+      throw manifestInvalid({ file, line, ref }, reason);
     };
     const earlier = firstLineOf.get(ref);
     if (earlier !== undefined) reject(`${wrapInBackticks(ref)} repeats line ${earlier}`);
@@ -85,9 +93,18 @@ function parsePortable(
       `${wrapInBackticks(ref)} must be a path relative to the project, starting with \`./\``,
     );
   }
-  const fromRoot = relative(root, source.path);
-  if (fromRoot === ".." || fromRoot.startsWith(`..${sep}`)) {
+  if (isOutside(root, source.path)) {
     return reject(`${wrapInBackticks(ref)} points outside the project`);
   }
   return source;
+}
+
+/**
+ * True when `path` is neither `root` nor beneath it. The one containment
+ * rule for manifest paths: the parser applies it to the path as written,
+ * the loader to the path's physical location.
+ */
+export function isOutside(root: string, path: string): boolean {
+  const fromRoot = relative(root, path);
+  return fromRoot === ".." || fromRoot.startsWith(`..${sep}`);
 }

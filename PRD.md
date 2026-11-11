@@ -1409,7 +1409,10 @@ lines is valid and declares no skills.
 
 **Accepted references.** A manifest line MUST be one of:
 
-- A git source (§8.2), in any form §8.4 accepts.
+- A git source (§8.2), in any form §8.4 accepts. A git source names its
+  repository by URL, so it is only as portable as that URL: a `file://` URL or
+  other machine-local address is accepted but resolves only where that
+  location exists.
 - A path source (§8.1) written relative to the manifest, starting with `./` or
   `../`, that resolves to the manifest's directory or a location beneath it.
   The path is resolved against the directory containing the manifest, never
@@ -1420,7 +1423,11 @@ lines is valid and declares no skills.
 - A tap source (§8.3) — a bare skill name, a tap-qualified name, or a tap
   name. Its meaning depends on the taps each machine has configured.
 - An absolute path, or a path starting with `~`.
-- A relative path that resolves outside the manifest's directory.
+- A relative path that resolves outside the manifest's directory. The check
+  is physical as well as lexical: a path that names a location inside the
+  directory but reaches outside it through a symbolic link is rejected. A
+  path that does not exist cannot be checked this way and is left for the
+  install flow to report as a missing source.
 - A line that is not a valid reference under §8.4.
 - A line identical, after trimming, to an earlier reference line.
 
@@ -1429,6 +1436,27 @@ the manifest file and the 1-based line number, and the `--json` `details`
 object MUST carry `file` (the manifest's absolute path), `line`, and `ref`
 (the line as written, trimmed). A manifest is valid or invalid as a whole: an
 implementation MUST NOT act on the valid lines of an invalid manifest.
+
+**Locating the manifest.** The manifest that governs a directory is found by
+starting at that directory and moving up one directory at a time. The first
+directory containing a regular file named `.crewrc` supplies the manifest, and
+that directory is the manifest's **project root**. The search stops, without a
+result, after checking a directory that contains a `.git` entry — a repository
+root, whether `.git` is a directory or a file — or the filesystem root. A
+manifest above a repository root therefore never governs that repository.
+
+A directory named `.crewrc` is not a manifest. A symbolic link named `.crewrc`
+is not a manifest and MUST NOT be followed or read: a checkout could otherwise
+point it at any readable file and have that file's contents echoed in a
+`manifest_invalid` diagnostic. The decision that `.crewrc` is a regular file
+and the read of its contents MUST apply to the same opened file, so replacing
+it with a link between the two cannot defeat the rule. In both cases the
+search continues upward as if the entry were absent.
+
+A `.crewrc` that exists but cannot be opened for any other reason (for
+example, it is not readable) fails with `source_unreachable` (§13). It is not
+skipped, because skipping it would let a manifest further up govern the
+project instead.
 
 ## 10. Update and autoupdate
 
