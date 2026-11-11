@@ -65,3 +65,28 @@ export function ownedNames(home: string): string[] {
   }
   return names.sort();
 }
+
+/**
+ * Run a verbose bare install, calling `onFirstSkillInstalling` once, when the
+ * first skill starts installing: after the manifest and lockfile were
+ * read, before ownership is reconciled or the lockfile written.
+ */
+export function runBareInstallWithMidInstallHook(
+  home: string,
+  project: string,
+  onFirstSkillInstalling: () => void,
+): number {
+  let done = false;
+  return runCli(["install", "--verbose"], {
+    home,
+    cwd: project,
+    streams: {
+      stdout: () => {},
+      stderr: (chunk) => {
+        if (done || !chunk.includes("installing")) return;
+        done = true;
+        onFirstSkillInstalling();
+      },
+    },
+  });
+}

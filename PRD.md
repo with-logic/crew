@@ -1615,8 +1615,36 @@ link.
   an entry whose commit has changed — after pulling a commit that updated the
   lockfile, say — moves the installed skill to the new commit under §5.4.
 
-`crew update` does not read the lockfile; it leaves manifest-owned skills
-alone (§9.2, "Updates").
+**Writing during a bare install.** After a bare install in which every
+declared skill succeeded, the lockfile is brought in line with the manifest:
+
+- It is rewritten to hold exactly: the existing entry of each line that still
+  needs one, and a new entry for each line that needs one and had none,
+  recording the commit that line resolved to at that line's own ref. Two
+  lines may name one repository at different refs; each records its own
+  commit. Two lines that reach the same skill at the same commit both get an
+  entry.
+- Entries for lines no longer in the manifest are dropped, including when the
+  manifest now declares nothing.
+- The file is written only if its contents would change. No file is created
+  when no line needs an entry; an existing one may be rewritten down to its
+  header line.
+- **An entry already there is kept.** The lockfile is read again immediately
+  before it is written, and an entry it holds for a line is kept in
+  preference to this run's own resolution. This is not a lock. Homecrew does
+  not serialize overlapping installs of one checkout, which may run under
+  different crew homes: if two both find no entry for a line, each writes its
+  own and the later write stands. What settles a project's versions is the
+  lockfile that is committed; a checkout that installed a different commit
+  moves to the committed one on its next bare install.
+- **Nothing is written** on `--dry-run`, when a declared skill failed to
+  install, when the lockfile or manifest is invalid, or when `.crewrc` is no
+  longer the manifest the run read. That last condition is checked
+  immediately before the write, and reported with the warning of §9.2,
+  "Reconciling".
+
+`crew update` neither reads nor writes the lockfile; it leaves manifest-owned
+skills alone (§9.2, "Updates").
 
 **Invalid lockfiles.** A lockfile that breaks any rule above fails with
 `manifest_invalid` (§13). The message names the lockfile and the 1-based line
@@ -3577,6 +3605,11 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-39 | §9.3, §5.4 | When a lock entry's commit changes, the next bare `crew install` moves the installed skill to that commit. |
 | C-RC-40 | §9.3 | A lock entry for a reference the manifest does not contain, or for a line already pinned to a full commit, is ignored. |
 | C-RC-41 | §9.3, §13 | A malformed lockfile, or a symbolic link or directory at the lock path, fails a bare `crew install` with `manifest_invalid` and `details` naming the lockfile, before anything is installed, including when the manifest declares nothing; what is at the lock path is left as it was. |
+| C-RC-42 | §9.3 | After a successful bare `crew install`, `.crewrc.lock` holds the commit each git line resolved to: for a whole-repository line, a line naming one subpath, two lines naming one repository at different refs (each its own commit), and two lines reaching one skill at one commit (both). It holds nothing for a path line or a line pinned to a full commit, and no lockfile is created when no line needs an entry. A second machine given that manifest and lockfile installs the same commit after the source has moved. |
+| C-RC-43 | §9.3 | A line dropped from the manifest is dropped from the lockfile by the next successful bare `crew install`, without its stale entry being resolved, including when the manifest is emptied. |
+| C-RC-44 | §9.3 | A bare `crew install` that changes nothing does not rewrite the lockfile, and `--dry-run` never writes or rewrites one. |
+| C-RC-45 | §9.3 | When a declared reference fails to resolve, a skill of a declared git source fails validation, or the manifest changes during the run, the lockfile is left byte-for-byte as it was, or absent if it was absent. |
+| C-RC-46 | §9.3 | An entry present in the lockfile for a line when a bare `crew install` comes to write it is kept; the run does not replace it with its own resolution. |
 
 ### 18.4 Worked examples
 

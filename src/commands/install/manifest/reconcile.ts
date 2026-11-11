@@ -15,7 +15,10 @@ import { withStateLock } from "../../../state/lock.ts";
 
 /** What reconciling did. */
 export interface Reconciliation {
-  /** True when `.crewrc` changed, or could not be re-read, during the run: nothing was claimed. */
+  /**
+   * True when `.crewrc` changed, or could not be re-read, during the run, so
+   * ownership or the lockfile was left as it was.
+   */
   readonly manifestChanged: boolean;
 }
 
@@ -42,7 +45,7 @@ export function reconcileOwnership(reconcile: {
 }
 
 /** True unless the manifest governing the project still lists exactly the same references. */
-function hasChangedOnDisk(snapshot: Manifest): boolean {
+export function hasChangedOnDisk(snapshot: Manifest): boolean {
   const identity = (manifest: Manifest | null): string =>
     JSON.stringify([manifest?.file, manifest?.entries.map((entry) => entry.ref)]);
   try {
@@ -56,6 +59,6 @@ function hasChangedOnDisk(snapshot: Manifest): boolean {
 export function staleManifestWarnings(reconciled: Reconciliation): string[] {
   if (!reconciled.manifestChanged) return [];
   return [
-    "warning: .crewrc changed, or could not be read again, while crew was installing, so ownership of the installed skills was not recorded. Check .crewrc and run `crew install` again.",
+    "warning: .crewrc changed, or could not be read again, while crew was installing, so crew stopped bringing the project in line with it. Check .crewrc and run `crew install` again.",
   ];
 }

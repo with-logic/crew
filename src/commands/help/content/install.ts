@@ -16,6 +16,7 @@ export const installHelp: CommandHelp = {
     "If a name isn't in your taps but appears in a trusted tap you haven't added yet, Homecrew tells you the tap to add first.",
     "Point at a folder full of skills and you get all of them at once. New ones added later show up automatically when you run `crew update`.",
     "Run `crew install` with nothing after it inside a project that has a `.crewrc` file, and Homecrew installs the skills that file lists, just for that project. A `.crewrc` is a plain list, one reference per line; blank lines and lines beginning with `#` are ignored. Each line is a git reference (`@acme/skills`, `gh:acme/skills@v1.2.0//python/testing`) or a path that starts with `./` or `../` and stays inside the project (`./tools/skills/notes`). Skill names from a tap, absolute paths, and `~` paths aren't allowed there, so the file means the same thing on every machine that can reach those git URLs.",
+    "For each git line in `.crewrc` that names a branch, a tag, or no version, Homecrew records the exact commit it resolved to in `.crewrc.lock` beside it. Commit that file too: with it, everyone gets the same version of those skills, and while a line stays as written its skills change version only when the lockfile does. Edit a line and it is resolved afresh. A line already pinned to a full commit needs no entry, and a path line always uses the folder as it is.",
   ],
   flags: [
     {

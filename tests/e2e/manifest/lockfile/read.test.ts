@@ -61,7 +61,7 @@ describe("reading the project lockfile", () => {
     expect(readFileSync(lockFile(project), "utf8")).toBe(lock);
   });
 
-  test("C-RC-38 a line with no lock entry installs as written, and no lockfile is created", () => {
+  test("C-RC-38 a line with no lock entry installs as written", () => {
     const repo = makeSkillRepo(["alpha"]);
     publish(repo, "v1\n");
     publish(repo, "v2\n");
@@ -70,7 +70,6 @@ describe("reading the project lockfile", () => {
     expect(crew(makeCrewHome(), project, ["install"]).code).toBe(0);
 
     expect(installedNote(project)).toBe("v2\n");
-    expect(existsSync(lockFile(project))).toBe(false);
   });
 
   test("C-RC-39 a lock entry that changes moves the installed skill to the new commit", () => {

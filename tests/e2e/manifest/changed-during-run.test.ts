@@ -68,7 +68,7 @@ describe("a manifest that changes during the run", () => {
 
       expect(human.rewritten).toBe(true);
       expect(human.code).toBe(0);
-      expect(human.stderr).toContain("ownership of the installed skills was not recorded");
+      expect(human.stderr).toContain("crew stopped bringing the project in line with it");
       expect(installed(home)).toEqual([`alpha@${project}`]);
       expect(ownedNames(home)).toEqual([]);
     });
@@ -82,7 +82,7 @@ describe("a manifest that changes during the run", () => {
 
     expect(run.code).toBe(0);
     const { warnings } = JSON.parse(run.stdout) as { warnings: string[] };
-    expect(warnings.join("\n")).toContain("ownership of the installed skills was not recorded");
+    expect(warnings.join("\n")).toContain("crew stopped bringing the project in line with it");
     expect(ownedNames(home)).toEqual([]);
   });
 });
