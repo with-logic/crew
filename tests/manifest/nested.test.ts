@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setGitRunner } from "../../src/git/exec.ts";
 import { nestedManifestDirs } from "../../src/manifest/index.ts";
@@ -123,6 +123,16 @@ describe("nestedManifestDirs", () => {
     addManifest(root, "packages/web");
 
     expect(nestedManifestDirs(join(root, ".git"))).toEqual([]);
+  });
+
+  test("passes over a tracked manifest that has been deleted from the work tree", () => {
+    const root = makeRepo();
+    addManifest(root, "packages/web");
+    addManifest(root, "packages/api");
+    commitAll(root, "manifests");
+    rmSync(join(root, "packages/api"), { recursive: true });
+
+    expect(nestedManifestDirs(root)).toEqual([join(root, "packages/web")]);
   });
 
   test("is empty outside a git repository", () => {

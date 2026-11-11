@@ -1558,6 +1558,12 @@ current directory; with none there either, it is the `usage_error` above.
   the directory is not in a repository counts as being outside one; if git
   fails for any other reason the command fails with that error, because
   manifests it could not look for must not be silently skipped.
+- **Each must be a project in its own right.** Before any project is
+  installed, every directory git lists is checked. One that no longer exists
+  in the work tree is passed over. One that is reached through a symbolic
+  link, and so may lie outside the repository, or whose `.crewrc` is not a
+  regular file, fails the command with `manifest_invalid` naming that file;
+  nothing is installed.
 - **Each is its own project.** The manifests are found once, and each is
   then applied on its own, exactly once, with no further searching beneath
   it: skills install under its directory, its lockfile sits beside it, and
@@ -3833,6 +3839,7 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-59 | §9.2 | Run in a project's directory, bare `crew install` applies that project and those beneath it and leaves its parent and siblings untouched. A `.crewrc` that git ignores is not applied, and outside a git work tree no manifest beneath the governing one is applied. |
 | C-RC-60 | §9.2 | With several manifests, one that exits non-zero sets the command's exit code (the first such code, when several do) and the others are still applied; one that raises an error fails the command with that error, later manifests are not applied, and earlier ones stay installed. With no active agent every project reports `no_agents: true` and nothing is installed. |
 | C-RC-61 | §9.2 | A line dropped from a nested manifest removes that project's copy of the skill and leaves another project's copy of the same skill installed. `crew install --save` edits and installs the governing project only: its result has no `nested`. Under `--latest`, a source named by several manifests is looked up once per command. |
+| C-RC-62 | §9.2 | A nested project directory that git lists but that is now a symbolic link out of the repository, and a nested `.crewrc` that is a symbolic link, each fail the command with `manifest_invalid` naming that manifest before anything is installed: neither the repository's other projects nor the link's target receive a skill. A tracked project directory deleted from the work tree is passed over. |
 
 ### 18.4 Worked examples
 

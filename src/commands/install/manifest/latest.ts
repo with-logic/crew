@@ -86,7 +86,9 @@ function remoteCommit(url: string, ref: string | null): string | null {
  * `lock` with the entry of every line that takes one replaced by the commit
  * the line names on its remote now. A line whose ref the remote lists as
  * neither a branch nor a tag (an abbreviated commit) keeps what it had.
- * Contacts each line's remote; an unreachable one is `source_unreachable`.
+ * Each line's URL and ref is looked up on its remote, unless this command
+ * already looked that pair up (`sharingRemoteLookups`). An unreachable
+ * remote is `source_unreachable`.
  */
 export function latestLock(manifest: Manifest, lock: Lock): Lock {
   const latest = new Map(lock);
