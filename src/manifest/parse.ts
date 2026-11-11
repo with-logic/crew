@@ -35,7 +35,14 @@ const CREDENTIAL_REASON =
   "a line carries a credential in its URL, and this file is meant to be checked in; " +
   "remove it and let git supply the credential (a credential helper, or an SSH URL)";
 /** The query parameters §5.2 treats as secrets. */
-const SENSITIVE_QUERY_PARAM = /[?&](token|access_token|private_token|api_key|apikey|password)=/i;
+const SENSITIVE_QUERY_PARAMS: ReadonlySet<string> = new Set([
+  "token",
+  "access_token",
+  "private_token",
+  "api_key",
+  "apikey",
+  "password",
+]);
 const wrapInBackticks = (ref: string): string => `\`${ref}\``;
 
 /** A manifest's contents and where they were read from. */
@@ -130,9 +137,14 @@ export function isOutside(root: string, path: string): boolean {
  * in `?tab=readme` holds no secret.
  */
 function carriesCredential(ref: string, source: GitSource): boolean {
-  if (SENSITIVE_QUERY_PARAM.test(ref)) return true;
-  // An scp-style remote (`git@host:owner/repo`) has a username, not a secret.
-  if (!source.url.includes("://")) return false;
+  // Keys are compared after decoding, so `%74oken` is `token`.
+  const query = ref.includes("?") ? ref.slice(ref.indexOf("?") + 1) : "";
+  for (const key of new URLSearchParams(query).keys()) {
+    if (SENSITIVE_QUERY_PARAMS.has(key.toLowerCase())) return true;
+  }
+  // Only a URL with a scheme has userinfo that can be a secret. An
+  // scp-style remote (`git@host:owner/repo`) has a username.
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(source.url)) return false;
   const url = new URL(source.url);
   const isHttp = url.protocol === "http:" || url.protocol === "https:";
   return url.password !== "" || (isHttp && url.username !== "");

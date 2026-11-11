@@ -134,23 +134,31 @@ describe("parseManifest: rejected references", () => {
   }
 
   test("a URL with a harmless query, a default port, or an uppercase host is not a credential", () => {
-    const refs = [
+    const accepted = [
       "https://host.example:443/acme/skills",
       "https://HOST.example/acme/skills",
       "https://github.com/acme/skills?tab=readme-ov-file",
       "https://github.com/acme/skills/tree/main/pdf?plain=1",
-      "ssh://git:pw-is-allowed-nowhere@host.example/acme/skills.git",
     ];
-    expect(parse(`${refs.slice(0, 4).join("\n")}\n`).map((e) => e.line)).toEqual([1, 2, 3, 4]);
-    expect(rejection(`${refs[4]}\n`).message).toContain("credential");
+    expect(parse(`${accepted.join("\n")}\n`).map((e) => e.line)).toEqual([1, 2, 3, 4]);
   });
 
-  test("each sensitive query parameter of §5.2 is a credential, in any case", () => {
-    for (const key of ["token", "access_token", "private_token", "api_key", "apikey", "PASSWORD"]) {
+  test("a password is a credential on any URL with a scheme, including ssh://", () => {
+    const err = rejection("ssh://git:hunter2secret@host.example/acme/skills.git\n");
+    expect(err.message).toContain("credential");
+  });
+
+  test.each(["token", "access_token", "private_token", "api_key", "apikey", "PASSWORD", "%74oken"])(
+    "the sensitive query parameter %p is a credential, and its value is not echoed",
+    (key) => {
       const err = rejection(`https://host.example/acme/skills?x=1&${key}=s3cretValue\n`);
       expect(err.message).toContain("credential");
       expect(`${err.message} ${JSON.stringify(err.details)}`).not.toContain("s3cretValue");
-    }
+    },
+  );
+
+  test("an scp-style remote is judged as one even when its path contains ://", () => {
+    expect(parse("git@host.example:acme/repo://path\n").map((e) => e.line)).toEqual([1]);
   });
 
   test("an SSH URL's username is not a credential", () => {
