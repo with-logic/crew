@@ -17,6 +17,13 @@ test("C-RC-09 a line with a credential in its URL is manifest_invalid, and the c
   const human = crew(home, project, ["install"]);
   const json = crew(home, project, ["install", "--json"]);
 
+  expect(json.code).toBe(4);
+  const { error } = JSON.parse(json.stdout) as {
+    error: { name: string; details: { file: string; line: number; ref: string } };
+  };
+  expect(error.name).toBe("manifest_invalid");
+  expect(error.details).toMatchObject({ file: join(project, ".crewrc"), line: 1 });
+  expect(error.details.ref).toContain("***");
   expect(human.code).toBe(4);
   expect(human.stderr).toContain("manifest_invalid");
   expect(human.stderr).toContain("credential");

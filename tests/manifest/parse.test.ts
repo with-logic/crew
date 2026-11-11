@@ -124,12 +124,19 @@ describe("parseManifest: rejected references", () => {
       const err = rejection(`${ref}\n`);
       expect(err.code).toBe("manifest_invalid");
       expect(err.message).toContain("credential");
+      expect(err.details).toMatchObject({ file: FILE, line: 1 });
+      expect(String(err.details["ref"])).toContain("***");
       const shown = `${err.message} ${JSON.stringify(err.details)}`;
       for (const secret of ["ghp_secret123", "hunter2secret", "tok_secret9"]) {
         expect(shown).not.toContain(secret);
       }
     });
   }
+
+  test("a URL the redactor would merely normalize is not a credential", () => {
+    const refs = "https://host.example:443/acme/skills\nhttps://HOST.example/acme/skills\n";
+    expect(parse(refs).map((e) => e.line)).toEqual([1, 2]);
+  });
 
   test("an SSH URL's username is not a credential", () => {
     const refs = "git@github.com:acme/skills.git\nssh://git@host.example/acme/skills.git\n";

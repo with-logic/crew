@@ -34,6 +34,7 @@ const TAP_REASON =
 const CREDENTIAL_REASON =
   "a line carries a credential in its URL, and this file is meant to be checked in; " +
   "remove it and let git supply the credential (a credential helper, or an SSH URL)";
+const REDACTION_MASK = "***";
 const wrapInBackticks = (ref: string): string => `\`${ref}\``;
 
 /** A manifest's contents and where they were read from. */
@@ -93,7 +94,7 @@ function parsePortable(
   if (source.type === "tap") return reject(`${wrapInBackticks(ref)} ${TAP_REASON}`);
   if (source.type === "git") {
     // A manifest is meant to be checked in, so no line of it may hold a secret.
-    if (redactText(ref) !== ref) return reject(CREDENTIAL_REASON);
+    if (carriesCredential(ref)) return reject(CREDENTIAL_REASON);
     return source;
   }
   if (!(ref.startsWith("./") || ref.startsWith("../"))) {
@@ -115,4 +116,14 @@ function parsePortable(
 export function isOutside(root: string, path: string): boolean {
   const fromRoot = relative(root, path);
   return fromRoot === ".." || fromRoot.startsWith(`..${sep}`);
+}
+
+/**
+ * True when the redactor finds something to mask in `ref`. Redaction may
+ * also normalize a URL (a default port, host case), so the test is whether
+ * it added a mask, not whether the text changed.
+ */
+function carriesCredential(ref: string): boolean {
+  const masks = (text: string): number => text.split(REDACTION_MASK).length;
+  return masks(redactText(ref)) > masks(ref);
 }
