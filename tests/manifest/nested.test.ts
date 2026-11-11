@@ -4,8 +4,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setGitRunner } from "../../src/git/exec.ts";
 import { nestedManifestDirs } from "../../src/manifest/index.ts";
 import { commitAll, makeGitRepo, makeTempDir } from "../helpers/fixtures.ts";
 
@@ -76,6 +77,30 @@ describe("nestedManifestDirs", () => {
     expect(nestedManifestDirs(join(root, "packages/web"))).toEqual([
       join(root, "packages/web/widgets"),
     ]);
+  });
+
+  test("lists a .crewrc that is a symbolic link; refusing to read one is the loader's job", () => {
+    const root = makeRepo();
+    mkdirSync(join(root, "packages/web"), { recursive: true });
+    writeFileSync(join(root, "shared.crewrc"), "");
+    symlinkSync(join(root, "shared.crewrc"), join(root, "packages/web/.crewrc"));
+
+    expect(nestedManifestDirs(root)).toEqual([join(root, "packages/web")]);
+  });
+
+  test("inside a repository, a failure to list its files is raised, not read as none", () => {
+    const root = makeRepo();
+    addManifest(root, "packages/web");
+    const real = setGitRunner((args, options) =>
+      args[0] === "ls-files"
+        ? { stdout: "", stderr: "fatal: index file corrupt", exitCode: 128 }
+        : real(args, options),
+    );
+    try {
+      expect(() => nestedManifestDirs(root)).toThrow("index file corrupt");
+    } finally {
+      setGitRunner(real);
+    }
   });
 
   test("is empty outside a git repository", () => {

@@ -15,9 +15,17 @@ import { MANIFEST_FILENAME } from "./parse.ts";
 /**
  * The directories strictly beneath `root` that hold a `.crewrc`, as
  * absolute paths in a stable order. Empty when `root` is not inside a git
- * repository: without one there is nothing to say which directories belong.
+ * work tree: without one there is nothing to say which directories belong.
+ *
+ * Inside a work tree, a failure to list its files is raised, not read as
+ * "none": that would silently skip every nested project.
  */
 export function nestedManifestDirs(root: string): string[] {
+  const inside = runGit(["rev-parse", "--is-inside-work-tree"], {
+    cwd: root,
+    throwOnError: false,
+  });
+  if (inside.exitCode !== 0 || inside.stdout.trim() !== "true") return [];
   const listed = runGit(
     [
       "ls-files",
@@ -28,9 +36,8 @@ export function nestedManifestDirs(root: string): string[] {
       "--",
       `:(glob)**/${MANIFEST_FILENAME}`,
     ],
-    { cwd: root, throwOnError: false },
+    { cwd: root },
   );
-  if (listed.exitCode !== 0) return [];
   const dirs = new Set<string>();
   for (const file of listed.stdout.split("\0")) {
     // Paths are relative to `root`. The root's own manifest is not nested.
