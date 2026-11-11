@@ -20,7 +20,8 @@ export const LOCK_FILENAME = ".crewrc.lock";
 /** First line of every lockfile crew writes: the format, and its version. */
 export const LOCK_HEADER = "# crew lockfile v1 — written by `crew install`; do not edit by hand.";
 
-const FULL_SHA = /^[0-9a-f]{40}$/;
+// A ref may spell a commit in either case (§12.2); lock records are lowercase only.
+const FULL_SHA = /^[0-9a-f]{40}$/i;
 const LOCK_LINE = /^([0-9a-f]{40}) (\S.*)$/;
 
 /** Commits by manifest reference, exactly as the reference is written in `.crewrc`. */
@@ -33,25 +34,33 @@ export interface LockInput {
   readonly file: string;
 }
 
+const UPGRADE_REMEDY =
+  "This lockfile was not written by this version of crew. Upgrade crew (`crew self-update`) and try again. Deleting the lockfile also works, but lets every line that is not pinned to a commit move to its latest one.";
+const REPAIR_REMEDY =
+  "Restore `.crewrc.lock` from version control. It is written by `crew install` and is not meant to be edited by hand.";
+
 /** Parse a lockfile. Throws `manifest_invalid` naming the file and line. */
 export function parseLock({ text, file }: LockInput): Lock {
-  const lines = text.split("\n");
-  const reject = (line: number, reason: string): never => {
-    throw new CrewError("manifest_invalid", `${file} line ${line}: ${reason}`, { file, line });
+  const reject = (line: number, reason: string, remedy: string): never => {
+    const details = { file, line };
+    throw new CrewError("manifest_invalid", `${file} line ${line}: ${reason}`, details, remedy);
   };
+  // Every line ends with LF, so splitting leaves one empty string at the end.
+  const lines = text.split("\n");
   if (lines[0] !== LOCK_HEADER) {
-    reject(
-      1,
-      "is not a lockfile this version of crew understands; delete it and run `crew install`",
-    );
+    reject(1, "is not a lockfile this version of crew understands", UPGRADE_REMEDY);
   }
+  if (lines.pop() !== "") reject(lines.length + 1, "does not end with a newline", REPAIR_REMEDY);
   const lock = new Map<string, string>();
   for (const [index, raw] of lines.entries()) {
     if (raw === "" || raw.startsWith("#")) continue;
     const match = LOCK_LINE.exec(raw);
-    if (!match) reject(index + 1, "is not `<40-character commit> <reference>`");
-    const [, sha, ref] = match as unknown as [string, string, string];
-    if (lock.has(ref)) reject(index + 1, `locks \`${ref}\` a second time`);
+    const sha = match?.[1];
+    const ref = match?.[2];
+    if (sha === undefined || ref === undefined) {
+      return reject(index + 1, "is not `<40-character commit> <reference>`", REPAIR_REMEDY);
+    }
+    if (lock.has(ref)) reject(index + 1, `locks \`${ref}\` a second time`, REPAIR_REMEDY);
     lock.set(ref, sha);
   }
   return lock;
@@ -66,18 +75,19 @@ export function serializeLock(lock: Lock): string {
 }
 
 /**
- * True when a manifest line gets a lock entry: a git line that does not
+ * True when a manifest line needs a lock entry: a git line that does not
  * already name a full commit. A path line has no commit, and a line pinned
  * to a full commit is its own lock.
  */
-export function isLockable(entry: ManifestEntry): boolean {
+export function needsLockEntry(entry: ManifestEntry): boolean {
   const { source } = entry;
   return source.type === "git" && !(source.ref !== null && FULL_SHA.test(source.ref));
 }
 
 /**
- * The reference that installs `entry` at exactly `sha`: the same repository
- * and subpath, with the commit in place of whatever ref the line named.
+ * For a git line, the reference that installs it at exactly `sha`: the same
+ * repository and subpath, with the commit in place of whatever ref the line
+ * named. A path line has no commit and is returned as written.
  */
 export function pinnedRef(entry: ManifestEntry, sha: string): string {
   const { source } = entry;

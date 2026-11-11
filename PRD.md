@@ -1579,7 +1579,8 @@ two branches which each add a manifest line produce lockfiles that merge
 without conflict.
 
 **Which lines are locked.** A manifest line has a lock entry if it is a git
-source whose ref is not already a full 40-character commit SHA. A line pinned
+source whose ref is not already a full 40-character commit SHA, in either
+case (§12.2). A line pinned
 to a full commit is its own lock, and a path line has no commit to record.
 
 **Pinned form.** The reference that installs a locked line at its recorded
@@ -1590,7 +1591,10 @@ the line carried.
 
 **Invalid lockfiles.** A lockfile that breaks any rule above fails with
 `manifest_invalid` (§13). The message names the lockfile and the 1-based line
-number, and `details` carries `file` and `line`.
+number, and `details` carries `file` and `line`. For an unrecognized first
+line the suggested remedy is to upgrade Homecrew, since a newer version may
+have written the file; deleting it is a last resort, because every line not
+pinned to a commit would then be free to move.
 
 ## 10. Update and autoupdate
 

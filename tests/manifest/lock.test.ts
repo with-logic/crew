@@ -6,8 +6,8 @@ import { describe, expect, test } from "bun:test";
 import type { CrewError } from "../../src/core/errors.ts";
 import type { GitSource } from "../../src/core/types.ts";
 import {
-  isLockable,
   LOCK_HEADER,
+  needsLockEntry,
   parseLock,
   pinnedRef,
   serializeLock,
@@ -33,9 +33,19 @@ function rejection(text: string): CrewError {
 }
 
 describe("serializeLock and parseLock", () => {
-  test("an empty lock is just the header", () => {
-    expect(serializeLock(new Map())).toBe(`${LOCK_HEADER}\n`);
-    expect(parse(`${LOCK_HEADER}\n`)).toEqual(new Map());
+  test("an empty lock is just the header line of §9.3", () => {
+    const header = "# crew lockfile v1 — written by `crew install`; do not edit by hand.\n";
+    expect(serializeLock(new Map())).toBe(header);
+    expect(parse(header)).toEqual(new Map());
+  });
+
+  test("entries are sorted by code unit, not by locale", () => {
+    // A locale-aware sort would put "a" before "B", and "é" between "e" and "f".
+    const refs = ["gh:o/a", "gh:o/B", "gh:o/é", "gh:o/f"];
+    const text = serializeLock(new Map(refs.map((ref) => [ref, A])));
+    expect(text.split("\n").slice(1, -1)).toEqual(
+      ["gh:o/B", "gh:o/a", "gh:o/f", "gh:o/é"].map((ref) => `${A} ${ref}`),
+    );
   });
 
   test("entries are written one per line, sorted by reference, and read back unchanged", () => {
@@ -68,6 +78,8 @@ describe("parseLock: what is refused", () => {
     ["an uppercase commit", `${LOCK_HEADER}\n${"A".repeat(40)} @acme/skills\n`, 2, "40-character"],
     ["a line with no reference", `${LOCK_HEADER}\n${A}\n`, 2, "40-character commit"],
     ["a reference locked twice", `${LOCK_HEADER}\n${A} @x/y\n${B} @x/y\n`, 3, "a second time"],
+    ["a header with no final newline", LOCK_HEADER, 1, "does not end with a newline"],
+    ["a last entry with no final newline", `${LOCK_HEADER}\n${A} @x/y`, 2, "end with a newline"],
   ];
   for (const [what, text, line, reason] of cases) {
     test(`${what} is manifest_invalid`, () => {
@@ -76,24 +88,31 @@ describe("parseLock: what is refused", () => {
       expect(err.message).toContain(`${FILE} line ${line}`);
       expect(err.message).toContain(reason);
       expect(err.details).toEqual({ file: FILE, line });
+      expect(err.remedy).toContain(
+        reason === "not a lockfile" ? "Upgrade crew" : "version control",
+      );
     });
   }
 });
 
-describe("isLockable", () => {
+describe("needsLockEntry", () => {
   test("a git line with no ref, a branch, or a tag is lockable", () => {
     for (const ref of ["@acme/skills", "gh:acme/skills@main", "gh:acme/skills@v1.4.0//pdf"]) {
-      expect(isLockable(entryFor(ref))).toBe(true);
+      expect(needsLockEntry(entryFor(ref))).toBe(true);
     }
   });
 
   test("a git line pinned to a full commit, and a path line, are not", () => {
-    expect(isLockable(entryFor(`gh:acme/skills@${A}`))).toBe(false);
-    expect(isLockable(entryFor("./tools/skills/notes"))).toBe(false);
+    expect(needsLockEntry(entryFor(`gh:acme/skills@${A}`))).toBe(false);
+    expect(needsLockEntry(entryFor("./tools/skills/notes"))).toBe(false);
   });
 
-  test("an abbreviated commit is still lockable: it is not a full commit", () => {
-    expect(isLockable(entryFor("gh:acme/skills@a1b2c3d"))).toBe(true);
+  test("a full commit written in uppercase is already pinned too", () => {
+    expect(needsLockEntry(entryFor(`gh:acme/skills@${"A".repeat(40)}`))).toBe(false);
+  });
+
+  test("an abbreviated commit still needs an entry: it is not a full commit", () => {
+    expect(needsLockEntry(entryFor("gh:acme/skills@a1b2c3d"))).toBe(true);
   });
 });
 

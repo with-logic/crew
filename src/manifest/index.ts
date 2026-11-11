@@ -1,13 +1,14 @@
 /**
- * Project manifest (§9.2): the entry point for locating, reading, and
- * parsing a project's `.crewrc`.
+ * Project manifest and lockfile (§9.2, §9.3): the entry point for locating,
+ * reading, and parsing a project's `.crewrc`, and for the format of the
+ * `.crewrc.lock` that records what its git lines resolved to.
  */
 
 export { loadManifestFor, type Manifest } from "./load.ts";
 export {
-  isLockable,
   LOCK_FILENAME,
   type Lock,
+  needsLockEntry,
   parseLock,
   pinnedRef,
   serializeLock,
