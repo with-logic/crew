@@ -9,6 +9,7 @@
 
 import { CrewError } from "../../../core/errors.ts";
 import { loadManifestFor, MANIFEST_FILENAME, type Manifest } from "../../../manifest/index.ts";
+import { safePath } from "../../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
 
 /** Flags that reinterpret references; meaningless without references on the command line. */
@@ -60,4 +61,17 @@ export function nothingToInstall(
       manifest_path: manifest.file,
     },
   };
+}
+
+/**
+ * The outcome of a bare install on a machine with no active agent (§9.2).
+ *
+ * A project's setup step runs `crew install` everywhere, including CI
+ * runners that have no agent and often no access to the skill sources.
+ * There is nothing to install into, so this succeeds without touching one.
+ */
+export function noAgentsOutcome(manifest: Manifest, ctx: CommandContext): CommandOutput {
+  const human = `No active agent coders — nothing to install from ${safePath(manifest.file)}.`;
+  const outcome = nothingToInstall(manifest, ctx, human);
+  return { ...outcome, json: { ...(outcome.json as object), no_agents: true } };
 }

@@ -1525,6 +1525,31 @@ its manifest gave it. An explicit `crew install <ref>` is a deliberate act
 and follows §5.4 as for any other entry.
 An entry installed by hand from the same source elsewhere is updated as usual.
 
+**As a project setup step.** A project may run bare `crew install` from its
+own setup (an npm `postinstall` script, a Makefile target), so it runs on every
+machine and every time. Three properties make that safe:
+
+- **No active agent.** When no `--agent` was given and the agent set of §9
+  step 7 would be empty, a bare install exits 0, reports that no agent is
+  active, and MUST NOT acquire, clone, or fetch any source. A CI
+  runner with no agent and no access to a private skill repository therefore
+  succeeds. Nothing else is done on such a run. The `--json` result carries
+  `no_agents: true` and empty `records`, `already_installed`, and `skipped`. With `--agent`, an empty agent
+  set remains `no_agents` (§13): the user asked for a specific agent. A
+  manifest that declares no skills is the exception to that exception: it
+  installs nothing and exits 0 before agents are selected, with or without
+  `--agent`.
+- **Nothing to do.** When every declared skill is already installed at its
+  declared source, a bare install contacts no git remote. A git reference is
+  resolved from its tap's existing local clone, under the network policy of
+  §16.6; a path reference is read from its directory in the project. The
+  command therefore succeeds offline and when a remote has since become
+  unreachable, as long as that local clone is present.
+- **All or nothing.** When any declared reference cannot be acquired, the
+  command fails with that reference's error (`source_unreachable`, exit 5, for
+  an unreachable source) and installs none of the manifest's other skills. A
+  project is never left with part of its manifest.
+
 ## 10. Update and autoupdate
 
 ### 10.1 `crew update`
@@ -3469,6 +3494,10 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-19 | §9.2, §10.1.1 | The same source installed by hand under another project root is still updated and re-expanded by `crew update`, and its entries stay unowned. |
 | C-RC-26 | §9.2 | A manifest path line that reaches outside the project through a symbolic link is `manifest_invalid`, with `details` naming its line; nothing from outside the project is installed. |
 | C-RC-31 | §9.2 | When `.crewrc` is replaced, becomes invalid, or is deleted while a bare `crew install` is running, that run marks no entry `manifest_owned`, warns on stderr and in `warnings` of the `--json` result, and exits as it otherwise would. |
+| C-RC-34 | §9.2 | With no active agent and no `--agent`, bare `crew install` exits 0 with `no_agents: true` and empty `records`, `already_installed`, and `skipped` in `--json`, acquires no source (it succeeds even when a declared source is unreachable), and writes no state and no skill. An agent that is not detected but is force-enabled counts as active. |
+| C-RC-35 | §9.2, §13 | With no active agent, bare `crew install --agent <name>` on a manifest that declares at least one skill fails with `no_agents`, exit 4. |
+| C-RC-36 | §9.2, §16.6 | When every declared skill is already installed and its tap's local clone is present, bare `crew install` exits 0 even though the git remote can no longer be reached. |
+| C-RC-37 | §9.2 | When one declared source is unreachable, bare `crew install` fails with `source_unreachable`, exit 5, and installs none of the manifest's other skills. |
 
 ### 18.4 Worked examples
 

@@ -18,7 +18,7 @@ import type { CommandContext, CommandOutput } from "../types.ts";
 import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
-import { manifestForBareInstall, nothingToInstall } from "./manifest/index.ts";
+import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest/index.ts";
 import {
   IN_STEP_WITH_MANIFEST,
   reconcileOwnership,
@@ -81,6 +81,15 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     result = runInstall(config, installOptions);
   } catch (err) {
     if (!(err instanceof CrewError)) throw err;
+    // §9.2: `runInstall` selects agents before it acquires any source, so
+    // this is reached with nothing fetched. Naming an agent with `--agent`
+    // is a request for that agent, so it still fails as `no_agents`.
+    const isBareInstall = manifest !== null;
+    const noAgentRequested = ctx.flags.agent.length === 0;
+    const noAgentActive = err.code === "no_agents";
+    if (isBareInstall && noAgentRequested && noAgentActive) {
+      return noAgentsOutcome(manifest, ctx);
+    }
     throw withKnownTapInstallSuggestions(err, refs, config, cwd, kindHint);
   }
 
