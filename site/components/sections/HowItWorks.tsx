@@ -83,7 +83,7 @@ export function HowItWorks() {
           number="03"
           label="How it works"
           title="Find, install, update. Repeat."
-          description="Five everyday motions. No proprietary manifest, no hosted account, no per-agent setup loop — just commands that do what they say."
+          description="Five everyday motions. No proprietary skill format, no hosted account, no per-agent setup loop — just commands that do what they say."
         />
 
         <div className={styles.pipeline}>

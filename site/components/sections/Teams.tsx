@@ -22,13 +22,13 @@ const CARDS: readonly {
     ),
   },
   {
-    kicker: "Onboarding, one command",
-    title: "New hires are productive on day one.",
+    kicker: "Skills per project",
+    title: "Check in a list. Everyone gets the same skills.",
     body: (
       <>
-        Publish a <code>team-baseline</code> meta-skill that depends on everything you consider
-        standard — review checklists, on-call playbooks, style guides. A single{" "}
-        <code>crew install</code> catches them up.
+        Put a <code>.crewrc</code> in a project: one skill reference per line. Anyone who runs{" "}
+        <code>crew install</code> there gets those skills, for that project, at the commits recorded
+        in <code>.crewrc.lock</code>. Remove a line and the skill goes away on the next install.
       </>
     ),
   },
@@ -64,7 +64,7 @@ export function Teams() {
           number="08"
           label="For teams"
           title="Turn team know-how into installable skills."
-          description="Your team's best agent playbooks should not be trapped on one engineer's laptop. Homecrew turns a private git repo into a shared package source that people install from, review in PRs, and keep in sync without another internal service."
+          description="Your team's best agent playbooks should not be trapped on one engineer's laptop. Homecrew turns a private git repo into a shared package source, and a checked-in .crewrc gives every project the skills it expects, without another internal service."
         />
 
         <div className={styles.grid}>
@@ -79,19 +79,23 @@ export function Teams() {
 
         <div className={styles.codeWrap}>
           <CodeBlock>
-            <Cmt># Monday, 9:04am. A new engineer opens their laptop.</Cmt>
+            <Cmt># .crewrc, checked in at the top of the project</Cmt>
             {"\n"}
-            <Prompt /> crew tap add <Acc>@acme/skills</Acc>
+            <Acc>{"@acme/skills//review-checklist"}</Acc>
             {"\n"}
-            <Ok>✓</Ok> cloned <Key>acme</Key> → 42 skills available
+            <Acc>{"@acme/skills//oncall-playbook"}</Acc>
+            {"\n"}
+            <Acc>./tools/skills/release-notes</Acc>
             {"\n\n"}
-            <Prompt /> crew install <Acc>acme/team-baseline</Acc>
+            <Cmt># A new engineer clones the project and runs one command.</Cmt>
             {"\n"}
-            <Ok>✓</Ok> resolved 14 dependencies
+            <Prompt /> crew install
             {"\n"}
-            <Ok>✓</Ok> installed across every detected agent
+            <Ok>✓</Ok> installed 3 skills into this project, for every detected agent
             {"\n\n"}
-            <Cmt># Monday, 9:06am. They know how the team ships code.</Cmt>
+            <Cmt># Or nobody runs it: add it to the setup step you already have.</Cmt>
+            {"\n"}
+            <Key>"postinstall"</Key>: "crew install"
           </CodeBlock>
         </div>
       </Container>

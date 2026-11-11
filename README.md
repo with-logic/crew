@@ -75,7 +75,7 @@ installer also uses `bash`, `curl`, `openssl`, and either `shasum` or `sha256sum
 
 ## How it works
 
-Five everyday motions. No manifest to learn, no plugins to configure —
+Five everyday motions. No new skill format to learn, no plugins to configure —
 commands that do what they say, across every agent you use.
 
 1. **Find great skills.** `crew search` across the default `core` collection
@@ -173,6 +173,10 @@ When a command asks for an installed skill name, you can use the bare name
 |---|---|
 | `crew install <ref>…` | Install one or more skills into every detected agent; on misses, may suggest skills from trusted taps you haven't added yet. |
 | `crew install --from-git <source>` | Install from a git source without a positional ref. Forces the value to be read as git, so a bare `owner/repo` means GitHub rather than `<tap>/<skill>`. Combines with positional refs. |
+| `crew install` | With nothing named, install the skills listed in this project's `.crewrc`, for this project, at the commits recorded in `.crewrc.lock`. Skills whose line was removed are uninstalled. In a repository with several projects, one run at the top installs them all. See [Skills per project](#skills-per-project-crewrc). |
+| `crew install --latest` | The same, but lines that name a branch or tag move to what it points at now, and `.crewrc.lock` is updated. |
+| `crew install --save <ref>…` | Add references to this project's `.crewrc` (creating it if needed) and install from it. |
+| `crew uninstall --save <ref>…` | Take lines out of this project's `.crewrc` and remove the skills they brought in. Give each reference as the file writes it. |
 | `crew uninstall <selector>…` | Remove installed skills from every agent they were installed into. A selector is a skill (`pdf`, `anthropic/pdf`), a tap (`acme`) to remove everything installed from it, or a namespace — qualified (`acme/marketing`) or bare when unique across your taps. `--all` removes everything at the target scope. Acts on one scope at a time: the user-scoped install by default, or the current project's with `--scope project`. |
 | `crew remove <name>…`, `crew rm <name>…` | Aliases for `crew uninstall`. |
 | `crew upgrade [<name>…]` | Alias for `crew update`. |
@@ -282,6 +286,9 @@ interpretation.
 - **One repo, every laptop.** Point Homecrew at a private GitHub repo once. Every
   new skill that lands on `main` shows up in everyone's `crew search`. No
   internal tool to build. No package server to run.
+- **Skills per project.** Check in a `.crewrc` listing the skills a project
+  expects. Anyone who runs `crew install` there gets them, at the same
+  commits. Details [below](#skills-per-project-crewrc).
 - **Onboarding, one command.** Publish a `team-baseline` meta-skill that
   depends on everything you consider standard — review checklists, on-call
   playbooks, style guides. A single `crew install` catches new hires up.
@@ -290,6 +297,70 @@ interpretation.
   squash-merge.
 - **Private by default.** Homecrew clones taps with whatever git credentials you
   already have. Your private repo stays private — Homecrew never phones home.
+
+### Skills per project: `.crewrc`
+
+A `.crewrc` is a plain list of the skills a project expects, one reference
+per line. Check it in at the top of the project.
+
+```
+# .crewrc
+@acme/skills//review-checklist
+@acme/skills@v2.1.0//oncall-playbook
+./tools/skills/release-notes
+```
+
+Each line is a git source (`@owner/repo`, `gh:owner/repo@ref//subpath`, a git
+URL) or a path inside the project starting with `./`. Blank lines and lines
+starting with `#` are ignored. Skill names from a tap and absolute paths are
+not allowed, so the file means the same thing on every machine.
+
+```sh
+crew install                          # install what .crewrc lists, for this project
+crew install --save @acme/skills//pdf # add a line and install it
+crew uninstall --save ./tools/skills/release-notes  # remove a line and its skill
+crew install --latest                 # move to newer commits, update the lockfile
+```
+
+What to expect:
+
+- **Project scope only.** Skills from `.crewrc` install under the project
+  (for example `.claude/skills/`), not into your user-wide skills.
+- **The file is the source of truth.** Delete a line and the next
+  `crew install` removes that skill, along with dependencies nothing else
+  needs. Skills you installed in the project by hand are left alone.
+- **Commit `.crewrc.lock`.** For a line that names a branch, a tag, or no
+  version, Homecrew records the commit it installed. Everyone then gets that
+  commit, even after the branch moves.
+- **Updates are deliberate.** `crew update` and autoupdate skip these skills.
+  Run `crew install --latest` and commit the changed lockfile.
+- **Monorepos.** Give each project its own `.crewrc`. `crew install` at the top
+  of the repository installs all of them, each into its own project folder.
+
+**Run it from your setup step.** `crew install` exits 0 on a machine with no
+coding agent, without contacting any git remote, so it is safe in CI. When
+everything is already installed it does not touch the network either.
+These recipes skip quietly where Homecrew is not installed, and fail the setup
+step if `crew install` itself fails.
+
+```jsonc
+// package.json (npm, pnpm, yarn, bun)
+{
+  "scripts": {
+    "postinstall": "if command -v crew >/dev/null; then crew install; else echo 'Homecrew not found, skipping skills: https://crew.logic.inc'; fi"
+  }
+}
+```
+
+```make
+# Makefile
+setup:
+	@if command -v crew >/dev/null; then crew install; \
+	else echo "Homecrew not found, skipping skills: https://crew.logic.inc"; fi
+```
+
+Project manifests need Homecrew 0.13 or newer. An older `crew` answers a bare
+`crew install` with a usage error; run `crew self-update`.
 
 ## Safety model
 
@@ -323,7 +394,7 @@ overwrite anything it didn't install itself.
 
 ## Anatomy of a skill
 
-No proprietary manifest. Just `SKILL.md`. Homecrew reads the [Agent Skills
+No proprietary format. Just `SKILL.md`. Homecrew reads the [Agent Skills
 specification](https://agentskills.io/specification) directly. Homecrew-specific
 metadata lives under `metadata.crew` so the skill stays fully spec-compliant —
 readable by any agent, not just the ones Homecrew installs into.
@@ -405,6 +476,24 @@ access tokens, GitHub Enterprise hosts. Nothing gets uploaded anywhere;
 there's no intermediary registry. Every `main`-merge automatically becomes
 installable team-wide. Pair it with `crew autoupdate enable` and everyone
 stays in sync without thinking about it.
+
+**How do I give everyone on a project the same skills?** Check in a `.crewrc`
+at the top of the project: one skill reference per line. `crew install` with
+no arguments installs what it lists, for that project only. See
+[Skills per project](#skills-per-project-crewrc).
+
+**What is `.crewrc.lock`, and should I commit it?** Yes. It records the exact
+commit installed for each line that names a branch, a tag, or no version, so
+everyone gets the same one. Homecrew writes it; you never edit it by hand.
+
+**How do skills from a `.crewrc` get updated?** Deliberately. `crew update` and
+autoupdate leave them alone. Run `crew install --latest` to move to newer
+commits, then commit the changed `.crewrc.lock`.
+
+**Does `.crewrc` work in a monorepo?** Yes. Give each project its own
+`.crewrc`. `crew install` at the top of the repository installs every
+project's skills, each into its own folder. Files inside ignored directories
+such as `node_modules` are skipped.
 
 **Skills can depend on other skills?** Yes. A `SKILL.md`'s frontmatter can
 list `metadata.crew.dependencies` — an array of skill references in any form
