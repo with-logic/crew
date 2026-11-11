@@ -19,6 +19,12 @@ import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest/index.ts";
+import {
+  hasNoActiveAgent,
+  latestLock,
+  rejectLatestWithReferences,
+  wantsLatest,
+} from "./manifest/latest.ts";
 import { readLock, refsToInstall } from "./manifest/lockfile.ts";
 import { EMPTY_RECONCILIATION, reconcileManifestInstalls } from "./manifest/reconcile.ts";
 import { reportReconciliation } from "./manifest/report.ts";
@@ -46,7 +52,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const fromGit = ctx.flags.extras["from-git"];
   // §9.2: with nothing named on the command line, the project's manifest names the skills.
   const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";
-  const manifest = isBare ? manifestForBareInstall(ctx) : null;
+  const manifest = isBare ? manifestForBareInstall(ctx) : rejectLatestWithReferences(ctx);
   if (manifest?.entries.length === 0) {
     // §9.3: an invalid lockfile is an error even with nothing to install,
     // and before anything is removed.
@@ -60,9 +66,14 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   rejectRecursiveTapRefs(ctx);
   const config = readConfig(ctx.home);
   const discovery = new GitDiscoveryWarnings();
+  // §9.3: `--latest` looks each unpinned line up on its remote, unless
+  // there is no agent to install into, which must not touch a source.
+  const isLatest = manifest !== null && wantsLatest(ctx);
+  if (isLatest && hasNoActiveAgent(config, ctx)) return noAgentsOutcome(manifest, ctx);
+  const latest = isLatest ? latestLock(manifest, readLock(manifest)) : undefined;
   // §9.3: a line with a lock entry installs at its recorded commit.
   const refs = manifest
-    ? refsToInstall(manifest, readLock(manifest))
+    ? refsToInstall(manifest, latest ?? readLock(manifest))
     : resolveCollisions(ctx, config, discovery, kindHint);
   // §5.3: `--from-git` is never bare, so it skips collision resolution.
   if (typeof fromGit === "string") refs.push(normalizeFromGit(fromGit, ctx.cwd));
@@ -126,7 +137,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const everythingLanded = failed === 0;
   const reconciled =
     manifest && everythingLanded
-      ? reconcileManifestInstalls(ctx, manifest, result.resolved)
+      ? reconcileManifestInstalls(ctx, manifest, result.resolved, latest)
       : EMPTY_RECONCILIATION;
   const reconciliation = reportReconciliation(reconciled, ctx);
   if (reconciliation.hasAbortedRemoval) exitCode = 1;

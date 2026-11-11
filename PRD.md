@@ -102,6 +102,7 @@ Every command below is mandatory. Exit codes are defined in §15.
 ```
 crew install <ref> [<ref>...]     Install one or more skills.
 crew install                       Install the skills listed in the project manifest (§9.2).
+crew install --latest              The same, moving unpinned lines to their latest commit (§9.3).
 crew uninstall <selector> [<selector>...] Remove installed skills from every agent.
 crew remove <selector> [<selector>...]    Alias for `crew uninstall`.
 crew rm <selector> [<selector>...]        Alias for `crew uninstall`.
@@ -239,6 +240,7 @@ Only flags documented as repeatable (`--agent`) may appear more than once. Passi
 ### 5.3 Install-time flags
 
 - `--from-git <url>[@<ref>][//<subpath>]` — explicit git source. The value is always parsed as a git source (§8.2), never as a tap reference or path. Any git URL or shorthand form from §8.2 is accepted, and a bare `<owner>/<repo>` value — which as a positional would be read as a tap reference — is treated as GitHub, exactly as if the user had written `@<owner>/<repo>`. The resulting source is installed alongside any positional references on the same command. The bare form accepts the same `@<ref>` and `//<subpath>` tails as every other git reference (`acme/skills@v1.2.0//tools/demo`). A value that cannot be parsed as a git source is `invalid_ref`. The flag is only accepted by `crew install`; on any other command it is an unknown flag (`usage_error`). Like every flag that takes a single value, passing it more than once is a `usage_error` (§5.2).
+- `--latest` — on a bare install only (§9.2), look up each unpinned git line of the manifest on its remote, install it at the commit found there, and record that commit in the lockfile (§9.3). With any reference on the command line it is a `usage_error`.
 - `--recursive` — for direct git/path installs only, fall back to bounded recursive discovery when standard layouts find no skill candidates. Tap-name installs use the tap's configured discovery mode; combining `--recursive` with a tap-name ref is a `usage_error`. Dependencies declared by a skill installed with `--recursive` do not inherit the flag; each dependency resolves with its own standard discovery unless its source is already a recursive tap.
 
 ### 5.3.1 Uninstall-time flags
@@ -1494,7 +1496,7 @@ A bare install is always project scope. `--scope user` with no references is a
 how a reference is interpreted (`--recursive`, `--tap`, `--bundle`, `--skill`)
 are a `usage_error` on a bare install, because a manifest must mean the same thing however it is invoked.
 `--agent`, `--dry-run`, `--force`, `--json`, `--quiet`, and `--verbose` behave
-as on any install. The `--json` result carries a `manifest_path` field holding
+as on any install. `--latest` is accepted only on a bare install (§9.3). The `--json` result carries a `manifest_path` field holding
 the manifest's absolute path.
 
 When any reference is given on the command line, no manifest is read.
@@ -1611,7 +1613,8 @@ behalf; the run's general tap refresh (§10.1 step 1) is unaffected. Tap
 re-expansion (§10.1.1) skips a group that contains a manifest-owned entry, so
 no sibling is added to it, including to hand-installed members of that group.
 `crew update` and autoupdate therefore cannot move a project off the version
-its manifest gave it. An explicit `crew install <ref>` is a deliberate act
+its manifest gave it. A project takes new versions with
+`crew install --latest` (§9.3). An explicit `crew install <ref>` is a deliberate act
 and follows §5.4 as for any other entry.
 An entry installed by hand from the same source elsewhere is updated as usual.
 
@@ -1718,12 +1721,44 @@ declared skill succeeded, the lockfile is brought in line with the manifest:
   different crew homes: if two both find no entry for a line, each writes its
   own and the later write stands. What settles a project's versions is the
   lockfile that is committed; a checkout that installed a different commit
-  moves to the committed one on its next bare install.
+  moves to the committed one on its next bare install. The one exception is
+  `--latest`, below, whose purpose is to replace entries.
 - **Nothing is written** on `--dry-run`, when a declared skill failed to
   install, when the lockfile or manifest is invalid, or when `.crewrc` is no
   longer the manifest the run read. That last condition is the final
   confirmation of §9.2, "Reconciling", made immediately before the write and
   reported with the warning described there.
+
+**Moving to the latest commit (`--latest`).** A locked line never moves on
+its own, and an install does not refresh a clone it already has (§16.6).
+`crew install --latest` is how a project takes new versions:
+
+- For each manifest line that takes a lock entry (a git line not pinned to a
+  full commit), Homecrew asks the line's remote which commit the line's ref
+  names now: its branch or tag, or the default branch when the line names no
+  ref. A tag wins over a branch of the same name, and an annotated tag gives
+  the commit it points at, as in local resolution (§9 step 3). Nothing is
+  cloned or fetched to find this out.
+- Each such line is then installed at that commit, exactly as if the lockfile
+  had held it, and after a successful install the lockfile records it,
+  replacing the line's previous entry. The rest of the bare install is
+  unchanged: reconciling, removing dropped skills, and the conditions under
+  which nothing is written all apply.
+- A line whose ref the remote lists as neither a branch nor a tag, such as an
+  abbreviated commit, keeps the entry it has. A line pinned to a full commit
+  and a path line take no entry and are not looked up.
+- When nothing has moved, the run installs nothing and rewrites neither the
+  lockfile nor `state.json`.
+- `--latest` contacts every such line's remote, so it does not have the
+  offline guarantee of §9.2, "Nothing to do". If any remote cannot be reached
+  the command fails with `source_unreachable` before anything is installed,
+  and the installed skills and the lockfile are left as they were.
+- With no active agent and no `--agent`, the run exits 0 without contacting
+  any remote, as any bare install does (§9.2).
+- `--dry-run` looks the commits up, reports what would be installed, and
+  writes nothing.
+- With a reference on the command line, including `--from-git`, `--latest` is
+  a `usage_error`.
 
 `crew update` neither reads nor writes the lockfile; it leaves manifest-owned
 skills alone (§9.2, "Updates").
@@ -3704,6 +3739,10 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-44 | §9.3 | A bare `crew install` that changes nothing does not rewrite the lockfile, and `--dry-run` never writes or rewrites one. |
 | C-RC-45 | §9.3 | When a declared reference fails to resolve, a skill of a declared git source fails validation, or the manifest changes during the run, the lockfile is left byte-for-byte as it was, or absent if it was absent. |
 | C-RC-46 | §9.3 | An entry present in the lockfile for a line when a bare `crew install` comes to write it is kept; the run does not replace it with its own resolution. |
+| C-RC-47 | §9.3 | After a line's source publishes a new commit, a plain bare `crew install` leaves the skill and the lockfile as they were; `crew install --latest` installs the new commit and records it in the lockfile, for a line naming no ref, a branch, or a tag (which goes to wherever the tag now points). A second checkout given that lockfile installs the same commit after the source has moved again. |
+| C-RC-48 | §9.3 | Under `--latest`, a line pinned to a full commit and a path line are not moved and get no lock entry; a line naming an abbreviated commit keeps the commit it is locked to; and when nothing has moved, nothing is installed and neither the lockfile nor `state.json` is rewritten. |
+| C-RC-49 | §9.3, §5.2 | `--latest` with a reference on the command line, positional or `--from-git`, is a `usage_error`. `--latest --dry-run` reports the skills that would move and writes neither skills, the lockfile, nor state. |
+| C-RC-50 | §9.3 | Under `--latest`, an unreachable source fails the command with `source_unreachable` and leaves the installed skills and the lockfile unchanged. With no active agent and no `--agent`, it exits 0 with `no_agents: true` without contacting any source; with `--agent` it remains `no_agents`. |
 
 ### 18.4 Worked examples
 
