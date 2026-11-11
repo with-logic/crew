@@ -1505,13 +1505,16 @@ manifest is invalid, or on a `--dry-run`. A skill installed in the project by
 hand that is not in the resolved install set is never claimed, and entries at
 user scope or under another project root are never touched.
 
-When `crew update` re-expands a tap (§10.1.1) and installs a newly added
-sibling, the new entry is marked `manifest_owned: true` if an entry from the same
-tap at the same install location already carries the flag: the newcomer came
-from the same manifest line. Inheritance follows the tap, not the wording of
-the line: if a manifest once took a whole repository and now names one skill
-from it, entries from that tap stay owned and so do siblings added later.
-What the manifest no longer resolves to is settled by the next bare install.
+**Updates.** `crew update` and autoupdate never change a manifest-owned
+entry. Each one is reported as `skipped` with the reason `managed by .crewrc`
+(§10.1), with or without `--force`, and no revision is acquired on its
+behalf; the run's general tap refresh (§10.1 step 1) is unaffected. Tap
+re-expansion (§10.1.1) skips a group that contains a manifest-owned entry, so
+no sibling is added to it, including to hand-installed members of that group.
+`crew update` and autoupdate therefore cannot move a project off the version
+its manifest gave it. An explicit `crew install <ref>` is a deliberate act
+and follows §5.4 as for any other entry.
+An entry installed by hand from the same source elsewhere is updated as usual.
 
 ## 10. Update and autoupdate
 
@@ -2321,7 +2324,8 @@ an uninstall in one project never rewrites the other's. A skill with
 manifest at this entry's `project_root` accounts for the skill: it is in that
 manifest's resolved install set, dependencies included, not necessarily named
 on a line of its own (§9.2). Set by bare `crew install`. Only project-scope
-entries carry it. It survives an update or reinstall of the skill. It is
+entries carry it. It survives a reinstall of the skill, and `crew update`
+skips an entry that carries it (§9.2). It is
 recorded in state only, not in the install-site marker: if state is rebuilt
 from markers (`crew doctor --repair`) the flag is lost, and the next bare
 install re-claims every skill the manifest still resolves to.
@@ -3451,8 +3455,8 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-15 | §9.2 | A skill installed in the project by hand gains `manifest_owned: true` once the manifest declares it. |
 | C-RC-16 | §9.2 | No entry is marked when a declared reference fails to resolve, when one skill of a multi-skill source fails validation, or on `--dry-run`. |
 | C-RC-17 | §9.2 | A repeat bare `crew install` with nothing new to claim leaves `state.json` byte-for-byte unchanged. |
-| C-RC-18 | §9.2, §10.1.1 | `manifest_owned: true` survives `crew update`, and a sibling that update adds from a manifest-owned tap at that install location is marked too, and only at that location. An explicit reinstall of an owned skill keeps the flag. |
-| C-RC-19 | §9.2, §10.1.1 | A sibling that `crew update` adds from a tap no manifest owns is not marked. |
+| C-RC-18 | §9.2, §10.1 | `crew update`, with or without `--force`, reports a manifest-owned skill as `skipped` with reason `managed by .crewrc`, leaves its files and state entry unchanged, and exits 0 even when that skill's source is unreachable. No sibling is added to a tap group containing an owned entry, even when the group also has a hand-installed member. An explicit reinstall of an owned skill keeps `manifest_owned: true`. |
+| C-RC-19 | §9.2, §10.1.1 | The same source installed by hand under another project root is still updated and re-expanded by `crew update`, and its entries stay unowned. |
 | C-RC-26 | §9.2 | A manifest path line that reaches outside the project through a symbolic link is `manifest_invalid`, with `details` naming its line; nothing from outside the project is installed. |
 
 ### 18.4 Worked examples

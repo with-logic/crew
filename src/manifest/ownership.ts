@@ -39,20 +39,9 @@ export function claimForManifest(
 }
 
 /**
- * A skill that `crew update` adds while re-expanding a tap (§10.1.1) joins
- * the entries already installed from that tap at the same install location.
- * If the manifest owns those, it owns the newcomer too: both came from the
- * same manifest line.
+ * True when a project manifest owns `entry`. Only project-scope entries can
+ * be owned (§11.1), so a stray flag on a user-scope entry does not count.
  */
-export function inheritManifestOwnership(added: StateEntry, state: StateFile): StateEntry {
-  // §11.1: only project-scope entries can be manifest-owned.
-  if (added.scope !== "project") return added;
-  const ownedSibling = state.installations.some(
-    (entry) =>
-      entry.manifest_owned === true &&
-      entry.source.tap === added.source.tap &&
-      entry.scope === added.scope &&
-      entry.project_root === added.project_root,
-  );
-  return ownedSibling ? { ...added, manifest_owned: true } : added;
+export function isManifestOwned(entry: StateEntry): boolean {
+  return entry.scope === "project" && entry.manifest_owned === true;
 }
