@@ -1519,8 +1519,9 @@ user scope or under another project root are never touched.
 under a single hold of the state lock, and only while the manifest on disk
 still lists exactly the references this run read. That is checked before
 anything is removed, again immediately before each deletion, and a final
-time once the removals are done. After that final confirmation the run only
-writes: the lockfile (§9.3), then the claims. It does not look at `.crewrc`
+time once the removals are done. That one confirmation covers both writes
+that follow: the lockfile (§9.3), then the claims. Writing the lockfile reads
+`.crewrc.lock` again (§9.3), but the run does not look at `.crewrc`
 between or after those two writes, so a run that reports a changed manifest
 has written neither. A change made after the final confirmation is not seen
 by this run; the next bare install reconciles against it. `state.json` is

@@ -81,7 +81,8 @@ export function reconcileManifestInstalls(
     if (outcome === null) return MANIFEST_CHANGED;
     // The removals are persisted on their own, before the lockfile step,
     // which can fail: state must not go on listing a skill that is gone.
-    if (outcome.state !== before) {
+    // Compared by value: an aborted removal can hand back an equal copy.
+    if (JSON.stringify(outcome.state) !== JSON.stringify(before)) {
       writeState(outcome.state, ctx.home);
       // A dropped line may have been the last use of its auto tap (§16.5).
       garbageCollectAutoTaps(outcome.state, ctx.home);
@@ -91,6 +92,7 @@ export function reconcileManifestInstalls(
     }
     // That was the last look at `.crewrc`. From here the run only writes:
     // the lockfile, then the claims, both from the manifest just confirmed.
+    // (`recordLock` reads `.crewrc.lock` again, not `.crewrc`.)
     // Nothing is checked between or after the two, so a run that reports a
     // changed manifest has written neither.
     recordLock(manifest, resolved);

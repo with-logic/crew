@@ -61,3 +61,29 @@ test("C-RC-33 a manifest replaced partway through the removals stops them there"
   expect(ownedNames(home)).toEqual(left);
   expect(readFileSync(join(project, ".crewrc.lock"), "utf8")).toBe(lockBefore);
 });
+
+test("C-RC-33 a manifest replaced during the last removal means no lockfile write and no claim", () => {
+  const home = makeCrewHome();
+  const repo = makeSkillRepo(["alpha"]);
+  const project = makeProject([repo]);
+  expect(crew(home, project, ["install"]).code).toBe(0);
+  const gammaRepo = makeSkillRepo(["gamma"]);
+  expect(crew(home, project, ["install", "--scope", "project", gammaRepo]).code).toBe(0);
+  writeManifest(project, [gammaRepo]);
+  const lockBefore = readFileSync(join(project, ".crewrc.lock"), "utf8");
+
+  // alpha is the only removal: nothing checks the manifest after it but the final confirmation.
+  const run = runBareInstallWithProgressHook(
+    home,
+    project,
+    () => writeManifest(project, [gammaRepo, "./tools/later"]),
+    [],
+    /removing alpha /,
+  );
+
+  expect(run).toMatchObject({ code: 0, hookRan: true });
+  expect(run.stderr).toContain("crew stopped bringing the project in line");
+  expect(installed(home)).toEqual([`gamma@${project}`]);
+  expect(ownedNames(home)).toEqual([]);
+  expect(readFileSync(join(project, ".crewrc.lock"), "utf8")).toBe(lockBefore);
+});
