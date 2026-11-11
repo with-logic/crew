@@ -45,7 +45,7 @@ import { garbageCollectAutoTaps } from "../../maintenance/auto-taps.ts";
 import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
-import { installCommand } from "../install/index.ts";
+import { runOneInstall } from "../install/index.ts";
 import { unsaveThenInstall } from "../install/manifest/unsave.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { validateAgentFilter } from "./agent-filter.ts";
@@ -60,7 +60,7 @@ export function uninstallCommand(ctx: CommandContext): CommandOutput {
   // §9.2: `--save` edits the manifest and lets a bare install do the removing.
   // The install it runs stages skills, so it holds the lease `crew install` holds (§14).
   if (ctx.flags.extras["save"]) {
-    return withSourceMaintenanceLock(ctx, () => unsaveThenInstall(ctx, installCommand));
+    return withSourceMaintenanceLock(ctx, () => unsaveThenInstall(ctx, runOneInstall));
   }
   const all = Boolean(ctx.flags.extras["all"]);
   if (ctx.positional.length === 0 && !all) {
