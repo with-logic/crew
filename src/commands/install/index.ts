@@ -15,13 +15,15 @@ import { parseRef } from "../../refs/parse.ts";
 import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { safePath } from "../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
-import type { UninstallRecord } from "../uninstall/core.ts";
 import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
-import { claimManifestOwnership } from "./manifest/claim.ts";
 import { manifestForBareInstall, nothingToInstall } from "./manifest/index.ts";
-import { removeDroppedSkills } from "./manifest/removal.ts";
+import {
+  NOTHING_RECONCILED,
+  reconcileOwnership,
+  staleManifestWarnings,
+} from "./manifest/reconcile.ts";
 import { renderDropped } from "./render/dropped.ts";
 import { renderInstall } from "./render/index.ts";
 
@@ -50,9 +52,8 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const manifest = isBare ? manifestForBareInstall(ctx) : null;
   if (manifest?.entries.length === 0) {
     // Declaring nothing still drops whatever the manifest used to own (§9.2).
-    const dropped = removeDroppedSkills(ctx, manifest.projectRoot, new Set());
     const human = `${safePath(manifest.file)} declares no skills.`;
-    return nothingToInstall(manifest, ctx, human, dropped);
+    return nothingToInstall(manifest, ctx, human, reconcileOwnership(ctx, manifest, new Set()));
   }
   const kindHint = readKindHint(ctx);
   rejectRecursiveTapRefs(ctx);
@@ -110,17 +111,13 @@ export function installCommand(ctx: CommandContext): CommandOutput {
 
   // §9.2: the manifest owns what it resolved to and drops what it no longer
   // accounts for — but only once all of it has landed.
-  let removed: readonly UninstallRecord[] = [];
   const noInstallFailures = failed === 0;
-  if (manifest && noInstallFailures) {
-    const resolvedSkillNames = new Set(result.resolved.map((skill) => skill.name));
-    const mayWriteState = !ctx.flags.dryRun;
-    if (mayWriteState) {
-      claimManifestOwnership({ home: ctx.home, projectRoot: cwd, resolvedSkillNames });
-    }
-    removed = removeDroppedSkills(ctx, cwd, resolvedSkillNames);
-    if (removed.some((record) => record.failures.length > 0)) exitCode = 1;
-  }
+  const reconciled =
+    manifest && noInstallFailures
+      ? reconcileOwnership(ctx, manifest, new Set(result.resolved.map((skill) => skill.name)))
+      : NOTHING_RECONCILED;
+  const { removed } = reconciled;
+  if (removed.some((record) => record.failures.length > 0)) exitCode = 1;
 
   const human = [
     ...renderInstall(
@@ -142,7 +139,11 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   return {
     exitCode,
     human,
-    stderr: result.unusableProjectRoots ? [UNUSABLE_PROJECT_ROOT_WARNING, ...warnings] : warnings,
+    stderr: [
+      ...(result.unusableProjectRoots ? [UNUSABLE_PROJECT_ROOT_WARNING] : []),
+      ...warnings,
+      ...staleManifestWarnings(reconciled),
+    ],
     json: {
       already_installed: result.alreadyInstalled,
       records: result.summary.records,

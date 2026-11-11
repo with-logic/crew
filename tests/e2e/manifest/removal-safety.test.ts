@@ -77,8 +77,13 @@ describe("removal safety", () => {
     mkdirSync(skillDir(project, "gamma"), { recursive: true });
     writeManifest(project, ["./tools/gamma"]);
 
-    expect(crew(home, project, ["install"]).code).not.toBe(0);
+    const run = crew(home, project, ["install", "--json"]);
 
+    expect(run.code).toBe(1);
+    const { records } = JSON.parse(run.stdout) as {
+      records: { name: string; perAgent: { error?: { code: string } }[] }[];
+    };
+    expect(JSON.stringify(records)).toContain("untracked_directory");
     expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
     expect(installed(home)).toEqual([`alpha@${project}`]);
   });

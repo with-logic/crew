@@ -1476,8 +1476,9 @@ project instead.
 The existing rules apply to each reference unchanged: a skill already
 installed at the declared source and commit is reported as already installed
 (§5.4), so a repeat run with nothing new exits 0 and writes nothing. A manifest
-that declares no skills installs nothing and exits 0; that is decided before
-agents are selected, so it holds on a machine with no active agent.
+that declares no skills installs nothing; that is decided before agents are
+selected, so it needs no active agent. It still removes what the manifest
+used to own, and exits 0 unless one of those removals aborts.
 
 A bare install is always project scope. `--scope user` with no references is a
 `usage_error`; `--scope project` is accepted and redundant. Flags that change
@@ -1515,6 +1516,15 @@ no sibling is added to it, including to hand-installed members of that group.
 its manifest gave it. An explicit `crew install <ref>` is a deliberate act
 and follows §5.4 as for any other entry.
 An entry installed by hand from the same source elsewhere is updated as usual.
+
+**Reconciling.** Claiming, and the removal described next, happen together
+under a single hold of the state lock, and only if the manifest on disk still
+lists exactly the references this run read. If `.crewrc` has changed since —
+or can no longer be read or parsed — the run claims nothing and removes
+nothing, prints a warning to stderr saying so, and leaves its exit code
+unchanged; the next bare install reconciles against the current manifest.
+Without this check, two overlapping bare installs that read different
+versions of the manifest could each remove what the other had just installed.
 
 **Removing dropped skills.** A manifest-owned skill that has left the
 resolved install set — its line was deleted, or it stopped being a dependency
@@ -3519,6 +3529,7 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-29 | §9.2 | When a dropped dependent's removal aborts, the dependency it requires stays installed and keeps its `manifest_owned` flag. |
 | C-RC-30 | §9.2 | When a project's skills directory is a symbolic link to the user-scope one, or to another project's, dropping a line removes nothing: the other location's files and state entry remain, and this project's entry stays in state with `manifest_owned` cleared. |
 | C-RC-35 | §9.2 | A dropped dependency chain that nothing else needs is removed in full, dependents first. A dropped dependency cycle that nothing outside it needs is removed in full. |
+| C-RC-36 | §9.2 | When `.crewrc` is replaced, or becomes invalid, while a bare `crew install` is running, that run claims nothing and removes nothing, warns on stderr, and exits as it otherwise would. |
 
 ### 18.4 Worked examples
 

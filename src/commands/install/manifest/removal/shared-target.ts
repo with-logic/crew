@@ -10,10 +10,10 @@
 
 import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import { baseFor } from "../../../agents/adapter.ts";
-import { agentByName } from "../../../agents/registry.ts";
-import type { StateEntry, StateFile } from "../../../core/types.ts";
-import { entryKey } from "../../../state/identity.ts";
+import { baseFor } from "../../../../agents/adapter.ts";
+import { agentByName } from "../../../../agents/registry.ts";
+import type { StateEntry, StateFile } from "../../../../core/types.ts";
+import { entryKey } from "../../../../state/identity.ts";
 
 /** A project-scope entry: its `project_root` is known to be present. */
 export type ProjectEntry = StateEntry & {

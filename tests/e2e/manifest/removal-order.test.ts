@@ -62,6 +62,10 @@ describe("removal order", () => {
     expect(removed.map((r) => r.name)).toEqual(["top"]);
     expect(installed(home)).toEqual([`base@${project}`, `middle@${project}`, `mine@${project}`]);
     expect(ownedNames(home)).toEqual([]);
+    expect(existsSync(skillDir(project, "top"))).toBe(false);
+    for (const name of ["base", "middle", "mine"]) {
+      expect(existsSync(join(skillDir(project, name), "SKILL.md"))).toBe(true);
+    }
   });
 
   test("C-RC-29 when a dependent's removal aborts, its dependency stays and stays owned", () => {
@@ -106,6 +110,8 @@ describe("removal order", () => {
     expect(run.code).toBe(0);
     expect(run.removed.sort()).toEqual(["ping", "pong"]);
     expect(installed(home)).toEqual([]);
+    expect(existsSync(skillDir(project, "ping"))).toBe(false);
+    expect(existsSync(skillDir(project, "pong"))).toBe(false);
   });
 
   test("C-RC-28 a cycle that a hand-installed skill needs is kept whole and released", () => {
@@ -120,5 +126,8 @@ describe("removal order", () => {
     expect(run).toEqual({ code: 0, removed: [] });
     expect(installed(home)).toEqual([`mine@${project}`, `ping@${project}`, `pong@${project}`]);
     expect(ownedNames(home)).toEqual([]);
+    for (const name of ["mine", "ping", "pong"]) {
+      expect(existsSync(join(skillDir(project, name), "SKILL.md"))).toBe(true);
+    }
   });
 });
