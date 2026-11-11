@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
 import {
+  crew,
   installed,
   makeProject,
   makeSkillRepo,
@@ -74,6 +75,40 @@ describe("a manifest that changes during the run", () => {
     expect(run.code).toBe(0);
     const { warnings } = JSON.parse(run.stdout) as { warnings: string[] };
     expect(warnings.join("\n")).toContain("crew stopped bringing the project in line with it");
+    expect(ownedNames(home)).toEqual([]);
+  });
+
+  test("C-RC-33 a run that read an older manifest removes nothing it would have dropped", () => {
+    const home = makeCrewHome();
+    const alphaRepo = makeSkillRepo(["alpha"]);
+    const project = makeProject([alphaRepo]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    expect(ownedNames(home)).toEqual(["alpha"]);
+    // This run reads a manifest without alpha; by the time it reconciles, alpha is back.
+    writeManifest(project, [makeSkillRepo(["beta"])]);
+
+    const run = installWhileManifestBecomes(home, project, [alphaRepo]);
+
+    expect(run.hookRan).toBe(true);
+    expect(run.stderr).toContain("crew stopped bringing the project in line");
+    expect(installed(home)).toEqual([`alpha@${project}`, `beta@${project}`]);
+    expect(ownedNames(home)).toEqual(["alpha"]);
+  });
+
+  test("C-RC-31 a hand-installed skill a stale manifest named is not claimed when that manifest is replaced", () => {
+    const home = makeCrewHome();
+    const alphaRepo = makeSkillRepo(["alpha"]);
+    const betaRepo = makeSkillRepo(["beta"]);
+    const project = makeProject([betaRepo]);
+    expect(crew(home, project, ["install", "--scope", "project", alphaRepo]).code).toBe(0);
+    // The manifest this run reads lists alpha as well; by the time it reconciles, it does not.
+    writeManifest(project, [alphaRepo, betaRepo]);
+
+    const run = installWhileManifestBecomes(home, project, [betaRepo]);
+
+    expect(run.hookRan).toBe(true);
+    expect(run.stderr).toContain("crew stopped bringing the project in line");
+    expect(installed(home)).toEqual([`alpha@${project}`, `beta@${project}`]);
     expect(ownedNames(home)).toEqual([]);
   });
 });

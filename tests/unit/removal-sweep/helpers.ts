@@ -41,11 +41,6 @@ export function installProject(
   return { home, project };
 }
 
-/** Where claude-code installs `name` at project scope under `project`. */
-export function skillDir(project: string, name: string): string {
-  return join(project, ".claude", "skills", name);
-}
-
 /** The sweep never prompts, so these are never called. */
 const NO_PROMPTS = {
   prompt: undefined as unknown as CommandContext["prompt"],

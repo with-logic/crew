@@ -98,3 +98,8 @@ export function runBareInstallWithMidInstallHook(
   });
   return { code, stdout, stderr, hookRan };
 }
+
+/** Where claude-code installs `name` at project scope under `project`. */
+export function skillDir(project: string, name: string): string {
+  return join(project, ".claude", "skills", name);
+}

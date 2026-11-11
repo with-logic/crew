@@ -1,54 +1,89 @@
 /**
- * Reconciling ownership after a bare `crew install` (§9.2): record that the
- * manifest owns the skills it resolved to.
+ * Reconciling ownership after a bare `crew install` (§9.2): remove what the
+ * manifest no longer accounts for, then claim what it resolved to.
  *
- * This happens under the state lock, and only if the manifest on disk is
- * still the one this run installed from. A run that read an older version
- * of `.crewrc` must not act on it: once removal of dropped skills exists,
- * two overlapping installs reading different versions could otherwise each
- * sweep away what the other had just claimed.
+ * Both happen under one hold of the state lock, and only while the manifest
+ * on disk is still the one this run installed from. Two overlapping installs
+ * that read different versions of `.crewrc` would otherwise each sweep away
+ * what the other had just claimed.
  */
 
+import { garbageCollectAutoTaps } from "../../../maintenance/auto-taps.ts";
 import { claimForManifest, type Manifest } from "../../../manifest/index.ts";
 import { readState, writeState } from "../../../state/load.ts";
 import { withStateLock } from "../../../state/lock.ts";
+import type { CommandContext } from "../../types.ts";
+import type { UninstallRecord } from "../../uninstall/core.ts";
 import { hasChangedOnDisk } from "./freshness.ts";
+import { processDroppedEntries, type RemovalOutcome } from "./removal/index.ts";
 
 /** What reconciling did. */
 export interface Reconciliation {
+  /** One removal record per dropped entry attempted: completed, previewed, or aborted. */
+  readonly removed: readonly UninstallRecord[];
+  /** Names kept because their install directories are not verifiably the project's own. */
+  readonly keptForUnverifiedInstallSites: readonly string[];
   /**
-   * True when `.crewrc` changed, or could not be re-read, during the run, so
-   * ownership or the lockfile was left as it was.
+   * True when `.crewrc` changed, or could not be re-read, during the run.
+   * Reconciling stopped at that point: before anything was removed, or
+   * partway through the removals, in which case `removed` holds the ones
+   * already done. Nothing was claimed, and the lockfile was left as it was.
    */
   readonly manifestChanged: boolean;
 }
 
-/** The result when ownership matches the manifest: reconciled, or nothing to reconcile. */
-export const IN_STEP_WITH_MANIFEST: Reconciliation = { manifestChanged: false };
+/** The result of a run that did not reconcile, or that reconciled and had nothing to remove or report. */
+export const IN_STEP_WITH_MANIFEST: Reconciliation = {
+  removed: [],
+  keptForUnverifiedInstallSites: [],
+  manifestChanged: false,
+};
+const MANIFEST_CHANGED: Reconciliation = { ...IN_STEP_WITH_MANIFEST, manifestChanged: true };
 
 /**
- * Mark the skills in `resolvedSkillNames`, the manifest's resolved install
- * set, as owned by `manifest`. State is written only when an entry changes.
+ * Bring ownership at the manifest's project root in line with
+ * `resolvedSkillNames`, its resolved install set: remove what the manifest
+ * owns that is not in it, then claim what is. A dry run previews the
+ * removals and writes nothing.
  */
-export function reconcileOwnership(reconcile: {
-  readonly home: string;
-  readonly manifest: Manifest;
-  readonly resolvedSkillNames: ReadonlySet<string>;
-}): Reconciliation {
-  const { home, manifest, resolvedSkillNames } = reconcile;
+export function reconcileOwnership(
+  ctx: CommandContext,
+  manifest: Manifest,
+  resolvedSkillNames: ReadonlySet<string>,
+): Reconciliation {
+  const request = {
+    ctx,
+    projectRoot: manifest.projectRoot,
+    resolvedSkillNames,
+    isStillCurrent: () => !hasChangedOnDisk(manifest),
+  };
+  if (ctx.flags.dryRun) {
+    const preview = processDroppedEntries(readState(ctx.home), request);
+    return preview ? reconciliationOf(preview) : MANIFEST_CHANGED;
+  }
   return withStateLock(() => {
-    if (hasChangedOnDisk(manifest)) return { manifestChanged: true };
-    const state = readState(home);
-    const claimed = claimForManifest(state, manifest.projectRoot, resolvedSkillNames);
-    if (claimed !== state) writeState(claimed, home);
-    return IN_STEP_WITH_MANIFEST;
-  }, home);
+    // Removal runs on the unclaimed state, so that if the manifest stops
+    // being current partway through, what is written holds the removals
+    // already done and none of this run's claims. Claims go on last, and
+    // only once the manifest is confirmed a final time.
+    const before = readState(ctx.home);
+    const outcome = processDroppedEntries(before, request);
+    if (outcome === null) return MANIFEST_CHANGED;
+    const isConfirmed = !outcome.interrupted && request.isStillCurrent();
+    const after = isConfirmed
+      ? claimForManifest(outcome.state, manifest.projectRoot, resolvedSkillNames)
+      : outcome.state;
+    if (after !== before) writeState(after, ctx.home);
+    // A dropped line may have been the last use of its auto tap (§16.5).
+    if (outcome.state !== before) garbageCollectAutoTaps(after, ctx.home);
+    return { ...reconciliationOf(outcome), manifestChanged: !isConfirmed };
+  }, ctx.home);
 }
 
-/** The warnings a run owes the user when `.crewrc` changed underneath it. */
-export function staleManifestWarnings(reconciled: Reconciliation): string[] {
-  if (!reconciled.manifestChanged) return [];
-  return [
-    "warning: .crewrc changed, or could not be read again, while crew was installing, so crew stopped bringing the project in line with it. Check .crewrc and run `crew install` again.",
-  ];
+function reconciliationOf(outcome: RemovalOutcome): Reconciliation {
+  return {
+    removed: outcome.records,
+    keptForUnverifiedInstallSites: outcome.keptForUnverifiedInstallSites,
+    manifestChanged: outcome.interrupted,
+  };
 }

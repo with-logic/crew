@@ -44,6 +44,7 @@ describe("bare crew install as a setup step", () => {
       skipped: [],
       dry_run: false,
       manifest_path: join(project, ".crewrc"),
+      removed: [],
       no_agents: true,
     });
     expect(existsSync(join(home, "state.json"))).toBe(false);

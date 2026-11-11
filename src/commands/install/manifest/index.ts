@@ -11,6 +11,8 @@ import { CrewError } from "../../../core/errors.ts";
 import { loadManifestFor, MANIFEST_FILENAME, type Manifest } from "../../../manifest/index.ts";
 import { safePath } from "../../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
+import { IN_STEP_WITH_MANIFEST, type Reconciliation } from "./reconcile.ts";
+import { reportSettlement } from "./settle.ts";
 
 /** Flags that reinterpret references; meaningless without references on the command line. */
 const REFERENCE_FLAGS = ["recursive", "tap", "bundle", "skill"] as const;
@@ -42,26 +44,30 @@ export function manifestForBareInstall(ctx: CommandContext): Manifest {
 
 /**
  * The outcome of a bare install that has nothing to install (§9.2).
- * Decided before agents are selected or any source is touched, so it
- * succeeds on a machine with no agent at all.
+ * Installing is decided before agents are selected or any source is
+ * touched, so it needs no agent. `settled` is what removing the skills the
+ * manifest used to own did; the exit code is 1 when one of those removals
+ * aborted.
  */
 export function nothingToInstall(
   manifest: Manifest,
   ctx: CommandContext,
   human: string,
-  warnings: readonly string[] = [],
+  settled: Reconciliation = IN_STEP_WITH_MANIFEST,
 ): CommandOutput {
+  const settlement = reportSettlement(settled, ctx);
   return {
-    exitCode: 0,
-    human: [human],
-    stderr: warnings,
+    exitCode: settlement.hasAbortedRemoval ? 1 : 0,
+    human: [human, ...settlement.human],
+    stderr: settlement.warnings,
     json: {
       already_installed: [],
       records: [],
       skipped: [],
       dry_run: ctx.flags.dryRun,
       manifest_path: manifest.file,
-      ...(warnings.length > 0 ? { warnings } : {}),
+      removed: settled.removed,
+      ...(settlement.warnings.length > 0 ? { warnings: settlement.warnings } : {}),
     },
   };
 }
