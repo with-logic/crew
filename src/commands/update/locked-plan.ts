@@ -14,7 +14,6 @@ import { reexpandTaps, type TapReexpandRow } from "../../install/tap-reexpand/in
 import { updateOneEntry } from "../../install/update/entry.ts";
 import { rowFor } from "../../install/update/row.ts";
 import type { UpdateRow } from "../../install/update/types.ts";
-import { inheritManifestOwnership } from "../../manifest/index.ts";
 import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { type CollectionSubject, entryIdentity } from "../../state/collections/index.ts";
@@ -123,7 +122,7 @@ function runTargetBatch(
     }
   }
   for (const entry of reexpanded.added) {
-    current = upsertEntry(current, inheritManifestOwnership(entry, current));
+    current = upsertEntry(current, entry);
   }
   const sourceGone = reexpanded.sourceGone;
 

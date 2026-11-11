@@ -4,7 +4,7 @@
  */
 
 export { loadManifestFor, type Manifest } from "./load.ts";
-export { claimForManifest, inheritManifestOwnership } from "./ownership.ts";
+export { claimForManifest } from "./ownership.ts";
 export {
   MANIFEST_FILENAME,
   type ManifestEntry,

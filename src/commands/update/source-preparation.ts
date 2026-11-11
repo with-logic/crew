@@ -19,6 +19,8 @@ export function prepareUpdateSources(input: LockedPlanInput): PreparedSources {
     if (entry.scope === "project" && !hasUsableProjectRoot(entry)) continue;
     const tap = input.config.taps.find((candidate) => candidate.name === entry.source.tap);
     if (!tap || tap.kind === "path") continue;
+    // Manifest-owned entries are never updated (§9.2), so nothing is fetched for them.
+    if (entry.manifest_owned === true) continue;
     // Exact-SHA ordinary entries skip acquisition; tracked groups still scan to discover new children.
     if (
       entry.pinned &&

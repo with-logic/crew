@@ -30,6 +30,10 @@ export function updateOne(
     return { kind: "missing_project_root", root: String(entry.project_root ?? "(unknown)") };
   }
 
+  // §9.2: a project manifest decides what version of its skills a project
+  // has. An update, forced or not, never moves them out from under it.
+  if (entry.manifest_owned === true) return { kind: "skipped", reason: "managed by .crewrc" };
+
   const entryCwd = cwdForEntry(entry, fallbackCwd);
   if (entry.pinned && entry.ref !== null && /^[0-9a-f]{40}$/i.test(entry.ref) && !force) {
     return { kind: "skipped", reason: "pinned to exact SHA" };

@@ -108,6 +108,9 @@ export function reexpandTaps(
     // suddenly acquire every sibling on update.
     const tracksTap = members.some((m) => m.tracks_tap === true);
     if (!tracksTap) continue;
+    // §9.2: a manifest-owned group gains siblings through the manifest,
+    // not through update.
+    if (members.some((m) => m.manifest_owned === true)) continue;
 
     // Restrict by selection — re-expand only if the user selected a
     // member of THIS group, or named the tap itself. Membership is
