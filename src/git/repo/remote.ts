@@ -1,7 +1,6 @@
 /**
  * Asking a remote what a ref names right now, without cloning or fetching
- * (§9.3). Used to move a project's unpinned manifest lines to their latest
- * commit.
+ * (§9.3). This is a lookup only: it changes nothing locally or remotely.
  */
 
 import { CrewError } from "../../core/errors.ts";
@@ -18,6 +17,10 @@ import { type GitProcessError, runGit } from "../exec.ts";
  * unreachable remote is `source_unreachable`.
  */
 export function remoteCommitOf(url: string, ref: string | null): string | null {
+  // git reads these arguments as patterns. A ref name cannot contain a
+  // pattern character (git-check-ref-format), so one that does names
+  // nothing, and is not sent: `*` would ask for every ref the remote has.
+  if (ref !== null && /[*?[\\]/.test(ref)) return null;
   const tag = `refs/tags/${ref}`;
   // An annotated tag is listed twice: the tag object, and `^{}` for the commit it points at.
   const peeledTag = `${tag}^{}`;
@@ -37,7 +40,7 @@ function listRemote(url: string, names: readonly string[]): Map<string, string> 
   try {
     stdout = runGit(["ls-remote", "--", url, ...names]).stdout;
   } catch (err) {
-    // `runGit` only ever throws `GitProcessError`.
+    // `runGit` only ever throws `GitProcessError`, as in `cloneRepo`.
     const ge = err as GitProcessError;
     throw new CrewError(
       "source_unreachable",

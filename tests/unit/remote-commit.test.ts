@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { CrewError } from "../../src/core/errors.ts";
 import { runGit } from "../../src/git/exec.ts";
 import { remoteCommitOf } from "../../src/git/repo/remote.ts";
+import { displayUrl } from "../../src/refs/display-url.ts";
 import { commitAll, makeGitRepo, makeTempDir, tagRepo } from "../helpers/fixtures.ts";
 
 /** A repository with one commit; returns its directory, `file://` URL, and that commit. */
@@ -82,7 +83,15 @@ describe("remoteCommitOf", () => {
 
     expect(remoteCommitOf(url, "next")).toBeNull();
     expect(remoteCommitOf(url, "release")).toBeNull();
-    expect(remoteCommitOf(url, "rel*")).toBeNull();
+  });
+
+  test("a name with a pattern character names nothing, and is not sent to the remote", () => {
+    // Nothing is at this URL: asking it anything would be `source_unreachable`.
+    const url = `file://${join(makeTempDir("crew-remote-"), "missing")}`;
+
+    for (const name of ["rel*", "*", "ma?n", "[m]ain", "ma\\in"]) {
+      expect(remoteCommitOf(url, name)).toBeNull();
+    }
   });
 
   test("a ref the remote does not list, such as an abbreviated commit, is null", () => {
@@ -104,5 +113,6 @@ describe("remoteCommitOf", () => {
     expect(thrown).toBeInstanceOf(CrewError);
     expect((thrown as CrewError).code).toBe("source_unreachable");
     expect((thrown as CrewError).details).toEqual({ url });
+    expect((thrown as CrewError).message).toContain(`couldn't reach \`${displayUrl(url)}\``);
   });
 });
