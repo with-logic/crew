@@ -36,7 +36,7 @@ export interface StateEntry {
    * True when a project manifest at `project_root` accounts for this skill:
    * it is in the manifest's resolved install set, dependencies included (§9.2).
    */
-  readonly manifest?: boolean;
+  readonly manifest_owned?: boolean;
   /** For `scope === "project"` entries: the absolute install project root. */
   readonly project_root?: string;
 }

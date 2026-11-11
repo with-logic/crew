@@ -1491,11 +1491,11 @@ When any reference is given on the command line, no manifest is read.
 
 **Ownership.** A manifest owns the skills in its **resolved install set**:
 every skill its lines expand to, plus every dependency resolved with them (§9
-step 6). Ownership is recorded as `manifest: true` on the state entry (§11.1).
+step 6). Ownership is recorded as `manifest_owned: true` on the state entry (§11.1).
 
 After a bare install in which every declared skill succeeded, every
 project-scope entry at the manifest's directory whose name is in the resolved
-install set is marked `manifest: true`, under the state lock. This includes a
+install set is marked `manifest_owned: true`, under the state lock. This includes a
 skill that was already installed there by hand: once a manifest accounts for a
 skill, the manifest owns it. State is written only when some entry changes, so
 a repeat install with nothing new to claim does not rewrite `state.json`.
@@ -1506,9 +1506,12 @@ hand that is not in the resolved install set is never claimed, and entries at
 user scope or under another project root are never touched.
 
 When `crew update` re-expands a tap (§10.1.1) and installs a newly added
-sibling, the new entry is marked `manifest: true` if an entry from the same
+sibling, the new entry is marked `manifest_owned: true` if an entry from the same
 tap at the same install location already carries the flag: the newcomer came
-from the same manifest line.
+from the same manifest line. Inheritance follows the tap, not the wording of
+the line: if a manifest once took a whole repository and now names one skill
+from it, entries from that tap stay owned and so do siblings added later.
+What the manifest no longer resolves to is settled by the next bare install.
 
 ## 10. Update and autoupdate
 
@@ -2314,7 +2317,7 @@ an uninstall in one project never rewrites the other's. A skill with
 `explicit: false` and empty `required_by` is an autoremovable orphan —
 `crew uninstall --prune` removes it.
 
-**`manifest`** (boolean, optional; absent means false). True when a project
+**`manifest_owned`** (boolean, optional; absent means false). True when a project
 manifest at this entry's `project_root` accounts for the skill: it is in that
 manifest's resolved install set, dependencies included, not necessarily named
 on a line of its own (§9.2). Set by bare `crew install`. Only project-scope
@@ -3442,12 +3445,12 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-10 | §9.2 | Bare `crew install --scope user` is a `usage_error` and installs nothing; bare `crew install --scope project` behaves as bare `crew install`. |
 | C-RC-11 | §9.2 | Bare `crew install` with `--recursive`, `--tap`, `--bundle`, or `--skill` is a `usage_error` and installs nothing. |
 | C-RC-12 | §9.2 | `crew install <ref>` never reads a manifest: with an invalid `.crewrc` in the working directory it installs `<ref>` at the requested scope and succeeds. |
-| C-RC-13 | §9.2, §11.1 | After a bare `crew install`, every state entry in the manifest's resolved install set carries `manifest: true`, including a dependency no line names. |
+| C-RC-13 | §9.2, §11.1 | After a bare `crew install`, every state entry in the manifest's resolved install set carries `manifest_owned: true`, including a dependency no line names. |
 | C-RC-14 | §9.2 | Entries the manifest does not resolve to are not marked: a skill installed in the project by hand, the same skill at user scope, and the same skill under another project root. |
-| C-RC-15 | §9.2 | A skill installed in the project by hand gains `manifest: true` once the manifest declares it. |
-| C-RC-16 | §9.2 | No entry is marked when a declared reference fails to install, or on `--dry-run`. |
+| C-RC-15 | §9.2 | A skill installed in the project by hand gains `manifest_owned: true` once the manifest declares it. |
+| C-RC-16 | §9.2 | No entry is marked when a declared reference fails to resolve, when one skill of a multi-skill source fails validation, or on `--dry-run`. |
 | C-RC-17 | §9.2 | A repeat bare `crew install` with nothing new to claim leaves `state.json` byte-for-byte unchanged. |
-| C-RC-18 | §9.2, §10.1.1 | `manifest: true` survives `crew update`, and a sibling that update adds from a manifest-owned tap at that install location is marked too. |
+| C-RC-18 | §9.2, §10.1.1 | `manifest_owned: true` survives `crew update`, and a sibling that update adds from a manifest-owned tap at that install location is marked too, and only at that location. An explicit reinstall of an owned skill keeps the flag. |
 | C-RC-19 | §9.2, §10.1.1 | A sibling that `crew update` adds from a tap no manifest owns is not marked. |
 | C-RC-26 | §9.2 | A manifest path line that reaches outside the project through a symbolic link is `manifest_invalid`, with `details` naming its line; nothing from outside the project is installed. |
 

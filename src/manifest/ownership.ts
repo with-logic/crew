@@ -1,7 +1,7 @@
 /**
  * Manifest ownership in state (§9.2, §11.1).
  *
- * `manifest: true` on a project-scope state entry means a project manifest
+ * `manifest_owned: true` on a project-scope state entry means a project manifest
  * at that entry's `project_root` accounts for the skill: it is in the
  * manifest's resolved install set, which is every skill a manifest line
  * expands to plus every dependency resolved with them. It does not mean
@@ -16,22 +16,24 @@ function isInstalledAt(entry: StateEntry, projectRoot: string): boolean {
 }
 
 /**
- * Mark every entry at `projectRoot` whose name is in `resolved` — the
- * manifest's resolved install set — as manifest-owned. Returns `state`
+ * Mark every entry at `projectRoot` whose name is in the manifest's
+ * resolved install set as manifest-owned. Returns `state`
  * itself when nothing changes, so a caller can skip the write.
  */
 export function claimForManifest(
   state: StateFile,
   projectRoot: string,
-  resolved: ReadonlySet<string>,
+  resolvedSkillNames: ReadonlySet<string>,
 ): StateFile {
-  const isUnclaimed = (entry: StateEntry): boolean =>
-    isInstalledAt(entry, projectRoot) && resolved.has(entry.name) && entry.manifest !== true;
-  if (!state.installations.some(isUnclaimed)) return state;
+  const needsManifestClaim = (entry: StateEntry): boolean =>
+    isInstalledAt(entry, projectRoot) &&
+    resolvedSkillNames.has(entry.name) &&
+    entry.manifest_owned !== true;
+  if (!state.installations.some(needsManifestClaim)) return state;
   return {
     schema_version: 1,
     installations: state.installations.map((entry) =>
-      isUnclaimed(entry) ? { ...entry, manifest: true } : entry,
+      needsManifestClaim(entry) ? { ...entry, manifest_owned: true } : entry,
     ),
   };
 }
@@ -43,12 +45,14 @@ export function claimForManifest(
  * same manifest line.
  */
 export function inheritManifestOwnership(added: StateEntry, state: StateFile): StateEntry {
+  // §11.1: only project-scope entries can be manifest-owned.
+  if (added.scope !== "project") return added;
   const ownedSibling = state.installations.some(
     (entry) =>
-      entry.manifest === true &&
+      entry.manifest_owned === true &&
       entry.source.tap === added.source.tap &&
       entry.scope === added.scope &&
       entry.project_root === added.project_root,
   );
-  return ownedSibling ? { ...added, manifest: true } : added;
+  return ownedSibling ? { ...added, manifest_owned: true } : added;
 }

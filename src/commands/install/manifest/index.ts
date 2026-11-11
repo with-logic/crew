@@ -7,9 +7,9 @@
  * applied to every line.
  */
 
-import { CrewError } from "../../core/errors.ts";
-import { loadManifestFor, MANIFEST_FILENAME, type Manifest } from "../../manifest/index.ts";
-import type { CommandContext, CommandOutput } from "../types.ts";
+import { CrewError } from "../../../core/errors.ts";
+import { loadManifestFor, MANIFEST_FILENAME, type Manifest } from "../../../manifest/index.ts";
+import type { CommandContext, CommandOutput } from "../../types.ts";
 
 /** Flags that reinterpret references; meaningless without references on the command line. */
 const REFERENCE_FLAGS = ["recursive", "tap", "bundle", "skill"] as const;

@@ -1,6 +1,6 @@
 /**
  * Manifest ownership (§9.2, §11.1): which state entries a bare
- * `crew install` marks `manifest: true`, and which it leaves alone.
+ * `crew install` marks `manifest_owned: true`, and which it leaves alone.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -23,7 +23,7 @@ afterEach(() => {
 /** `name@location` for every manifest-owned entry, sorted. */
 function owned(home: string): string[] {
   return readState(home)
-    .installations.filter((entry) => entry.manifest === true)
+    .installations.filter((entry) => entry.manifest_owned === true)
     .map((entry) => `${entry.name}@${entry.project_root ?? "user"}`)
     .sort();
 }
@@ -86,6 +86,19 @@ describe("manifest ownership", () => {
     expect(owned(home)).toEqual([]);
   });
 
+  test("C-RC-16 nothing is claimed when one skill of a declared source fails validation", () => {
+    const home = makeCrewHome();
+    const project = makeProject(["./tools"]);
+    addLocalSkill(project, "tools", "gamma");
+    makeSkill(join(project, "tools"), "broken", "name: broken");
+
+    const run = crew(home, project, ["install"]);
+
+    expect(run.code).toBe(1);
+    expect(readState(home).installations.map((entry) => entry.name)).toEqual(["gamma"]);
+    expect(owned(home)).toEqual([]);
+  });
+
   test("C-RC-17 a repeat install with nothing new to claim does not rewrite state", () => {
     const home = makeCrewHome();
     const project = makeProject([makeSkillRepo(["alpha"])]);
@@ -110,6 +123,37 @@ describe("manifest ownership", () => {
     expect(crew(home, project, ["update"]).code).toBe(0);
 
     expect(owned(home)).toEqual([`alpha@${project}`, `beta@${project}`]);
+  });
+
+  test("C-RC-18 a sibling an update adds is owned only where the manifest owns the tap", () => {
+    const home = makeCrewHome();
+    const repo = makeSkillRepo(["alpha"]);
+    const project = makeProject([repo]);
+    const other = makeProject([]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    expect(crew(home, other, ["install", "--scope", "project", repo]).code).toBe(0);
+    const repoDir = repo.slice("file://".length);
+    makeSkill(repoDir, "beta", skillFrontmatter({ name: "beta" }));
+    commitAll(repoDir, "adds beta");
+
+    expect(crew(home, project, ["update"]).code).toBe(0);
+
+    expect(readState(home).installations.filter((entry) => entry.name === "beta")).toHaveLength(2);
+    expect(owned(home)).toEqual([`alpha@${project}`, `beta@${project}`]);
+  });
+
+  test("C-RC-18 an explicit reinstall of an owned skill keeps it owned", () => {
+    const home = makeCrewHome();
+    const project = makeProject(["./tools/gamma"]);
+    addLocalSkill(project, "tools", "gamma");
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    const hashBefore = readState(home).installations[0]?.content_hash;
+    writeFileSync(join(project, "tools", "gamma", "notes.md"), "changed\n");
+
+    expect(crew(home, project, ["install", "--scope", "project", "./tools/gamma"]).code).toBe(0);
+
+    expect(readState(home).installations[0]?.content_hash).not.toBe(hashBefore);
+    expect(owned(home)).toEqual([`gamma@${project}`]);
   });
 
   test("C-RC-19 a skill an update adds from a source no manifest owns is not owned", () => {
