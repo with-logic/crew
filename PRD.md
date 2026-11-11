@@ -1421,7 +1421,11 @@ lines is valid and declares no skills.
 - A tap source (§8.3) — a bare skill name, a tap-qualified name, or a tap
   name. Its meaning depends on the taps each machine has configured.
 - An absolute path, or a path starting with `~`.
-- A relative path that resolves outside the manifest's directory.
+- A relative path that resolves outside the manifest's directory. The check
+  is physical as well as lexical: a path that names a location inside the
+  directory but reaches outside it through a symbolic link is rejected. A
+  path that does not exist cannot be checked this way and is reported by the
+  install flow as a missing source.
 - A line that is not a valid reference under §8.4.
 - A line identical, after trimming, to an earlier reference line.
 
@@ -1461,8 +1465,8 @@ agents are selected, so it holds on a machine with no active agent.
 
 A bare install is always project scope. `--scope user` with no references is a
 `usage_error`; `--scope project` is accepted and redundant. Flags that change
-how a reference is interpreted (`--recursive`) are a `usage_error` on a bare
-install, because a manifest must mean the same thing however it is invoked.
+how a reference is interpreted (`--recursive`, `--tap`, `--bundle`, `--skill`)
+are a `usage_error` on a bare install, because a manifest must mean the same thing however it is invoked.
 `--agent`, `--dry-run`, `--force`, `--json`, `--quiet`, and `--verbose` behave
 as on any install. The `--json` result carries a `manifest` field holding the
 manifest's absolute path.
@@ -3390,8 +3394,9 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-08 | §9.2 | A directory named `.crewrc` is not a manifest. A symbolic link named `.crewrc` is not a manifest, and its target's contents never appear in output. |
 | C-RC-09 | §9.2, §13 | An invalid manifest fails with `manifest_invalid`, exit 4, with `details` carrying `file`, `line`, and `ref`; none of its lines is installed, including valid ones. |
 | C-RC-10 | §9.2 | Bare `crew install --scope user` is a `usage_error` and installs nothing; bare `crew install --scope project` behaves as bare `crew install`. |
-| C-RC-11 | §9.2 | Bare `crew install --recursive` is a `usage_error` and installs nothing. |
+| C-RC-11 | §9.2 | Bare `crew install` with `--recursive`, `--tap`, `--bundle`, or `--skill` is a `usage_error` and installs nothing. |
 | C-RC-12 | §9.2 | `crew install <ref>` never reads a manifest: with an invalid `.crewrc` in the working directory it installs `<ref>` at the requested scope and succeeds. |
+| C-RC-26 | §9.2 | A manifest path line that reaches outside the project through a symbolic link is `manifest_invalid`, with `details` naming its line; nothing from outside the project is installed. |
 
 ### 18.4 Worked examples
 

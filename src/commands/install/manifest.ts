@@ -8,8 +8,12 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
-import { findManifest, loadManifest, type Manifest } from "../../manifest/load.ts";
-import { MANIFEST_FILENAME } from "../../manifest/parse.ts";
+import {
+  findManifest,
+  loadManifest,
+  MANIFEST_FILENAME,
+  type Manifest,
+} from "../../manifest/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 
 /** Flags that reinterpret references; meaningless without references on the command line. */

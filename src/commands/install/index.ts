@@ -13,6 +13,7 @@ import { UNUSABLE_PROJECT_ROOT_WARNING } from "../../install/metadata-warning.ts
 import type { KindHint } from "../../install/resolve-ref/index.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
+import { safePath } from "../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
@@ -44,7 +45,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";
   const manifest = isBare ? manifestForBareInstall(ctx) : null;
   if (manifest?.entries.length === 0) {
-    return nothingToInstall(manifest, ctx, `${manifest.file} declares no skills.`);
+    return nothingToInstall(manifest, ctx, `${safePath(manifest.file)} declares no skills.`);
   }
   const kindHint = readKindHint(ctx);
   rejectRecursiveTapRefs(ctx);

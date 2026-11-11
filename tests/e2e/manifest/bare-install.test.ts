@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
@@ -28,6 +28,8 @@ afterEach(() => {
 
 const skillFile = (project: string, name: string): string =>
   join(project, ".claude", "skills", name, "SKILL.md");
+const markerFile = (project: string, name: string): string =>
+  join(project, ".claude", "skills", name, ".crew.json");
 
 describe("bare crew install", () => {
   test("C-RC-01 installs every declared skill at project scope under the manifest's directory", () => {
@@ -83,6 +85,11 @@ describe("bare crew install", () => {
     const home = makeCrewHome();
     const project = makeProject([makeSkillRepo(["alpha"])]);
     expect(crew(home, project, ["install"]).code).toBe(0);
+    const written = (): string[] =>
+      [join(home, "state.json"), skillFile(project, "alpha"), markerFile(project, "alpha")].map(
+        (file) => readFileSync(file, "utf8"),
+      );
+    const before = written();
 
     const again = crew(home, project, ["install", "--json"]);
 
@@ -95,6 +102,7 @@ describe("bare crew install", () => {
     expect(payload.already_installed.map((a) => a.name)).toEqual(["alpha"]);
     expect(payload.records).toEqual([]);
     expect(payload.manifest).toBe(join(project, ".crewrc"));
+    expect(written()).toEqual(before);
   });
 
   test("C-RC-04 a manifest that declares nothing installs nothing and succeeds", () => {
@@ -113,9 +121,14 @@ describe("bare crew install", () => {
     const detect = claudeCodeAdapter.detect;
     (claudeCodeAdapter as { detect: () => boolean }).detect = () => false;
     try {
-      const run = crew(makeCrewHome(), makeProject([]), ["install", "--json"]);
+      const project = makeProject([]);
+      const run = crew(makeCrewHome(), project, ["install", "--json"]);
       expect(run.code).toBe(0);
-      expect(JSON.parse(run.stdout)).toMatchObject({ records: [], already_installed: [] });
+      expect(JSON.parse(run.stdout)).toMatchObject({
+        records: [],
+        already_installed: [],
+        manifest: join(project, ".crewrc"),
+      });
     } finally {
       (claudeCodeAdapter as { detect: () => boolean }).detect = detect;
     }

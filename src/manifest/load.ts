@@ -6,9 +6,9 @@
  * higher up — a home directory's, say — never claims an unrelated project.
  */
 
-import { existsSync, lstatSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { MANIFEST_FILENAME, type ManifestEntry, parseManifest } from "./parse.ts";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { MANIFEST_FILENAME, type ManifestEntry, manifestInvalid, parseManifest } from "./parse.ts";
 
 /** A manifest read from disk. */
 export interface Manifest {
@@ -35,9 +35,27 @@ export function findManifest(cwd: string): string | null {
 
 /** Read and parse the manifest at `file`. Throws `manifest_invalid` per §9.2. */
 export function loadManifest(file: string): Manifest {
-  return {
-    file,
-    projectRoot: dirname(file),
-    entries: parseManifest({ text: readFileSync(file, "utf8"), file }),
-  };
+  const projectRoot = dirname(file);
+  const entries = parseManifest({ text: readFileSync(file, "utf8"), file });
+  for (const entry of entries) {
+    if (entry.source.type === "path" && escapesThroughSymlink(entry.source.path, projectRoot)) {
+      throw manifestInvalid(
+        { file, line: entry.line, ref: entry.ref },
+        `\`${entry.ref}\` reaches outside the project through a symbolic link`,
+      );
+    }
+  }
+  return { file, projectRoot, entries };
+}
+
+/**
+ * The parser's containment check is lexical; this one is physical. A path
+ * that stays inside the project by name can still leave it through a
+ * symlinked directory. A path that does not exist yet cannot escape, and
+ * the install flow reports it as missing.
+ */
+function escapesThroughSymlink(path: string, projectRoot: string): boolean {
+  if (!existsSync(path)) return false;
+  const fromRoot = relative(realpathSync(projectRoot), realpathSync(path));
+  return fromRoot === ".." || fromRoot.startsWith(`..${sep}`);
 }

@@ -9,7 +9,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
-import { MANIFEST_FILENAME } from "../../../src/manifest/parse.ts";
+import { MANIFEST_FILENAME } from "../../../src/manifest/index.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams } from "../../helpers/env.ts";
 import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
@@ -50,7 +50,7 @@ export function crew(home: string, cwd: string, args: readonly string[]) {
   return { code, stdout: captured.stdout(), stderr: captured.stderr() };
 }
 
-/** `name@scope[:project_root]` for every state entry, sorted. */
+/** `name@user` or `name@<project_root>` for every state entry, sorted. */
 export function installed(home: string): string[] {
   return readState(home)
     .installations.map((e) => `${e.name}@${e.scope === "user" ? "user" : e.project_root}`)

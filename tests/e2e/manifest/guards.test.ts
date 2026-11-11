@@ -48,10 +48,15 @@ describe("bare crew install guards", () => {
     });
   }
 
-  test("C-RC-08 a directory named .crewrc is not a manifest", () => {
-    const project = makeTempDir("crew-proj-");
-    mkdirSync(join(project, ".crewrc"));
-    expect(crew(makeCrewHome(), project, ["install"]).code).toBe(4);
+  test("C-RC-08 a directory named .crewrc is skipped in favor of the manifest above it", () => {
+    const home = makeCrewHome();
+    const project = makeProject(["./tools/gamma"]);
+    addLocalSkill(project, "tools", "gamma");
+    const nested = join(project, "packages");
+    mkdirSync(join(nested, ".crewrc"), { recursive: true });
+
+    expect(crew(home, nested, ["install"]).code).toBe(0);
+    expect(installed(home)).toEqual([`gamma@${project}`]);
   });
 
   test("C-RC-08 a symbolic link named .crewrc is not a manifest and is never read", () => {
@@ -103,15 +108,40 @@ describe("bare crew install guards", () => {
     expect(installed(home)).toEqual([`gamma@${project}`]);
   });
 
-  test("C-RC-11 flags that reinterpret references are a usage_error", () => {
-    const home = makeCrewHome();
-    const project = makeProject(["./tools/gamma"]);
-    addLocalSkill(project, "tools", "gamma");
+  for (const flag of ["--recursive", "--tap", "--bundle", "--skill"]) {
+    test(`C-RC-11 ${flag} reinterprets references, so it is a usage_error`, () => {
+      const home = makeCrewHome();
+      const project = makeProject(["./tools/gamma"]);
+      addLocalSkill(project, "tools", "gamma");
 
-    const run = crew(home, project, ["install", "--recursive"]);
+      const run = crew(home, project, ["install", flag]);
+
+      expect(run.code).toBe(4);
+      expect(run.stderr).toContain(flag);
+      expect(installed(home)).toEqual([]);
+    });
+  }
+
+  test("C-RC-26 a path line that leaves the project through a symlink is manifest_invalid", () => {
+    const home = makeCrewHome();
+    const outside = makeTempDir("crew-outside-");
+    addLocalSkill(outside, "", "stolen");
+    const project = makeProject(["./tools/gamma", "./linked/stolen"]);
+    addLocalSkill(project, "tools", "gamma");
+    symlinkSync(outside, join(project, "linked"));
+
+    const run = crew(home, project, ["install", "--json"]);
 
     expect(run.code).toBe(4);
-    expect(run.stderr).toContain("--recursive");
+    const { error } = JSON.parse(run.stdout) as {
+      error: { name: string; details: Record<string, unknown> };
+    };
+    expect(error.name).toBe("manifest_invalid");
+    expect(error.details).toEqual({
+      file: join(project, ".crewrc"),
+      line: 2,
+      ref: "./linked/stolen",
+    });
     expect(installed(home)).toEqual([]);
   });
 
