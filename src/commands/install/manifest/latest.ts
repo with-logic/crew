@@ -9,6 +9,7 @@
  */
 
 import { CrewError } from "../../../core/errors.ts";
+import { canonicalRepoUrl } from "../../../core/repo-url.ts";
 import type { Config } from "../../../core/types.ts";
 import { remoteCommitOf } from "../../../git/repo/remote.ts";
 import { computeAgentSet } from "../../../install/agent-set.ts";
@@ -53,16 +54,49 @@ export function hasAgentToInstallInto(config: Config, ctx: CommandContext): bool
 }
 
 /**
+ * Remote lookups already made by the command now running, by repository and ref.
+ * Null outside `sharingRemoteLookups`, where every lookup goes to the remote.
+ */
+let lookups: Map<string, string | null> | null = null;
+
+/**
+ * Run `work` with remote lookups shared: one command that installs several
+ * projects asks each remote about each ref once, however many of the
+ * projects name it. Nothing is remembered once `work` returns.
+ */
+export function sharingRemoteLookups<T>(work: () => T): T {
+  lookups = new Map();
+  try {
+    return work();
+  } finally {
+    lookups = null;
+  }
+}
+
+/** `remoteCommitOf`, answered from this command's earlier lookups when it can be. */
+function remoteCommit(url: string, ref: string | null): string | null {
+  // Spellings of one repository (a trailing `.git` or `/`) share an answer.
+  const key = JSON.stringify([canonicalRepoUrl(url), ref]);
+  const known = lookups?.get(key);
+  if (known !== undefined) return known;
+  const sha = remoteCommitOf(url, ref);
+  lookups?.set(key, sha);
+  return sha;
+}
+
+/**
  * `lock` with the entry of every line that takes one replaced by the commit
  * the line names on its remote now. A line whose ref the remote lists as
  * neither a branch nor a tag (an abbreviated commit) keeps what it had.
- * Contacts each line's remote; an unreachable one is `source_unreachable`.
+ * Each line's URL and ref is looked up on its remote, unless this command
+ * already looked that pair up (`sharingRemoteLookups`). An unreachable
+ * remote is `source_unreachable`.
  */
 export function latestLock(manifest: Manifest, lock: Lock): Lock {
   const latest = new Map(lock);
   for (const entry of manifest.entries) {
     if (!needsLockEntry(entry)) continue;
-    const sha = remoteCommitOf(entry.source.url, entry.source.ref);
+    const sha = remoteCommit(entry.source.url, entry.source.ref);
     if (sha !== null) latest.set(entry.ref, sha);
   }
   return latest;
