@@ -63,6 +63,16 @@ describe("removalOrder", () => {
     expect(order(chain, ["middle"])).toEqual(["top"]);
   });
 
+  test("a removable entry that depends on a kept one is still removed, and the kept one is not", () => {
+    const entries = [entry("base", ["middle"]), entry("middle", ["top", "mine"]), entry("top")];
+    const extra = entry("leaf", []);
+    expect(order([...entries, entry("side", ["leaf"]), extra]).sort()).toEqual([
+      "leaf",
+      "side",
+      "top",
+    ]);
+  });
+
   test("a staying entry does not hold back an unrelated one", () => {
     const entries = [entry("base", ["top"]), entry("top"), entry("other")];
     expect(order(entries, ["top"])).toEqual(["other"]);

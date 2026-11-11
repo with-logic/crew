@@ -43,28 +43,33 @@ export function removalOrder(
   }
   markDependenciesKept(kept, dependencies);
 
-  // Count, for each removable entry, the removable entries that require it.
-  // Every dependent of a removable entry is itself removable: were one
-  // kept, the entry would have been marked kept above.
+  // For each removable entry, how many removable entries still require it.
+  // Every dependent of a removable entry is itself removable (were one
+  // kept, the entry would have been marked kept above), but a removable
+  // entry may depend on a kept one, which has no count and is skipped.
   const removable = dropped.map((entry) => entry.name).filter((name) => !kept.has(name));
-  const waitingOn = new Map(removable.map((name) => [name, 0]));
+  const remainingDependents = new Map(removable.map((name) => [name, 0]));
+  const removableDependenciesOf = (name: string): string[] =>
+    (dependencies.get(name) as string[]).filter((dependency) =>
+      remainingDependents.has(dependency),
+    );
   for (const name of removable) {
-    for (const dependency of dependencies.get(name) as string[]) {
-      waitingOn.set(dependency, (waitingOn.get(dependency) as number) + 1);
+    for (const dependency of removableDependenciesOf(name)) {
+      remainingDependents.set(dependency, (remainingDependents.get(dependency) as number) + 1);
     }
   }
   const order: string[] = [];
   const placed = new Set<string>();
-  const ready = removable.filter((name) => waitingOn.get(name) === 0);
+  const ready = removable.filter((name) => remainingDependents.get(name) === 0);
   const place = (first: string): void => {
     const worklist = [first];
     for (let name = worklist.pop(); name !== undefined; name = worklist.pop()) {
       if (placed.has(name)) continue;
       placed.add(name);
       order.push(name);
-      for (const dependency of dependencies.get(name) as string[]) {
-        const left = (waitingOn.get(dependency) as number) - 1;
-        waitingOn.set(dependency, left);
+      for (const dependency of removableDependenciesOf(name)) {
+        const left = (remainingDependents.get(dependency) as number) - 1;
+        remainingDependents.set(dependency, left);
         if (left === 0) worklist.push(dependency);
       }
     }
