@@ -35,7 +35,7 @@ export const uninstallHelp: CommandHelp = {
     {
       flag: "--save",
       description:
-        "Take a line out of this project's `.crewrc` instead of naming a skill: give the reference exactly as the file writes it. Homecrew removes the line, then removes the skills it brought in. If that fails, `.crewrc` is left as it was.",
+        "Take a line out of this project's `.crewrc` instead of naming a skill. Give a git reference exactly as the file writes it; give a path relative to where you are, wherever the `.crewrc` is. Homecrew removes the line, then removes the skills it brought in. If that fails, `.crewrc` is left as it was.",
     },
     {
       flag: "--prune",

@@ -1529,7 +1529,8 @@ as if the line had been typed by hand.
   `manifest_invalid` and leaves the file untouched, or uncreated.
 - **All or nothing.** If the install that follows raises an error or exits
   non-zero, the manifest and its lockfile are put back exactly as they were
-  (or removed, if this run created them), and the run says so: in the message of the error it
+  (or removed, if this run created them), the lockfile even when the
+  manifest itself needed no edit, and the run says so: in the message of the error it
   raises, or otherwise in a line on stderr, with `saved` empty in the
   `--json` result. Skills that install had already put in place are not
   rolled back.
@@ -1552,7 +1553,7 @@ It does not take skill names or the other selectors of §7.4; a `<ref>` here
 is a manifest line.
 
 - **Matching.** A reference matches a line when it is the same text, after
-  trimming. A path is given relative to the current directory and matched in
+  trimming. So a git reference is given exactly as the manifest writes it. A path is given relative to the current directory and matched in
   the form the manifest writes it, relative to the manifest's directory.
   Different spellings of one source (`@acme/skills`, `gh:acme/skills`) are
   different lines.
@@ -1564,8 +1565,9 @@ is a manifest line.
 - **All or nothing.** As for `crew install --save`: if the install that
   follows raises an error or exits non-zero, including because a removal
   aborted (exit 1), the manifest and its lockfile are put back exactly as
-  they were and the run says so, in the error's message or in a line on
-  stderr, with `unsaved` empty in the `--json` result.
+  they were and the run says so: in the message of the error it raises, or,
+  when it returns a result, in a line on stderr with `unsaved` empty in the
+  `--json` result.
 - **Flags.** `--save` with no reference, with `--dry-run`, `--scope user`,
   `--all`, `--prune`, or `--agent` is a `usage_error`.
 - **Output.** That of the bare install, with human output beginning with a

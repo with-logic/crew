@@ -37,6 +37,7 @@
  */
 
 import { withTargetLocks } from "../../agents/target-lock/index.ts";
+import { withSourceMaintenanceLock } from "../../cli/maintenance.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
 import type { StateFile } from "../../core/types.ts";
@@ -57,7 +58,10 @@ import { uninstallTargetBases } from "./target-set.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
   // §9.2: `--save` edits the manifest and lets a bare install do the removing.
-  if (ctx.flags.extras["save"]) return unsaveThenInstall(ctx, installCommand);
+  // The install it runs stages skills, so it holds the lease `crew install` holds (§14).
+  if (ctx.flags.extras["save"]) {
+    return withSourceMaintenanceLock(ctx, () => unsaveThenInstall(ctx, installCommand));
+  }
   const all = Boolean(ctx.flags.extras["all"]);
   if (ctx.positional.length === 0 && !all) {
     throw new CrewError(

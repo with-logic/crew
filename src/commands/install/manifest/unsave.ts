@@ -48,7 +48,7 @@ export function unsaveThenInstall(
   if (ctx.positional.length === 0) {
     throw new CrewError(
       "usage_error",
-      `\`crew uninstall --save\` needs at least one reference to remove from \`${MANIFEST_FILENAME}\`, written as it appears there`,
+      `\`crew uninstall --save\` needs at least one reference to remove from \`${MANIFEST_FILENAME}\` — a git reference as the file writes it, or a path relative to where you are`,
     );
   }
   const { file, before } = manifestToEdit(ctx.cwd);
@@ -68,7 +68,7 @@ export function unsaveThenInstall(
   if (absent.length > 0) {
     throw new CrewError(
       "usage_error",
-      `${safePath(file)} has no line \`${absent[0]}\` — give the reference exactly as the file writes it`,
+      `${safePath(file)} has no line \`${absent[0]}\` — give a git reference exactly as the file writes it, or a path relative to where you are`,
       { file, refs: absent },
     );
   }

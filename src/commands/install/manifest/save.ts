@@ -72,7 +72,7 @@ export function rejectUnsavableFlags(ctx: CommandContext): void {
   if (ctx.flags.scopeGiven && ctx.flags.scope === "user") {
     throw new CrewError(
       "usage_error",
-      `\`--save\` records skills in \`${MANIFEST_FILENAME}\`, which installs at project scope — drop \`--scope user\``,
+      `\`--save\` edits \`${MANIFEST_FILENAME}\`, whose skills are installed at project scope — drop \`--scope user\``,
     );
   }
 }
@@ -120,9 +120,10 @@ export function installFromEditedManifest(
   const lockFile = join(dirname(file), LOCK_FILENAME);
   const lockBefore = textAt(lockFile);
   if (wrote) writeText(file, edit.text);
+  // The lockfile is put back even when the manifest needed no edit: the
+  // install that failed may still have rewritten it.
   const restore = (): void => {
-    if (!wrote) return;
-    putBack(file, before);
+    if (wrote) putBack(file, before);
     if (textAt(lockFile) !== lockBefore) putBack(lockFile, lockBefore);
   };
   const bare: CommandContext = {
