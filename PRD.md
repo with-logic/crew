@@ -108,6 +108,7 @@ crew uninstall <selector> [<selector>...] Remove installed skills from every age
 crew remove <selector> [<selector>...]    Alias for `crew uninstall`.
 crew rm <selector> [<selector>...]        Alias for `crew uninstall`.
 crew uninstall --all              Remove every installed skill at the target scope.
+crew uninstall --save <ref> [<ref>...] Remove references from the project manifest, then install from it (§9.2).
 crew update [<selector>...]       Update all installed skills, or only those selected.
 crew upgrade [<selector>...]      Alias for `crew update`.
 crew outdated [<selector>...]     Preview what `crew update` would change, without changing it.
@@ -1527,8 +1528,9 @@ as if the line had been typed by hand.
   project, an absolute path, or a reference carrying a credential fails with
   `manifest_invalid` and leaves the file untouched, or uncreated.
 - **All or nothing.** If the install that follows raises an error or exits
-  non-zero, the manifest is put back exactly as it was (or removed, if this
-  run created it), and the run says so: in the message of the error it
+  non-zero, the manifest and its lockfile are put back exactly as they were
+  (or removed, if this run created them), the lockfile even when the
+  manifest itself needed no edit, and the run says so: in the message of the error it
   raises, or otherwise in a line on stderr, with `saved` empty in the
   `--json` result. Skills that install had already put in place are not
   rolled back.
@@ -1541,6 +1543,37 @@ as if the line had been typed by hand.
   references added, or saying they were already listed. The `--json` result
   is that of the bare install plus `saved`: the array of references added,
   as written, empty when all were already listed.
+
+**Removing from the manifest (`crew uninstall --save`).**
+`crew uninstall --save <ref>...` (and its alias `crew remove --save`) is the
+reverse: it deletes each reference's line from the manifest governing the
+current directory and then runs a bare install from it, which removes the
+skills those lines brought in under the rules of "Removing dropped skills".
+It does not take skill names or the other selectors of §7.4; a `<ref>` here
+is a manifest line.
+
+- **Matching.** A reference matches a line when it is the same text, after
+  trimming. So a git reference is given exactly as the manifest writes it. A path is given relative to the current directory and matched in
+  the form the manifest writes it, relative to the manifest's directory.
+  Different spellings of one source (`@acme/skills`, `gh:acme/skills`) are
+  different lines.
+- **All named lines must exist.** If any reference is not a line of the
+  manifest, the command is a `usage_error` whose `details.refs` lists the
+  ones not found, with any credential in them redacted (§5.2), and nothing
+  is changed. With no manifest governing the
+  current directory it is a `usage_error` too; none is created.
+- **All or nothing.** As for `crew install --save`: if the install that
+  follows raises an error or exits non-zero, including because a removal
+  aborted (exit 1), the manifest and its lockfile are put back exactly as
+  they were and the run says so: in the message of the error it raises, or,
+  when it returns a result, in a line on stderr with `unsaved` empty in the
+  `--json` result.
+- **Flags.** `--save` with no reference, with `--dry-run`, `--scope user`,
+  `--all`, `--prune`, or `--agent` is a `usage_error`.
+- **Output.** That of the bare install, with human output beginning with a
+  line naming the manifest and the references removed, and `--json` carrying
+  `unsaved`: the array of references removed. The skills removed are in
+  `removed`, as for any bare install.
 
 **Ownership.** A manifest owns the skills in its **resolved install set**:
 every skill its lines expand to, plus every dependency resolved with them (§9
@@ -3788,6 +3821,9 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-52 | §9.2 | Under `--save`, a path given from a subdirectory is written relative to the manifest's directory and no manifest is created in the subdirectory. A reference already listed is not written again: the file is byte-for-byte unchanged and `saved` is empty. |
 | C-RC-53 | §9.2 | Under `--save`, a tap skill name, a path outside the project, an absolute path, a reference carrying a credential, or a malformed reference fails with `manifest_invalid` without modifying or creating `.crewrc`, and without printing the credential. When the install that follows fails (an unreachable source, a skill that fails validation), `.crewrc` is restored byte-for-byte, or removed if the run created it, and stderr says it was left as it was. |
 | C-RC-54 | §9.2 | `--save` with `--dry-run`, with `--scope user`, with `--recursive`, with `--latest`, or with no reference is a `usage_error` and leaves `.crewrc` unchanged. |
+| C-RC-55 | §9.2 | `crew uninstall --save <ref>` (and `crew remove --save <ref>`) deletes that line from the governing `.crewrc`, leaving its other lines and comments as they were, uninstalls the skill the line brought in, and drops its lockfile entry; `--json` carries the reference in `unsaved` and the skill in `removed`. A path given from a subdirectory matches the line written relative to the manifest. |
+| C-RC-56 | §9.2 | Under `crew uninstall --save`, a reference that is not a line of the manifest, including a skill name, is a `usage_error` listing it in `details.refs`, and neither `.crewrc` nor any skill changes even when other references given do match. A reference not found is redacted wherever the error repeats it. When the removal that follows aborts, the command exits 1, `.crewrc` and `.crewrc.lock` are restored byte-for-byte, and stderr says it was left as it was. |
+| C-RC-57 | §9.2 | `crew uninstall --save` with `--dry-run`, `--scope user`, `--all`, `--prune`, `--agent`, with no reference, or with no manifest governing the current directory is a `usage_error`; `.crewrc` is unchanged and none is created. |
 
 ### 18.4 Worked examples
 

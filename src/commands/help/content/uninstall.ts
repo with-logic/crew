@@ -1,8 +1,15 @@
+/**
+ * `crew help uninstall` content (§5.5): the uninstall command's synopsis,
+ * flags, and examples, including `--save`, which removes a line from a
+ * project manifest (§9.2).
+ */
+
 import type { CommandHelp } from "./types.ts";
 
 export const uninstallHelp: CommandHelp = {
   name: "uninstall",
-  synopsis: "crew uninstall <selector> [<selector>...] | crew uninstall --all",
+  synopsis:
+    "crew uninstall <selector> [<selector>...] | crew uninstall --all | crew uninstall --save <ref> [<ref>...]",
   summary: [
     "Remove an installed skill from every agent on your machine.",
     "A selector is usually a skill: name it directly (`pdf`) or tap-qualified (`anthropic/pdf`).",
@@ -24,6 +31,11 @@ export const uninstallHelp: CommandHelp = {
       flag: "--dry-run",
       description:
         "Show what would be removed (including what `--prune` would clean up) without touching anything.",
+    },
+    {
+      flag: "--save",
+      description:
+        "Take a line out of this project's `.crewrc` instead of naming a skill. Give a git reference exactly as the file writes it; give a path starting with `./` or `../` from where you are (`./tools/skills/notes`), wherever the `.crewrc` is. Homecrew removes the line, then removes the skills it brought in. If that fails, `.crewrc` is left as it was.",
     },
     {
       flag: "--prune",

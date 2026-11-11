@@ -4,12 +4,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { makeSkill, makeTempDir } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import { addLocalSkill, crew, installed, makeProject, makeSkillRepo } from "../helpers.ts";
+import { manifestOf, projectWithTwoSkills } from "./helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -18,8 +19,6 @@ beforeEach(() => {
 afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
-
-const manifestOf = (project: string): string => readFileSync(join(project, ".crewrc"), "utf8");
 
 describe("crew install --save that does not go through", () => {
   test.each([
@@ -91,6 +90,22 @@ describe("crew install --save that does not go through", () => {
     expect(result.saved).toEqual([]);
     expect(JSON.stringify(result.skipped)).toContain("invalid_skill");
     expect(manifestOf(project)).toBe("");
+  });
+
+  test("C-RC-53 a failed run that had nothing to add still puts the lockfile back", () => {
+    const home = makeCrewHome();
+    const { project, alpha, beta } = projectWithTwoSkills(home);
+    // beta's line is dropped but its skill cannot be removed, so the next install exits 1.
+    writeFileSync(join(project, ".crewrc"), `${alpha}\n`);
+    rmSync(join(project, ".claude", "skills", "beta", ".crew.json"));
+    const lockBefore = readFileSync(join(project, ".crewrc.lock"), "utf8");
+    expect(lockBefore).toContain(beta);
+
+    const run = crew(home, project, ["install", "--save", alpha]);
+
+    expect(run.code).toBe(1);
+    expect(manifestOf(project)).toBe(`${alpha}\n`);
+    expect(readFileSync(join(project, ".crewrc.lock"), "utf8")).toBe(lockBefore);
   });
 
   test.each([

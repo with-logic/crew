@@ -60,12 +60,13 @@ export function addManifestLines(text: string, refs: readonly string[]): Manifes
  */
 export function removeManifestLines(text: string, refs: readonly string[]): ManifestEdit {
   const wanted = singleLineRefs(refs);
+  const isWanted = new Set(wanted);
   const found = new Set<string>();
   const lines = text.split("\n");
   const kept: string[] = [];
   for (const [index, line] of lines.entries()) {
     const ref = referenceOn(line);
-    if (ref === null || !wanted.includes(ref)) {
+    if (ref === null || !isWanted.has(ref)) {
       kept.push(line);
       continue;
     }

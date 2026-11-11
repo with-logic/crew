@@ -39,7 +39,7 @@ describe("alias help lists the canonical flags", () => {
     });
   }
 
-  test("C-CLI-01b rendered `crew help remove` shows all four uninstall flags", () => {
+  test("C-CLI-01b rendered `crew help remove` shows every uninstall flag", () => {
     const home = makeCrewHome();
     const c = captureStreams();
     expect(runCli(["help", "remove"], { home, streams: c.streams })).toBe(0);
@@ -47,6 +47,7 @@ describe("alias help lists the canonical flags", () => {
     expect(out).toContain("--scope");
     expect(out).toContain("--agent");
     expect(out).toContain("--prune");
+    expect(out).toContain("--save");
     expect(out).toContain("--force");
   });
 
