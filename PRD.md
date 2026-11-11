@@ -1594,6 +1594,28 @@ subpath if it has one (the ref-first form of §8.4). It names the same
 repository and subpath as the line, with the commit in place of whatever ref
 the line carried.
 
+**Reading during a bare install.** A bare `crew install` (§9.2) reads the
+lockfile beside the manifest it found, if there is one. Whatever is at that
+path must be a regular file or nothing: a symbolic link, a directory, or
+anything else there fails with `manifest_invalid` before any skill is
+installed, as does a lockfile that breaks the format, including when the
+manifest declares no skills. Homecrew does not read a lockfile through a
+link.
+
+- A manifest line that has a lock entry is installed in its pinned form, so
+  it installs the recorded commit whatever its branch or tag has moved to
+  since, including on a machine that has never installed it.
+- A line without an entry is installed as written.
+- An entry that does not apply is ignored: one for a reference the manifest
+  does not contain, and one for a line that is already pinned to a full
+  commit.
+- Because the pinned form names a different commit than the one installed,
+  an entry whose commit has changed — after pulling a commit that updated the
+  lockfile, say — moves the installed skill to the new commit under §5.4.
+
+`crew update` does not read the lockfile; it leaves manifest-owned skills
+alone (§9.2, "Updates").
+
 **Invalid lockfiles.** A lockfile that breaks any rule above fails with
 `manifest_invalid` (§13). The message names the lockfile and the 1-based line
 number, and `details` carries `file` and `line`. For an unrecognized first
@@ -3549,6 +3571,10 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-35 | §9.2, §13 | With no active agent, bare `crew install --agent <name>` on a manifest that declares at least one skill fails with `no_agents`, exit 4. |
 | C-RC-36 | §9.2, §16.6 | When every declared skill is already installed and its tap's local clone is present, bare `crew install` exits 0 even though the git remote can no longer be reached. |
 | C-RC-37 | §9.2 | When one declared source is unreachable, bare `crew install` fails with `source_unreachable`, exit 5, and installs none of the manifest's other skills. |
+| C-RC-38 | §9.3 | A manifest line with a lock entry is installed at the entry's commit even though its source has since moved; a line with no entry is installed as written. |
+| C-RC-39 | §9.3, §5.4 | When a lock entry's commit changes, the next bare `crew install` moves the installed skill to that commit. |
+| C-RC-40 | §9.3 | A lock entry for a reference the manifest does not contain, or for a line already pinned to a full commit, is ignored. |
+| C-RC-41 | §9.3, §13 | A malformed lockfile, or a symbolic link or directory at the lock path, fails a bare `crew install` with `manifest_invalid` and `details` naming the lockfile, before anything is installed, including when the manifest declares nothing; what is at the lock path is left as it was. |
 
 ### 18.4 Worked examples
 
