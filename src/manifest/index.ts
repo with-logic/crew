@@ -15,6 +15,7 @@ export {
 } from "./lock.ts";
 export { claimForManifest, isManifestOwned } from "./ownership.ts";
 export {
+  isOutside,
   MANIFEST_FILENAME,
   type ManifestEntry,
   type ManifestInput,
