@@ -14,8 +14,8 @@
  *      same relative path it has by name. If a symbolic link is crossed on
  *      the way, the directory may be the user-scope one, another project's,
  *      or one recorded under another crew home.
- *   4. It must be a different directory on disk from the agent's user-scope
- *      install of that skill, judged by device and inode. A project rooted
+ *   4. It must be a different directory on disk from every agent's
+ *      user-scope install of that skill, judged by device and inode. A project rooted
  *      at the home directory shares that path with no link involved, and a
  *      bind mount shares the directory under a different path.
  *
@@ -32,7 +32,7 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { baseFor } from "../../../../agents/adapter.ts";
-import { agentByName } from "../../../../agents/registry.ts";
+import { ALL_AGENTS, agentByName } from "../../../../agents/registry.ts";
 import type { StateEntry } from "../../../../core/types.ts";
 import { isOutside } from "../../../../manifest/index.ts";
 import { NAME_PATTERN } from "../../../../refs/parse.ts";
@@ -60,9 +60,20 @@ export function areProjectInstallPathsSafeToRemove(entry: ProjectEntry): boolean
     if (isOutside(root, dir) || realpathSync(dir) !== expectedPhysicalDir) {
       return false;
     }
-    if (isSameDirectory(dir, join(baseFor(adapter, "user", root), entry.name))) return false;
+    if (isSomeUserScopeInstall(dir, entry.name, root)) return false;
   }
   return true;
+}
+
+/**
+ * True when `dir` is the same directory on disk as any agent's user-scope
+ * install of `skillName` — not only the agent the entry records, since
+ * several agents share one user-scope skills directory (§7.2).
+ */
+function isSomeUserScopeInstall(dir: string, skillName: string, root: string): boolean {
+  return ALL_AGENTS.some((agent) =>
+    isSameDirectory(dir, join(baseFor(agent, "user", root), skillName)),
+  );
 }
 
 /**

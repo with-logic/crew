@@ -1512,8 +1512,9 @@ lists exactly the references this run read. That is checked again once the
 target locks removal needs are held, and again immediately before each
 deletion. If
 `.crewrc` has changed — or can no longer be read or parsed — the run stops
-reconciling at that point: it claims nothing and removes nothing if it had
-not started, and removes nothing further if it had. It reports a warning on
+reconciling at that point: it removes nothing if it had not started and
+nothing further if it had, and in either case it claims nothing. Claims are
+recorded last, after the manifest has been confirmed a final time. It reports a warning on
 stderr and in the `warnings` array of the `--json` result, and leaves its
 exit code unchanged.
 The next bare install reconciles against the current manifest. A run must
@@ -1571,7 +1572,7 @@ so a later bare install removes it once the reason is gone:
     from the project root without crossing a symbolic link. A project skills
     directory that is a link may be the user-scope directory, another
     project's, or one recorded under another crew home.
-  - That directory is not the same directory on disk as the agent's
+  - That directory is not the same directory on disk as any agent's
     user-scope directory for the skill, judged by device and inode rather
     than by path. A project rooted at the home directory shares that path
     with no link involved, and a bind mount shares the directory under a

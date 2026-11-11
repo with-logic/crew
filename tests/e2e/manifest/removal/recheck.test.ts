@@ -11,7 +11,14 @@ import { readState } from "../../../../src/state/load.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { makeTempDir } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
-import { crew, makeProject, makeSkillRepo, skillDir, writeManifest } from "../helpers.ts";
+import {
+  crew,
+  makeProject,
+  makeSkillRepo,
+  ownedNames,
+  skillDir,
+  writeManifest,
+} from "../helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -51,6 +58,7 @@ test("C-RC-33 a manifest replaced partway through the removals stops them there"
   const left = ["alpha", "beta"].filter((name) => existsSync(skillDir(project, name)));
   expect(left).toHaveLength(1);
   expect(readState(home).installations.map((entry) => entry.name)).toEqual(left);
+  expect(ownedNames(home)).toEqual(left);
 });
 
 test("C-RC-30 a directory that becomes a link after the pre-checks is still not deleted", () => {

@@ -103,4 +103,26 @@ describe("a manifest that changes during the run", () => {
     expect(installed(home)).toEqual([`alpha@${project}`, `beta@${project}`]);
     expect(ownedNames(home)).toEqual(["alpha"]);
   });
+
+  test("C-RC-31 a hand-installed skill a stale manifest named is not claimed when that manifest is replaced", () => {
+    const home = makeCrewHome();
+    const alphaRepo = makeSkillRepo(["alpha"]);
+    const betaRepo = makeSkillRepo(["beta"]);
+    const project = makeProject([betaRepo]);
+    expect(
+      runCli(["install", "--scope", "project", alphaRepo], {
+        home,
+        cwd: project,
+        streams: quietStreams(),
+      }),
+    ).toBe(0);
+    // The manifest this run reads lists alpha as well; by the time it reconciles, it does not.
+    writeManifest(project, [alphaRepo, betaRepo]);
+
+    const run = installWhileManifestBecomes(home, project, [betaRepo]);
+
+    expect(run.stderr).toContain("crew stopped reconciling");
+    expect(installed(home)).toEqual([`alpha@${project}`, `beta@${project}`]);
+    expect(ownedNames(home)).toEqual([]);
+  });
 });

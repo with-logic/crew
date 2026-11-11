@@ -32,7 +32,7 @@ export interface RemovalOutcome {
 }
 
 /** What to remove, and the conditions it is removed under. */
-export interface RemovalRequest {
+interface RemovalRequest {
   readonly ctx: CommandContext;
   readonly projectRoot: string;
   /** Names in the manifest's resolved install set; everything else owned there is dropped. */
@@ -49,7 +49,9 @@ export interface RemovalRequest {
 /**
  * Uninstall the dropped entries at the project root. On a normal run this
  * removes skill directories; on a dry run `removeOne` only previews.
- * Returns null, having changed nothing, when the request is no longer current.
+ * Returns null, having changed nothing, when the request was already stale
+ * before the sweep started. If it goes stale partway through, the outcome
+ * is `interrupted` and holds the removals completed up to that point.
  */
 export function processDroppedEntries(
   state: StateFile,

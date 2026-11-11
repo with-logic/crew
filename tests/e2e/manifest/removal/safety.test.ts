@@ -164,4 +164,17 @@ describe("removal safety", () => {
     expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
     expect(ownedNames(home)).toEqual(["alpha"]);
   });
+
+  test("C-RC-25 one skill that cannot be removed does not hold back an unrelated one", () => {
+    const home = makeCrewHome();
+    const project = makeProject([makeSkillRepo(["alpha"]), makeSkillRepo(["beta"])]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    rmSync(join(skillDir(project, "alpha"), ".crew.json"));
+    writeManifest(project, []);
+
+    expect(crew(home, project, ["install"]).code).toBe(1);
+
+    expect(installed(home)).toEqual([`alpha@${project}`]);
+    expect(existsSync(skillDir(project, "beta"))).toBe(false);
+  });
 });

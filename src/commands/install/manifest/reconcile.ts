@@ -8,6 +8,7 @@
  * what the other had just claimed.
  */
 
+import type { CrewErrorName } from "../../../core/errors.ts";
 import { garbageCollectAutoTaps } from "../../../maintenance/auto-taps.ts";
 import { claimForManifest, loadManifestFor, type Manifest } from "../../../manifest/index.ts";
 import { readState, writeState } from "../../../state/load.ts";
@@ -66,11 +67,19 @@ export function reconcileOwnership(
     return preview ? reconciliationOf(preview) : MANIFEST_UNCONFIRMED;
   }
   return withStateLock(() => {
+    // Removal runs on the unclaimed state, so that if the manifest stops
+    // being current partway through, what is written holds the removals
+    // already done and none of this run's claims. Claims go on last, and
+    // only once the manifest is confirmed a final time.
     const before = readState(ctx.home);
-    const claimed = claimForManifest(before, manifest.projectRoot, resolvedSkillNames);
-    const outcome = processDroppedEntries(claimed, request);
+    const outcome = processDroppedEntries(before, request);
     if (outcome === null) return MANIFEST_UNCONFIRMED;
-    if (outcome.state !== before) writeState(outcome.state, ctx.home);
+    const isConfirmed = !outcome.interrupted && request.isStillCurrent();
+    const after = isConfirmed
+      ? claimForManifest(outcome.state, manifest.projectRoot, resolvedSkillNames)
+      : outcome.state;
+    if (after !== before) writeState(after, ctx.home);
+    if (!isConfirmed) return { ...reconciliationOf(outcome), manifestUnconfirmed: true };
     // A dropped line may have been the last use of its auto tap (§16.5).
     if (outcome.records.length > 0) garbageCollectAutoTaps(outcome.state, ctx.home);
     return reconciliationOf(outcome);
@@ -111,7 +120,7 @@ export function reconciliationWarnings(reconciled: Reconciliation): string[] {
 }
 
 /** The uninstall safety checks `--force` overrides (§7.4); it does not override filesystem errors (§13). */
-const FORCE_OVERRIDES: ReadonlySet<string> = new Set([
+const FORCE_OVERRIDES: ReadonlySet<string> = new Set<CrewErrorName>([
   "untracked_directory",
   "inconsistent_marker",
   "not_installed_here",
