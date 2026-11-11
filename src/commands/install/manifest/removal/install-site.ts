@@ -29,16 +29,17 @@
  * path can promise.
  */
 
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { lstatSync, realpathSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { baseFor } from "../../../../agents/adapter.ts";
 import { ALL_AGENTS, agentByName } from "../../../../agents/registry.ts";
 import type { StateEntry } from "../../../../core/types.ts";
 import { isOutside } from "../../../../manifest/index.ts";
 import { NAME_PATTERN } from "../../../../refs/parse.ts";
+import { hasUsableProjectRoot } from "../../../../state/validation.ts";
 
-/** A project-scope entry: its `project_root` is known to be present. */
-export type ProjectEntry = StateEntry & {
+/** A project-scope entry of `state.json`: its `project_root` is present. */
+export type ProjectStateEntry = StateEntry & {
   readonly scope: "project";
   readonly project_root: string;
 };
@@ -46,8 +47,10 @@ export type ProjectEntry = StateEntry & {
 /**
  * True when every install directory for `entry` passes the checks above. A directory that does not exist has nothing in it to protect.
  */
-export function areProjectInstallPathsSafeToRemove(entry: ProjectEntry): boolean {
+export function areProjectInstallPathsSafeToRemove(entry: ProjectStateEntry): boolean {
   if (!NAME_PATTERN.test(entry.name) || entry.agents.length === 0) return false;
+  // §11.1: a root that is not a usable absolute path authorizes nothing.
+  if (!hasUsableProjectRoot(entry)) return false;
   const root = entry.project_root;
   const physicalRoot = realpathSync(root);
   for (const agentName of entry.agents) {
@@ -55,7 +58,9 @@ export function areProjectInstallPathsSafeToRemove(entry: ProjectEntry): boolean
     const projectBase = adapter ? baseFor(adapter, "project", root) : "";
     if (!adapter || projectBase === "") return false;
     const dir = join(projectBase, entry.name);
-    if (!existsSync(dir)) continue;
+    const presence = probe(dir);
+    if (presence === "absent") continue;
+    if (presence === "unknown") return false;
     const expectedPhysicalDir = join(physicalRoot, relative(root, dir));
     if (isOutside(root, dir) || realpathSync(dir) !== expectedPhysicalDir) {
       return false;
@@ -63,6 +68,20 @@ export function areProjectInstallPathsSafeToRemove(entry: ProjectEntry): boolean
     if (isSomeUserScopeInstall(dir, entry.name, root)) return false;
   }
   return true;
+}
+
+/**
+ * Whether something is at `path`. Only a path that verifiably does not
+ * exist is "absent"; one that cannot be inspected is "unknown", so a
+ * permission error is never mistaken for an empty spot.
+ */
+function probe(path: string): "present" | "absent" | "unknown" {
+  try {
+    lstatSync(path);
+    return "present";
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "ENOENT" ? "absent" : "unknown";
+  }
 }
 
 /**

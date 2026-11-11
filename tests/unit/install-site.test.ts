@@ -3,14 +3,14 @@
  * directories crew may delete. Real directories, links, and adapters.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, renameSync, symlinkSync } from "node:fs";
+import { chmodSync, mkdirSync, renameSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../src/agents/claude-code.ts";
 import { codexAdapter } from "../../src/agents/codex.ts";
 import {
   areProjectInstallPathsSafeToRemove,
-  type ProjectEntry,
-} from "../../src/commands/install/manifest/removal/install-site.ts";
+  type ProjectStateEntry,
+} from "../../src/commands/install/manifest/removal/index.ts";
 import { withOriginalAdapter } from "../helpers/env.ts";
 import { makeTempDir } from "../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../helpers/scoped-install.ts";
@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 /** A project-scope entry for `name` under `project`, installed for `agents`. */
-function entry(name: string, agents: readonly string[] = ["claude-code"]): ProjectEntry {
+function entry(name: string, agents: readonly string[] = ["claude-code"]): ProjectStateEntry {
   return {
     name,
     source: { tap: "t", path: name },
@@ -91,11 +91,38 @@ describe("areProjectInstallPathsSafeToRemove", () => {
     }
   });
 
-  test("a name that is not a single skill-name segment is not safe", () => {
-    mkdirSync(join(project, "victim"));
-    for (const name of ["../../victim", "a/b", "", "Alpha"]) {
+  test.each(["../../victim", "a/b", "", "Alpha"])(
+    "a name that is not a single skill-name segment is not safe: %p",
+    (name) => {
+      mkdirSync(join(project, "victim"));
       expect(areProjectInstallPathsSafeToRemove(entry(name))).toBe(false);
+    },
+  );
+
+  test("a project root that is not an absolute path is not safe", () => {
+    mkdirSync(installDir("alpha"), { recursive: true });
+    for (const root of [".", "relative/dir", ""]) {
+      expect(areProjectInstallPathsSafeToRemove({ ...entry("alpha"), project_root: root })).toBe(
+        false,
+      );
     }
+  });
+
+  test("a directory that cannot be inspected is not safe: unreadable is not the same as absent", () => {
+    mkdirSync(installDir("alpha"), { recursive: true });
+    chmodSync(join(project, ".claude"), 0);
+    try {
+      expect(areProjectInstallPathsSafeToRemove(entry("alpha"))).toBe(false);
+    } finally {
+      chmodSync(join(project, ".claude"), 0o700);
+    }
+  });
+
+  test("an install directory that is simply outside the project, with no link involved, is not safe", () => {
+    const outside = makeTempDir("crew-outside-");
+    mkdirSync(join(outside, "alpha"));
+    (claudeCodeAdapter as { projectPath: (c: string) => string }).projectPath = () => outside;
+    expect(areProjectInstallPathsSafeToRemove(entry("alpha"))).toBe(false);
   });
 
   test("an entry with no agent, or an agent this build does not know, is not safe", () => {
