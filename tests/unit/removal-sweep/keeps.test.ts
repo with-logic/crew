@@ -105,4 +105,19 @@ describe("processDroppedEntries keeps", () => {
     expect(existsSync(join(elsewhere, "alpha", "SKILL.md"))).toBe(true);
     expect(existsSync(join(elsewhere, ".crew-target"))).toBe(false);
   });
+
+  test("a skill whose directory is absent under a linked skills directory, without writing a lock into it", () => {
+    const installed = installProject({ alpha: null }, ["alpha"]);
+    const { project } = installed;
+    const elsewhere = join(makeTempDir("crew-elsewhere-"), "skills");
+    renameSync(join(project, ".claude", "skills"), elsewhere);
+    rmSync(join(elsewhere, ".crew-target"), { force: true });
+    rmSync(join(elsewhere, "alpha"), { recursive: true });
+    symlinkSync(elsewhere, join(project, ".claude", "skills"));
+
+    const { outcome } = sweep(installed);
+
+    expect(outcome?.keptForUnverifiedInstallSites).toEqual(["alpha"]);
+    expect(existsSync(join(elsewhere, ".crew-target"))).toBe(false);
+  });
 });

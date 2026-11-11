@@ -60,10 +60,10 @@ describe("removing dropped skills", () => {
 
     expect(run.code).toBe(0);
     expect(run.stdout).toContain("No longer required by .crewrc");
-    for (const name of ["alpha", "beta"]) {
-      expect(run.stdout).toContain(name);
-      expect(existsSync(skillDir(project, name))).toBe(false);
-    }
+    expect(run.stdout).toContain("alpha");
+    expect(run.stdout).toContain("beta");
+    expect(existsSync(skillDir(project, "alpha"))).toBe(false);
+    expect(existsSync(skillDir(project, "beta"))).toBe(false);
     expect(installed(home)).toEqual([]);
   });
 

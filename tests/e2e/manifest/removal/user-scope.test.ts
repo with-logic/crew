@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 describe("install sites that are also a user-scope install", () => {
-  test("C-RC-30 a project whose install path is the user-scope path itself keeps the user's skill", () => {
+  test("C-RC-23 a project whose install path is the user-scope path itself keeps the user's skill", () => {
     const home = makeCrewHome();
     const repo = makeSkillRepo(["alpha"]);
     const project = makeProject([repo]);
@@ -44,12 +44,15 @@ describe("install sites that are also a user-scope install", () => {
     const run = crew(home, project, ["install", "--force", "--json"]);
 
     expect(run.code).toBe(0);
-    expect((JSON.parse(run.stdout) as { removed: unknown[] }).removed).toEqual([]);
+    const result = JSON.parse(run.stdout) as { removed: unknown[]; warnings: string[] };
+    expect(result.removed).toEqual([]);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain("kept `alpha`");
     expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
     expect(installed(home)).toEqual([`alpha@${project}`, "alpha@user"]);
   });
 
-  test("C-RC-30 another agent's user-scope directory, reached by a second path, is recognized", () => {
+  test("C-RC-23 another agent's user-scope directory, reached by a second path, is recognized", () => {
     const home = makeCrewHome();
     const repo = makeSkillRepo(["alpha"]);
     const project = makeProject([repo]);

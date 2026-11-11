@@ -65,6 +65,12 @@ describe("areProjectInstallPathsSafeToRemove", () => {
     expect(areProjectInstallPathsSafeToRemove(entry("alpha"))).toBe(false);
   });
 
+  test("a linked skills directory is not safe even when the skill's own directory is absent", () => {
+    mkdirSync(join(project, ".claude"));
+    symlinkSync(makeTempDir("crew-elsewhere-"), skillsDir());
+    expect(areProjectInstallPathsSafeToRemove(entry("alpha"))).toBe(false);
+  });
+
   test("a skill directory that is itself a link is not safe, even to a place inside the project", () => {
     mkdirSync(installDir("real"), { recursive: true });
     symlinkSync(installDir("real"), installDir("alpha"));

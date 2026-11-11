@@ -11,8 +11,8 @@ import { CrewError } from "../../../core/errors.ts";
 import { loadManifestFor, MANIFEST_FILENAME, type Manifest } from "../../../manifest/index.ts";
 import { safePath } from "../../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
-import { IN_STEP_WITH_MANIFEST, type Reconciliation } from "./reconcile.ts";
-import { reportSettlement } from "./settle.ts";
+import { EMPTY_RECONCILIATION, type Reconciliation } from "./reconcile.ts";
+import { reportReconciliation } from "./report.ts";
 
 /** Flags that reinterpret references; meaningless without references on the command line. */
 const REFERENCE_FLAGS = ["recursive", "tap", "bundle", "skill"] as const;
@@ -45,29 +45,29 @@ export function manifestForBareInstall(ctx: CommandContext): Manifest {
 /**
  * The outcome of a bare install that has nothing to install (§9.2).
  * Installing is decided before agents are selected or any source is
- * touched, so it needs no agent. `settled` is what removing the skills the
- * manifest used to own did; the exit code is 1 when one of those removals
+ * touched, so it needs no agent. `reconciled` is what removing the skills
+ * the manifest used to own did; the exit code is 1 when one of those removals
  * aborted.
  */
 export function nothingToInstall(
   manifest: Manifest,
   ctx: CommandContext,
   human: string,
-  settled: Reconciliation = IN_STEP_WITH_MANIFEST,
+  reconciled: Reconciliation = EMPTY_RECONCILIATION,
 ): CommandOutput {
-  const settlement = reportSettlement(settled, ctx);
+  const report = reportReconciliation(reconciled, ctx);
   return {
-    exitCode: settlement.hasAbortedRemoval ? 1 : 0,
-    human: [human, ...settlement.human],
-    stderr: settlement.warnings,
+    exitCode: report.hasAbortedRemoval ? 1 : 0,
+    human: [human, ...report.human],
+    stderr: report.warnings,
     json: {
       already_installed: [],
       records: [],
       skipped: [],
       dry_run: ctx.flags.dryRun,
       manifest_path: manifest.file,
-      removed: settled.removed,
-      ...(settlement.warnings.length > 0 ? { warnings: settlement.warnings } : {}),
+      removed: reconciled.removed,
+      ...(report.warnings.length > 0 ? { warnings: report.warnings } : {}),
     },
   };
 }

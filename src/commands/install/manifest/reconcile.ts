@@ -1,13 +1,15 @@
 /**
- * Reconciling ownership after a bare `crew install` (§9.2): remove what the
- * manifest no longer accounts for, then claim what it resolved to.
+ * Bringing a project in line with its manifest after a bare `crew install`
+ * (§9.2, §9.3): remove what the manifest no longer accounts for, record the
+ * lockfile, then claim what the manifest resolved to.
  *
- * Both happen under one hold of the state lock, and only while the manifest
- * on disk is still the one this run installed from. Two overlapping installs
- * that read different versions of `.crewrc` would otherwise each sweep away
- * what the other had just claimed.
+ * All of it happens under one hold of the state lock, and only while the
+ * manifest on disk is still the one this run installed from. Two overlapping
+ * installs that read different versions of `.crewrc` would otherwise each
+ * sweep away what the other had just claimed.
  */
 
+import type { ResolvedSkill } from "../../../core/types.ts";
 import { garbageCollectAutoTaps } from "../../../maintenance/auto-taps.ts";
 import { claimForManifest, type Manifest } from "../../../manifest/index.ts";
 import { readState, writeState } from "../../../state/load.ts";
@@ -15,6 +17,7 @@ import { withStateLock } from "../../../state/lock.ts";
 import type { CommandContext } from "../../types.ts";
 import type { UninstallRecord } from "../../uninstall/core.ts";
 import { hasChangedOnDisk } from "./freshness.ts";
+import { recordLock } from "./lockfile.ts";
 import { processDroppedEntries, type RemovalOutcome } from "./removal/index.ts";
 
 /** What reconciling did. */
@@ -32,25 +35,30 @@ export interface Reconciliation {
   readonly manifestChanged: boolean;
 }
 
-/** The result of a run that did not reconcile, or that reconciled and had nothing to remove or report. */
-export const IN_STEP_WITH_MANIFEST: Reconciliation = {
+/** Nothing removed, kept, or found changed: also the result of a run that did not reconcile at all. */
+export const EMPTY_RECONCILIATION: Reconciliation = {
   removed: [],
   keptForUnverifiedInstallSites: [],
   manifestChanged: false,
 };
-const MANIFEST_CHANGED: Reconciliation = { ...IN_STEP_WITH_MANIFEST, manifestChanged: true };
+const MANIFEST_CHANGED: Reconciliation = { ...EMPTY_RECONCILIATION, manifestChanged: true };
 
 /**
- * Bring ownership at the manifest's project root in line with
- * `resolvedSkillNames`, its resolved install set: remove what the manifest
- * owns that is not in it, then claim what is. A dry run previews the
- * removals and writes nothing.
+ * Bring the project at the manifest's root in line with `resolved`, the
+ * skills the manifest resolved to. Call only when all of them have landed.
+ *
+ * In order: uninstall what the manifest owns that is no longer among them,
+ * record the lockfile, and mark them as owned. Each step runs only while
+ * `.crewrc` is still the manifest this run read. Claims come last so that a
+ * run which finds the manifest changed, at any earlier step, has claimed
+ * nothing. A dry run previews the removals and writes nothing.
  */
-export function reconcileOwnership(
+export function reconcileManifestInstalls(
   ctx: CommandContext,
   manifest: Manifest,
-  resolvedSkillNames: ReadonlySet<string>,
+  resolved: readonly ResolvedSkill[],
 ): Reconciliation {
+  const resolvedSkillNames = new Set(resolved.map((skill) => skill.name));
   const request = {
     ctx,
     projectRoot: manifest.projectRoot,
@@ -64,12 +72,15 @@ export function reconcileOwnership(
   return withStateLock(() => {
     // Removal runs on the unclaimed state, so that if the manifest stops
     // being current partway through, what is written holds the removals
-    // already done and none of this run's claims. Claims go on last, and
-    // only once the manifest is confirmed a final time.
+    // already done and none of this run's claims.
     const before = readState(ctx.home);
     const outcome = processDroppedEntries(before, request);
     if (outcome === null) return MANIFEST_CHANGED;
-    const isConfirmed = !outcome.interrupted && request.isStillCurrent();
+    // `recordLock` returns false, having written nothing, when it finds the
+    // manifest changed. It runs before the claims so that they are never
+    // recorded by a run that went on to detect a change.
+    const isConfirmed =
+      !outcome.interrupted && request.isStillCurrent() && recordLock(manifest, resolved);
     const after = isConfirmed
       ? claimForManifest(outcome.state, manifest.projectRoot, resolvedSkillNames)
       : outcome.state;

@@ -31,17 +31,18 @@ test("C-RC-33 a manifest replaced partway through the removals stops them there"
   const project = makeProject([repo]);
   expect(crew(home, project, ["install"]).code).toBe(0);
   writeManifest(project, []);
-  let stderr = "";
+  let stdout = "";
   let restored = false;
 
   // While the first of the two is being removed, the manifest lists them again.
-  const code = runCli(["install", "--verbose"], {
+  const code = runCli(["install", "--verbose", "--json"], {
     home,
     cwd: project,
     streams: {
-      stdout: () => {},
+      stdout: (chunk) => {
+        stdout += chunk;
+      },
       stderr: (chunk) => {
-        stderr += chunk;
         if (restored || !/removing (alpha|beta) /.test(chunk)) return;
         restored = true;
         writeManifest(project, [repo]);
@@ -51,9 +52,15 @@ test("C-RC-33 a manifest replaced partway through the removals stops them there"
 
   expect(restored).toBe(true);
   expect(code).toBe(0);
-  expect(stderr).toContain("crew stopped bringing the project in line");
   const left = ["alpha", "beta"].filter((name) => existsSync(skillDir(project, name)));
   expect(left).toHaveLength(1);
+  const gone = left[0] === "alpha" ? "beta" : "alpha";
+  const { removed, warnings } = JSON.parse(stdout) as {
+    removed: { name: string; failures: unknown[] }[];
+    warnings: string[];
+  };
+  expect(warnings.join("\n")).toContain("crew stopped bringing the project in line");
+  expect(removed).toMatchObject([{ name: gone, failures: [] }]);
   expect(readState(home).installations.map((entry) => entry.name)).toEqual(left);
   expect(ownedNames(home)).toEqual(left);
 });

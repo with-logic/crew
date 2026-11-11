@@ -20,8 +20,8 @@ import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest/index.ts";
 import { readLock, refsToInstall } from "./manifest/lockfile.ts";
-import { IN_STEP_WITH_MANIFEST } from "./manifest/reconcile.ts";
-import { reportSettlement, settleManifest } from "./manifest/settle.ts";
+import { EMPTY_RECONCILIATION, reconcileManifestInstalls } from "./manifest/reconcile.ts";
+import { reportReconciliation } from "./manifest/report.ts";
 import { renderInstall } from "./render/index.ts";
 
 /** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
@@ -52,9 +52,9 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     // and before anything is removed.
     readLock(manifest);
     // §9.2: declaring nothing still drops whatever the manifest used to own.
-    const settled = settleManifest(ctx, manifest, []);
+    const reconciled = reconcileManifestInstalls(ctx, manifest, []);
     const human = `${safePath(manifest.file)} declares no skills.`;
-    return nothingToInstall(manifest, ctx, human, settled);
+    return nothingToInstall(manifest, ctx, human, reconciled);
   }
   const kindHint = readKindHint(ctx);
   rejectRecursiveTapRefs(ctx);
@@ -124,12 +124,12 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   // skills removed, ownership and the lockfile recorded — only once
   // everything declared has landed.
   const everythingLanded = failed === 0;
-  const settled =
+  const reconciled =
     manifest && everythingLanded
-      ? settleManifest(ctx, manifest, result.resolved)
-      : IN_STEP_WITH_MANIFEST;
-  const settlement = reportSettlement(settled, ctx);
-  if (settlement.hasAbortedRemoval) exitCode = 1;
+      ? reconcileManifestInstalls(ctx, manifest, result.resolved)
+      : EMPTY_RECONCILIATION;
+  const reconciliation = reportReconciliation(reconciled, ctx);
+  if (reconciliation.hasAbortedRemoval) exitCode = 1;
 
   const human = [
     ...renderInstall(
@@ -144,10 +144,10 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       },
       ctx.style,
     ),
-    ...settlement.human,
+    ...reconciliation.human,
   ];
 
-  const warnings = [...discovery.warnings(), ...settlement.warnings];
+  const warnings = [...discovery.warnings(), ...reconciliation.warnings];
   return {
     exitCode,
     human,
@@ -157,7 +157,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       records: result.summary.records,
       skipped: result.skipped,
       dry_run: ctx.flags.dryRun,
-      ...(manifest ? { manifest_path: manifest.file, removed: settled.removed } : {}),
+      ...(manifest ? { manifest_path: manifest.file, removed: reconciled.removed } : {}),
       ...(warnings.length > 0 ? { warnings } : {}),
     },
   };

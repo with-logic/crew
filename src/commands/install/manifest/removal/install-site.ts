@@ -67,6 +67,12 @@ function passesInstallSiteChecks(entry: ProjectStateEntry): boolean {
     const adapter = agentByName(agentName);
     const projectBase = adapter ? baseFor(adapter, "project", root) : "";
     if (!adapter || projectBase === "") return false;
+    // The skills directory is checked even when the skill's own directory
+    // is absent: locking it writes into it, so it must be the project's own.
+    const expectedPhysicalBase = join(physicalRoot, relative(root, projectBase));
+    if (probe(projectBase) !== "absent" && realpathSync(projectBase) !== expectedPhysicalBase) {
+      return false;
+    }
     const dir = join(projectBase, entry.name);
     const presence = probe(dir);
     if (presence === "absent") continue;
