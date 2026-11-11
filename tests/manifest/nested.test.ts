@@ -125,14 +125,17 @@ describe("nestedManifestDirs", () => {
     expect(nestedManifestDirs(join(root, ".git"))).toEqual([]);
   });
 
-  test("passes over a tracked manifest that has been deleted from the work tree", () => {
+  test("lists a tracked manifest even after it is deleted from the work tree; the caller checks", () => {
     const root = makeRepo();
     addManifest(root, "packages/web");
     addManifest(root, "packages/api");
     commitAll(root, "manifests");
     rmSync(join(root, "packages/api"), { recursive: true });
 
-    expect(nestedManifestDirs(root)).toEqual([join(root, "packages/web")]);
+    expect(nestedManifestDirs(root)).toEqual([
+      join(root, "packages/api"),
+      join(root, "packages/web"),
+    ]);
   });
 
   test("is empty outside a git repository", () => {

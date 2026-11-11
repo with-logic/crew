@@ -10,8 +10,8 @@
  * own install location, lockfile, and ownership, and is processed once.
  */
 
-import { realpathSync } from "node:fs";
-import { join, relative } from "node:path";
+import { lstatSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { CrewError } from "../../../core/errors.ts";
 import {
   loadManifestFor,
@@ -42,10 +42,9 @@ export function installEveryProject(
 ): CommandOutput {
   const governing = loadManifestFor(ctx.cwd);
   const root = governing?.projectRoot ?? ctx.cwd;
-  const nested = nestedManifestDirs(root);
-  if (nested.length === 0) return installOne(ctx);
   // Every candidate is checked before any project is installed.
-  for (const dir of nested) requireOwnProject(root, dir);
+  const nested = nestedManifestDirs(root).filter((dir) => isOwnProject(root, dir));
+  if (nested.length === 0) return installOne(ctx);
   // The governing project first, then those beneath it in path order. An
   // error raised by one stops the run there; what earlier ones did stands.
   // Under `--latest`, projects that name the same source share one lookup of it.
@@ -61,24 +60,39 @@ export function installEveryProject(
 }
 
 /**
- * Refuse a candidate that is not a project of this repository in its own
- * right: a directory reached through a symbolic link, which may lie outside
- * the repository, or a `.crewrc` that is not a regular file, which the
- * single-project install would pass over in favor of a manifest further up.
+ * Whether the candidate `dir`, beneath `root`, is a project of this
+ * repository in its own right.
+ *
+ * False when it is simply gone: git also lists a tracked manifest that has
+ * been deleted from the work tree. Raises `manifest_invalid` when something
+ * is there that must not be applied: a directory on the way that is a
+ * symbolic link, which may lead out of the repository, or a `.crewrc` that
+ * is not a regular file, which the single-project install would pass over
+ * in favor of a manifest further up.
+ *
+ * Each directory from `root` down is examined without following links, so
+ * a link is seen as a link whatever it points at, or at nothing.
  */
-function requireOwnProject(root: string, dir: string): void {
+function isOwnProject(root: string, dir: string): boolean {
   const file = join(dir, MANIFEST_FILENAME);
-  const isPhysicallyBeneath = realpathSync(dir) === join(realpathSync(root), relative(root, dir));
-  if (!isPhysicallyBeneath) {
-    throw new CrewError(
-      "manifest_invalid",
-      `${file}: its directory is reached through a symbolic link, so it is not applied as part of this repository`,
-      { file },
-    );
+  let at = root;
+  for (const segment of relative(root, dir).split(sep)) {
+    at = join(at, segment);
+    const stat = lstatSync(at, { throwIfNoEntry: false });
+    if (stat === undefined) return false;
+    if (stat.isSymbolicLink()) {
+      throw new CrewError(
+        "manifest_invalid",
+        `${file}: ${at} is a symbolic link, so this manifest is not applied as part of the repository`,
+        { file },
+      );
+    }
   }
-  if (readFileAt(file).kind !== "file") {
+  const found = readFileAt(file);
+  if (found.kind === "other") {
     throw new CrewError("manifest_invalid", `${file} is not a regular file`, { file });
   }
+  return found.kind === "file";
 }
 
 /** Join the outputs of several projects into one, in the order they ran. */

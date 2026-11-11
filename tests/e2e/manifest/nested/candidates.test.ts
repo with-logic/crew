@@ -54,6 +54,32 @@ describe("nested manifest candidates", () => {
     expect(existsSync(skillDir(outside, "gamma"))).toBe(false);
   });
 
+  test.each([
+    ["a directory with no .crewrc", (outside: string) => outside],
+    ["nothing at all", (outside: string) => join(outside, "missing")],
+  ])(
+    "C-RC-62 a project directory replaced by a link to %s is refused, not taken for deleted",
+    (_what, targetIn) => {
+      const home = makeCrewHome();
+      const root = makeMonorepo({
+        ".": [makeSkillRepo(["alpha"])],
+        "packages/api": [makeSkillRepo(["beta"])],
+      });
+      commitAll(root, "projects");
+      rmSync(join(root, "packages/api"), { recursive: true });
+      symlinkSync(targetIn(makeTempDir("crew-outside-")), join(root, "packages/api"));
+
+      const run = crew(home, root, ["install", "--json"]);
+
+      expect(run.code).toBe(4);
+      expect(errorOf(run.stdout)).toEqual({
+        name: "manifest_invalid",
+        file: join(root, "packages/api", ".crewrc"),
+      });
+      expect(installed(home)).toEqual([]);
+    },
+  );
+
   test("C-RC-62 a nested .crewrc that is a symbolic link is refused, not skipped in favor of its parent's", () => {
     const home = makeCrewHome();
     const root = makeMonorepo({
@@ -81,6 +107,24 @@ describe("nested manifest candidates", () => {
     rmSync(join(root, "packages/api"), { recursive: true });
 
     const run = crew(home, root, ["install", "--json"]);
+
+    expect(run.code).toBe(0);
+    expect((JSON.parse(run.stdout) as { nested?: unknown }).nested).toBeUndefined();
+    expect(installed(home)).toEqual([`alpha@${root}`]);
+  });
+
+  test.each([
+    ["a positional reference", (repo: string) => ["install", "--scope", "project", repo]],
+    ["--from-git", (repo: string) => ["install", "--scope", "project", "--from-git", repo]],
+  ])("C-RC-59 an install with %s does not look for nested manifests", (_what, args) => {
+    const home = makeCrewHome();
+    const root = makeMonorepo({ ".": [], "packages/api": [makeSkillRepo(["beta"])] });
+    // A candidate a bare install would refuse: this run must not even look.
+    const file = join(root, "packages/api", ".crewrc");
+    renameSync(file, join(root, "api.crewrc"));
+    symlinkSync(join(root, "api.crewrc"), file);
+
+    const run = crew(home, root, [...args(makeSkillRepo(["alpha"])), "--json"]);
 
     expect(run.code).toBe(0);
     expect((JSON.parse(run.stdout) as { nested?: unknown }).nested).toBeUndefined();

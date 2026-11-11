@@ -10,13 +10,14 @@
 
 import { dirname, join } from "node:path";
 import { GitProcessError, runGit } from "../git/exec.ts";
-import { readFileAt } from "./load.ts";
 import { MANIFEST_FILENAME } from "./parse.ts";
 
 /**
- * The directories strictly beneath `root` where git lists a `.crewrc` and
- * something is at that path, as absolute paths in a stable order. Whether
- * each is a regular file in a real directory is for the caller to check. Empty when `root` is not inside a git
+ * The directories strictly beneath `root` where git lists a `.crewrc`, as
+ * absolute paths in a stable order. git lists paths; it does not vouch for
+ * what is at them now. A listed file may have been deleted from the work
+ * tree, or its directory replaced by a link: that is for the caller to
+ * check before treating any of these as a project. Empty when `root` is not inside a git
  * work tree: without one there is nothing to say which directories belong.
  *
  * Only git saying "not a git repository" counts as being outside one. Any
@@ -57,9 +58,6 @@ export function nestedManifestDirs(root: string): string[] {
   for (const file of listed.stdout.split("\0")) {
     // Paths are relative to `root`. The root's own manifest is not nested.
     if (file === "" || file === MANIFEST_FILENAME) continue;
-    // The index also lists a tracked file that has been deleted from the
-    // work tree. With nothing at the path there is no project there.
-    if (readFileAt(join(root, file)).kind === "absent") continue;
     dirs.add(join(root, dirname(file)));
   }
   return [...dirs].sort();

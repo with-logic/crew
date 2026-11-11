@@ -1,6 +1,7 @@
 /**
  * `crew install --save <ref>...` (§9.2): add references to the project's
- * manifest, then install from it.
+ * manifest, then install from it. `./unsave.ts` is the reverse, built from
+ * the pieces exported here.
  *
  * The edit is validated before the file is written, and the file is put
  * back as it was if the install that follows does not succeed, so a failed
@@ -12,6 +13,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { CrewError } from "../../../core/errors.ts";
 import {
   addManifestLines,
+  LOCK_FILENAME,
   loadManifestFor,
   MANIFEST_FILENAME,
   type ManifestEdit,
@@ -28,13 +30,11 @@ export function wantsSave(ctx: CommandContext): boolean {
 }
 
 /** The manifest a `--save` edits: the one governing `cwd`, or a new one in `cwd`. */
-function manifestToEdit(cwd: string): { file: string; before: string | null } {
+export function manifestToEdit(cwd: string): { file: string; before: string | null } {
   // Parsing it here refuses to edit a manifest that is already invalid.
   const governing = loadManifestFor(cwd);
   if (governing === null) return { file: join(cwd, MANIFEST_FILENAME), before: null };
-  // `loadManifestFor` just read this as a regular file.
-  const found = readFileAt(governing.file) as { readonly text: string };
-  return { file: governing.file, before: found.text };
+  return { file: governing.file, before: governing.text };
 }
 
 /**
@@ -44,7 +44,7 @@ function manifestToEdit(cwd: string): { file: string; before: string | null } {
  * means. Every other spelling, an absolute path included, is written as
  * given, so the manifest's own rules accept or refuse it.
  */
-function manifestLineFor(at: {
+export function manifestLineFor(at: {
   readonly ref: string;
   readonly cwd: string;
   readonly projectRoot: string;
@@ -56,7 +56,7 @@ function manifestLineFor(at: {
 }
 
 /** `--save` writes the manifest and installs at project scope; refuse what contradicts that. */
-function rejectUnsavableFlags(ctx: CommandContext): void {
+export function rejectUnsavableFlags(ctx: CommandContext): void {
   if (ctx.flags.dryRun) {
     throw new CrewError(
       "usage_error",
@@ -72,7 +72,7 @@ function rejectUnsavableFlags(ctx: CommandContext): void {
   if (ctx.flags.scopeGiven && ctx.flags.scope === "user") {
     throw new CrewError(
       "usage_error",
-      `\`--save\` records skills in \`${MANIFEST_FILENAME}\`, which installs at project scope — drop \`--scope user\``,
+      `\`--save\` edits \`${MANIFEST_FILENAME}\`, whose skills are installed at project scope — drop \`--scope user\``,
     );
   }
 }
@@ -87,13 +87,26 @@ interface PendingEdit {
   readonly extras: CommandContext["flags"]["extras"];
 }
 
+/** The text of the regular file at `path`, or null when there is none to read. */
+function textAt(path: string): string | null {
+  const found = readFileAt(path);
+  return found.kind === "file" ? found.text : null;
+}
+
+/** Make `path` hold `text` again, or not exist when `text` is null. */
+function putBack(path: string, text: string | null): void {
+  if (text === null) rmSync(path, { force: true });
+  else writeText(path, text);
+}
+
 /**
  * Write the edited manifest and run `install`, a bare install, from its
- * directory. If that raises or exits non-zero, the manifest is put back
- * exactly as it was, or removed if this run created it. Returns the
+ * directory. If that raises or exits non-zero, the manifest and its
+ * lockfile are put back exactly as they were, or removed if this run
+ * created them. Returns the
  * install's output and whether it succeeded.
  */
-function installFromEditedManifest(
+export function installFromEditedManifest(
   ctx: CommandContext,
   pending: PendingEdit,
   install: (bare: CommandContext) => CommandOutput,
@@ -102,10 +115,16 @@ function installFromEditedManifest(
   // Checked before anything is written: an invalid line never reaches the file.
   parseManifest({ text: edit.text, file });
   const wrote = edit.changedRefs.length > 0;
+  // The install may rewrite the lockfile for the edited manifest before it
+  // fails, so the lockfile is put back together with the manifest.
+  const lockFile = join(dirname(file), LOCK_FILENAME);
+  const lockBefore = textAt(lockFile);
   if (wrote) writeText(file, edit.text);
+  // The lockfile is put back even when the manifest needed no edit: the
+  // install that failed may still have rewritten it.
   const restore = (): void => {
-    if (wrote && before === null) rmSync(file, { force: true });
-    if (wrote && before !== null) writeText(file, before);
+    if (wrote) putBack(file, before);
+    if (textAt(lockFile) !== lockBefore) putBack(lockFile, lockBefore);
   };
   const bare: CommandContext = {
     ...ctx,
@@ -125,12 +144,7 @@ function installFromEditedManifest(
   }
   if (output.exitCode === 0) return { output, succeeded: true };
   restore();
-  // stderr is not printed under `--json`, where an empty `saved` says the same.
-  const json = { ...(output.json as object), saved: [] };
-  return {
-    output: { ...output, json, stderr: [...(output.stderr ?? []), note] },
-    succeeded: false,
-  };
+  return { output: { ...output, stderr: [...(output.stderr ?? []), note] }, succeeded: false };
 }
 
 /**
@@ -160,7 +174,8 @@ export function saveThenInstall(
     { file, before, edit, extras },
     install,
   );
-  if (!succeeded) return output;
+  // stderr is not printed under `--json`, where an empty `saved` says the same.
+  if (!succeeded) return { ...output, json: { ...(output.json as object), saved: [] } };
   const added = edit.changedRefs;
   const alreadyListed = refsToSave.length === 1 ? "that reference" : "those references";
   const summary =

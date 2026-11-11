@@ -32,6 +32,8 @@ export interface Manifest {
   /** The directory containing the manifest; skills install under it at project scope. */
   readonly projectRoot: string;
   readonly entries: readonly ManifestEntry[];
+  /** The file's text exactly as it was read, for a caller that edits it. */
+  readonly text: string;
 }
 
 /** The manifest governing `cwd`, read and parsed, or null when there is none. */
@@ -112,7 +114,7 @@ function buildManifest(file: string, text: string): Manifest {
       );
     }
   }
-  return { file, projectRoot, entries };
+  return { file, projectRoot, entries, text };
 }
 
 /**

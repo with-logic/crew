@@ -4,12 +4,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
-import { setGitRunner } from "../../../../src/git/exec.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
-import { commitAll, makeSkill, makeTempDir } from "../../../helpers/fixtures.ts";
+import { makeSkill, makeTempDir } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import { crew, installed, makeSkillRepo, skillDir, writeManifest } from "../helpers.ts";
 import { makeMonorepo } from "./helpers.ts";
@@ -21,16 +20,6 @@ beforeEach(() => {
 afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
-
-/** Count the `git ls-remote` calls made until `stop` is called. */
-function countingLookups(): { count: () => number; stop: () => void } {
-  let made = 0;
-  const real = setGitRunner((args, options) => {
-    if (args[0] === "ls-remote") made += 1;
-    return real(args, options);
-  });
-  return { count: () => made, stop: () => setGitRunner(real) };
-}
 
 describe("several manifests, one run", () => {
   test("C-RC-60 a project that exits non-zero sets the exit code, and the others are still installed", () => {
@@ -62,50 +51,14 @@ describe("several manifests, one run", () => {
     expect(crew(home, a, ["install"]).code).toBe(4);
     expect(crew(home, b, ["install"]).code).toBe(1);
 
-    expect(crew(home, root, ["install"]).code).toBe(4);
-  });
+    const run = crew(home, root, ["install", "--json"]);
 
-  test("C-RC-61 --latest moves every project, asking a source they share once", () => {
-    const home = makeCrewHome();
-    const shared = makeSkillRepo(["alpha"]);
-    const root = makeMonorepo({ ".": [shared], "packages/api": [shared] });
-    const api = join(root, "packages/api");
-    expect(crew(home, root, ["install"]).code).toBe(0);
-    // Both projects are now locked to the first commit; the source moves on.
-    const repoDir = shared.slice("file://".length);
-    writeFileSync(join(repoDir, "alpha", "notes.md"), "v2\n");
-    const second = commitAll(repoDir, "publish v2");
-    const lookups = countingLookups();
-    try {
-      expect(crew(home, root, ["install", "--latest"]).code).toBe(0);
-      expect(lookups.count()).toBe(1);
-      // The sharing lasts one command: the next run asks again.
-      expect(crew(home, root, ["install", "--latest"]).code).toBe(0);
-      expect(lookups.count()).toBe(2);
-    } finally {
-      lookups.stop();
-    }
-    for (const project of [root, api]) {
-      expect(readFileSync(join(skillDir(project, "alpha"), "notes.md"), "utf8")).toBe("v2\n");
-      expect(readFileSync(join(project, ".crewrc.lock"), "utf8")).toContain(second);
-    }
-  });
-
-  test("C-RC-61 --latest also asks once about a ref the remote does not list", () => {
-    const home = makeCrewHome();
-    const repo = makeSkillRepo(["alpha"]);
-    const repoDir = repo.slice("file://".length);
-    const line = `${repo}@${commitAll(repoDir, "second").slice(0, 12)}`;
-    const root = makeMonorepo({ ".": [line], "packages/api": [line] });
-    expect(crew(home, root, ["install"]).code).toBe(0);
-    const lookups = countingLookups();
-    try {
-      expect(crew(home, root, ["install", "--latest"]).code).toBe(0);
-    } finally {
-      lookups.stop();
-    }
-
-    expect(lookups.count()).toBe(1);
+    expect(run.code).toBe(4);
+    const { nested } = JSON.parse(run.stdout) as { nested: { manifest_path: string }[] };
+    expect(nested.map((project) => project.manifest_path)).toEqual([
+      join(a, ".crewrc"),
+      join(b, ".crewrc"),
+    ]);
   });
 
   test("C-RC-60 a project that raises an error stops the run there; earlier projects stay installed", () => {

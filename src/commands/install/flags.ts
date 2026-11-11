@@ -1,6 +1,8 @@
 /**
- * The flags of `crew install` that change how a reference is read (§5.3):
- * `--tap`, `--bundle`, `--skill`, and `--recursive`.
+ * Two checks `crew install` makes on its reference flags: reading the kind
+ * hint (`--tap`, `--bundle`, `--skill`, §8.3) and refusing `--recursive`
+ * with a tap-name reference (§5.3). `--from-git` is handled in
+ * `./from-git.ts`.
  */
 
 import { CrewError } from "../../core/errors.ts";

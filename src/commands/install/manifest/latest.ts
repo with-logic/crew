@@ -9,6 +9,7 @@
  */
 
 import { CrewError } from "../../../core/errors.ts";
+import { canonicalRepoUrl } from "../../../core/repo-url.ts";
 import type { Config } from "../../../core/types.ts";
 import { remoteCommitOf } from "../../../git/repo/remote.ts";
 import { computeAgentSet } from "../../../install/agent-set.ts";
@@ -53,7 +54,7 @@ export function hasAgentToInstallInto(config: Config, ctx: CommandContext): bool
 }
 
 /**
- * Remote lookups already made by the command now running, by URL and ref.
+ * Remote lookups already made by the command now running, by repository and ref.
  * Null outside `sharingRemoteLookups`, where every lookup goes to the remote.
  */
 let lookups: Map<string, string | null> | null = null;
@@ -74,7 +75,8 @@ export function sharingRemoteLookups<T>(work: () => T): T {
 
 /** `remoteCommitOf`, answered from this command's earlier lookups when it can be. */
 function remoteCommit(url: string, ref: string | null): string | null {
-  const key = JSON.stringify([url, ref]);
+  // Spellings of one repository (a trailing `.git` or `/`) share an answer.
+  const key = JSON.stringify([canonicalRepoUrl(url), ref]);
   const known = lookups?.get(key);
   if (known !== undefined) return known;
   const sha = remoteCommitOf(url, ref);
