@@ -1431,8 +1431,10 @@ lines is valid and declares no skills.
   directory but reaches outside it through a symbolic link is rejected. A
   path that does not exist cannot be checked this way and is left for the
   install flow to report as a missing source.
-- A git source whose line carries a credential: a password, a token in the
-  userinfo of an `http(s)` URL, or a sensitive query parameter (§5.2). A
+- A git source whose line carries a credential: a password in its URL, a
+  userinfo token on an `http(s)` URL, or one of the sensitive query parameters
+  named in §5.2. Any other query string — a pasted browser URL ending in
+  `?tab=readme`, say — is not a credential and is accepted. A
   manifest is meant to be checked in. The diagnostic, including `details`,
   MUST NOT echo the credential. An SSH username such as `git@` is not a
   credential.

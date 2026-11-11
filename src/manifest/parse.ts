@@ -34,7 +34,15 @@ const TAP_REASON =
 const CREDENTIAL_REASON =
   "a line carries a credential in its URL, and this file is meant to be checked in; " +
   "remove it and let git supply the credential (a credential helper, or an SSH URL)";
-const REDACTION_MASK = "***";
+/** The query parameters §5.2 treats as secrets. */
+const SENSITIVE_QUERY_PARAMS: ReadonlySet<string> = new Set([
+  "token",
+  "access_token",
+  "private_token",
+  "api_key",
+  "apikey",
+  "password",
+]);
 const wrapInBackticks = (ref: string): string => `\`${ref}\``;
 
 /** A manifest's contents and where they were read from. */
@@ -94,7 +102,7 @@ function parsePortable(
   if (source.type === "tap") return reject(`${wrapInBackticks(ref)} ${TAP_REASON}`);
   if (source.type === "git") {
     // A manifest is meant to be checked in, so no line of it may hold a secret.
-    if (carriesCredential(ref)) return reject(CREDENTIAL_REASON);
+    if (carriesCredential(ref, source)) return reject(CREDENTIAL_REASON);
     return source;
   }
   if (!(ref.startsWith("./") || ref.startsWith("../"))) {
@@ -119,11 +127,30 @@ export function isOutside(root: string, path: string): boolean {
 }
 
 /**
- * True when the redactor finds something to mask in `ref`. Redaction may
- * also normalize a URL (a default port, host case), so the test is whether
- * it added a mask, not whether the text changed.
+ * True when a git line holds a credential (§9.2): a password or an
+ * `http(s)` userinfo token in its clone URL, or one of the sensitive query
+ * parameters of §5.2 anywhere in the line.
+ *
+ * This is deliberately not the display redactor. That masks every query
+ * value it does not recognize, which is the right way to print a URL and
+ * the wrong way to decide a line is invalid: a pasted browser URL ending
+ * in `?tab=readme` holds no secret.
  */
-function carriesCredential(ref: string): boolean {
-  const masks = (text: string): number => text.split(REDACTION_MASK).length;
-  return masks(redactText(ref)) > masks(ref);
+function carriesCredential(ref: string, source: GitSource): boolean {
+  // Keys are compared after decoding, so `%74oken` is `token`.
+  // The query is what lies between the first `?` and any fragment; a `?`
+  // after a `#` is fragment text, which §8.2 discards.
+  const beforeFragment = ref.split("#", 1)[0] as string;
+  const query = beforeFragment.includes("?")
+    ? beforeFragment.slice(beforeFragment.indexOf("?") + 1)
+    : "";
+  for (const key of new URLSearchParams(query).keys()) {
+    if (SENSITIVE_QUERY_PARAMS.has(key.toLowerCase())) return true;
+  }
+  // Only a URL with a scheme has userinfo that can be a secret. An
+  // scp-style remote (`git@host:owner/repo`) has a username.
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(source.url)) return false;
+  const url = new URL(source.url);
+  const isHttp = url.protocol === "http:" || url.protocol === "https:";
+  return url.password !== "" || (isHttp && url.username !== "");
 }
