@@ -50,6 +50,18 @@ describe("crew uninstall --save that does not go through", () => {
     expect(beta).not.toBe(alpha);
   });
 
+  test("C-RC-56 details.refs repeats an unmatched reference exactly as typed", () => {
+    const home = makeCrewHome();
+    const { project } = projectWithTwoSkills(home);
+    const typed = "https://someone:something@git.example.invalid/acme/skills?access_token=abc";
+
+    const run = crew(home, project, ["uninstall", "--save", typed, "--json"]);
+
+    expect(run.code).toBe(4);
+    const { error } = JSON.parse(run.stdout) as { error: { details: { refs: string[] } } };
+    expect(error.details.refs).toEqual([typed]);
+  });
+
   test("C-RC-56 a lockfile that did not exist before a failed run does not exist after it", () => {
     const home = makeCrewHome();
     const { project, beta } = projectWithTwoSkills(home);
