@@ -1590,8 +1590,10 @@ repository and subpath as the line, with the commit in place of whatever ref
 the line carried.
 
 **During a bare install.** A bare `crew install` (§9.2) reads the lockfile
-beside the manifest it found, if there is one. A symbolic link named
-`.crewrc.lock` is not a lockfile and is not read, as for the manifest.
+beside the manifest it found, if there is one. Whatever is at that path must
+be a regular file or nothing: a symbolic link, a directory, or anything else
+there fails with `manifest_invalid` before any skill is installed. Homecrew
+does not read through a link, and it does not replace one with a lockfile.
 
 - **Installing.** A manifest line that has a lock entry is installed in its
   pinned form, so it installs the recorded commit whatever its branch or tag
@@ -1605,9 +1607,19 @@ beside the manifest it found, if there is one. A symbolic link named
 - **Writing.** After an install in which every declared skill succeeded, the
   lockfile is rewritten to hold exactly: the existing entry of each line that
   still needs one, and a new entry for each line that needs one and had none,
-  recording the commit that line resolved to. Entries for lines no longer in
-  the manifest are dropped. The file is written only if its contents would
-  change, and is not created when no line needs an entry.
+  recording the commit that line resolved to at that line's own ref. Two
+  lines may name one repository at different refs; each records its own
+  commit. Entries for lines no longer in the manifest are dropped, including
+  when the manifest now declares nothing. The file is written only if its
+  contents would change. No file is created when no line needs an entry; an
+  existing one may be rewritten down to its header line.
+- **Another run's entry wins.** The lockfile is read again immediately before
+  it is written, and an entry found there for a line is kept in preference to
+  this run's own resolution. Two installs of one project that overlap
+  therefore converge on the entry published first. Homecrew does not hold a
+  lock across the two, since they may run under different crew homes, so the
+  loser of that race has installed the commit it resolved, not the one
+  recorded; its next bare install moves it to the recorded commit.
 - **Not writing.** Nothing is written on `--dry-run`, when a declared skill
   failed to install, when the lockfile or manifest is invalid, or when the
   run found the manifest changed underneath it (§9.2, "Reconciling").
@@ -3570,13 +3582,14 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-35 | §9.2, §13 | With no active agent, bare `crew install --agent <name>` on a manifest that declares at least one skill fails with `no_agents`, exit 4. |
 | C-RC-36 | §9.2, §16.6 | When every declared skill is already installed and its tap's local clone is present, bare `crew install` exits 0 even though the git remote can no longer be reached. |
 | C-RC-37 | §9.2 | When one declared source is unreachable, bare `crew install` fails with `source_unreachable`, exit 5, and installs none of the manifest's other skills. |
-| C-RC-38 | §9.3 | After a successful bare `crew install`, `.crewrc.lock` holds the commit each git line resolved to, including a line that names one subpath of a repository, and nothing for a path line or a line pinned to a full commit. No lockfile is created when no line needs an entry. |
+| C-RC-38 | §9.3 | After a successful bare `crew install`, `.crewrc.lock` holds the commit each git line resolved to, including a line that names one subpath of a repository, and nothing for a path line or a line pinned to a full commit. Two lines naming one repository at different refs each record their own commit. No lockfile is created when no line needs an entry. |
 | C-RC-39 | §9.3 | With a lockfile present, a bare `crew install` under a fresh crew home installs each locked line at its recorded commit even though the source has since moved, and leaves the lockfile unchanged. |
 | C-RC-40 | §9.3, §5.4 | When a lock entry's commit changes, the next bare `crew install` moves the installed skill to that commit. |
-| C-RC-41 | §9.3 | A line dropped from the manifest is dropped from the lockfile by the next successful bare `crew install`. |
+| C-RC-41 | §9.3 | A line dropped from the manifest is dropped from the lockfile by the next successful bare `crew install`, including when the manifest is emptied; an emptied manifest still fails on an invalid lockfile. |
 | C-RC-42 | §9.3 | A bare `crew install` that changes nothing does not rewrite the lockfile, and `--dry-run` never writes one. |
-| C-RC-43 | §9.3, §13 | An invalid lockfile fails a bare `crew install` with `manifest_invalid`, `details` naming the lockfile and line, and nothing is installed. |
-| C-RC-44 | §9.3 | When a declared skill fails to install, the lockfile is left exactly as it was. |
+| C-RC-43 | §9.3, §13 | An invalid lockfile, or a symbolic link or directory at the lock path, fails a bare `crew install` with `manifest_invalid` before anything is installed; a link and its target are left untouched. |
+| C-RC-44 | §9.3 | When a declared skill fails to install, or the manifest changes during the run, the lockfile is left exactly as it was. |
+| C-RC-45 | §9.3 | A lock entry published for a line while a bare `crew install` is running is kept: that run does not overwrite it with its own resolution. |
 
 ### 18.4 Worked examples
 

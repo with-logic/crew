@@ -15,7 +15,7 @@ import {
   readFileSync,
   realpathSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import {
   isOutside,
@@ -61,16 +61,16 @@ export function readRegularFile(file: string): string | null {
     // O_NONBLOCK: opening a FIFO named `.crewrc` must not hang waiting for a writer.
     fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch (err) {
-    // Absent (ENOENT), or a symbolic link (ELOOP): not a manifest, keep looking.
+    // Absent (ENOENT), or a symbolic link (ELOOP): not a file crew reads.
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT" || code === "ELOOP") return null;
-    // Anything else means a manifest is there and cannot be read. Skipping
-    // it would let a manifest further up govern this project instead.
+    // Anything else means the file is there and cannot be read. Treating a
+    // manifest that way as absent would let one further up govern the project.
     throw new CrewError(
       "source_unreachable",
       `couldn't read \`${file}\` (${code})`,
       { file },
-      `Check that \`${MANIFEST_FILENAME}\` is readable and that the directories above it can be entered.`,
+      `Check that \`${basename(file)}\` is readable and that the directories above it can be entered.`,
     );
   }
   try {

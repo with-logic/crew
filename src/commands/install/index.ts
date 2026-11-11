@@ -19,13 +19,7 @@ import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest/index.ts";
-import {
-  lockAfterInstall,
-  NO_LOCK,
-  readLock,
-  refsToInstall,
-  writeLockIfChanged,
-} from "./manifest/lockfile.ts";
+import { NO_LOCK, readLock, recordLock, refsToInstall } from "./manifest/lockfile.ts";
 import {
   IN_STEP_WITH_MANIFEST,
   reconcileOwnership,
@@ -57,6 +51,9 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";
   const manifest = isBare ? manifestForBareInstall(ctx) : null;
   if (manifest?.entries.length === 0) {
+    // §9.3: an emptied manifest still has its lockfile checked and emptied.
+    readLock(manifest);
+    if (!ctx.flags.dryRun) recordLock(manifest, []);
     return nothingToInstall(manifest, ctx, `${safePath(manifest.file)} declares no skills.`);
   }
   const kindHint = readKindHint(ctx);
@@ -124,23 +121,18 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     exitCode = 1; // Zero succeeded; purely operational failures.
   }
 
-  // §9.2: the manifest owns what it resolved to — but only once all of it
-  // has landed, and never on a dry run.
-  const noInstallFailures = failed === 0;
-  const mayWriteState = !ctx.flags.dryRun;
-  const reconciled =
-    manifest && noInstallFailures && mayWriteState
-      ? reconcileOwnership({
-          home: ctx.home,
-          manifest,
-          resolvedSkillNames: new Set(result.resolved.map((skill) => skill.name)),
-        })
-      : IN_STEP_WITH_MANIFEST;
-  // §9.3: record what each new line resolved to — under the same conditions
-  // as reconciling, and only if the manifest was still the one this run read.
-  if (manifest && noInstallFailures && mayWriteState && !reconciled.manifestChanged) {
-    writeLockIfChanged(manifest, lock, lockAfterInstall(manifest, lock, result.resolved));
-  }
+  // §9.2, §9.3: ownership and the lockfile are brought up to date only once
+  // everything declared has landed, never on a dry run, and — for the
+  // lockfile — only if the manifest was still the one this run read.
+  const mayPersist = manifest !== null && failed === 0 && !ctx.flags.dryRun;
+  const reconciled = mayPersist
+    ? reconcileOwnership({
+        home: ctx.home,
+        manifest,
+        resolvedSkillNames: new Set(result.resolved.map((skill) => skill.name)),
+      })
+    : IN_STEP_WITH_MANIFEST;
+  if (mayPersist && !reconciled.manifestChanged) recordLock(manifest, result.resolved);
 
   const human = renderInstall(
     {

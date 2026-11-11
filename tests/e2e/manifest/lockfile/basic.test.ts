@@ -7,12 +7,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { runGit } from "../../../src/git/exec.ts";
-import { LOCK_HEADER, parseLock } from "../../../src/manifest/lock.ts";
-import { makeCrewHome } from "../../helpers/env.ts";
-import { commitAll } from "../../helpers/fixtures.ts";
-import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
-import { addLocalSkill, crew, makeProject, makeSkillRepo, writeManifest } from "./helpers.ts";
+import { runGit } from "../../../../src/git/exec.ts";
+import { LOCK_HEADER, parseLock } from "../../../../src/manifest/lock.ts";
+import { makeCrewHome } from "../../../helpers/env.ts";
+import { commitAll } from "../../../helpers/fixtures.ts";
+import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
+import { addLocalSkill, crew, makeProject, makeSkillRepo, writeManifest } from "../helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -109,21 +109,6 @@ describe("the project lockfile", () => {
     expect(installedNote(project)).toBe("v2\n");
   });
 
-  test("C-RC-41 a line dropped from the manifest is dropped from the lockfile", () => {
-    const home = makeCrewHome();
-    const alpha = makeSkillRepo(["alpha"]);
-    const beta = makeSkillRepo(["beta"]);
-    const project = makeProject([alpha, beta]);
-    expect(crew(home, project, ["install"]).code).toBe(0);
-
-    writeManifest(project, [beta]);
-    expect(crew(home, project, ["install"]).code).toBe(0);
-
-    expect(readFileSync(lockFile(project), "utf8")).toBe(
-      `${LOCK_HEADER}\n${headOf(beta)} ${beta}\n`,
-    );
-  });
-
   test("C-RC-42 a repeat install does not rewrite the lockfile, and --dry-run never writes one", () => {
     const home = makeCrewHome();
     const project = makeProject([makeSkillRepo(["alpha"])]);
@@ -164,5 +149,24 @@ describe("the project lockfile", () => {
     expect(crew(home, project, ["install"]).code).toBe(4);
 
     expect(readFileSync(lockFile(project), "utf8")).toBe(before);
+  });
+
+  test("C-RC-38 two lines naming one repository at different refs each record their own commit", () => {
+    const home = makeCrewHome();
+    const repo = makeSkillRepo(["alpha", "beta"]);
+    const old = headOf(repo);
+    runGit(["-c", "tag.gpgSign=false", "tag", "v1"], { cwd: dirOf(repo) });
+    const latest = publish(repo, "after v1\n");
+    const project = makeProject([`${repo}//alpha`, `${repo}@v1//beta`]);
+
+    expect(crew(home, project, ["install"]).code).toBe(0);
+
+    const text = readFileSync(lockFile(project), "utf8");
+    expect(parseLock({ text, file: lockFile(project) })).toEqual(
+      new Map([
+        [`${repo}//alpha`, latest],
+        [`${repo}@v1//beta`, old],
+      ]),
+    );
   });
 });

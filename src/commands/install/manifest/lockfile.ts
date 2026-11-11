@@ -8,11 +8,14 @@
  * line without an entry gets one, recording the commit it resolved to.
  */
 
+import { lstatSync } from "node:fs";
 import { join } from "node:path";
+import { CrewError } from "../../../core/errors.ts";
 import { canonicalRepoUrl } from "../../../core/repo-url.ts";
-import type { GitSource, ResolvedSkill } from "../../../core/types.ts";
+import type { ResolvedSkill } from "../../../core/types.ts";
 import { sourceIdentityOf } from "../../../install/source-identity.ts";
 import {
+  type GitManifestEntry,
   LOCK_FILENAME,
   type Lock,
   type Manifest,
@@ -27,17 +30,31 @@ import { writeText } from "../../../util/fs.ts";
 /** The lock of a run that has no manifest. */
 export const NO_LOCK: Lock = new Map();
 
-/** Absolute path of the lockfile that belongs to `manifest`. */
-export function lockPathFor(manifest: Manifest): string {
+function lockPathFor(manifest: Manifest): string {
   return join(manifest.projectRoot, LOCK_FILENAME);
 }
 
 /**
  * The lock recorded beside `manifest`; empty when there is no lockfile.
- * Like the manifest, a symbolic link there is not a lockfile and is not read.
+ *
+ * Whatever is at the lock path must be a regular file or nothing. A
+ * symbolic link, a directory, or anything else there is `manifest_invalid`,
+ * raised here before any skill is installed: crew will not read through a
+ * link, and it could not replace the path with a lockfile afterwards
+ * without either failing late or taking its permissions from the link's
+ * target.
  */
 export function readLock(manifest: Manifest): Lock {
   const file = lockPathFor(manifest);
+  const found = lstatSync(file, { throwIfNoEntry: false });
+  if (found !== undefined && !found.isFile()) {
+    throw new CrewError(
+      "manifest_invalid",
+      `${file} line 1: is not a regular file`,
+      { file, line: 1 },
+      `Remove whatever is at \`${LOCK_FILENAME}\` and restore the lockfile from version control, or let \`crew install\` write a new one.`,
+    );
+  }
   const text = readRegularFile(file);
   return text === null ? NO_LOCK : parseLock({ text, file });
 }
@@ -51,47 +68,45 @@ export function refsToInstall(manifest: Manifest, lock: Lock): string[] {
 }
 
 /**
- * The lock after a successful install: existing entries for lines still in
- * the manifest, a new entry for each line that had none, and nothing for a
- * line that has left the manifest.
+ * Bring the lockfile in line with the manifest after a successful install:
+ * keep the entry of each line that still needs one, add an entry for each
+ * line that had none, and drop entries for lines that have left.
+ *
+ * The lockfile is read again here, so an entry another `crew install`
+ * published for the same line in the meantime is kept, not overwritten
+ * with this run's resolution. The file is written only if it would change;
+ * no file is created when no line needs an entry, though an existing one
+ * may be rewritten down to its header.
  */
-export function lockAfterInstall(
-  manifest: Manifest,
-  lock: Lock,
-  resolved: readonly ResolvedSkill[],
-): Lock {
+export function recordLock(manifest: Manifest, resolved: readonly ResolvedSkill[]): void {
+  const onDisk = readLock(manifest);
   const next = new Map<string, string>();
   for (const entry of manifest.entries) {
     if (!needsLockEntry(entry)) continue;
-    const sha = lock.get(entry.ref) ?? resolvedCommitOf(entry.source as GitSource, resolved);
+    const sha = onDisk.get(entry.ref) ?? resolvedCommitOf(entry, resolved);
     if (sha) next.set(entry.ref, sha);
   }
-  return next;
+  const text = serializeLock(next);
+  if (text !== serializeLock(onDisk)) writeText(lockPathFor(manifest), text);
 }
 
 /**
- * The commit a git line resolved to: that of the first resolved skill that
- * came from the line's repository, at or beneath its subpath. Every skill
- * a line resolves to comes from one commit, so the first is enough.
+ * The commit an unlocked git line resolved to: that of a resolved skill
+ * that came from the line's repository, at the line's own ref, at or
+ * beneath its subpath. The ref matters: two lines may name one repository
+ * at different refs, and each must get its own commit. Every skill one
+ * line resolves to comes from one commit, so the first match is enough.
  */
 function resolvedCommitOf(
-  source: GitSource,
+  entry: GitManifestEntry,
   resolved: readonly ResolvedSkill[],
 ): string | null | undefined {
-  const root = canonicalRepoUrl(source.url);
+  const { url, ref, subpath } = entry.source;
+  const root = canonicalRepoUrl(url);
   const isFromLine = (skill: ResolvedSkill): boolean => {
     const { root: skillRoot, location } = sourceIdentityOf(skill.tap, skill.tapRelativePath);
-    const isBeneath = source.subpath === "" || `${location}/`.startsWith(`${source.subpath}/`);
-    return skillRoot === root && isBeneath;
+    const isBeneath = subpath === "" || `${location}/`.startsWith(`${subpath}/`);
+    return skillRoot === root && skill.ref === ref && isBeneath;
   };
   return resolved.find(isFromLine)?.resolvedSha;
-}
-
-/**
- * Write the lockfile when `after` differs from `before`. An unchanged lock
- * is never rewritten, and a project with nothing to lock gets no lockfile.
- */
-export function writeLockIfChanged(manifest: Manifest, before: Lock, after: Lock): void {
-  const text = serializeLock(after);
-  if (text !== serializeLock(before)) writeText(lockPathFor(manifest), text);
 }

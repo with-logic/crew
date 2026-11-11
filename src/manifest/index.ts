@@ -6,6 +6,7 @@
 
 export { loadManifestFor, type Manifest, readRegularFile } from "./load.ts";
 export {
+  type GitManifestEntry,
   LOCK_FILENAME,
   type Lock,
   needsLockEntry,
