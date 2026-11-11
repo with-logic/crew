@@ -1489,6 +1489,44 @@ the manifest's absolute path.
 
 When any reference is given on the command line, no manifest is read.
 
+**Ownership.** A manifest owns the skills it declares, and a skill it stops
+declaring is removed. Ownership is recorded as `manifest: true` on the state
+entry (§11.1).
+
+After a bare install in which every declared skill succeeded, with the state
+lock held:
+
+1. **Claim.** Every project-scope entry at the manifest's directory whose name
+   is in the resolved install set — each declared skill and each dependency
+   resolved with it (§9 step 6) — is marked `manifest: true`. This includes a
+   skill that was already installed there by hand: once a manifest declares a
+   skill, the manifest owns it.
+2. **Remove.** Every entry at that same install location that carries
+   `manifest: true` and whose name is not in the resolved install set is
+   uninstalled through the uninstall algorithm of §7.4, including its safety
+   checks. If the removal leaves an auto tap with no entries, the tap is
+   garbage-collected (§16.5).
+   An entry that another skill at that install location still depends on —
+   its `required_by` names a skill that is not itself being removed — is not
+   uninstalled, because that would break the dependent. It is released
+   instead: its `manifest` flag is cleared and it stays installed as an
+   ordinary dependency.
+
+A skill installed in the project by hand and never declared carries no
+`manifest` flag and is never removed by a bare install. Entries at user scope
+or under another project root are never touched.
+
+If any declared skill failed to install, or the manifest is invalid, nothing
+is claimed and nothing is removed: a manifest that cannot be fully satisfied
+MUST NOT cost the project a skill it already has. A removal that aborts on a
+§7.4 safety check keeps the skill and its entry, is reported, and makes the
+command exit 1.
+
+`--dry-run` reports the skills that would be removed and writes nothing. The
+`--json` result of a bare install carries `removed`: an array with one
+uninstall record (§7.4) per skill removed or attempted, empty when there are
+none. Human output lists them under a heading that names `.crewrc`.
+
 ## 10. Update and autoupdate
 
 ### 10.1 `crew update`
@@ -2292,6 +2330,15 @@ installed in two projects has two independent `required_by` lists, and
 an uninstall in one project never rewrites the other's. A skill with
 `explicit: false` and empty `required_by` is an autoremovable orphan —
 `crew uninstall --prune` removes it.
+
+**`manifest`** (boolean, optional; absent means false). True when a project
+manifest at this entry's `project_root` declares the skill, set and consumed
+by bare `crew install` (§9.2). Only project-scope entries carry it. It
+survives an update or reinstall of the skill. It is recorded in state only,
+not in the install-site marker: if state is rebuilt from markers
+(`crew doctor --repair`) the flag is lost, which is the safe direction — an
+unowned skill is never removed, and the next bare install re-claims every
+skill the manifest still declares.
 
 **`tracks_tap`** (boolean, optional; absent means false). True when
 this entry came from a whole-tap install (`crew install <tap-url>` or
@@ -3412,6 +3459,16 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-10 | §9.2 | Bare `crew install --scope user` is a `usage_error` and installs nothing; bare `crew install --scope project` behaves as bare `crew install`. |
 | C-RC-11 | §9.2 | Bare `crew install` with `--recursive`, `--tap`, `--bundle`, or `--skill` is a `usage_error` and installs nothing. |
 | C-RC-12 | §9.2 | `crew install <ref>` never reads a manifest: with an invalid `.crewrc` in the working directory it installs `<ref>` at the requested scope and succeeds. |
+| C-RC-13 | §9.2 | After a line is dropped from the manifest, the next bare `crew install` uninstalls the skill it provided, reports it in `removed`, leaves the other declared skills installed, and garbage-collects the dropped line's auto tap when nothing else uses it. |
+| C-RC-14 | §9.2 | A manifest emptied of references removes every skill it owned; human output lists them under a heading naming `.crewrc`. |
+| C-RC-15 | §9.2 | A skill installed in the project with `crew install --scope project <ref>` and never declared is not removed by any bare `crew install`. |
+| C-RC-16 | §9.2, §11.1 | A skill installed by hand that the manifest later declares gains `manifest: true`, and is removed when its line is later dropped. |
+| C-RC-17 | §9.2 | Removal is confined to the manifest's install location: the same skill at user scope, or under another project root, is untouched. |
+| C-RC-18 | §9.2, §5.2 | Bare `crew install --dry-run` lists the skills that would be removed in `removed` and removes none. |
+| C-RC-19 | §9.2, §7.4 | A dropped skill whose removal aborts on a §7.4 safety check keeps its files and state entry, is reported, and the command exits 1. |
+| C-RC-20 | §9.2 | When a declared reference fails to install, nothing is removed, including skills whose lines were dropped. |
+| C-RC-21 | §9.2, §11.1 | `manifest: true` survives `crew update` of the skill, so a later dropped line still removes it. |
+| C-RC-27 | §9.2 | A dropped skill that a hand-installed skill at the same install location depends on is not removed: it stays installed, its `manifest` flag is cleared, and `removed` does not list it. |
 | C-RC-26 | §9.2 | A manifest path line that reaches outside the project through a symbolic link is `manifest_invalid`, with `details` naming its line; nothing from outside the project is installed. |
 
 ### 18.4 Worked examples
