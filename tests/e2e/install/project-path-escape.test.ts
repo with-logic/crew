@@ -61,7 +61,7 @@ test("C-INST-24 a project directory name cannot inject control characters into i
   expect(json.stdout()).not.toContain(ESCAPED);
 });
 
-test("C-INST-24 a skipped skill's diagnostic cannot inject control characters either", () => {
+test("C-INST-24 the failed-skill section of install output carries no control characters from a hostile source path", () => {
   const home = makeCrewHome();
   const source = join(makeTempDir("crew-escape-src-"), HOSTILE);
   mkdirSync(source);
