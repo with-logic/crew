@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { runCli } from "../../../src/cli/main.ts";
@@ -59,4 +59,37 @@ test("C-INST-24 a project directory name cannot inject control characters into i
   const json = captureStreams();
   expect(runCli([...args, "--json"], { home, cwd: project, streams: json.streams })).toBe(0);
   expect(json.stdout()).not.toContain(ESCAPED);
+});
+
+test("C-INST-24 a skipped skill's diagnostic cannot inject control characters either", () => {
+  const home = makeCrewHome();
+  const source = join(makeTempDir("crew-escape-src-"), HOSTILE);
+  mkdirSync(source);
+  makeSkill(source, "good", skillFrontmatter({ name: "good" }));
+  makeSkill(source, "broken", "name: broken");
+
+  const run = captureStreams();
+  const code = runCli(["install", "--agent", "claude-code", source], {
+    home,
+    cwd: makeTempDir(),
+    streams: run.streams,
+  });
+
+  expect(code).toBe(1);
+  expect(run.stdout()).toContain("Failed (1)");
+  expect(run.stdout()).not.toContain(ESC);
+  expect(forgedLines(run.stdout())).toEqual([]);
+});
+
+test("C-INST-24 --json reports the manifest path exactly, control characters and all", () => {
+  const home = makeCrewHome();
+  const project = join(makeTempDir("crew-escape-proj-"), HOSTILE);
+  mkdirSync(project);
+  writeFileSync(join(project, ".crewrc"), "");
+
+  const run = captureStreams();
+  expect(runCli(["install", "--json"], { home, cwd: project, streams: run.streams })).toBe(0);
+
+  const payload = JSON.parse(run.stdout()) as { manifest_path: string };
+  expect(payload.manifest_path).toBe(join(project, ".crewrc"));
 });

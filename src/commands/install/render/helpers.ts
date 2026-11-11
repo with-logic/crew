@@ -34,8 +34,8 @@ export function renderAgentLine(
   if (result.kind === "installed" || result.kind === "up_to_date") {
     const adapter = agentByName(name);
     // §5.2: a project install's path embeds the cwd, so escape it.
-    const base = adapter ? join(baseFor(adapter, scope, cwd), skillName) : "";
-    const installPath = safePath(shortenHome(base));
+    const installDir = adapter ? join(baseFor(adapter, scope, cwd), skillName) : "";
+    const installPath = safePath(shortenHome(installDir));
     const status = result.kind === "up_to_date" ? style.dim("already up to date") : "";
     const pathSuffix = installPath ? `${style.dim("→")} ${style.dim(installPath)}` : "";
     const parts = [style.symbol("ok"), name, pathSuffix, status].filter((s) => s.length > 0);

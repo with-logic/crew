@@ -99,7 +99,8 @@ export function renderInstall(input: RenderInstallInput, style: Styler): string[
     for (const s of input.skipped) {
       // `wrap` always returns at least one element for a non-empty
       // message — `s.message` is a CrewError message, never empty.
-      const wrapped = wrap(s.message, Math.max(40, input.width - 4));
+      // §5.2: the message can name a source path, which the user does not control.
+      const wrapped = wrap(sanitizeLine(s.message), Math.max(40, input.width - 4));
       lines.push(`  ${style.symbol("fail")} ${style.red(wrapped[0]!)}`);
       for (let i = 1; i < wrapped.length; i++) lines.push(`    ${style.red(wrapped[i]!)}`);
     }
