@@ -24,6 +24,7 @@ import {
   reconcileOwnership,
   staleManifestWarnings,
 } from "./manifest/reconcile.ts";
+import { renderDropped } from "./render/dropped.ts";
 import { renderInstall } from "./render/index.ts";
 
 /** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
@@ -50,7 +51,9 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";
   const manifest = isBare ? manifestForBareInstall(ctx) : null;
   if (manifest?.entries.length === 0) {
-    return nothingToInstall(manifest, ctx, `${safePath(manifest.file)} declares no skills.`);
+    // Declaring nothing still drops whatever the manifest used to own (§9.2).
+    const human = `${safePath(manifest.file)} declares no skills.`;
+    return nothingToInstall(manifest, ctx, human, reconcileOwnership(ctx, manifest, new Set()));
   }
   const kindHint = readKindHint(ctx);
   rejectRecursiveTapRefs(ctx);
@@ -106,31 +109,31 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     exitCode = 1; // Zero succeeded; purely operational failures.
   }
 
-  // §9.2: the manifest owns what it resolved to — but only once all of it
-  // has landed, and never on a dry run.
+  // §9.2: the manifest owns what it resolved to and drops what it no longer
+  // accounts for — but only once all of it has landed.
   const noInstallFailures = failed === 0;
-  const mayWriteState = !ctx.flags.dryRun;
   const reconciled =
-    manifest && noInstallFailures && mayWriteState
-      ? reconcileOwnership({
-          home: ctx.home,
-          manifest,
-          resolvedSkillNames: new Set(result.resolved.map((skill) => skill.name)),
-        })
+    manifest && noInstallFailures
+      ? reconcileOwnership(ctx, manifest, new Set(result.resolved.map((skill) => skill.name)))
       : IN_STEP_WITH_MANIFEST;
+  const { removed } = reconciled;
+  if (removed.some((record) => record.failures.length > 0)) exitCode = 1;
 
-  const human = renderInstall(
-    {
-      records: result.summary.records,
-      alreadyInstalled: result.alreadyInstalled,
-      resolved: result.resolved,
-      skipped: result.skipped,
-      dryRun: ctx.flags.dryRun,
-      cwd,
-      width: ctx.width,
-    },
-    ctx.style,
-  );
+  const human = [
+    ...renderInstall(
+      {
+        records: result.summary.records,
+        alreadyInstalled: result.alreadyInstalled,
+        resolved: result.resolved,
+        skipped: result.skipped,
+        dryRun: ctx.flags.dryRun,
+        cwd,
+        width: ctx.width,
+      },
+      ctx.style,
+    ),
+    ...renderDropped(removed, ctx),
+  ];
 
   const warnings = [...discovery.warnings(), ...staleManifestWarnings(reconciled)];
   return {
@@ -142,7 +145,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       records: result.summary.records,
       skipped: result.skipped,
       dry_run: ctx.flags.dryRun,
-      ...(manifest ? { manifest_path: manifest.file } : {}),
+      ...(manifest ? { manifest_path: manifest.file, removed } : {}),
       ...(warnings.length > 0 ? { warnings } : {}),
     },
   };

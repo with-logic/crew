@@ -53,6 +53,8 @@ function installWhileManifestBecomes(
   return { code, stdout, stderr, rewritten };
 }
 
+const quietStreams = () => ({ stdout: () => {}, stderr: () => {} });
+
 describe("a manifest that changes during the run", () => {
   const cases: readonly (readonly [string, () => string[] | null])[] = [
     ["is replaced by a different valid manifest", () => [makeSkillRepo(["beta"])]],
@@ -68,7 +70,7 @@ describe("a manifest that changes during the run", () => {
 
       expect(human.rewritten).toBe(true);
       expect(human.code).toBe(0);
-      expect(human.stderr).toContain("ownership of the installed skills was not recorded");
+      expect(human.stderr).toContain("nothing was claimed or removed");
       expect(installed(home)).toEqual([`alpha@${project}`]);
       expect(ownedNames(home)).toEqual([]);
     });
@@ -82,7 +84,23 @@ describe("a manifest that changes during the run", () => {
 
     expect(run.code).toBe(0);
     const { warnings } = JSON.parse(run.stdout) as { warnings: string[] };
-    expect(warnings.join("\n")).toContain("ownership of the installed skills was not recorded");
+    expect(warnings.join("\n")).toContain("nothing was claimed or removed");
     expect(ownedNames(home)).toEqual([]);
+  });
+
+  test("C-RC-33 a run that read an older manifest removes nothing it would have dropped", () => {
+    const home = makeCrewHome();
+    const alphaRepo = makeSkillRepo(["alpha"]);
+    const project = makeProject([alphaRepo]);
+    expect(runCli(["install"], { home, cwd: project, streams: quietStreams() })).toBe(0);
+    expect(ownedNames(home)).toEqual(["alpha"]);
+    // This run reads a manifest without alpha; by the time it reconciles, alpha is back.
+    writeManifest(project, [makeSkillRepo(["beta"])]);
+
+    const run = installWhileManifestBecomes(home, project, [alphaRepo]);
+
+    expect(run.stderr).toContain("nothing was claimed or removed");
+    expect(installed(home)).toEqual([`alpha@${project}`, `beta@${project}`]);
+    expect(ownedNames(home)).toEqual(["alpha"]);
   });
 });

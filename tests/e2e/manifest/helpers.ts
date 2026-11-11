@@ -65,3 +65,8 @@ export function ownedNames(home: string): string[] {
   }
   return names.sort();
 }
+
+/** Where claude-code installs `name` at project scope under `project`. */
+export function skillDir(project: string, name: string): string {
+  return join(project, ".claude", "skills", name);
+}

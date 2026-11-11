@@ -10,6 +10,8 @@
 import { CrewError } from "../../../core/errors.ts";
 import { loadManifestFor, MANIFEST_FILENAME, type Manifest } from "../../../manifest/index.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
+import { renderDropped } from "../render/dropped.ts";
+import { type Reconciliation, staleManifestWarnings } from "./reconcile.ts";
 
 /** Flags that reinterpret references; meaningless without references on the command line. */
 const REFERENCE_FLAGS = ["recursive", "tap", "bundle", "skill"] as const;
@@ -41,23 +43,30 @@ export function manifestForBareInstall(ctx: CommandContext): Manifest {
 
 /**
  * The outcome of a bare install that has nothing to install (§9.2).
- * Decided before agents are selected or any source is touched, so it
- * succeeds on a machine with no agent at all.
+ * Installing is decided before agents are selected or any source is
+ * touched, so it needs no agent. Removing what the manifest used to own
+ * still runs, so the exit code is 1 when one of those removals aborts.
  */
 export function nothingToInstall(
   manifest: Manifest,
   ctx: CommandContext,
   human: string,
+  reconciled: Reconciliation,
 ): CommandOutput {
+  const { removed } = reconciled;
+  const warnings = staleManifestWarnings(reconciled);
   return {
-    exitCode: 0,
-    human: [human],
+    exitCode: removed.some((record) => record.failures.length > 0) ? 1 : 0,
+    human: [human, ...renderDropped(removed, ctx)],
+    stderr: warnings,
     json: {
       already_installed: [],
       records: [],
       skipped: [],
       dry_run: ctx.flags.dryRun,
       manifest_path: manifest.file,
+      removed,
+      ...(warnings.length > 0 ? { warnings } : {}),
     },
   };
 }
