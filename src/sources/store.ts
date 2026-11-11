@@ -10,14 +10,18 @@
  *   - a reinstall from the same SHA is a cheap copy, not a network op;
  *   - `crew cache clean` has a clear contract — remove store entries no
  *     longer referenced by state or any marker.
+ *
+ * A dry run (§5.2) must not add store entries, so `withThrowawayStore`
+ * redirects new entries into a scratch directory under `cache/`.
  */
 
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdtempSync } from "node:fs";
+import { basename, join } from "node:path";
 import { crewHome, paths, storeEntryPath } from "../core/paths.ts";
 import { hashDirectory } from "../hash/content.ts";
 import { assertSkillFile } from "../skill/file.ts";
-import { atomicReplace, ensureDir } from "../util/fs.ts";
+import { withExportCleanup } from "../util/export-cleanup.ts";
+import { atomicReplace, ensureDir, rmrf } from "../util/fs.ts";
 import { progress } from "../util/progress.ts";
 import { safePath } from "../util/redact.ts";
 import { copySourceFile, copySourceTree, hashSourceDirectory } from "./read.ts";
@@ -30,6 +34,31 @@ export interface StoredSkill {
   readonly shortSha: string;
   /** True if the store entry was reused (bytes already present). */
   readonly reused: boolean;
+}
+
+/** Lazily creates the active dry run's scratch root; null outside `withThrowawayStore`. */
+let throwawayRoot: (() => string) | null = null;
+
+/**
+ * Run `fn` with `stageIntoStore` writing nothing under `store/` (§5.2).
+ * Published entries are still reused; a new one is staged under `cache/`
+ * and removed when `fn` returns or throws, so its `storePath` must not
+ * be read afterwards.
+ */
+export function withThrowawayStore<T>(home: string, fn: () => T): T {
+  const owned: { cleanupPath: string; cleanup: () => void }[] = [];
+  throwawayRoot = () => {
+    if (owned[0]) return owned[0].cleanupPath;
+    ensureDir(paths(home).cacheDir);
+    const root = mkdtempSync(join(paths(home).cacheDir, "dry-run-store-"));
+    owned.push({ cleanupPath: root, cleanup: () => rmrf(root) });
+    return root;
+  };
+  try {
+    return withExportCleanup(fn, owned);
+  } finally {
+    throwawayRoot = null;
+  }
 }
 
 /**
@@ -50,7 +79,10 @@ export function stageIntoStore(
   // `sourceHash`, when the caller already hashed `sourcePath`, avoids
   // walking the same unbounded tree twice.
   const shortSha = shortShaFor(sourcePath, resolvedSha, sourceHash);
-  const storePath = storeEntryPath(name, shortSha, home);
+  const published = storeEntryPath(name, shortSha, home);
+  const storeRoot =
+    throwawayRoot !== null && !existsSync(published) ? throwawayRoot() : paths(home).storeDir;
+  const storePath = join(storeRoot, basename(published));
 
   if (existsSync(storePath)) {
     progress(`reusing store entry ${safePath(name)}@${shortSha}`);
@@ -59,12 +91,12 @@ export function stageIntoStore(
   }
   progress(`staging ${safePath(name)}@${shortSha} into ${safePath(storePath)}`);
 
-  ensureDir(join(storePath, "..")); // parents
+  ensureDir(storeRoot);
   withStoreStaging(storePath, (staging) => {
     if (isGistFile) {
       assertSkillFile(sourcePath);
       copySourceFile(sourcePath, join(staging, "SKILL.md"));
-    } else copySourceTree(sourcePath, staging, paths(home).storeDir);
+    } else copySourceTree(sourcePath, staging, storeRoot);
     atomicReplace(staging, storePath);
   });
 
