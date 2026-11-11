@@ -117,9 +117,11 @@ describe("the project lockfile", () => {
     expect(existsSync(lockFile(project))).toBe(false);
 
     expect(crew(home, project, ["install"]).code).toBe(0);
-    writeFileSync(lockFile(project), `${readFileSync(lockFile(project), "utf8")}# kept\n`);
+    const annotated = `${readFileSync(lockFile(project), "utf8")}# kept\n`;
+    writeFileSync(lockFile(project), annotated);
     expect(crew(home, project, ["install"]).code).toBe(0);
-    expect(readFileSync(lockFile(project), "utf8")).toContain("# kept\n");
+    expect(crew(home, project, ["install", "--dry-run"]).code).toBe(0);
+    expect(readFileSync(lockFile(project), "utf8")).toBe(annotated);
   });
 
   test("C-RC-43 an invalid lockfile is manifest_invalid and nothing is installed", () => {

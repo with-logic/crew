@@ -8,7 +8,6 @@
  * line without an entry gets one, recording the commit it resolved to.
  */
 
-import { lstatSync } from "node:fs";
 import { join } from "node:path";
 import { CrewError } from "../../../core/errors.ts";
 import { canonicalRepoUrl } from "../../../core/repo-url.ts";
@@ -22,7 +21,7 @@ import {
   needsLockEntry,
   parseLock,
   pinnedRef,
-  readRegularFile,
+  readFileAt,
   serializeLock,
 } from "../../../manifest/index.ts";
 import { writeText } from "../../../util/fs.ts";
@@ -39,24 +38,20 @@ function lockPathFor(manifest: Manifest): string {
  *
  * Whatever is at the lock path must be a regular file or nothing. A
  * symbolic link, a directory, or anything else there is `manifest_invalid`,
- * raised here before any skill is installed: crew will not read through a
- * link, and it could not replace the path with a lockfile afterwards
- * without either failing late or taking its permissions from the link's
- * target.
+ * raised before any skill is installed: crew will not read through a link,
+ * and it will not write a lockfile over one.
  */
 export function readLock(manifest: Manifest): Lock {
   const file = lockPathFor(manifest);
-  const found = lstatSync(file, { throwIfNoEntry: false });
-  if (found !== undefined && !found.isFile()) {
-    throw new CrewError(
-      "manifest_invalid",
-      `${file} line 1: is not a regular file`,
-      { file, line: 1 },
-      `Remove whatever is at \`${LOCK_FILENAME}\` and restore the lockfile from version control, or let \`crew install\` write a new one.`,
-    );
-  }
-  const text = readRegularFile(file);
-  return text === null ? NO_LOCK : parseLock({ text, file });
+  const found = readFileAt(file);
+  if (found.kind === "absent") return NO_LOCK;
+  if (found.kind === "file") return parseLock({ text: found.text, file });
+  throw new CrewError(
+    "manifest_invalid",
+    `${file} line 1: is not a regular file`,
+    { file, line: 1 },
+    `Remove whatever is at \`${LOCK_FILENAME}\` and restore the lockfile from version control, or let \`crew install\` write a new one.`,
+  );
 }
 
 /** The references to install: each locked line in its pinned form, the rest as written. */
@@ -72,11 +67,15 @@ export function refsToInstall(manifest: Manifest, lock: Lock): string[] {
  * keep the entry of each line that still needs one, add an entry for each
  * line that had none, and drop entries for lines that have left.
  *
- * The lockfile is read again here, so an entry another `crew install`
- * published for the same line in the meantime is kept, not overwritten
- * with this run's resolution. The file is written only if it would change;
- * no file is created when no line needs an entry, though an existing one
- * may be rewritten down to its header.
+ * The lockfile is read again here, and an entry it holds for a line is
+ * kept in preference to this run's own resolution. That is not a lock:
+ * overlapping installs of one checkout are not serialized, and if two both
+ * find no entry, the later write stands. What settles a project's versions
+ * is the lockfile that gets committed.
+ *
+ * The file is written only if it would change. No file is created when no
+ * line needs an entry, though an existing one may be rewritten down to its
+ * header.
  */
 export function recordLock(manifest: Manifest, resolved: readonly ResolvedSkill[]): void {
   const onDisk = readLock(manifest);

@@ -7,19 +7,20 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
-  readlinkSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { runCli } from "../../../../src/cli/main.ts";
+import { hasChangedOnDisk } from "../../../../src/commands/install/manifest/reconcile.ts";
+import { loadManifestFor } from "../../../../src/manifest/index.ts";
 import { LOCK_HEADER } from "../../../../src/manifest/lock.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
-import { makeTempDir } from "../../../helpers/fixtures.ts";
+import { commitAll, makeSkill, makeTempDir } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
-import { crew, makeProject, makeSkillRepo, writeManifest } from "../helpers.ts";
+import { crew, installAnd, makeProject, makeSkillRepo, writeManifest } from "../helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -30,23 +31,6 @@ afterEach(() => {
 });
 
 const lockFile = (project: string): string => join(project, ".crewrc.lock");
-
-/** Run a verbose bare install, calling `during` once when the first skill starts installing. */
-function installAnd(home: string, project: string, during: () => void): number {
-  let done = false;
-  return runCli(["install", "--verbose"], {
-    home,
-    cwd: project,
-    streams: {
-      stdout: () => {},
-      stderr: (chunk) => {
-        if (done || !chunk.includes("installing")) return;
-        done = true;
-        during();
-      },
-    },
-  });
-}
 
 describe("lockfile safety", () => {
   for (const kind of ["a symbolic link", "a directory"] as const) {
@@ -66,7 +50,8 @@ describe("lockfile safety", () => {
       expect(error.message).toContain("is not a regular file");
       expect(existsSync(join(project, ".claude"))).toBe(false);
       expect(readFileSync(target, "utf8")).toBe(`${LOCK_HEADER}\n`);
-      if (kind === "a symbolic link") expect(readlinkSync(lockFile(project))).toBe(target);
+      const still = lstatSync(lockFile(project));
+      expect(kind === "a directory" ? still.isDirectory() : still.isSymbolicLink()).toBe(true);
     });
   }
 
@@ -92,5 +77,32 @@ describe("lockfile safety", () => {
     expect(installAnd(home, project, () => writeManifest(project, [beta, "./tools/x"]))).toBe(0);
 
     expect(readFileSync(lockFile(project), "utf8")).toBe(before);
+  });
+
+  test("C-RC-44 the check that guards the lockfile sees an emptied manifest that was restored on disk", () => {
+    const home = makeCrewHome();
+    const repo = makeSkillRepo(["alpha"]);
+    const project = makeProject([repo]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    const before = readFileSync(lockFile(project), "utf8");
+    // The run reads an empty manifest; the file on disk lists alpha again.
+    writeManifest(project, []);
+    const emptied = loadManifestFor(project);
+    writeManifest(project, [repo]);
+
+    expect(hasChangedOnDisk(emptied!)).toBe(true);
+    expect(readFileSync(lockFile(project), "utf8")).toBe(before);
+  });
+
+  test("C-RC-44 a git source with one invalid skill leaves no lockfile behind", () => {
+    const home = makeCrewHome();
+    const repo = makeSkillRepo(["alpha"]);
+    makeSkill(repo.slice("file://".length), "broken", "name: broken");
+    commitAll(repo.slice("file://".length), "adds an invalid skill");
+    const project = makeProject([repo]);
+
+    expect(crew(home, project, ["install"]).code).toBe(1);
+
+    expect(existsSync(lockFile(project))).toBe(false);
   });
 });

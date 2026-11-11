@@ -1613,13 +1613,14 @@ does not read through a link, and it does not replace one with a lockfile.
   when the manifest now declares nothing. The file is written only if its
   contents would change. No file is created when no line needs an entry; an
   existing one may be rewritten down to its header line.
-- **Another run's entry wins.** The lockfile is read again immediately before
-  it is written, and an entry found there for a line is kept in preference to
-  this run's own resolution. Two installs of one project that overlap
-  therefore converge on the entry published first. Homecrew does not hold a
-  lock across the two, since they may run under different crew homes, so the
-  loser of that race has installed the commit it resolved, not the one
-  recorded; its next bare install moves it to the recorded commit.
+- **An entry already there is kept.** The lockfile is read again immediately
+  before it is written, and an entry it holds for a line is kept in
+  preference to this run's own resolution. This is not a lock. Homecrew does
+  not serialize overlapping installs of one checkout, which may run under
+  different crew homes: if two both find no entry for a line, each writes its
+  own and the later write stands. What settles a project's versions is the
+  lockfile that is committed; a checkout that installed a different commit
+  moves to the committed one on its next bare install.
 - **Not writing.** Nothing is written on `--dry-run`, when a declared skill
   failed to install, when the lockfile or manifest is invalid, or when the
   run found the manifest changed underneath it (§9.2, "Reconciling").
@@ -3588,8 +3589,8 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-41 | §9.3 | A line dropped from the manifest is dropped from the lockfile by the next successful bare `crew install`, including when the manifest is emptied; an emptied manifest still fails on an invalid lockfile. |
 | C-RC-42 | §9.3 | A bare `crew install` that changes nothing does not rewrite the lockfile, and `--dry-run` never writes one. |
 | C-RC-43 | §9.3, §13 | An invalid lockfile, or a symbolic link or directory at the lock path, fails a bare `crew install` with `manifest_invalid` before anything is installed; a link and its target are left untouched. |
-| C-RC-44 | §9.3 | When a declared skill fails to install, or the manifest changes during the run, the lockfile is left exactly as it was. |
-| C-RC-45 | §9.3 | A lock entry published for a line while a bare `crew install` is running is kept: that run does not overwrite it with its own resolution. |
+| C-RC-44 | §9.3 | When a declared reference fails to resolve, a skill of a declared git source fails validation, or the manifest changes during the run (including an emptied manifest), the lockfile is left byte-for-byte as it was, or absent if it was absent. |
+| C-RC-45 | §9.3 | An entry present in the lockfile for a line when a bare `crew install` comes to write it is kept; the run does not replace it with its own resolution. |
 
 ### 18.4 Worked examples
 

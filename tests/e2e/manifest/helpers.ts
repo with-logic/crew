@@ -65,3 +65,24 @@ export function ownedNames(home: string): string[] {
   }
   return names.sort();
 }
+
+/**
+ * Run a verbose bare install, calling `during` once, at the moment the
+ * first skill starts installing: after the manifest and lockfile were
+ * read, before ownership is reconciled or the lockfile written.
+ */
+export function installAnd(home: string, project: string, during: () => void): number {
+  let done = false;
+  return runCli(["install", "--verbose"], {
+    home,
+    cwd: project,
+    streams: {
+      stdout: () => {},
+      stderr: (chunk) => {
+        if (done || !chunk.includes("installing")) return;
+        done = true;
+        during();
+      },
+    },
+  });
+}

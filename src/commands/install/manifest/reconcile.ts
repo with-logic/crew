@@ -42,7 +42,7 @@ export function reconcileOwnership(reconcile: {
 }
 
 /** True unless the manifest governing the project still lists exactly the same references. */
-function hasChangedOnDisk(snapshot: Manifest): boolean {
+export function hasChangedOnDisk(snapshot: Manifest): boolean {
   const identity = (manifest: Manifest | null): string =>
     JSON.stringify([manifest?.file, manifest?.entries.map((entry) => entry.ref)]);
   try {

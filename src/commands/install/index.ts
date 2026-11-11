@@ -21,6 +21,7 @@ import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest/index.ts";
 import { NO_LOCK, readLock, recordLock, refsToInstall } from "./manifest/lockfile.ts";
 import {
+  hasChangedOnDisk,
   IN_STEP_WITH_MANIFEST,
   reconcileOwnership,
   staleManifestWarnings,
@@ -51,9 +52,11 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";
   const manifest = isBare ? manifestForBareInstall(ctx) : null;
   if (manifest?.entries.length === 0) {
-    // §9.3: an emptied manifest still has its lockfile checked and emptied.
-    readLock(manifest);
-    if (!ctx.flags.dryRun) recordLock(manifest, []);
+    // §9.3: an emptied manifest still has its lockfile checked, and emptied
+    // unless this is a dry run or the manifest has changed since it was read.
+    const mayRewriteLock = !(ctx.flags.dryRun || hasChangedOnDisk(manifest));
+    if (mayRewriteLock) recordLock(manifest, []);
+    else readLock(manifest);
     return nothingToInstall(manifest, ctx, `${safePath(manifest.file)} declares no skills.`);
   }
   const kindHint = readKindHint(ctx);
@@ -124,7 +127,9 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   // §9.2, §9.3: ownership and the lockfile are brought up to date only once
   // everything declared has landed, never on a dry run, and — for the
   // lockfile — only if the manifest was still the one this run read.
-  const mayPersist = manifest !== null && failed === 0 && !ctx.flags.dryRun;
+  const isBareInstall = manifest !== null;
+  const everythingLanded = failed === 0;
+  const mayPersist = isBareInstall && everythingLanded && !ctx.flags.dryRun;
   const reconciled = mayPersist
     ? reconcileOwnership({
         home: ctx.home,
