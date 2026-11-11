@@ -14,7 +14,7 @@
 
 import type { ResolvedSkill } from "../../../core/types.ts";
 import { garbageCollectAutoTaps } from "../../../maintenance/auto-taps.ts";
-import { claimForManifest, type Manifest } from "../../../manifest/index.ts";
+import { claimForManifest, type Lock, type Manifest } from "../../../manifest/index.ts";
 import { readState, writeState } from "../../../state/load.ts";
 import { withStateLock } from "../../../state/lock.ts";
 import type { CommandContext } from "../../types.ts";
@@ -57,12 +57,14 @@ const MANIFEST_CHANGED: Reconciliation = { ...EMPTY_RECONCILIATION, manifestChan
  * confirmation, writes neither the lockfile nor any claim. A change after
  * the last confirmation is not seen by this run; the next bare install
  * reconciles against it. A dry run previews the removals, without the state
- * lock, and writes nothing.
+ * lock, and writes nothing. `latest` is the lock of a `--latest` run (§9.3),
+ * whose entries replace the lockfile's.
  */
 export function reconcileManifestInstalls(
   ctx: CommandContext,
   manifest: Manifest,
   resolved: readonly ResolvedSkill[],
+  latest?: Lock,
 ): Reconciliation {
   const resolvedSkillNames = new Set(resolved.map((skill) => skill.name));
   const request = {
@@ -95,7 +97,7 @@ export function reconcileManifestInstalls(
     // (`recordLock` reads `.crewrc.lock` again, not `.crewrc`.)
     // Nothing is checked between or after the two, so a run that reports a
     // changed manifest has written neither.
-    recordLock(manifest, resolved);
+    recordLock(manifest, resolved, latest);
     const claimed = claimForManifest(outcome.state, manifest.projectRoot, resolvedSkillNames);
     if (claimed !== outcome.state) writeState(claimed, ctx.home);
     return reconciliationOf(outcome);
