@@ -3,7 +3,7 @@
  */
 import type { QA } from "../Faq.types";
 
-export const GENERAL: readonly QA[] = [
+export const GENERAL = [
   {
     id: "vs-others",
     defaultOpen: true,
@@ -159,4 +159,4 @@ export const GENERAL: readonly QA[] = [
     q: "What about Linux? Windows?",
     a: "Linux is supported on x86_64 and ARM64 hosts. Windows is future work because agent paths, scheduler integration, and binary distribution need separate platform decisions.",
   },
-];
+] as const satisfies readonly QA[];

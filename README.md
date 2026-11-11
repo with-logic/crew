@@ -173,8 +173,8 @@ When a command asks for an installed skill name, you can use the bare name
 |---|---|
 | `crew install <ref>…` | Install one or more skills into every detected agent; on misses, may suggest skills from trusted taps you haven't added yet. |
 | `crew install --from-git <source>` | Install from a git source without a positional ref. Forces the value to be read as git, so a bare `owner/repo` means GitHub rather than `<tap>/<skill>`. Combines with positional refs. |
-| `crew install` | With nothing named, install the skills listed in this project's `.crewrc`, for this project, at the commits recorded in `.crewrc.lock`. Skills whose line was removed are uninstalled. In a repository with several projects, one run at the top installs them all. See [Skills per project](#skills-per-project-crewrc). |
-| `crew install --latest` | The same, but lines that name a branch or tag move to what it points at now, and `.crewrc.lock` is updated. |
+| `crew install` | With nothing named, install the skills listed in this project's `.crewrc`, for this project, at the commits recorded in `.crewrc.lock`. Skills whose line was removed are uninstalled, unless a listed skill still depends on them. In a repository with several projects, one run at the top installs them all. See [Skills per project](#skills-per-project-crewrc). |
+| `crew install --latest` | The same, but lines that name a branch, a tag, or no version move to what that points at now, and `.crewrc.lock` is updated. |
 | `crew install --save <ref>…` | Add references to this project's `.crewrc` (creating it if needed) and install from it. |
 | `crew uninstall --save <ref>…` | Take lines out of this project's `.crewrc` and remove the skills they brought in. Give each reference as the file writes it. |
 | `crew uninstall <selector>…` | Remove installed skills from every agent they were installed into. A selector is a skill (`pdf`, `anthropic/pdf`), a tap (`acme`) to remove everything installed from it, or a namespace — qualified (`acme/marketing`) or bare when unique across your taps. `--all` removes everything at the target scope. Acts on one scope at a time: the user-scoped install by default, or the current project's with `--scope project`. |
@@ -313,7 +313,7 @@ per line. Check it in at the top of the project.
 Each line is a git source (`@owner/repo`, `gh:owner/repo@ref//subpath`, a git
 URL) or a path inside the project starting with `./`. Blank lines and lines
 starting with `#` are ignored. Skill names from a tap and absolute paths are
-not allowed, so the file means the same thing on every machine.
+not allowed, because they mean different things on different machines.
 
 ```sh
 crew install                          # install what .crewrc lists, for this project
@@ -328,7 +328,7 @@ What to expect:
   (for example `.claude/skills/`), not into your user-wide skills.
 - **The file is the source of truth.** Delete a line and the next
   `crew install` removes that skill, along with dependencies nothing else
-  needs. Skills you installed in the project by hand are left alone.
+  needs. A skill that a remaining line depends on stays. Skills you installed in the project by hand are left alone.
 - **Commit `.crewrc.lock`.** For a line that names a branch, a tag, or no
   version, Homecrew records the commit it installed. Everyone then gets that
   commit, even after the branch moves.

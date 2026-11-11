@@ -24,8 +24,9 @@ export const MANAGING: CommandGroup = {
         <>
           With nothing named, install the skills listed in this project&apos;s <code>.crewrc</code>,
           for this project, at the commits recorded in <code>.crewrc.lock</code>. Skills whose line
-          was removed are uninstalled. <span className={styles.flag}>--latest</span> moves lines
-          that name a branch or tag to what it points at now and updates the lockfile.{" "}
+          was removed are uninstalled, unless a listed skill still depends on them.{" "}
+          <span className={styles.flag}>--latest</span> moves lines that name a branch, a tag, or no
+          version to what that points at now and updates the lockfile.{" "}
           <span className={styles.flag}>--save</span> adds a reference to <code>.crewrc</code> and
           installs it. In a repository with several projects, each with its own <code>.crewrc</code>
           , one run at the top installs them all.

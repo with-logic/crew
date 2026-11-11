@@ -18,7 +18,8 @@ export const PROJECTS: readonly QA[] = [
         <p>
           Running <code>crew install</code> with no arguments in the project installs what the file
           lists, for that project only. Delete a line and the next <code>crew install</code> removes
-          that skill. <code>crew install --save &lt;ref&gt;</code> adds a line for you.
+          that skill, unless another listed skill depends on it.{" "}
+          <code>crew install --save &lt;ref&gt;</code> adds a line for you.
         </p>
         <p>
           Most teams add <code>crew install</code> to a setup step they already have, such as an npm{" "}
