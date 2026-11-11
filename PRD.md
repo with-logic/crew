@@ -99,6 +99,7 @@ Every command below is mandatory. Exit codes are defined in §15.
 
 ```
 crew install <ref> [<ref>...]     Install one or more skills.
+crew install                       Install the skills listed in the project manifest (§9.2).
 crew uninstall <selector> [<selector>...] Remove installed skills from every agent.
 crew remove <selector> [<selector>...]    Alias for `crew uninstall`.
 crew rm <selector> [<selector>...]        Alias for `crew uninstall`.
@@ -1457,6 +1458,36 @@ A `.crewrc` that exists but cannot be opened for any other reason (for
 example, it is not readable) fails with `source_unreachable` (§13). It is not
 skipped, because skipping it would let a manifest further up govern the
 project instead.
+
+**Bare `crew install`.** `crew install` with no positional reference and no
+`--from-git` installs the skills a project manifest declares:
+
+1. **Find the manifest** that governs the working directory, as described
+   under "Locating the manifest" above. With no manifest the command is a
+   `usage_error` whose message mentions `.crewrc`.
+2. **Validate it** as above. An invalid manifest is `manifest_invalid` and
+   nothing is installed.
+3. **Install every declared reference** through the install flow of §9, at
+   project scope, with the manifest's directory as the working directory. That
+   directory is therefore the recorded `project_root` (§11.1) and the base
+   against which relative path lines resolve, wherever beneath it the command
+   was run.
+
+The existing rules apply to each reference unchanged: a skill already
+installed at the declared source and commit is reported as already installed
+(§5.4), so a repeat run with nothing new exits 0 and writes nothing. A manifest
+that declares no skills installs nothing and exits 0; that is decided before
+agents are selected, so it holds on a machine with no active agent.
+
+A bare install is always project scope. `--scope user` with no references is a
+`usage_error`; `--scope project` is accepted and redundant. Flags that change
+how a reference is interpreted (`--recursive`, `--tap`, `--bundle`, `--skill`)
+are a `usage_error` on a bare install, because a manifest must mean the same thing however it is invoked.
+`--agent`, `--dry-run`, `--force`, `--json`, `--quiet`, and `--verbose` behave
+as on any install. The `--json` result carries a `manifest_path` field holding
+the manifest's absolute path.
+
+When any reference is given on the command line, no manifest is read.
 
 ## 10. Update and autoupdate
 
@@ -3364,6 +3395,24 @@ Implementations and test suites refer to criteria by ID.
 | C-CLI-17d | §5.5 | The help target is the first parser positional, so a flag's value is never mistaken for the command. `crew --scope project install --help`, `crew --agent codex install --help`, `crew --from-git gh:acme/skills install --help`, and the spaced boolean `crew --help --json false install` all print the `install` page, byte-identical to `crew help install`. |
 | C-CLI-17e | §5.5 | A command-scoped flag placed BEFORE its command still resolves the target: `crew --prune uninstall --help` prints the `uninstall` page and `crew --recursive install -h` prints the `install` page, byte-identical to their canonical forms. |
 | C-CLI-17f | §5.5, §13 | A malformed value flag in a conventional-flag rewrite fails as `usage_error` with exit 4, not as an unnamed internal error: `crew --help --agent` (no value) reports the stable error name. |
+
+#### C-RC: Project manifest (§9.2)
+
+| ID | Ref | Assertion |
+|---|---|---|
+| C-RC-01 | §9.2 | Bare `crew install` installs every skill the manifest declares, from git and in-project path lines alike, at project scope under the manifest's directory; nothing is written at user scope and each state entry's `project_root` is the manifest's directory. |
+| C-RC-02 | §9.2 | Run from a subdirectory, bare `crew install` uses the nearest manifest above it; skills land under the manifest's directory, not the working directory, and relative path lines resolve against the manifest's directory. With manifests at two levels, only the nearest is used. |
+| C-RC-03 | §9.2, §5.4 | A repeat bare `crew install` with nothing new exits 0, reports the skills as already installed, and installs nothing. Its `--json` result carries `manifest_path`, the manifest's absolute path. |
+| C-RC-04 | §9.2 | A manifest with no reference lines installs nothing and exits 0. |
+| C-RC-05 | §9.2 | A manifest with no reference lines exits 0 when no agent is active: it is decided before agents are selected. Its `--json` result carries `manifest_path`, and `dry_run: true` under `--dry-run`. |
+| C-RC-06 | §9.2 | Bare `crew install` with no manifest at or above the working directory is a `usage_error`, exit 4, whose message mentions `.crewrc`. |
+| C-RC-07 | §9.2 | A manifest above a repository root does not govern that repository, whether the root's `.git` entry is a directory or a file: bare `crew install` inside the repository is a `usage_error` and installs nothing. |
+| C-RC-08 | §9.2 | A directory named `.crewrc` is not a manifest. A symbolic link named `.crewrc` is not a manifest, and its target's contents never appear in output. |
+| C-RC-09 | §9.2, §13 | An invalid manifest fails with `manifest_invalid`, exit 4, with `details` carrying `file`, `line`, and `ref`; none of its lines is installed, including valid ones. |
+| C-RC-10 | §9.2 | Bare `crew install --scope user` is a `usage_error` and installs nothing; bare `crew install --scope project` behaves as bare `crew install`. |
+| C-RC-11 | §9.2 | Bare `crew install` with `--recursive`, `--tap`, `--bundle`, or `--skill` is a `usage_error` and installs nothing. |
+| C-RC-12 | §9.2 | `crew install <ref>` never reads a manifest: with an invalid `.crewrc` in the working directory it installs `<ref>` at the requested scope and succeeds. |
+| C-RC-26 | §9.2 | A manifest path line that reaches outside the project through a symbolic link is `manifest_invalid`, with `details` naming its line; nothing from outside the project is installed. |
 
 ### 18.4 Worked examples
 
