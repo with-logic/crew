@@ -98,10 +98,26 @@ describe("crew uninstall --save", () => {
     expect(beta).not.toBe(alpha);
   });
 
-  test("C-RC-56 when the removal that follows aborts, .crewrc is put back", () => {
+  test("C-RC-56 a reference that matches no line is redacted wherever the error repeats it", () => {
+    const home = makeCrewHome();
+    const { project } = projectWithTwoSkills(home);
+    const secret = "https://user:hunter2@example.com/acme/skills";
+
+    const json = crew(home, project, ["uninstall", "--save", secret, "--json"]);
+    const human = crew(home, project, ["uninstall", "--save", secret]);
+
+    expect(json.code).toBe(4);
+    expect(json.stdout).toContain("usage_error");
+    expect(json.stdout).not.toContain("hunter2");
+    expect(human.stderr).not.toContain("hunter2");
+  });
+
+  test("C-RC-56 when the removal that follows aborts, .crewrc and its lockfile are put back", () => {
     const home = makeCrewHome();
     const { project, beta } = projectWithTwoSkills(home);
     const before = manifestOf(project);
+    const lockBefore = readFileSync(join(project, ".crewrc.lock"), "utf8");
+    expect(lockBefore).toContain(beta);
     // Without its marker the directory is no longer provably crew's (§7.4).
     rmSync(join(skillDir(project, "beta"), ".crew.json"));
 
@@ -110,6 +126,7 @@ describe("crew uninstall --save", () => {
     expect(run.code).toBe(1);
     expect(run.stderr).toContain("was left as it was");
     expect(manifestOf(project)).toBe(before);
+    expect(readFileSync(join(project, ".crewrc.lock"), "utf8")).toBe(lockBefore);
     expect(existsSync(join(skillDir(project, "beta"), "SKILL.md"))).toBe(true);
 
     const json = crew(home, project, ["uninstall", "--save", beta, "--json"]);
@@ -135,19 +152,35 @@ describe("crew uninstall --save", () => {
     expect(run.stderr).toContain("usage_error");
     expect(run.stderr).toContain("--save");
     expect(manifestOf(project)).toBe(before);
-    expect(installed(home)).toHaveLength(2);
+    expect(installed(home)).toEqual([`alpha@${project}`, `beta@${project}`]);
   });
 
   test("C-RC-57 with no reference, or with no manifest, it is a usage_error", () => {
     const home = makeCrewHome();
     const { project } = projectWithTwoSkills(home);
+    const before = manifestOf(project);
 
-    expect(crew(home, project, ["uninstall", "--save"]).stderr).toContain("usage_error");
+    const noReference = crew(home, project, ["uninstall", "--save"]);
+    expect(noReference.code).toBe(4);
+    expect(noReference.stderr).toContain("usage_error");
+    expect(manifestOf(project)).toBe(before);
 
     const bare = makeTempDir("crew-proj-");
-    const run = crew(home, bare, ["uninstall", "--save", "@acme/skills"]);
-    expect(run.stderr).toContain("usage_error");
-    expect(run.stderr).toContain("no `.crewrc`");
+    const noManifest = crew(home, bare, ["uninstall", "--save", "@acme/skills"]);
+    expect(noManifest.code).toBe(4);
+    expect(noManifest.stderr).toContain("usage_error");
+    expect(noManifest.stderr).toContain("no `.crewrc`");
     expect(existsSync(join(bare, ".crewrc"))).toBe(false);
+  });
+
+  test("C-RC-55 --scope project is accepted, and redundant", () => {
+    const home = makeCrewHome();
+    const { project, alpha, beta } = projectWithTwoSkills(home);
+
+    const run = crew(home, project, ["uninstall", "--save", "--scope", "project", beta]);
+
+    expect(run.code).toBe(0);
+    expect(manifestOf(project)).toBe(`# shared skills\n${alpha}\n`);
+    expect(installed(home)).toEqual([`alpha@${project}`]);
   });
 });

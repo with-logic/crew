@@ -13,6 +13,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { CrewError } from "../../../core/errors.ts";
 import {
   addManifestLines,
+  LOCK_FILENAME,
   loadManifestFor,
   MANIFEST_FILENAME,
   type ManifestEdit,
@@ -33,9 +34,7 @@ export function manifestToEdit(cwd: string): { file: string; before: string | nu
   // Parsing it here refuses to edit a manifest that is already invalid.
   const governing = loadManifestFor(cwd);
   if (governing === null) return { file: join(cwd, MANIFEST_FILENAME), before: null };
-  // `loadManifestFor` just read this as a regular file.
-  const found = readFileAt(governing.file) as { readonly text: string };
-  return { file: governing.file, before: found.text };
+  return { file: governing.file, before: governing.text };
 }
 
 /**
@@ -88,10 +87,23 @@ interface PendingEdit {
   readonly extras: CommandContext["flags"]["extras"];
 }
 
+/** The text of the regular file at `path`, or null when there is none to read. */
+function textAt(path: string): string | null {
+  const found = readFileAt(path);
+  return found.kind === "file" ? found.text : null;
+}
+
+/** Make `path` hold `text` again, or not exist when `text` is null. */
+function putBack(path: string, text: string | null): void {
+  if (text === null) rmSync(path, { force: true });
+  else writeText(path, text);
+}
+
 /**
  * Write the edited manifest and run `install`, a bare install, from its
- * directory. If that raises or exits non-zero, the manifest is put back
- * exactly as it was, or removed if this run created it. Returns the
+ * directory. If that raises or exits non-zero, the manifest and its
+ * lockfile are put back exactly as they were, or removed if this run
+ * created them. Returns the
  * install's output and whether it succeeded.
  */
 export function installFromEditedManifest(
@@ -103,10 +115,15 @@ export function installFromEditedManifest(
   // Checked before anything is written: an invalid line never reaches the file.
   parseManifest({ text: edit.text, file });
   const wrote = edit.changedRefs.length > 0;
+  // The install may rewrite the lockfile for the edited manifest before it
+  // fails, so the lockfile is put back together with the manifest.
+  const lockFile = join(dirname(file), LOCK_FILENAME);
+  const lockBefore = textAt(lockFile);
   if (wrote) writeText(file, edit.text);
   const restore = (): void => {
-    if (wrote && before === null) rmSync(file, { force: true });
-    if (wrote && before !== null) writeText(file, before);
+    if (!wrote) return;
+    putBack(file, before);
+    if (textAt(lockFile) !== lockBefore) putBack(lockFile, lockBefore);
   };
   const bare: CommandContext = {
     ...ctx,

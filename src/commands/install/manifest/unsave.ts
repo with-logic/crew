@@ -11,7 +11,7 @@
 import { dirname } from "node:path";
 import { CrewError } from "../../../core/errors.ts";
 import { MANIFEST_FILENAME, removeManifestLines } from "../../../manifest/index.ts";
-import { safePath } from "../../../util/redact.ts";
+import { redactText, safePath } from "../../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
 import {
   installFromEditedManifest,
@@ -61,11 +61,14 @@ export function unsaveThenInstall(
   const projectRoot = dirname(file);
   const lines = ctx.positional.map((ref) => manifestLineFor({ ref, cwd: ctx.cwd, projectRoot }));
   const edit = removeManifestLines(before, lines);
-  const absent = lines.filter((line) => !edit.changedRefs.includes(line.trim()));
+  const removed = new Set(edit.changedRefs);
+  // A reference that names no line was typed by hand and may hold a
+  // credential, so it is redacted wherever it is repeated (§5.2).
+  const absent = lines.filter((line) => !removed.has(line.trim())).map((line) => redactText(line));
   if (absent.length > 0) {
     throw new CrewError(
       "usage_error",
-      `${safePath(file)} has no line \`${safePath(absent[0] as string)}\` — give the reference exactly as the file writes it`,
+      `${safePath(file)} has no line \`${absent[0]}\` — give the reference exactly as the file writes it`,
       { file, refs: absent },
     );
   }

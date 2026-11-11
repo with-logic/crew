@@ -1,8 +1,15 @@
+/**
+ * `crew help uninstall` content (§5.5): the uninstall command's synopsis,
+ * flags, and examples, including `--save`, which removes a line from a
+ * project manifest (§9.2).
+ */
+
 import type { CommandHelp } from "./types.ts";
 
 export const uninstallHelp: CommandHelp = {
   name: "uninstall",
-  synopsis: "crew uninstall <selector> [<selector>...] | crew uninstall --all",
+  synopsis:
+    "crew uninstall <selector> [<selector>...] | crew uninstall --all | crew uninstall --save <ref> [<ref>...]",
   summary: [
     "Remove an installed skill from every agent on your machine.",
     "A selector is usually a skill: name it directly (`pdf`) or tap-qualified (`anthropic/pdf`).",

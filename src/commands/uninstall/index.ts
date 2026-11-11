@@ -1,5 +1,5 @@
 /**
- * `crew uninstall <selector>... | --all` (§7.4, §14).
+ * `crew uninstall <selector>... | --all | --save <ref>...` (§7.4, §9.2, §14).
  *
  * Selectors name installed skills, taps, or namespaces; `--all` selects
  * every skill at the target scope behind a confirmation.
@@ -26,6 +26,11 @@
  * state write and auto-tap GC, and it never takes the state lock —
  * acquiring the lock would itself create `state.json` (§14 reserves
  * the lock for commands that write).
+ *
+ * With `--save <ref>...` (§9.2) the command does none of the above
+ * itself: it removes those lines from the project's `.crewrc` and runs a
+ * bare install, which uninstalls what the lines brought in
+ * (`../install/manifest/unsave.ts`).
  *
  * Per-skill removal and state mutation live in sibling modules
  * (`./core.ts`, `./state.ts`).
