@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { codexAdapter } from "../../../../src/agents/codex.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import {
@@ -85,6 +86,27 @@ test("C-RC-25 under --quiet every aborted removal gets its own line", () => {
   expect(lines[1]).toStartWith(
     "error: could not remove `beta` from claude-code (untracked_directory)",
   );
+});
+
+test("C-RC-25 under --quiet a skill that two agents both refuse to give up gets a line per agent", () => {
+  const home = makeCrewHome();
+  const detect = codexAdapter.detect;
+  (codexAdapter as { detect: () => boolean }).detect = () => true;
+  try {
+    const project = projectWithDroppedAlpha(home);
+    rmSync(join(skillDir(project, "alpha"), ".crew.json"));
+    rmSync(join(codexAdapter.projectPath(project), "alpha", ".crew.json"));
+
+    const run = crew(home, project, ["install", "--quiet"]);
+
+    expect(run.code).toBe(1);
+    expect(run.stderr.trimEnd().split("\n").sort()).toEqual([
+      "error: could not remove `alpha` from claude-code (untracked_directory): something else owns that folder (pass --force to remove anyway)",
+      "error: could not remove `alpha` from codex (untracked_directory): something else owns that folder (pass --force to remove anyway)",
+    ]);
+  } finally {
+    (codexAdapter as { detect: () => boolean }).detect = detect;
+  }
 });
 
 test("C-RC-25 under --quiet the line never repeats text read from the install site", () => {
