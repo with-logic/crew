@@ -41,7 +41,7 @@ export const installHelp: CommandHelp = {
     {
       flag: "--latest",
       description:
-        "With a bare `crew install`: move each `.crewrc` line that names a branch, a tag, or no version to the newest commit its source has, and record it in `.crewrc.lock`. Commit the changed lockfile to share the upgrade. Lines pinned to a full commit, and path lines, stay as they are.",
+        "With a bare `crew install`: move each `.crewrc` line that names a branch or a tag to the commit that branch or tag points at now (a line with no version follows the default branch), and record it in `.crewrc.lock`. Commit the changed lockfile to share the upgrade. Lines pinned to a full commit, and path lines, stay as they are.",
     },
     {
       flag: "--recursive",

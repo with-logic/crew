@@ -35,19 +35,19 @@ const hasNewNotes = (project: string): boolean =>
   existsSync(join(skillDir(project, "alpha"), "notes.md"));
 
 describe("crew install --latest guards", () => {
-  test("C-RC-49 with a reference on the command line it is a usage_error", () => {
+  test.each([
+    ["a positional reference", (repo: string) => ["install", "--latest", repo]],
+    ["--from-git", (repo: string) => ["install", "--latest", "--from-git", repo]],
+  ])("C-RC-49 with %s it is a usage_error", (_what, args) => {
     const home = makeCrewHome();
     const { project, repo } = projectBehindItsSource(home);
 
-    for (const args of [
-      ["install", "--latest", repo],
-      ["install", "--latest", "--from-git", repo],
-    ]) {
-      const run = crew(home, project, args);
-      expect(run.code).not.toBe(0);
-      expect(run.stderr).toContain("usage_error");
-      expect(run.stderr).toContain("--latest");
-    }
+    const run = crew(home, project, [...args(repo), "--json"]);
+
+    expect(run.code).toBe(4);
+    const { error } = JSON.parse(run.stdout) as { error: { name: string; message: string } };
+    expect(error.name).toBe("usage_error");
+    expect(error.message).toContain("--latest");
     expect(hasNewNotes(project)).toBe(false);
   });
 
@@ -66,17 +66,30 @@ describe("crew install --latest guards", () => {
     expect(readFileSync(join(home, "state.json"), "utf8")).toBe(state);
   });
 
-  test("C-RC-50 an unreachable source fails the run and leaves skills and lockfile as they were", () => {
+  test("C-RC-50 an unreachable source fails the run and leaves skills, lockfile, and state as they were", () => {
     const home = makeCrewHome();
-    const { project, repo, lock } = projectBehindItsSource(home);
-    renameSync(dirOf(repo), `${dirOf(repo)}-gone`);
+    // Two lines: the first has something newer, the second cannot be reached.
+    const first = makeSkillRepo(["alpha"]);
+    const second = makeSkillRepo(["beta"]);
+    const project = makeProject([first, second]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    writeFileSync(join(dirOf(first), "alpha", "notes.md"), "v2\n");
+    commitAll(dirOf(first), "publish v2");
+    const lock = readFileSync(lockFile(project), "utf8");
+    const state = readFileSync(join(home, "state.json"), "utf8");
+    renameSync(dirOf(second), `${dirOf(second)}-gone`);
 
-    const run = crew(home, project, ["install", "--latest"]);
+    const run = crew(home, project, ["install", "--latest", "--json"]);
 
     expect(run.code).toBe(5);
-    expect(run.stderr).toContain("source_unreachable");
+    expect((JSON.parse(run.stdout) as { error: { name: string } }).error.name).toBe(
+      "source_unreachable",
+    );
+    expect(hasNewNotes(project)).toBe(false);
     expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
+    expect(existsSync(join(skillDir(project, "beta"), "SKILL.md"))).toBe(true);
     expect(readFileSync(lockFile(project), "utf8")).toBe(lock);
+    expect(readFileSync(join(home, "state.json"), "utf8")).toBe(state);
   });
 
   test("C-RC-50 with no active agent it exits 0 without contacting any source", () => {
@@ -89,13 +102,38 @@ describe("crew install --latest guards", () => {
       const run = crew(home, project, ["install", "--latest", "--json"]);
       expect(run.code).toBe(0);
       expect((JSON.parse(run.stdout) as { no_agents: boolean }).no_agents).toBe(true);
-      // Naming an agent is a request for it, so that still fails as `no_agents`.
-      expect(crew(home, project, ["install", "--latest", "--agent", "claude-code"]).code).not.toBe(
-        0,
+
+      // Naming an agent is a request for it: `no_agents`, not the unreachable source.
+      const named = crew(home, project, [
+        "install",
+        "--latest",
+        "--agent",
+        "claude-code",
+        "--json",
+      ]);
+      expect((JSON.parse(named.stdout) as { error: { name: string } }).error.name).toBe(
+        "no_agents",
       );
     } finally {
       (claudeCodeAdapter as { detect: () => boolean }).detect = detect;
     }
     expect(readFileSync(lockFile(project), "utf8")).toBe(lock);
+  });
+
+  test("C-RC-41 an invalid lockfile is manifest_invalid even with no active agent", () => {
+    const home = makeCrewHome();
+    const { project } = projectBehindItsSource(home);
+    writeFileSync(lockFile(project), "not a lockfile\n");
+    const detect = claudeCodeAdapter.detect;
+    (claudeCodeAdapter as { detect: () => boolean }).detect = () => false;
+    try {
+      const run = crew(home, project, ["install", "--latest", "--json"]);
+      expect(run.code).toBe(4);
+      expect((JSON.parse(run.stdout) as { error: { name: string } }).error.name).toBe(
+        "manifest_invalid",
+      );
+    } finally {
+      (claudeCodeAdapter as { detect: () => boolean }).detect = detect;
+    }
   });
 });

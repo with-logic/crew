@@ -20,7 +20,7 @@ import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest/index.ts";
 import {
-  hasNoActiveAgent,
+  hasAgentToInstallInto,
   latestLock,
   rejectLatestWithReferences,
   wantsLatest,
@@ -66,15 +66,18 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   rejectRecursiveTapRefs(ctx);
   const config = readConfig(ctx.home);
   const discovery = new GitDiscoveryWarnings();
-  // §9.3: `--latest` looks each unpinned line up on its remote, unless
-  // there is no agent to install into, which must not touch a source.
-  const isLatest = manifest !== null && wantsLatest(ctx);
-  if (isLatest && hasNoActiveAgent(config, ctx)) return noAgentsOutcome(manifest, ctx);
-  const latest = isLatest ? latestLock(manifest, readLock(manifest)) : undefined;
+  // §9.3: an invalid lockfile is an error before anything else is decided.
+  const lock = manifest ? readLock(manifest) : null;
+  // §9.3: `--latest` looks each unpinned line up on its remote, but only
+  // once agents are selected: with none to install into, no source is touched.
+  const isLatest = manifest !== null && lock !== null && wantsLatest(ctx);
+  if (isLatest && !hasAgentToInstallInto(config, ctx)) return noAgentsOutcome(manifest, ctx);
+  const latest = isLatest ? latestLock(manifest, lock) : undefined;
   // §9.3: a line with a lock entry installs at its recorded commit.
-  const refs = manifest
-    ? refsToInstall(manifest, latest ?? readLock(manifest))
-    : resolveCollisions(ctx, config, discovery, kindHint);
+  const refs =
+    manifest && lock
+      ? refsToInstall(manifest, latest ?? lock)
+      : resolveCollisions(ctx, config, discovery, kindHint);
   // §5.3: `--from-git` is never bare, so it skips collision resolution.
   if (typeof fromGit === "string") refs.push(normalizeFromGit(fromGit, ctx.cwd));
   // A manifest's skills belong to its project: relative paths resolve

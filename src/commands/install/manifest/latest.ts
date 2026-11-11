@@ -30,23 +30,25 @@ export function rejectLatestWithReferences(ctx: CommandContext): null {
   if (!wantsLatest(ctx)) return null;
   throw new CrewError(
     "usage_error",
-    `\`--latest\` only applies to \`crew install\` with no references, which installs from \`${MANIFEST_FILENAME}\` — to move one skill, run \`crew update <name>\``,
+    `\`--latest\` only applies to \`crew install\` with no references, where it moves every unpinned line of \`${MANIFEST_FILENAME}\` to the commit its branch or tag now names — it cannot move one skill named on the command line`,
   );
 }
 
 /**
- * True when no agent is active and none was asked for by name: the case in
- * which a bare install succeeds without touching any source (§9.2). Asked
- * before `--latest` contacts a remote, so that still holds.
+ * Select agents exactly as the install will, before `--latest` contacts any
+ * remote. False when no agent is active and none was asked for by name: the
+ * case in which a bare install succeeds without touching a source (§9.2).
+ * Any other failure to select agents is raised here, as the install would
+ * raise it, so it is never masked by a lookup that fails first.
  */
-export function hasNoActiveAgent(config: Config, ctx: CommandContext): boolean {
-  if (ctx.flags.agent.length > 0) return false;
+export function hasAgentToInstallInto(config: Config, ctx: CommandContext): boolean {
   try {
     computeAgentSet(config, ctx.flags.agent);
-    return false;
+    return true;
   } catch (err) {
-    // `computeAgentSet` only raises `CrewError`; any but `no_agents` will be raised again by the install itself.
-    return (err as CrewError).code === "no_agents";
+    const noneRequested = ctx.flags.agent.length === 0;
+    if (err instanceof CrewError && err.code === "no_agents" && noneRequested) return false;
+    throw err;
   }
 }
 

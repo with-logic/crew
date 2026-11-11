@@ -39,6 +39,9 @@ function notes(project: string, skill: string): string | null {
   return existsSync(file) ? readFileSync(file, "utf8") : null;
 }
 
+const isInstalled = (project: string, skill: string): boolean =>
+  existsSync(join(skillDir(project, skill), "SKILL.md"));
+
 describe("crew install --latest", () => {
   test("C-RC-47 a locked line stays put on a plain install and moves with --latest", () => {
     const home = makeCrewHome();
@@ -75,6 +78,7 @@ describe("crew install --latest", () => {
   test("C-RC-47 a branch line moves along its branch, and a tag line to where the tag now points", () => {
     const home = makeCrewHome();
     const repo = makeSkillRepo(["alpha"]);
+    const first = headSha(repo);
     tagRepo(dirOf(repo), "stable");
     const project = makeProject([`${repo}@main`]);
     expect(crew(home, project, ["install"]).code).toBe(0);
@@ -89,6 +93,10 @@ describe("crew install --latest", () => {
     writeManifest(project, [`${repo}@stable`]);
     expect(crew(home, project, ["install", "--latest"]).code).toBe(0);
     expect(notes(project, "alpha")).toBeNull();
+    expect(isInstalled(project, "alpha")).toBe(true);
+    expect(readFileSync(lockFile(project), "utf8")).toBe(
+      `${LOCK_HEADER}\n${first} ${repo}@stable\n`,
+    );
   });
 
   test("C-RC-48 a line pinned to a full commit and a path line are left alone", () => {
@@ -103,6 +111,8 @@ describe("crew install --latest", () => {
     expect(crew(home, project, ["install", "--latest"]).code).toBe(0);
 
     expect(notes(project, "alpha")).toBeNull();
+    expect(isInstalled(project, "alpha")).toBe(true);
+    expect(isInstalled(project, "gamma")).toBe(true);
     expect(existsSync(lockFile(project))).toBe(false);
   });
 
@@ -118,6 +128,7 @@ describe("crew install --latest", () => {
     expect(crew(home, project, ["install", "--latest"]).code).toBe(0);
 
     expect(notes(project, "alpha")).toBeNull();
+    expect(isInstalled(project, "alpha")).toBe(true);
     expect(readFileSync(lockFile(project), "utf8")).toBe(`${LOCK_HEADER}\n${first} ${line}\n`);
   });
 
