@@ -84,8 +84,10 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     // §9.2: `runInstall` selects agents before it acquires any source, so
     // this is reached with nothing fetched. Naming an agent with `--agent`
     // is a request for that agent, so it still fails as `no_agents`.
+    const isBareInstall = manifest !== null;
     const noAgentRequested = ctx.flags.agent.length === 0;
-    if (manifest && noAgentRequested && err.code === "no_agents") {
+    const noAgentActive = err.code === "no_agents";
+    if (isBareInstall && noAgentRequested && noAgentActive) {
       return noAgentsOutcome(manifest, ctx);
     }
     throw withKnownTapInstallSuggestions(err, refs, config, cwd, kindHint);

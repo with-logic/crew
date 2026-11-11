@@ -71,16 +71,7 @@ export function nothingToInstall(
  * There is nothing to install into, so this succeeds without touching one.
  */
 export function noAgentsOutcome(manifest: Manifest, ctx: CommandContext): CommandOutput {
-  return {
-    exitCode: 0,
-    human: [`No active agent coders — nothing to install from ${safePath(manifest.file)}.`],
-    json: {
-      already_installed: [],
-      records: [],
-      skipped: [],
-      dry_run: ctx.flags.dryRun,
-      manifest_path: manifest.file,
-      no_agents: true,
-    },
-  };
+  const human = `No active agent coders — nothing to install from ${safePath(manifest.file)}.`;
+  const outcome = nothingToInstall(manifest, ctx, human);
+  return { ...outcome, json: { ...(outcome.json as object), no_agents: true } };
 }
