@@ -99,13 +99,19 @@ describe("areProjectInstallPathsSafeToRemove", () => {
     },
   );
 
-  test("a project root that is not an absolute path is not safe", () => {
-    mkdirSync(installDir("alpha"), { recursive: true });
-    for (const root of [".", "relative/dir", ""]) {
-      expect(areProjectInstallPathsSafeToRemove({ ...entry("alpha"), project_root: root })).toBe(
-        false,
-      );
-    }
+  test.each([".", "relative/dir", ""])(
+    "a project root that is not an absolute path is not safe: %p",
+    (root) => {
+      mkdirSync(installDir("alpha"), { recursive: true });
+      const withRoot = { ...entry("alpha"), project_root: root };
+      expect(areProjectInstallPathsSafeToRemove(withRoot)).toBe(false);
+    },
+  );
+
+  test("an install directory that is a link to nowhere is not safe, and does not throw", () => {
+    mkdirSync(skillsDir(), { recursive: true });
+    symlinkSync(join(project, "no-such-place"), installDir("alpha"));
+    expect(areProjectInstallPathsSafeToRemove(entry("alpha"))).toBe(false);
   });
 
   test("a directory that cannot be inspected is not safe: unreadable is not the same as absent", () => {

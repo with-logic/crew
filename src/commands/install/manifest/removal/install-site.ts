@@ -48,6 +48,16 @@ export type ProjectStateEntry = StateEntry & {
  * True when every install directory for `entry` passes the checks above. A directory that does not exist has nothing in it to protect.
  */
 export function areProjectInstallPathsSafeToRemove(entry: ProjectStateEntry): boolean {
+  try {
+    return passesInstallSiteChecks(entry);
+  } catch {
+    // A link that leads nowhere, a root that cannot be resolved: whatever
+    // could not be inspected has not been shown to be the project's own.
+    return false;
+  }
+}
+
+function passesInstallSiteChecks(entry: ProjectStateEntry): boolean {
   if (!NAME_PATTERN.test(entry.name) || entry.agents.length === 0) return false;
   // §11.1: a root that is not a usable absolute path authorizes nothing.
   if (!hasUsableProjectRoot(entry)) return false;
