@@ -47,6 +47,7 @@ let throwawayRoot: (() => string) | null = null;
  */
 export function withThrowawayStore<T>(home: string, fn: () => T): T {
   const owned: { cleanupPath: string; cleanup: () => void }[] = [];
+  const previous = throwawayRoot;
   throwawayRoot = () => {
     if (owned[0]) return owned[0].cleanupPath;
     ensureDir(paths(home).cacheDir);
@@ -57,7 +58,9 @@ export function withThrowawayStore<T>(home: string, fn: () => T): T {
   try {
     return withExportCleanup(fn, owned);
   } finally {
-    throwawayRoot = null;
+    // Restore rather than clear, so a call nested inside another keeps the
+    // outer call's redirect in force once it returns.
+    throwawayRoot = previous;
   }
 }
 

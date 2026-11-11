@@ -22,7 +22,7 @@ import {
 /** Every path under `root` (files with their bytes), or `[]` when `root` is absent. */
 function snapshot(root: string): [string, string][] {
   if (!existsSync(root)) return [];
-  const names = readdirSync(root, { recursive: true }) as string[];
+  const names = readdirSync(root, { recursive: true, encoding: "utf8" });
   return names.sort().map((name) => {
     const path = join(root, name);
     return [name, statSync(path).isFile() ? readFileSync(path, "hex") : "<dir>"];
@@ -122,5 +122,25 @@ describe("C-INST-15a install --dry-run writes no store entry", () => {
     expect(code).not.toBe(0);
     expect(snapshot(paths(home).storeDir)).toEqual([]);
     expect(snapshot(paths(home).cacheDir)).toEqual([]);
+  });
+
+  test("after a dry run fails, a real install in the same process still lands in the store", () => {
+    const home = makeCrewHome();
+    const source = makeTempDir("crew-src-");
+    const skill = makeSkill(source, "alpha", skillFrontmatter({ name: "alpha" }));
+    const missing = join(source, "absent");
+
+    const failed = runCli(["install", "--dry-run", skill, missing], {
+      home,
+      cwd: source,
+      streams: captureStreams().streams,
+    });
+    expect(failed).not.toBe(0);
+    expect(snapshot(paths(home).storeDir)).toEqual([]);
+
+    expect(
+      runCli(["install", skill], { home, cwd: source, streams: captureStreams().streams }),
+    ).toBe(0);
+    expect(readdirSync(paths(home).storeDir).some((name) => name.startsWith("alpha@"))).toBe(true);
   });
 });
