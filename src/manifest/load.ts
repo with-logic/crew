@@ -55,7 +55,7 @@ export function loadManifestFor(cwd: string): Manifest | null {
  * which the file could be swapped for a link, so the open itself refuses
  * links (`O_NOFOLLOW`) and the type is confirmed on the descriptor.
  */
-function readRegularFile(file: string): string | null {
+export function readRegularFile(file: string): string | null {
   let fd: number;
   try {
     // O_NONBLOCK: opening a FIFO named `.crewrc` must not hang waiting for a writer.

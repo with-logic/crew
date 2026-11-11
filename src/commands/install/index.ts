@@ -20,6 +20,13 @@ import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest/index.ts";
 import {
+  lockAfterInstall,
+  NO_LOCK,
+  readLock,
+  refsToInstall,
+  writeLockIfChanged,
+} from "./manifest/lockfile.ts";
+import {
   IN_STEP_WITH_MANIFEST,
   reconcileOwnership,
   staleManifestWarnings,
@@ -56,8 +63,10 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   rejectRecursiveTapRefs(ctx);
   const config = readConfig(ctx.home);
   const discovery = new GitDiscoveryWarnings();
+  // §9.3: a locked line installs at its recorded commit.
+  const lock = manifest ? readLock(manifest) : NO_LOCK;
   const refs = manifest
-    ? manifest.entries.map((entry) => entry.ref)
+    ? refsToInstall(manifest, lock)
     : resolveCollisions(ctx, config, discovery, kindHint);
   // §5.3: `--from-git` is never bare, so it skips collision resolution.
   if (typeof fromGit === "string") refs.push(normalizeFromGit(fromGit, ctx.cwd));
@@ -127,6 +136,11 @@ export function installCommand(ctx: CommandContext): CommandOutput {
           resolvedSkillNames: new Set(result.resolved.map((skill) => skill.name)),
         })
       : IN_STEP_WITH_MANIFEST;
+  // §9.3: record what each new line resolved to — under the same conditions
+  // as reconciling, and only if the manifest was still the one this run read.
+  if (manifest && noInstallFailures && mayWriteState && !reconciled.manifestChanged) {
+    writeLockIfChanged(manifest, lock, lockAfterInstall(manifest, lock, result.resolved));
+  }
 
   const human = renderInstall(
     {
