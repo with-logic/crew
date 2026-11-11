@@ -3073,6 +3073,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-21a | §9 step 9 | Two directly-named roots where one succeeds in ≥1 agent and the other fails in every selected agent: the run exits 1 and both roots appear in the output. |
 | C-INST-22 | §9 step 9 | Every attempted skill appears in the human output with a per-skill success/failure line. `--json` includes a `results` array with the same per-skill outcomes. |
 | C-INST-23 | §9 step 8 | A staging or store publication failure releases only that attempt's private staging directory. If cleanup also fails, the original failure retains its name, exit code, details, and remedy, and reports the retained staging path and cleanup error with §5.2 escaping/redaction. Source paths, peer staging directories, reused entries, and published canonical bytes remain unchanged. |
+| C-INST-24 | §5.2, §9 | Human `crew install` output escapes C0, DEL, and C1 control characters as `\xNN` in every echoed filesystem path — the project directory shown for a project-scope install and each per-agent install path, for both fresh and already-installed skills — so a crafted directory name cannot forge or reposition terminal output. `--json` values are unchanged. |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
 

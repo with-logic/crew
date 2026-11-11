@@ -16,7 +16,7 @@ import type { AlreadyInstalled } from "../../../install/duplicate-rules/index.ts
 import type { InstallRecord } from "../../../install/perform/index.ts";
 import type { SkippedSkill } from "../../../sources/expand.ts";
 import { firstSentences, plural, shortenHome, wrap } from "../../../util/format.ts";
-import { sanitizeLine } from "../../../util/redact.ts";
+import { safePath, sanitizeLine } from "../../../util/redact.ts";
 import type { Styler } from "../../../util/term.ts";
 import { formatVersion, renderAgentLine, type Totals, tallyAgents } from "./helpers.ts";
 
@@ -141,7 +141,8 @@ function renderAlreadyInstalled(
   if (version) tagParts.push(style.dim(`· ${version}`));
   // Match `renderRecord`'s scope-tag shape: two leading spaces
   // inside `style.dim` so color markup brackets the whole tag.
-  const scopeTag = existing.scope === "project" ? style.dim(`  in ${shortenHome(cwd)}`) : "";
+  const scopeTag =
+    existing.scope === "project" ? style.dim(`  in ${safePath(shortenHome(cwd))}`) : "";
   lines.push(`  ${style.bold(existing.name)} ${tagParts.join(" ")}${scopeTag}`);
   if (existing.reattributedFrom && resolved) {
     const tracking = dryRun ? "would track via" : "now tracked via";
@@ -159,7 +160,7 @@ function renderAlreadyInstalled(
   for (const agentName of existing.agents) {
     const adapter = agentByName(agentName);
     const installPath = adapter
-      ? shortenHome(join(baseFor(adapter, existing.scope, cwd), existing.name))
+      ? safePath(shortenHome(join(baseFor(adapter, existing.scope, cwd), existing.name)))
       : "";
     const pathSuffix = installPath ? `${style.dim("→")} ${style.dim(installPath)}` : "";
     const parts = [style.symbol("muted"), agentName, pathSuffix].filter((s) => s.length > 0);
@@ -179,7 +180,8 @@ function renderRecord(
   // Scope is only annotated for project installs — user scope is the
   // default and showing `[user]` everywhere is noise. For a project
   // install, surface where it landed.
-  const scopeTag = record.scope === "project" ? style.dim(`  in ${shortenHome(cwd)}`) : "";
+  const scopeTag =
+    record.scope === "project" ? style.dim(`  in ${safePath(shortenHome(cwd))}`) : "";
   lines.push(`  ${style.bold(record.name)}${scopeTag}`);
   if (resolved?.frontmatter.description) {
     const desc = firstSentences(sanitizeLine(resolved.frontmatter.description), 200);
