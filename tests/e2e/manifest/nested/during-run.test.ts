@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { manifestForBareInstall } from "../../../../src/commands/install/manifest/index.ts";
-import type { CommandContext } from "../../../../src/commands/types.ts";
+import type { CommandContext, CommandFlags } from "../../../../src/commands/types.ts";
 import { CrewError } from "../../../../src/core/errors.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { makeTempDir } from "../../../helpers/fixtures.ts";
@@ -64,10 +64,32 @@ describe("a project that changes while an earlier one installs", () => {
 });
 
 describe("an install told which manifest it must find", () => {
-  /** A context for a bare install run in `cwd`; the fields this check does not read are left out. */
-  function bareInstallIn(cwd: string): CommandContext {
-    const flags = { scope: "user", scopeGiven: false, agent: [], extras: {} };
-    return { positional: [], cwd, flags } as unknown as CommandContext;
+  /** What a bare install run in `cwd`, with no flags, hands the check. */
+  function bareInstallIn(cwd: string): Pick<CommandContext, "cwd" | "flags"> {
+    const flags: CommandFlags = {
+      scope: "user",
+      scopeGiven: false,
+      agent: [],
+      dryRun: false,
+      json: false,
+      quiet: false,
+      verbose: false,
+      yes: false,
+      force: false,
+      extras: {},
+    };
+    return { cwd, flags };
+  }
+
+  /** The error `check` raises, or undefined. */
+  function errorFrom(check: () => unknown): unknown {
+    let thrown: unknown;
+    try {
+      check();
+    } catch (err) {
+      thrown = err;
+    }
+    return thrown;
   }
 
   test("C-RC-62 accepts that manifest, and refuses any other as manifest_invalid", () => {
@@ -77,14 +99,20 @@ describe("an install told which manifest it must find", () => {
 
     expect(manifestForBareInstall(bareInstallIn(project), own).file).toBe(own);
 
-    let thrown: unknown;
-    try {
-      manifestForBareInstall(bareInstallIn(project), other);
-    } catch (err) {
-      thrown = err;
-    }
+    const thrown = errorFrom(() => manifestForBareInstall(bareInstallIn(project), other));
     expect(thrown).toBeInstanceOf(CrewError);
     expect((thrown as CrewError).code).toBe("manifest_invalid");
     expect((thrown as CrewError).details).toEqual({ file: other });
+  });
+
+  test("C-RC-62 refuses as manifest_invalid, not a usage error, when that manifest is gone", () => {
+    const project = makeProject([makeSkillRepo(["alpha"])]);
+    const own = join(project, ".crewrc");
+    rmSync(own);
+
+    const thrown = errorFrom(() => manifestForBareInstall(bareInstallIn(project), own));
+    expect(thrown).toBeInstanceOf(CrewError);
+    expect((thrown as CrewError).code).toBe("manifest_invalid");
+    expect((thrown as CrewError).details).toEqual({ file: own });
   });
 });

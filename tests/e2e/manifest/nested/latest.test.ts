@@ -52,10 +52,10 @@ describe("--latest over several manifests", () => {
     } finally {
       lookups.stop();
     }
-    for (const project of [root, api]) {
-      expect(readFileSync(join(skillDir(project, "alpha"), "notes.md"), "utf8")).toBe("v2\n");
-      expect(readFileSync(join(project, ".crewrc.lock"), "utf8")).toContain(second);
-    }
+    expect(readFileSync(join(skillDir(root, "alpha"), "notes.md"), "utf8")).toBe("v2\n");
+    expect(readFileSync(join(root, ".crewrc.lock"), "utf8")).toContain(second);
+    expect(readFileSync(join(skillDir(api, "alpha"), "notes.md"), "utf8")).toBe("v2\n");
+    expect(readFileSync(join(api, ".crewrc.lock"), "utf8")).toContain(second);
   });
 
   test("C-RC-61 --latest asks once per ref, and once for two spellings of one repository", () => {

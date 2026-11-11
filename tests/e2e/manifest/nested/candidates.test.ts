@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { makeCrewHome } from "../../../helpers/env.ts";
-import { commitAll, makeTempDir } from "../../../helpers/fixtures.ts";
+import { commitAll, makeGitRepo, makeTempDir } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import { crew, installed, makeSkillRepo, skillDir, writeManifest } from "../helpers.ts";
 import { makeMonorepo } from "./helpers.ts";
@@ -151,6 +151,23 @@ describe("nested manifest candidates", () => {
 
     expect(run.code).toBe(0);
     expect(installed(home)).toEqual([`alpha@${root}`, `gamma@${join(root, "packages/web")}`]);
+  });
+
+  test("C-RC-62 a tracked project whose directory became its own repository is passed over", () => {
+    const home = makeCrewHome();
+    const root = makeMonorepo({
+      ".": [makeSkillRepo(["alpha"])],
+      "vendor/tool": [makeSkillRepo(["beta"])],
+      "vendor/tool/docs": [makeSkillRepo(["gamma"])],
+    });
+    commitAll(root, "projects");
+    // The outer index still lists both manifests; the directory is another repository now.
+    makeGitRepo(join(root, "vendor/tool"));
+
+    const run = crew(home, root, ["install"]);
+
+    expect(run.code).toBe(0);
+    expect(installed(home)).toEqual([`alpha@${root}`]);
   });
 
   test.each([

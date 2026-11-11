@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
@@ -100,6 +100,30 @@ describe("several manifests, one run", () => {
     expect(existsSync(join(home, "state.json"))).toBe(false);
     expect(existsSync(join(root, ".claude"))).toBe(false);
     expect(existsSync(join(root, "packages/api", ".claude"))).toBe(false);
+  });
+
+  test("C-RC-60 each project's warnings reach stderr, the root's and a nested one's alike", () => {
+    const home = makeCrewHome();
+    const root = makeMonorepo({
+      ".": [makeSkillRepo(["alpha"])],
+      "packages/api": [makeSkillRepo(["beta"])],
+    });
+    const api = join(root, "packages/api");
+    expect(crew(home, root, ["install"]).code).toBe(0);
+    // A dropped skill whose directory is now a link is kept, with a warning.
+    const elsewhere = makeTempDir("crew-elsewhere-");
+    renameSync(skillDir(root, "alpha"), join(elsewhere, "alpha"));
+    symlinkSync(join(elsewhere, "alpha"), skillDir(root, "alpha"));
+    renameSync(skillDir(api, "beta"), join(elsewhere, "beta"));
+    symlinkSync(join(elsewhere, "beta"), skillDir(api, "beta"));
+    writeManifest(root, []);
+    writeManifest(api, []);
+
+    const run = crew(home, root, ["install"]);
+
+    expect(run.code).toBe(0);
+    expect(run.stderr).toContain("kept `alpha`");
+    expect(run.stderr).toContain("kept `beta`");
   });
 
   test("C-RC-61 a line dropped from a nested manifest removes that project's skill only", () => {

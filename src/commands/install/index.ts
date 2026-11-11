@@ -52,13 +52,13 @@ export function installCommand(ctx: CommandContext): CommandOutput {
 /**
  * Install the references on the command line, or, for a bare install, the
  * single project whose manifest governs `ctx.cwd`. A caller installing
- * several projects passes `manifestFile`, the manifest this run must find.
+ * several projects passes `expectedManifestFile`, the manifest this run must find.
  */
-export function runOneInstall(ctx: CommandContext, manifestFile?: string): CommandOutput {
+export function runOneInstall(ctx: CommandContext, expectedManifestFile?: string): CommandOutput {
   const fromGit = ctx.flags.extras["from-git"];
   const isBare = isBareInstall(ctx);
   const manifest = isBare
-    ? manifestForBareInstall(ctx, manifestFile)
+    ? manifestForBareInstall(ctx, expectedManifestFile)
     : rejectLatestWithReferences(ctx);
   if (manifest?.entries.length === 0) {
     // §9.3: an invalid lockfile is an error even with nothing to install,

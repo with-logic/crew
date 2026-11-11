@@ -1477,8 +1477,9 @@ project instead.
 `--from-git` installs the skills a project manifest declares:
 
 1. **Find the manifest** that governs the working directory, as described
-   under "Locating the manifest" above. With no manifest the command is a
-   `usage_error` whose message mentions `.crewrc`.
+   under "Locating the manifest" above. With no manifest, and none beneath
+   the working directory either ("Several manifests in one repository"
+   below), the command is a `usage_error` whose message mentions `.crewrc`.
 2. **Validate it** as above. An invalid manifest is `manifest_invalid` and
    nothing is installed.
 3. **Install every declared reference** through the install flow of §9, at
@@ -1594,7 +1595,9 @@ current directory; with none there either, it is the `usage_error` above.
 - **Each must be a project in its own right.** Before any project is
   installed, every directory git lists is checked, each directory on the way
   down from the root without following links. One that no longer exists in
-  the work tree is passed over. One that is reached through a symbolic link,
+  the work tree is passed over, and so is one inside a directory that has
+  become a repository of its own (it holds a `.git`) while this repository's
+  index still lists the file. One that is reached through a symbolic link,
   wherever the link points and whether or not its target holds a `.crewrc`,
   or whose `.crewrc` is not a regular file, fails the command with
   `manifest_invalid` naming that file; nothing is installed. The same check
@@ -3832,7 +3835,7 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-03 | §9.2, §5.4 | A repeat bare `crew install` with nothing new exits 0, reports the skills as already installed, and installs nothing. Its `--json` result carries `manifest_path`, the manifest's absolute path. |
 | C-RC-04 | §9.2 | A manifest with no reference lines installs nothing and exits 0, unless a removal it triggers aborts (C-RC-25). |
 | C-RC-05 | §9.2 | A manifest with no reference lines needs no active agent: installing is decided before agents are selected. Removing what it owned still runs, so the C-RC-25 exception applies. Its `--json` result carries `manifest_path`, and `dry_run: true` under `--dry-run`. |
-| C-RC-06 | §9.2 | Bare `crew install` with no manifest at or above the working directory is a `usage_error`, exit 4, whose message mentions `.crewrc`. |
+| C-RC-06 | §9.2 | Bare `crew install` with no manifest at or above the working directory, and none in a directory beneath it that the command would apply, is a `usage_error`, exit 4, whose message mentions `.crewrc`. |
 | C-RC-07 | §9.2 | A manifest above a repository root does not govern that repository, whether the root's `.git` entry is a directory or a file: bare `crew install` inside the repository is a `usage_error` and installs nothing. |
 | C-RC-08 | §9.2 | A directory named `.crewrc` is not a manifest. A symbolic link named `.crewrc` is not a manifest, and its target's contents never appear in output. |
 | C-RC-09 | §9.2, §13 | An invalid manifest fails with `manifest_invalid`, exit 4, with `details` carrying `file`, `line`, and `ref`; none of its lines is installed, including valid ones. A line whose URL carries a credential is invalid, and the credential appears nowhere in the output. |

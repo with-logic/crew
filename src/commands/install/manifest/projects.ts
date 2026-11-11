@@ -24,9 +24,9 @@ import { withSharedRemoteLookups } from "./latest.ts";
 
 /**
  * A bare install of the single project governing its context's directory.
- * Given `manifestFile`, it must find exactly that manifest, or fail.
+ * Given `expectedManifestFile`, it must find exactly that manifest, or fail.
  */
-type InstallOne = (project: CommandContext, manifestFile?: string) => CommandOutput;
+type InstallOne = (project: CommandContext, expectedManifestFile?: string) => CommandOutput;
 
 /** One project's manifest and what installing it reported. */
 interface ProjectOutput {
@@ -38,22 +38,27 @@ interface ProjectOutput {
  * Run `installOne`, a bare install of the single project governing its
  * context's directory, for each project the command covers.
  *
- * With no manifest beneath the governing one this is `installOne(ctx)` and
+ * With no manifest beneath the governing one this is one `installOne` and
  * nothing more, including its usage error when there is no manifest at all.
+ * The governing manifest is found once, here: its install is told to find
+ * that same file, so it cannot settle for one further up if this one goes
+ * away while the projects beneath it are being listed.
  */
 export function installEveryProject(ctx: CommandContext, installOne: InstallOne): CommandOutput {
   const governing = loadManifestFor(ctx.cwd);
   const root = governing?.projectRoot ?? ctx.cwd;
   // Every candidate is checked before any project is installed.
   const nested = nestedProjectDirs(root);
-  if (nested.length === 0) return installOne(ctx);
+  if (nested.length === 0) return installOne(ctx, governing?.file);
   // The governing project first, then those beneath it in path order. An
   // error raised by one stops the run there; what earlier ones did stands.
   // Under `--latest`, projects that name the same source share one lookup of it.
   return withSharedRemoteLookups(() => {
     const outputs: ProjectOutput[] = [];
-    if (governing) outputs.push({ manifestFile: governing.file, output: installOne(ctx) });
-    for (const dir of nested) outputs.push(installNestedProject(root, dir, ctx, installOne));
+    if (governing) {
+      outputs.push({ manifestFile: governing.file, output: installOne(ctx, governing.file) });
+    }
+    for (const dir of nested) outputs.push(installNestedProject({ root, dir, ctx, installOne }));
     return combine(outputs, governing !== null, ctx);
   });
 }
@@ -65,17 +70,18 @@ export function installEveryProject(ctx: CommandContext, installOne: InstallOne)
  * install is then told which manifest it must find, so it cannot settle for
  * another one.
  */
-function installNestedProject(
-  root: string,
-  dir: string,
-  ctx: CommandContext,
-  installOne: InstallOne,
-): ProjectOutput {
+function installNestedProject(at: {
+  readonly root: string;
+  readonly dir: string;
+  readonly ctx: CommandContext;
+  readonly installOne: InstallOne;
+}): ProjectOutput {
+  const { root, dir, ctx, installOne } = at;
   const manifestFile = join(dir, MANIFEST_FILENAME);
   if (!isOwnProject({ root, dir })) {
     throw new CrewError(
       "manifest_invalid",
-      `${manifestFile} was removed while crew was installing the projects before it`,
+      `${manifestFile} stopped being a project of this repository while crew was installing the projects before it`,
       { file: manifestFile },
     );
   }
