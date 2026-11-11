@@ -29,6 +29,7 @@ import {
 import { readLock, refsToInstall } from "./manifest/lockfile.ts";
 import { EMPTY_RECONCILIATION, reconcileManifestInstalls } from "./manifest/reconcile.ts";
 import { reportReconciliation } from "./manifest/report.ts";
+import { saveThenInstall, wantsSave } from "./manifest/save.ts";
 import { renderInstall } from "./render/index.ts";
 
 /** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
@@ -50,6 +51,8 @@ function readKindHint(ctx: CommandContext): KindHint {
 }
 
 export function installCommand(ctx: CommandContext): CommandOutput {
+  // §9.2: `--save` edits the manifest, then runs this command again as a bare install.
+  if (wantsSave(ctx)) return saveThenInstall(ctx, installCommand);
   const fromGit = ctx.flags.extras["from-git"];
   // §9.2: with nothing named on the command line, the project's manifest names the skills.
   const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";

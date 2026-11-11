@@ -44,6 +44,11 @@ export const installHelp: CommandHelp = {
         "With a bare `crew install`: move each `.crewrc` line that names a branch or a tag to the commit that branch or tag points at now (a line with no version follows the default branch), and record it in `.crewrc.lock`. Commit the changed lockfile to share the upgrade. Lines pinned to a full commit, and path lines, stay as they are.",
     },
     {
+      flag: "--save",
+      description:
+        "Add the skills you name to this project's `.crewrc` (creating it here if there isn't one), then install from it. Everyone who runs `crew install` in the project gets them too. If the install fails, `.crewrc` is left as it was.",
+    },
+    {
       flag: "--recursive",
       description:
         "For direct git/path sources, fall back to bounded recursive discovery when standard tap layouts find no skills. Not accepted on a bare `crew install`, which takes its references from `.crewrc` as written.",

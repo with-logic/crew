@@ -103,6 +103,7 @@ Every command below is mandatory. Exit codes are defined in §15.
 crew install <ref> [<ref>...]     Install one or more skills.
 crew install                       Install the skills listed in the project manifest (§9.2).
 crew install --latest              The same, moving unpinned lines to their latest commit (§9.3).
+crew install --save <ref> [<ref>...] Add references to the project manifest, then install from it (§9.2).
 crew uninstall <selector> [<selector>...] Remove installed skills from every agent.
 crew remove <selector> [<selector>...]    Alias for `crew uninstall`.
 crew rm <selector> [<selector>...]        Alias for `crew uninstall`.
@@ -241,6 +242,7 @@ Only flags documented as repeatable (`--agent`) may appear more than once. Passi
 
 - `--from-git <url>[@<ref>][//<subpath>]` — explicit git source. The value is always parsed as a git source (§8.2), never as a tap reference or path. Any git URL or shorthand form from §8.2 is accepted, and a bare `<owner>/<repo>` value — which as a positional would be read as a tap reference — is treated as GitHub, exactly as if the user had written `@<owner>/<repo>`. The resulting source is installed alongside any positional references on the same command. The bare form accepts the same `@<ref>` and `//<subpath>` tails as every other git reference (`acme/skills@v1.2.0//tools/demo`). A value that cannot be parsed as a git source is `invalid_ref`. The flag is only accepted by `crew install`; on any other command it is an unknown flag (`usage_error`). Like every flag that takes a single value, passing it more than once is a `usage_error` (§5.2).
 - `--latest` — on a bare install only (§9.2), look up each unpinned git line of the manifest on its remote, install it at the commit found there, and record that commit in the lockfile (§9.3). With any reference on the command line it is a `usage_error`.
+- `--save` — add the given references to the project manifest and install from it (§9.2, "Saving to the manifest"). Cannot be combined with `--dry-run` or `--scope user`.
 - `--recursive` — for direct git/path installs only, fall back to bounded recursive discovery when standard layouts find no skill candidates. Tap-name installs use the tap's configured discovery mode; combining `--recursive` with a tap-name ref is a `usage_error`. Dependencies declared by a skill installed with `--recursive` do not inherit the flag; each dependency resolves with its own standard discovery unless its source is already a recursive tap.
 
 ### 5.3.1 Uninstall-time flags
@@ -1499,7 +1501,46 @@ are a `usage_error` on a bare install, because a manifest must mean the same thi
 as on any install. `--latest` is accepted only on a bare install (§9.3). The `--json` result carries a `manifest_path` field holding
 the manifest's absolute path.
 
-When any reference is given on the command line, no manifest is read.
+When any reference is given on the command line, no manifest is read, unless
+`--save` is given.
+
+**Saving to the manifest (`--save`).** `crew install --save <ref>...` adds
+each reference to the project manifest as a line and then runs a bare install
+from it, so the skill is installed, owned by the manifest, and locked exactly
+as if the line had been typed by hand.
+
+- **Which file.** The manifest governing the current directory (found as
+  above) is edited. If there is none, a `.crewrc` is created in the current
+  directory. A manifest that is already invalid is not edited; the command
+  fails with its `manifest_invalid` error.
+- **What is written.** One line per reference, appended after the existing
+  lines. Every existing line, comment, and blank line is left as it was. A
+  reference the manifest already lists is not added again, and a reference
+  given twice is added once. A git reference is written as given
+  (`--from-git <value>` as the git reference it names, §5.3). A path
+  spelled `./…` or `../…` is taken relative to the current directory and
+  written relative to the manifest's directory. Any other spelling,
+  including an absolute path that happens to point inside the project, is
+  written as given and so refused by the next rule.
+- **Validated first.** The edited text must be a valid manifest (above)
+  before anything is written: a skill name from a tap, a path outside the
+  project, an absolute path, or a reference carrying a credential fails with
+  `manifest_invalid` and leaves the file untouched, or uncreated.
+- **All or nothing.** If the install that follows raises an error or exits
+  non-zero, the manifest is put back exactly as it was (or removed, if this
+  run created it), and the run says so: in the message of the error it
+  raises, or otherwise in a line on stderr, with `saved` empty in the
+  `--json` result. Skills that install had already put in place are not
+  rolled back.
+- **Flags.** `--save` with no reference, with `--dry-run`, with
+  `--scope user`, or with a flag that reinterprets references (`--recursive`,
+  `--tap`, `--bundle`, `--skill`) is a `usage_error`, and the manifest is left
+  as it was. `--latest` takes no references (§9.3), so the two cannot be
+  combined.
+- **Output.** Human output begins with a line naming the manifest and the
+  references added, or saying they were already listed. The `--json` result
+  is that of the bare install plus `saved`: the array of references added,
+  as written, empty when all were already listed.
 
 **Ownership.** A manifest owns the skills in its **resolved install set**:
 every skill its lines expand to, plus every dependency resolved with them (§9
@@ -3743,6 +3784,10 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-48 | §9.3 | Under `--latest`, a line pinned to a full commit and a path line are not moved and get no lock entry; a line naming an abbreviated commit keeps the commit it is locked to; and when nothing has moved, nothing is installed and neither the lockfile nor `state.json` is rewritten. |
 | C-RC-49 | §9.3, §5.2 | `--latest` with a reference on the command line, positional or `--from-git`, is a `usage_error`. `--latest --dry-run` reports the skills that would move and writes neither skills, the lockfile, nor state. |
 | C-RC-50 | §9.3 | Under `--latest`, an unreachable source fails the command with `source_unreachable` and leaves the installed skills and the lockfile unchanged. With no active agent and no `--agent`, it exits 0 with `no_agents: true` without contacting any source; with `--agent` it remains `no_agents`. |
+| C-RC-51 | §9.2 | `crew install --save <ref>` appends the reference to the governing `.crewrc`, leaving its other lines and comments as they were, installs it, marks it `manifest_owned`, and records it in the lockfile; `--json` carries it in `saved`. With no manifest, one is created in the current directory. `--from-git <value>` is saved as the git reference it names. |
+| C-RC-52 | §9.2 | Under `--save`, a path given from a subdirectory is written relative to the manifest's directory and no manifest is created in the subdirectory. A reference already listed is not written again: the file is byte-for-byte unchanged and `saved` is empty. |
+| C-RC-53 | §9.2 | Under `--save`, a tap skill name, a path outside the project, an absolute path, a reference carrying a credential, or a malformed reference fails with `manifest_invalid` without modifying or creating `.crewrc`, and without printing the credential. When the install that follows fails (an unreachable source, a skill that fails validation), `.crewrc` is restored byte-for-byte, or removed if the run created it, and stderr says it was left as it was. |
+| C-RC-54 | §9.2 | `--save` with `--dry-run`, with `--scope user`, with `--recursive`, with `--latest`, or with no reference is a `usage_error` and leaves `.crewrc` unchanged. |
 
 ### 18.4 Worked examples
 
