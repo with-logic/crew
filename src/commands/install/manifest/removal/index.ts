@@ -4,3 +4,4 @@
  */
 
 export { areProjectInstallPathsSafeToRemove, type ProjectStateEntry } from "./install-site.ts";
+export { processDroppedEntries, type RemovalOutcome } from "./sweep.ts";
