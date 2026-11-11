@@ -1,6 +1,7 @@
 /**
  * `crew install --save <ref>...` (§9.2): add references to the project's
- * manifest, then install from it.
+ * manifest, then install from it. `./unsave.ts` is the reverse, built from
+ * the pieces exported here.
  *
  * The edit is validated before the file is written, and the file is put
  * back as it was if the install that follows does not succeed, so a failed
@@ -28,7 +29,7 @@ export function wantsSave(ctx: CommandContext): boolean {
 }
 
 /** The manifest a `--save` edits: the one governing `cwd`, or a new one in `cwd`. */
-function manifestToEdit(cwd: string): { file: string; before: string | null } {
+export function manifestToEdit(cwd: string): { file: string; before: string | null } {
   // Parsing it here refuses to edit a manifest that is already invalid.
   const governing = loadManifestFor(cwd);
   if (governing === null) return { file: join(cwd, MANIFEST_FILENAME), before: null };
@@ -44,7 +45,7 @@ function manifestToEdit(cwd: string): { file: string; before: string | null } {
  * means. Every other spelling, an absolute path included, is written as
  * given, so the manifest's own rules accept or refuse it.
  */
-function manifestLineFor(at: {
+export function manifestLineFor(at: {
   readonly ref: string;
   readonly cwd: string;
   readonly projectRoot: string;
@@ -56,7 +57,7 @@ function manifestLineFor(at: {
 }
 
 /** `--save` writes the manifest and installs at project scope; refuse what contradicts that. */
-function rejectUnsavableFlags(ctx: CommandContext): void {
+export function rejectUnsavableFlags(ctx: CommandContext): void {
   if (ctx.flags.dryRun) {
     throw new CrewError(
       "usage_error",
@@ -93,7 +94,7 @@ interface PendingEdit {
  * exactly as it was, or removed if this run created it. Returns the
  * install's output and whether it succeeded.
  */
-function installFromEditedManifest(
+export function installFromEditedManifest(
   ctx: CommandContext,
   pending: PendingEdit,
   install: (bare: CommandContext) => CommandOutput,
@@ -125,12 +126,7 @@ function installFromEditedManifest(
   }
   if (output.exitCode === 0) return { output, succeeded: true };
   restore();
-  // stderr is not printed under `--json`, where an empty `saved` says the same.
-  const json = { ...(output.json as object), saved: [] };
-  return {
-    output: { ...output, json, stderr: [...(output.stderr ?? []), note] },
-    succeeded: false,
-  };
+  return { output: { ...output, stderr: [...(output.stderr ?? []), note] }, succeeded: false };
 }
 
 /**
@@ -160,7 +156,8 @@ export function saveThenInstall(
     { file, before, edit, extras },
     install,
   );
-  if (!succeeded) return output;
+  // stderr is not printed under `--json`, where an empty `saved` says the same.
+  if (!succeeded) return { ...output, json: { ...(output.json as object), saved: [] } };
   const added = edit.changedRefs;
   const alreadyListed = refsToSave.length === 1 ? "that reference" : "those references";
   const summary =

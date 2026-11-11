@@ -31,7 +31,6 @@
  * (`./core.ts`, `./state.ts`).
  */
 
-import { ALL_AGENTS, agentByName } from "../../agents/registry.ts";
 import { withTargetLocks } from "../../agents/target-lock/index.ts";
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
@@ -40,7 +39,10 @@ import { garbageCollectAutoTaps } from "../../maintenance/auto-taps.ts";
 import { entryKey } from "../../state/identity.ts";
 import { readState, writeState } from "../../state/load.ts";
 import { withStateLock } from "../../state/lock.ts";
+import { installCommand } from "../install/index.ts";
+import { unsaveThenInstall } from "../install/manifest/unsave.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
+import { validateAgentFilter } from "./agent-filter.ts";
 import { allTargets, confirmAll } from "./all.ts";
 import { removeOne, type UninstallRecord } from "./core.ts";
 import { renderUninstall } from "./render.ts";
@@ -49,6 +51,8 @@ import { findOrphan } from "./state.ts";
 import { uninstallTargetBases } from "./target-set.ts";
 
 export function uninstallCommand(ctx: CommandContext): CommandOutput {
+  // §9.2: `--save` edits the manifest and lets a bare install do the removing.
+  if (ctx.flags.extras["save"]) return unsaveThenInstall(ctx, installCommand);
   const all = Boolean(ctx.flags.extras["all"]);
   if (ctx.positional.length === 0 && !all) {
     throw new CrewError(
@@ -134,26 +138,6 @@ function runUninstall(
         uninstallTargetBases(state, targets, prune, ctx.cwd, agentFilter),
         (_failures, unavailable) => remove(unavailable),
       );
-}
-
-/**
- * Validate `--agent` against the adapter registry. An unknown agent is
- * a user error — we tell them what's known so they can fix the typo.
- * An empty filter (no `--agent` passed) means "remove from every agent
- * this skill is currently installed in."
- */
-function validateAgentFilter(agents: readonly string[]): readonly string[] | null {
-  if (agents.length === 0) return null;
-  const unknown = agents.filter((n) => !agentByName(n));
-  if (unknown.length > 0) {
-    const known = ALL_AGENTS.map((a) => a.name).join(", ");
-    throw new CrewError(
-      "usage_error",
-      `unknown agent${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")} — known agents: ${known}`,
-      { unknown },
-    );
-  }
-  return agents;
 }
 
 /**

@@ -26,6 +26,11 @@ export const uninstallHelp: CommandHelp = {
         "Show what would be removed (including what `--prune` would clean up) without touching anything.",
     },
     {
+      flag: "--save",
+      description:
+        "Take a line out of this project's `.crewrc` instead of naming a skill: give the reference exactly as the file writes it. Homecrew removes the line, then removes the skills it brought in. If that fails, `.crewrc` is left as it was.",
+    },
+    {
       flag: "--prune",
       description:
         "Also clean up dependencies that are no longer needed. Like `apt autoremove` — safe and tidy.",
