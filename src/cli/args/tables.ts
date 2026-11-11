@@ -18,7 +18,7 @@ export const STRING_GLOBALS = ["scope"] as const;
 /** Subcommand-specific boolean flags. */
 export const BOOLEAN_SUB: Readonly<Record<string, readonly string[]>> = {
   doctor: ["verify", "repair"],
-  install: ["tap", "bundle", "skill", "recursive", "latest"],
+  install: ["tap", "bundle", "skill", "recursive", "latest", "save"],
   tap: ["recursive", "uninstall"],
   uninstall: ["prune", "all"],
   "self-update": ["check"],
