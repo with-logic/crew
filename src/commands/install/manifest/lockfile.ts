@@ -91,10 +91,14 @@ export function recordLock(manifest: Manifest, resolved: readonly ResolvedSkill[
 
 /**
  * The commit an unlocked git line resolved to: that of a resolved skill
- * that came from the line's repository, at the line's own ref, at or
- * beneath its subpath. The ref matters: two lines may name one repository
- * at different refs, and each must get its own commit. Every skill one
- * line resolves to comes from one commit, so the first match is enough.
+ * that came from the line's repository, at or beneath its subpath.
+ *
+ * A skill resolved at the line's own ref is preferred, because two lines
+ * may name one repository at different refs and each must get its own
+ * commit. If there is none, the line's skills were deduplicated into those
+ * of another line: the resolver keeps one copy of a skill that two lines
+ * reach at the same commit, and rejects the install if they reach it at
+ * different ones. So any skill from that location carries the line's commit.
  */
 function resolvedCommitOf(
   entry: GitManifestEntry,
@@ -102,10 +106,10 @@ function resolvedCommitOf(
 ): string | null | undefined {
   const { url, ref, subpath } = entry.source;
   const root = canonicalRepoUrl(url);
-  const isFromLine = (skill: ResolvedSkill): boolean => {
+  const fromLocation = resolved.filter((skill) => {
     const { root: skillRoot, location } = sourceIdentityOf(skill.tap, skill.tapRelativePath);
-    const isBeneath = subpath === "" || `${location}/`.startsWith(`${subpath}/`);
-    return skillRoot === root && skill.ref === ref && isBeneath;
-  };
-  return resolved.find(isFromLine)?.resolvedSha;
+    return skillRoot === root && (subpath === "" || `${location}/`.startsWith(`${subpath}/`));
+  });
+  const atOwnRef = fromLocation.find((skill) => skill.ref === ref);
+  return (atOwnRef ?? fromLocation[0])?.resolvedSha;
 }

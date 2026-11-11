@@ -13,6 +13,7 @@ import { dirname, relative, sep } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import type { GitSource, PathSource } from "../core/types.ts";
 import { parseRef } from "../refs/parse.ts";
+import { redactText } from "../util/redact.ts";
 
 /** The file name crew looks for at a project root. */
 export const MANIFEST_FILENAME = ".crewrc";
@@ -30,6 +31,9 @@ export interface ManifestEntry {
 const TAP_REASON =
   "names a skill through a tap, which depends on each machine's configured taps; " +
   "use a git source such as `@owner/repo//path` or a path inside the project";
+const CREDENTIAL_REASON =
+  "a line carries a credential in its URL, and this file is meant to be checked in; " +
+  "remove it and let git supply the credential (a credential helper, or an SSH URL)";
 const wrapInBackticks = (ref: string): string => `\`${ref}\``;
 
 /** A manifest's contents and where they were read from. */
@@ -63,7 +67,7 @@ export function parseManifest({ text, file }: ManifestInput): readonly ManifestE
     if (ref === "" || ref.startsWith("#")) continue;
     const line = index + 1;
     const reject = (reason: string): never => {
-      throw manifestInvalid({ file, line, ref }, reason);
+      throw manifestInvalid({ file, line, ref: redactText(ref) }, reason);
     };
     const earlier = firstLineOf.get(ref);
     if (earlier !== undefined) reject(`${wrapInBackticks(ref)} repeats line ${earlier}`);
@@ -87,7 +91,12 @@ function parsePortable(
     return reject((err as Error).message);
   }
   if (source.type === "tap") return reject(`${wrapInBackticks(ref)} ${TAP_REASON}`);
-  if (source.type === "git") return source;
+  if (source.type === "git") {
+    // A manifest is checked in, and so is the lockfile that copies its lines.
+    // The line itself is what the lockfile records, so it is the line that is checked.
+    if (redactText(ref) !== ref) return reject(CREDENTIAL_REASON);
+    return source;
+  }
   if (!(ref.startsWith("./") || ref.startsWith("../"))) {
     return reject(
       `${wrapInBackticks(ref)} must be a path relative to the project, starting with \`./\``,

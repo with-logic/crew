@@ -5,12 +5,11 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { runGit } from "../../../../src/git/exec.ts";
 import { LOCK_HEADER } from "../../../../src/manifest/lock.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import { crew, makeProject, makeSkillRepo, writeManifest } from "../helpers.ts";
+import { headOf, lockFile } from "./helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -20,11 +19,6 @@ afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
 
-const lockFile = (project: string): string => join(project, ".crewrc.lock");
-const dirOf = (repo: string): string => repo.slice("file://".length);
-const headOf = (repo: string): string =>
-  runGit(["rev-parse", "HEAD"], { cwd: dirOf(repo) }).stdout.trim();
-
 describe("lockfile entries for dropped lines", () => {
   test("C-RC-41 a line dropped from the manifest is dropped from the lockfile", () => {
     const home = makeCrewHome();
@@ -33,6 +27,12 @@ describe("lockfile entries for dropped lines", () => {
     const project = makeProject([alpha, beta]);
     expect(crew(home, project, ["install"]).code).toBe(0);
 
+    // The stale entry now names a commit that exists nowhere: if the dropped
+    // line were still resolved, the install would fail.
+    writeFileSync(
+      lockFile(project),
+      `${LOCK_HEADER}\n${"d".repeat(40)} ${alpha}\n${headOf(beta)} ${beta}\n`,
+    );
     writeManifest(project, [beta]);
     expect(crew(home, project, ["install"]).code).toBe(0);
 

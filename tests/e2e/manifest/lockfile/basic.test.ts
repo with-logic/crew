@@ -13,6 +13,7 @@ import { makeCrewHome } from "../../../helpers/env.ts";
 import { commitAll } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
 import { addLocalSkill, crew, makeProject, makeSkillRepo, writeManifest } from "../helpers.ts";
+import { dirOf, headOf, lockFile } from "./helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -22,10 +23,6 @@ afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
 
-const lockFile = (project: string): string => join(project, ".crewrc.lock");
-const dirOf = (repo: string): string => repo.slice("file://".length);
-const headOf = (repo: string): string =>
-  runGit(["rev-parse", "HEAD"], { cwd: dirOf(repo) }).stdout.trim();
 const installedNote = (project: string): string =>
   readFileSync(join(project, ".claude", "skills", "alpha", "notes.md"), "utf8");
 
@@ -62,6 +59,22 @@ describe("the project lockfile", () => {
       new Map([
         [`${repo}//beta`, headOf(repo)],
         [other, headOf(other)],
+      ]),
+    );
+  });
+
+  test("C-RC-38 two lines that reach one skill at one commit under different refs both get an entry", () => {
+    const home = makeCrewHome();
+    const repo = makeSkillRepo(["alpha"]);
+    const project = makeProject([`${repo}//alpha`, `${repo}@main//alpha`]);
+
+    expect(crew(home, project, ["install"]).code).toBe(0);
+
+    const text = readFileSync(lockFile(project), "utf8");
+    expect(parseLock({ text, file: lockFile(project) })).toEqual(
+      new Map([
+        [`${repo}//alpha`, headOf(repo)],
+        [`${repo}@main//alpha`, headOf(repo)],
       ]),
     );
   });

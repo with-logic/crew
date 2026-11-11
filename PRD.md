@@ -1431,6 +1431,11 @@ lines is valid and declares no skills.
   directory but reaches outside it through a symbolic link is rejected. A
   path that does not exist cannot be checked this way and is left for the
   install flow to report as a missing source.
+- A git source whose URL carries a credential: a password, a token in the
+  userinfo of an `http(s)` URL, or a sensitive query parameter (§5.2). The
+  manifest, and the lockfile that copies its lines (§9.3), are meant to be
+  checked in. The diagnostic MUST NOT echo the credential. An SSH username
+  such as `git@` is not a credential.
 - A line that is not a valid reference under §8.4.
 - A line identical, after trimming, to an earlier reference line.
 
@@ -3566,7 +3571,7 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-06 | §9.2 | Bare `crew install` with no manifest at or above the working directory is a `usage_error`, exit 4, whose message mentions `.crewrc`. |
 | C-RC-07 | §9.2 | A manifest above a repository root does not govern that repository, whether the root's `.git` entry is a directory or a file: bare `crew install` inside the repository is a `usage_error` and installs nothing. |
 | C-RC-08 | §9.2 | A directory named `.crewrc` is not a manifest. A symbolic link named `.crewrc` is not a manifest, and its target's contents never appear in output. |
-| C-RC-09 | §9.2, §13 | An invalid manifest fails with `manifest_invalid`, exit 4, with `details` carrying `file`, `line`, and `ref`; none of its lines is installed, including valid ones. |
+| C-RC-09 | §9.2, §13 | An invalid manifest fails with `manifest_invalid`, exit 4, with `details` carrying `file`, `line`, and `ref`; none of its lines is installed, including valid ones. A line whose URL carries a credential is invalid, and the credential appears nowhere in the output. |
 | C-RC-10 | §9.2 | Bare `crew install --scope user` is a `usage_error` and installs nothing; bare `crew install --scope project` behaves as bare `crew install`. |
 | C-RC-11 | §9.2 | Bare `crew install` with `--recursive`, `--tap`, `--bundle`, or `--skill` is a `usage_error` and installs nothing. |
 | C-RC-12 | §9.2 | `crew install <ref>` never reads a manifest: with an invalid `.crewrc` in the working directory it installs `<ref>` at the requested scope and succeeds. |
