@@ -1525,20 +1525,25 @@ auto tap with no entries, the tap is garbage-collected (§16.5).
 Three kinds of dropped entry are kept, because removing them would damage
 something the manifest does not own:
 
-- **Still required.** Dependents are removed before the skills they depend
-  on, and an entry is removed only once nothing remaining in state at that
-  install location lists it in `required_by`. An entry that a skill the
-  manifest does not own requires — directly, or through another entry kept for
-  the same reason — is not uninstalled. It is *released*: its `manifest_owned` flag
-  is cleared and it stays installed as an ordinary dependency.
+- **Still required.** A dropped entry is *needed* while something that is
+  staying at that install location lists it in `required_by`: a skill the
+  manifest does not own, a dropped entry whose own removal aborted, or another
+  needed entry. A needed entry is not uninstalled. Among the rest, dependents
+  are removed before the skills they depend on. Dependency cycles are legal
+  (C-DEP-08): a dropped cycle that nothing outside it needs is removed in
+  full, one member at a time. An entry needed by a skill the manifest does not
+  own — directly, or through another entry kept for the same reason — is
+  *released*: its `manifest_owned` flag is cleared and it stays installed as an
+  ordinary dependency.
 - **Aborted.** An entry whose removal aborts on a §7.4 safety check keeps its
   files, its state entry, and its `manifest_owned` flag, is reported, and makes the
   command exit 1. An entry held back only because such a dependent still
   requires it also keeps its flag, so it is removed when the dependent is.
-- **Shared with user scope.** If an agent's project-scope directory for the
-  skill is physically the same directory as its user-scope one (a project
-  skills directory that is a symbolic link to the user's), the entry is not
-  uninstalled and is released. Removing it would delete the user's skill.
+- **Shared physical directory.** If an agent's project-scope directory for
+  the skill is physically the same directory as its user-scope one, or as the
+  directory of the same skill recorded under another project root (a project
+  skills directory that is a symbolic link), the entry is not uninstalled and
+  is released. Removing it would delete a skill another install location has.
 
 A skill installed in the project by hand and never claimed is never removed,
 and entries at user scope or under another project root are never touched. If
@@ -3480,7 +3485,7 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-02 | §9.2 | Run from a subdirectory, bare `crew install` uses the nearest manifest above it; skills land under the manifest's directory, not the working directory, and relative path lines resolve against the manifest's directory. With manifests at two levels, only the nearest is used. |
 | C-RC-03 | §9.2, §5.4 | A repeat bare `crew install` with nothing new exits 0, reports the skills as already installed, and installs nothing. Its `--json` result carries `manifest_path`, the manifest's absolute path. |
 | C-RC-04 | §9.2 | A manifest with no reference lines installs nothing and exits 0, unless a removal it triggers aborts (C-RC-25). |
-| C-RC-05 | §9.2 | A manifest with no reference lines exits 0 when no agent is active: it is decided before agents are selected. Its `--json` result carries `manifest_path`, and `dry_run: true` under `--dry-run`. |
+| C-RC-05 | §9.2 | A manifest with no reference lines exits 0 when no agent is active: installing is decided before agents are selected. Removing what it owned still runs, so the C-RC-25 exception applies. Its `--json` result carries `manifest_path`, and `dry_run: true` under `--dry-run`. |
 | C-RC-06 | §9.2 | Bare `crew install` with no manifest at or above the working directory is a `usage_error`, exit 4, whose message mentions `.crewrc`. |
 | C-RC-07 | §9.2 | A manifest above a repository root does not govern that repository, whether the root's `.git` entry is a directory or a file: bare `crew install` inside the repository is a `usage_error` and installs nothing. |
 | C-RC-08 | §9.2 | A directory named `.crewrc` is not a manifest. A symbolic link named `.crewrc` is not a manifest, and its target's contents never appear in output. |
@@ -3505,7 +3510,8 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-27 | §9.2 | When a declared reference fails to install, or the manifest is invalid, nothing is removed and `state.json` is unchanged. |
 | C-RC-28 | §9.2 | Dropped skills that a hand-installed skill requires, directly or through another kept skill, stay installed with their `manifest_owned` flag cleared; a dropped skill nothing requires is still removed. |
 | C-RC-29 | §9.2 | When a dropped dependent's removal aborts, the dependency it requires stays installed and keeps its `manifest_owned` flag. |
-| C-RC-30 | §9.2 | When a project's skills directory is a symbolic link to the user-scope one, dropping a line removes nothing: the user-scope skill's files and state entry remain, and the project entry is released. |
+| C-RC-30 | §9.2 | When a project's skills directory is a symbolic link to the user-scope one, or to another project's, dropping a line removes nothing: the other location's files and state entry remain, and this project's entry stays in state with `manifest_owned` cleared. |
+| C-RC-35 | §9.2 | A dropped dependency chain that nothing else needs is removed in full, dependents first. A dropped dependency cycle that nothing outside it needs is removed in full. |
 
 ### 18.4 Worked examples
 

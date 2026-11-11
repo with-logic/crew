@@ -111,8 +111,8 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   // §9.2: the manifest owns what it resolved to and drops what it no longer
   // accounts for — but only once all of it has landed.
   let removed: readonly UninstallRecord[] = [];
-  const everythingInstalled = failed === 0;
-  if (manifest && everythingInstalled) {
+  const noInstallFailures = failed === 0;
+  if (manifest && noInstallFailures) {
     const resolvedSkillNames = new Set(result.resolved.map((skill) => skill.name));
     const mayWriteState = !ctx.flags.dryRun;
     if (mayWriteState) {

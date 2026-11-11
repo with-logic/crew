@@ -56,3 +56,16 @@ export function installed(home: string): string[] {
     .installations.map((e) => `${e.name}@${e.scope === "user" ? "user" : e.project_root}`)
     .sort();
 }
+
+/** Where claude-code installs `name` at project scope under `project`. */
+export function skillDir(project: string, name: string): string {
+  return join(project, ".claude", "skills", name);
+}
+
+/** Names of the manifest-owned state entries, sorted. */
+export function ownedNames(home: string): string[] {
+  return readState(home)
+    .installations.filter((entry) => entry.manifest_owned === true)
+    .map((entry) => entry.name)
+    .sort();
+}

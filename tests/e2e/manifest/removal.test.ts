@@ -17,6 +17,7 @@ import {
   installed,
   makeProject,
   makeSkillRepo,
+  skillDir,
   writeManifest,
 } from "./helpers.ts";
 
@@ -27,9 +28,6 @@ beforeEach(() => {
 afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
-
-const skillDir = (project: string, name: string): string =>
-  join(project, ".claude", "skills", name);
 
 describe("removing dropped skills", () => {
   test("C-RC-20 a skill whose line is dropped is uninstalled; the rest stay", () => {
