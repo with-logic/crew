@@ -154,6 +154,7 @@ describe("bare crew install guards", () => {
       ref: "./linked/stolen",
     });
     expect(installed(home)).toEqual([]);
+    expect(existsSync(join(project, ".claude"))).toBe(false);
   });
 
   test("C-RC-26 a symlink that stays inside the project is followed; a missing path is a missing source", () => {

@@ -124,7 +124,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       records: result.summary.records,
       skipped: result.skipped,
       dry_run: ctx.flags.dryRun,
-      ...(manifest ? { manifest: manifest.file } : {}),
+      ...(manifest ? { manifest_path: manifest.file } : {}),
       ...(warnings.length > 0 ? { warnings } : {}),
     },
   };

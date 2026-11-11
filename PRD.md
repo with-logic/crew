@@ -1484,8 +1484,8 @@ A bare install is always project scope. `--scope user` with no references is a
 how a reference is interpreted (`--recursive`, `--tap`, `--bundle`, `--skill`)
 are a `usage_error` on a bare install, because a manifest must mean the same thing however it is invoked.
 `--agent`, `--dry-run`, `--force`, `--json`, `--quiet`, and `--verbose` behave
-as on any install. The `--json` result carries a `manifest` field holding the
-manifest's absolute path.
+as on any install. The `--json` result carries a `manifest_path` field holding
+the manifest's absolute path.
 
 When any reference is given on the command line, no manifest is read.
 
@@ -3402,9 +3402,9 @@ Implementations and test suites refer to criteria by ID.
 |---|---|---|
 | C-RC-01 | §9.2 | Bare `crew install` installs every skill the manifest declares, from git and in-project path lines alike, at project scope under the manifest's directory; nothing is written at user scope and each state entry's `project_root` is the manifest's directory. |
 | C-RC-02 | §9.2 | Run from a subdirectory, bare `crew install` uses the nearest manifest above it; skills land under the manifest's directory, not the working directory, and relative path lines resolve against the manifest's directory. With manifests at two levels, only the nearest is used. |
-| C-RC-03 | §9.2, §5.4 | A repeat bare `crew install` with nothing new exits 0, reports the skills as already installed, and installs nothing. Its `--json` result carries `manifest`, the manifest's absolute path. |
+| C-RC-03 | §9.2, §5.4 | A repeat bare `crew install` with nothing new exits 0, reports the skills as already installed, and installs nothing. Its `--json` result carries `manifest_path`, the manifest's absolute path. |
 | C-RC-04 | §9.2 | A manifest with no reference lines installs nothing and exits 0. |
-| C-RC-05 | §9.2 | A manifest with no reference lines exits 0 when no agent is active: it is decided before agents are selected. Its `--json` result carries `manifest`. |
+| C-RC-05 | §9.2 | A manifest with no reference lines exits 0 when no agent is active: it is decided before agents are selected. Its `--json` result carries `manifest_path`, and `dry_run: true` under `--dry-run`. |
 | C-RC-06 | §9.2 | Bare `crew install` with no manifest at or above the working directory is a `usage_error`, exit 4, whose message mentions `.crewrc`. |
 | C-RC-07 | §9.2 | A manifest above a repository root does not govern that repository, whether the root's `.git` entry is a directory or a file: bare `crew install` inside the repository is a `usage_error` and installs nothing. |
 | C-RC-08 | §9.2 | A directory named `.crewrc` is not a manifest. A symbolic link named `.crewrc` is not a manifest, and its target's contents never appear in output. |

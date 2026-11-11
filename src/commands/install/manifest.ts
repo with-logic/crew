@@ -57,7 +57,7 @@ export function nothingToInstall(
       records: [],
       skipped: [],
       dry_run: ctx.flags.dryRun,
-      manifest: manifest.file,
+      manifest_path: manifest.file,
     },
   };
 }

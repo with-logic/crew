@@ -97,11 +97,11 @@ describe("bare crew install", () => {
     const payload = JSON.parse(again.stdout) as {
       already_installed: { name: string }[];
       records: unknown[];
-      manifest: string;
+      manifest_path: string;
     };
     expect(payload.already_installed.map((a) => a.name)).toEqual(["alpha"]);
     expect(payload.records).toEqual([]);
-    expect(payload.manifest).toBe(join(project, ".crewrc"));
+    expect(payload.manifest_path).toBe(join(project, ".crewrc"));
     expect(written()).toEqual(before);
   });
 
@@ -122,12 +122,13 @@ describe("bare crew install", () => {
     (claudeCodeAdapter as { detect: () => boolean }).detect = () => false;
     try {
       const project = makeProject([]);
-      const run = crew(makeCrewHome(), project, ["install", "--json"]);
+      const run = crew(makeCrewHome(), project, ["install", "--dry-run", "--json"]);
       expect(run.code).toBe(0);
       expect(JSON.parse(run.stdout)).toMatchObject({
         records: [],
         already_installed: [],
-        manifest: join(project, ".crewrc"),
+        dry_run: true,
+        manifest_path: join(project, ".crewrc"),
       });
     } finally {
       (claudeCodeAdapter as { detect: () => boolean }).detect = detect;

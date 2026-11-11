@@ -15,13 +15,13 @@ export const installHelp: CommandHelp = {
     "You can install by name (from a collection you've already added), by GitHub URL, from any git repo, or from a local folder — see REFERENCE FORMS below for the full list of shapes you can pass.",
     "If a name isn't in your taps but appears in a trusted tap you haven't added yet, Homecrew tells you the tap to add first.",
     "Point at a folder full of skills and you get all of them at once. New ones added later show up automatically when you run `crew update`.",
-    "Run `crew install` with nothing after it inside a project that has a `.crewrc` file, and Homecrew installs the skills that file lists, just for that project. A `.crewrc` is a plain list, one reference per line, with `#` for comments. Each line is a git reference (`@acme/skills`, `gh:acme/skills@v1.2.0//python/testing`) or a path that starts with `./` or `../` and stays inside the project (`./tools/skills/notes`). Skill names from a tap, absolute paths, and `~` paths aren't allowed there, so the file means the same thing on every machine that can reach those git URLs.",
+    "Run `crew install` with nothing after it inside a project that has a `.crewrc` file, and Homecrew installs the skills that file lists, just for that project. A `.crewrc` is a plain list, one reference per line; blank lines and lines beginning with `#` are ignored. Each line is a git reference (`@acme/skills`, `gh:acme/skills@v1.2.0//python/testing`) or a path that starts with `./` or `../` and stays inside the project (`./tools/skills/notes`). Skill names from a tap, absolute paths, and `~` paths aren't allowed there, so the file means the same thing on every machine that can reach those git URLs.",
   ],
   flags: [
     {
       flag: "--scope {user,project}",
       description:
-        "Install for yourself everywhere (default), or only inside the current project. A bare `crew install` from a `.crewrc` is always project scope.",
+        "Install for yourself everywhere (default), or only inside the current project. A bare `crew install` from a `.crewrc` is always project scope: `--scope project` is accepted but redundant, and `--scope user` is an error.",
     },
     {
       flag: "--agent <name>",
@@ -40,7 +40,7 @@ export const installHelp: CommandHelp = {
     {
       flag: "--recursive",
       description:
-        "For direct git/path sources, fall back to bounded recursive discovery when standard tap layouts find no skills.",
+        "For direct git/path sources, fall back to bounded recursive discovery when standard tap layouts find no skills. Not accepted on a bare `crew install`, which takes its references from `.crewrc` as written.",
     },
     {
       flag: "--from-git <git-source>",
