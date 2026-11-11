@@ -9,7 +9,7 @@
  */
 
 import { dirname, join } from "node:path";
-import { runGit } from "../git/exec.ts";
+import { GitProcessError, runGit } from "../git/exec.ts";
 import { MANIFEST_FILENAME } from "./parse.ts";
 
 /**
@@ -17,15 +17,28 @@ import { MANIFEST_FILENAME } from "./parse.ts";
  * absolute paths in a stable order. Empty when `root` is not inside a git
  * work tree: without one there is nothing to say which directories belong.
  *
- * Inside a work tree, a failure to list its files is raised, not read as
- * "none": that would silently skip every nested project.
+ * Only git saying "not a git repository" counts as being outside one. Any
+ * other failure, to answer that question or to list the files, is raised,
+ * not read as "none": that would silently skip every nested project.
  */
 export function nestedManifestDirs(root: string): string[] {
+  // LC_ALL=C: the refusal is told apart from other failures by its message.
   const inside = runGit(["rev-parse", "--is-inside-work-tree"], {
     cwd: root,
+    env: { LC_ALL: "C" },
     throwOnError: false,
   });
-  if (inside.exitCode !== 0 || inside.stdout.trim() !== "true") return [];
+  if (inside.exitCode !== 0) {
+    if (inside.stderr.includes("not a git repository")) return [];
+    // git is refusing or failing for some other reason (an ownership check,
+    // a damaged repository). Nested projects may exist, so this is not "none".
+    throw new GitProcessError(
+      `git could not tell whether ${root} is inside a repository: ${inside.stderr.trim()}`,
+      inside,
+    );
+  }
+  // "false" inside a `.git` directory or a bare repository: no work tree to search.
+  if (inside.stdout.trim() !== "true") return [];
   const listed = runGit(
     [
       "ls-files",

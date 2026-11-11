@@ -103,6 +103,28 @@ describe("nestedManifestDirs", () => {
     }
   });
 
+  test("a git failure other than 'not a repository' is raised, not read as none", () => {
+    const root = makeRepo();
+    addManifest(root, "packages/web");
+    const real = setGitRunner((args, options) =>
+      args[0] === "rev-parse"
+        ? { stdout: "", stderr: "fatal: detected dubious ownership in repository", exitCode: 128 }
+        : real(args, options),
+    );
+    try {
+      expect(() => nestedManifestDirs(root)).toThrow("dubious ownership");
+    } finally {
+      setGitRunner(real);
+    }
+  });
+
+  test("is empty inside a .git directory, which has no work tree", () => {
+    const root = makeRepo();
+    addManifest(root, "packages/web");
+
+    expect(nestedManifestDirs(join(root, ".git"))).toEqual([]);
+  });
+
   test("is empty outside a git repository", () => {
     const root = realpathSync(makeTempDir("crew-plain-"));
     addManifest(root, "packages/web");

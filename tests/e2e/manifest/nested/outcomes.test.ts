@@ -4,9 +4,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
+import { setGitRunner } from "../../../../src/git/exec.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { makeSkill, makeTempDir } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
@@ -35,6 +36,47 @@ describe("several manifests, one run", () => {
 
     expect(run.code).toBe(4);
     expect(installed(home)).toEqual([`alpha@${root}`, `gamma@${join(root, "packages/web")}`]);
+  });
+
+  test("C-RC-60 when two projects exit non-zero, the first one's code is the command's", () => {
+    const home = makeCrewHome();
+    const beta = makeSkillRepo(["beta"]);
+    const root = makeMonorepo({ "packages/a": ["./broken"], "packages/b": [beta] });
+    const a = join(root, "packages/a");
+    const b = join(root, "packages/b");
+    makeSkill(a, "broken", "name: broken");
+    // In b, a dropped skill that cannot be removed makes that project exit 1.
+    expect(crew(home, b, ["install"]).code).toBe(0);
+    rmSync(join(skillDir(b, "beta"), ".crew.json"));
+    writeManifest(b, []);
+    expect(crew(home, a, ["install"]).code).toBe(4);
+    expect(crew(home, b, ["install"]).code).toBe(1);
+
+    expect(crew(home, root, ["install"]).code).toBe(4);
+  });
+
+  test("C-RC-61 --latest asks a source shared by several projects once", () => {
+    const home = makeCrewHome();
+    const shared = makeSkillRepo(["alpha"]);
+    const root = makeMonorepo({
+      ".": [shared],
+      "packages/api": [shared],
+      "packages/web": [shared],
+    });
+    const lookups: string[] = [];
+    const real = setGitRunner((args, options) => {
+      if (args[0] === "ls-remote") lookups.push(args.join(" "));
+      return real(args, options);
+    });
+    try {
+      expect(crew(home, root, ["install", "--latest"]).code).toBe(0);
+      expect(lookups).toHaveLength(1);
+      // The sharing lasts one command: the next run asks again.
+      expect(crew(home, root, ["install", "--latest"]).code).toBe(0);
+      expect(lookups).toHaveLength(2);
+    } finally {
+      setGitRunner(real);
+    }
   });
 
   test("C-RC-60 a project that raises an error stops the run there; earlier projects stay installed", () => {

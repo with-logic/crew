@@ -3,18 +3,25 @@
  * manifest governing the current directory is applied, and then every
  * manifest in a directory beneath it, each as its own project.
  *
- * Each project is installed exactly as a bare install run in its directory
- * would install it: its own install location, lockfile, and ownership.
- * This module only decides which projects there are and joins what each
- * one reported.
+ * This module finds the manifests, once, and hands each to the
+ * single-project install, which does no searching of its own. Each project
+ * therefore gets its own install location, lockfile, and ownership, and is
+ * processed exactly once.
  */
 
 import { loadManifestFor, nestedManifestDirs } from "../../../manifest/index.ts";
 import { safePath } from "../../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
+import { sharingRemoteLookups } from "./latest.ts";
 
-/** The `--json` result of a bare install of one project. */
-type ProjectResult = Readonly<Record<string, unknown>>;
+/**
+ * The `--json` result of a bare install of one project. Every such result
+ * names its manifest (§9.2); the rest is passed through untouched.
+ */
+interface ProjectResult {
+  readonly manifest_path: string;
+  readonly [field: string]: unknown;
+}
 
 /**
  * Run `installOne`, a bare install of the single project governing its
@@ -32,9 +39,12 @@ export function installEveryProject(
   if (nested.length === 0) return installOne(ctx);
   // The governing project first, then those beneath it in path order. An
   // error raised by one stops the run there; what earlier ones did stands.
-  const outputs = governing ? [installOne(ctx)] : [];
-  for (const dir of nested) outputs.push(installOne({ ...ctx, cwd: dir }));
-  return combine(outputs, governing !== null, ctx);
+  // Under `--latest`, projects that name the same source share one lookup of it.
+  return sharingRemoteLookups(() => {
+    const outputs = governing ? [installOne(ctx)] : [];
+    for (const dir of nested) outputs.push(installOne({ ...ctx, cwd: dir }));
+    return combine(outputs, governing !== null, ctx);
+  });
 }
 
 /** Join the outputs of several projects into one, in the order they ran. */
@@ -51,20 +61,20 @@ function combine(
     const result = output.json as ProjectResult;
     results.push(result);
     if (human.length > 0) human.push("");
-    human.push(ctx.style.bold(safePath(String(result["manifest_path"]))), ...(output.human ?? []));
+    human.push(ctx.style.bold(safePath(result.manifest_path)), ...(output.human ?? []));
     stderr.push(...(output.stderr ?? []));
     // The first failure decides the exit code; later projects still ran.
     if (exitCode === 0) exitCode = output.exitCode;
   }
   // With no governing manifest, the top level is an empty result and every project is nested.
-  const nothingAtTop: ProjectResult = {
+  const nothingAtTop = {
     already_installed: [],
     records: [],
     skipped: [],
     dry_run: ctx.flags.dryRun,
     removed: [],
   };
-  const top = hasGoverning ? (results[0] as ProjectResult) : nothingAtTop;
+  const top = hasGoverning ? results[0] : nothingAtTop;
   const nested = hasGoverning ? results.slice(1) : results;
   return { exitCode, human, stderr, json: { ...top, nested } };
 }

@@ -32,23 +32,26 @@ import { reportReconciliation } from "./manifest/report.ts";
 import { saveThenInstall, wantsSave } from "./manifest/save.ts";
 import { renderInstall } from "./render/index.ts";
 
-/** True when nothing is named on the command line: the project's manifest names the skills (§9.2). */
+/**
+ * True when the command line names no reference. Which projects such a run
+ * installs is decided by where the manifests are (§9.2), not here.
+ */
 function isBareInstall(ctx: CommandContext): boolean {
   return ctx.positional.length === 0 && typeof ctx.flags.extras["from-git"] !== "string";
 }
 
 export function installCommand(ctx: CommandContext): CommandOutput {
   // §9.2: `--save` edits one manifest, then installs that one project from it.
-  if (wantsSave(ctx)) return saveThenInstall(ctx, installOneProject);
+  if (wantsSave(ctx)) return saveThenInstall(ctx, runOneInstall);
   // §9.2: a bare install covers the governing manifest and every one beneath it.
-  return isBareInstall(ctx) ? installEveryProject(ctx, installOneProject) : installOneProject(ctx);
+  return isBareInstall(ctx) ? installEveryProject(ctx, runOneInstall) : runOneInstall(ctx);
 }
 
 /**
  * Install the references on the command line, or, for a bare install, the
  * single project whose manifest governs `ctx.cwd`.
  */
-export function installOneProject(ctx: CommandContext): CommandOutput {
+export function runOneInstall(ctx: CommandContext): CommandOutput {
   const fromGit = ctx.flags.extras["from-git"];
   const isBare = isBareInstall(ctx);
   const manifest = isBare ? manifestForBareInstall(ctx) : rejectLatestWithReferences(ctx);

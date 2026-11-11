@@ -1554,11 +1554,14 @@ current directory; with none there either, it is the `usage_error` above.
   ones that no ignore rule excludes. A manifest that `.gitignore` excludes
   (under `node_modules`, say) or that lies inside another repository nested
   in this one is not applied. Outside a git work tree no directory beneath is
-  searched: only the governing manifest is applied.
-- **Each is its own project.** Every manifest is applied exactly as a bare
-  install run in its directory would apply it: skills install under that
-  directory, its lockfile sits beside it, and ownership, reconciling, and
-  removal are per manifest. Manifests do not merge, and a skill two of them
+  searched: only the governing manifest is applied. Only git reporting that
+  the directory is not in a repository counts as being outside one; if git
+  fails for any other reason the command fails with that error, because
+  manifests it could not look for must not be silently skipped.
+- **Each is its own project.** The manifests are found once, and each is
+  then applied on its own, exactly once, with no further searching beneath
+  it: skills install under its directory, its lockfile sits beside it, and
+  ownership, reconciling, and removal are per manifest. Manifests do not merge, and a skill two of them
   declare is installed once under each.
 - **Order and failure.** The governing manifest is applied first, then the
   others in ascending order of directory path. When one exits non-zero the
@@ -1567,7 +1570,9 @@ current directory; with none there either, it is the `usage_error` above.
   the command fails with that error and the manifests after it are not
   applied; what earlier ones did stands.
 - **Flags** apply to every manifest in the run, `--latest` and `--dry-run`
-  included. `--save` is the exception: it edits one manifest and installs
+  included. Under `--latest`, a source and ref that several manifests name
+  is looked up on its remote once per command, so all of them move to the
+  same commit. `--save` is the exception: it edits one manifest and installs
   that one project only.
 - **Output.** When only one manifest is applied, output is as described
   above. Otherwise human output reports each project in order under a line
@@ -3826,8 +3831,8 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-54 | §9.2 | `--save` with `--dry-run`, with `--scope user`, with `--recursive`, with `--latest`, or with no reference is a `usage_error` and leaves `.crewrc` unchanged. |
 | C-RC-58 | §9.2 | In a git repository with a `.crewrc` at the root and in two directories beneath it, bare `crew install` at the root installs each project's skills under that project's own directory, marks each `manifest_owned`, and writes each project's lockfile beside its manifest. `--json` carries the root's result at the top level and the others in `nested`, in path order, each with its `manifest_path`; human output reports each under its manifest's path. With no manifest at the root, the manifests beneath are still applied, all in `nested`. |
 | C-RC-59 | §9.2 | Run in a project's directory, bare `crew install` applies that project and those beneath it and leaves its parent and siblings untouched. A `.crewrc` that git ignores is not applied, and outside a git work tree no manifest beneath the governing one is applied. |
-| C-RC-60 | §9.2 | With several manifests, one that exits non-zero sets the command's exit code and the others are still applied; one that raises an error fails the command with that error, later manifests are not applied, and earlier ones stay installed. With no active agent every project reports `no_agents: true` and nothing is installed. |
-| C-RC-61 | §9.2 | A line dropped from a nested manifest removes that project's copy of the skill and leaves another project's copy of the same skill installed. `crew install --save` edits and installs the governing project only: its result has no `nested`. |
+| C-RC-60 | §9.2 | With several manifests, one that exits non-zero sets the command's exit code (the first such code, when several do) and the others are still applied; one that raises an error fails the command with that error, later manifests are not applied, and earlier ones stay installed. With no active agent every project reports `no_agents: true` and nothing is installed. |
+| C-RC-61 | §9.2 | A line dropped from a nested manifest removes that project's copy of the skill and leaves another project's copy of the same skill installed. `crew install --save` edits and installs the governing project only: its result has no `nested`. Under `--latest`, a source named by several manifests is looked up once per command. |
 
 ### 18.4 Worked examples
 

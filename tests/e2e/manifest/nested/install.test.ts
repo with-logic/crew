@@ -30,11 +30,13 @@ interface NestedResult {
 describe("bare crew install with several manifests", () => {
   test("C-RC-58 at the root it installs every project, each into its own directory", () => {
     const home = makeCrewHome();
-    const [alpha, beta, gamma] = ["alpha", "beta", "gamma"].map((name) => makeSkillRepo([name]));
+    const alpha = makeSkillRepo(["alpha"]);
+    const beta = makeSkillRepo(["beta"]);
+    const gamma = makeSkillRepo(["gamma"]);
     const root = makeMonorepo({
-      ".": [alpha as string],
-      "packages/api": [beta as string],
-      "packages/web": [gamma as string],
+      ".": [alpha],
+      "packages/api": [beta],
+      "packages/web": [gamma],
     });
     const api = join(root, "packages/api");
     const web = join(root, "packages/web");
@@ -54,7 +56,9 @@ describe("bare crew install with several manifests", () => {
     expect(ownedNames(home)).toEqual(["alpha", "beta", "gamma"]);
     expect(existsSync(join(skillDir(api, "beta"), "SKILL.md"))).toBe(true);
     expect(existsSync(skillDir(root, "beta"))).toBe(false);
-    expect(readFileSync(join(web, ".crewrc.lock"), "utf8")).toContain(gamma as string);
+    expect(readFileSync(join(root, ".crewrc.lock"), "utf8")).toContain(alpha);
+    expect(readFileSync(join(api, ".crewrc.lock"), "utf8")).toContain(beta);
+    expect(readFileSync(join(web, ".crewrc.lock"), "utf8")).toContain(gamma);
   });
 
   test("C-RC-58 human output reports each project under its manifest's path", () => {
@@ -69,8 +73,10 @@ describe("bare crew install with several manifests", () => {
     expect(run.code).toBe(0);
     const rootAt = run.stdout.indexOf(join(root, ".crewrc"));
     const apiAt = run.stdout.indexOf(join(root, "packages/api", ".crewrc"));
+    const alphaAt = run.stdout.indexOf("alpha");
     expect(rootAt).toBeGreaterThanOrEqual(0);
-    expect(apiAt).toBeGreaterThan(rootAt);
+    expect(alphaAt).toBeGreaterThan(rootAt);
+    expect(apiAt).toBeGreaterThan(alphaAt);
     expect(run.stdout.indexOf("beta")).toBeGreaterThan(apiAt);
   });
 
@@ -81,13 +87,39 @@ describe("bare crew install with several manifests", () => {
     const run = crew(home, root, ["install", "--json"]);
 
     expect(run.code).toBe(0);
-    const result = JSON.parse(run.stdout) as NestedResult;
-    expect(result.manifest_path).toBeUndefined();
-    expect(result.records).toEqual([]);
-    expect(result.nested.map((project) => project.manifest_path)).toEqual([
+    const { nested, ...top } = JSON.parse(run.stdout) as NestedResult;
+    expect(top as Record<string, unknown>).toEqual({
+      already_installed: [],
+      records: [],
+      skipped: [],
+      dry_run: false,
+      removed: [],
+    });
+    expect(nested.map((project) => project.manifest_path)).toEqual([
       join(root, "packages/api", ".crewrc"),
     ]);
     expect(installed(home)).toEqual([`beta@${join(root, "packages/api")}`]);
+  });
+
+  test("C-RC-58 --dry-run applies to every project: each reports it and nothing is written", () => {
+    const home = makeCrewHome();
+    const root = makeMonorepo({
+      ".": [makeSkillRepo(["alpha"])],
+      "packages/api": [makeSkillRepo(["beta"])],
+    });
+    const api = join(root, "packages/api");
+
+    const run = crew(home, root, ["install", "--dry-run", "--json"]);
+
+    expect(run.code).toBe(0);
+    const result = JSON.parse(run.stdout) as { dry_run: boolean; nested: { dry_run: boolean }[] };
+    expect(result.dry_run).toBe(true);
+    expect(result.nested.map((project) => project.dry_run)).toEqual([true]);
+    expect(existsSync(skillDir(root, "alpha"))).toBe(false);
+    expect(existsSync(skillDir(api, "beta"))).toBe(false);
+    expect(existsSync(join(root, ".crewrc.lock"))).toBe(false);
+    expect(existsSync(join(api, ".crewrc.lock"))).toBe(false);
+    expect(existsSync(join(home, "state.json"))).toBe(false);
   });
 
   test("C-RC-59 run inside one project, it leaves its siblings and its parent alone", () => {
