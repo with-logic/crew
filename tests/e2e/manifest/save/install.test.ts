@@ -69,6 +69,25 @@ describe("crew install --save", () => {
     expect(manifestOf(project)).toBe(`${alpha}\n`);
   });
 
+  test("C-RC-51 several references are saved in one run, each once", () => {
+    const home = makeCrewHome();
+    const alpha = makeSkillRepo(["alpha"]);
+    const beta = makeSkillRepo(["beta"]);
+    const project = makeProject([]);
+
+    const run = crew(home, project, ["install", "--save", alpha, beta, alpha, "--json"]);
+
+    expect(run.code).toBe(0);
+    expect((JSON.parse(run.stdout) as { saved: string[] }).saved).toEqual([alpha, beta]);
+    expect(manifestOf(project)).toBe(`${alpha}\n${beta}\n`);
+    expect(installed(home)).toEqual([`alpha@${project}`, `beta@${project}`]);
+
+    const again = crew(home, project, ["install", "--save", alpha, beta]);
+    expect(again.code).toBe(0);
+    expect(again.stdout).toContain("already lists those references");
+    expect(manifestOf(project)).toBe(`${alpha}\n${beta}\n`);
+  });
+
   test("C-RC-52 a path given from a subdirectory is written relative to the manifest", () => {
     const home = makeCrewHome();
     const project = makeProject([]);

@@ -1517,17 +1517,21 @@ as if the line had been typed by hand.
   lines. Every existing line, comment, and blank line is left as it was. A
   reference the manifest already lists is not added again, and a reference
   given twice is added once. A git reference is written as given
-  (`--from-git <value>` as the git reference it names, §5.3). A path is
-  given relative to the current directory and written relative to the
-  manifest's directory, starting with `./`.
+  (`--from-git <value>` as the git reference it names, §5.3). A path
+  spelled `./…` or `../…` is taken relative to the current directory and
+  written relative to the manifest's directory. Any other spelling,
+  including an absolute path that happens to point inside the project, is
+  written as given and so refused by the next rule.
 - **Validated first.** The edited text must be a valid manifest (above)
   before anything is written: a skill name from a tap, a path outside the
   project, an absolute path, or a reference carrying a credential fails with
   `manifest_invalid` and leaves the file untouched, or uncreated.
 - **All or nothing.** If the install that follows raises an error or exits
   non-zero, the manifest is put back exactly as it was (or removed, if this
-  run created it), and a line on stderr says so. Skills that install had
-  already put in place are not rolled back.
+  run created it), and the run says so: in the message of the error it
+  raises, or otherwise in a line on stderr, with `saved` empty in the
+  `--json` result. Skills that install had already put in place are not
+  rolled back.
 - **Flags.** `--save` with no reference, with `--dry-run`, with
   `--scope user`, or with a flag that reinterprets references (`--recursive`,
   `--tap`, `--bundle`, `--skill`) is a `usage_error`, and the manifest is left

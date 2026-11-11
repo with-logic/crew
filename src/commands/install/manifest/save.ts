@@ -8,7 +8,7 @@
  */
 
 import { rmSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { CrewError } from "../../../core/errors.ts";
 import {
   addManifestLines,
@@ -18,13 +18,11 @@ import {
   parseManifest,
   readFileAt,
 } from "../../../manifest/index.ts";
-import { parseRef } from "../../../refs/parse.ts";
 import { toPosix, writeText } from "../../../util/fs.ts";
 import { safePath } from "../../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../../types.ts";
 import { normalizeFromGit } from "../from-git.ts";
 
-/** True when the run asked for `--save`. */
 export function wantsSave(ctx: CommandContext): boolean {
   return Boolean(ctx.flags.extras["save"]);
 }
@@ -40,19 +38,20 @@ function manifestToEdit(cwd: string): { file: string; before: string | null } {
 }
 
 /**
- * The line to write for a reference given on the command line. A path is
- * given relative to where the command ran, and is written relative to the
- * manifest's directory, which is what a manifest line means.
+ * The line to write for a reference given on the command line. A path
+ * spelled relative to where the command ran (`./`, `../`) is written
+ * relative to the manifest's directory, which is what a manifest line
+ * means. Every other spelling, an absolute path included, is written as
+ * given, so the manifest's own rules accept or refuse it.
  */
-function manifestLineFor(ref: string, cwd: string, projectRoot: string): string {
-  let source: ReturnType<typeof parseRef>;
-  try {
-    source = parseRef(ref, cwd);
-  } catch {
-    return ref; // Not a reference at all: `parseManifest` reports it, with its line.
-  }
-  if (source.type !== "path") return ref;
-  const fromRoot = toPosix(relative(projectRoot, source.path));
+function manifestLineFor(at: {
+  readonly ref: string;
+  readonly cwd: string;
+  readonly projectRoot: string;
+}): string {
+  const { ref, cwd, projectRoot } = at;
+  if (!(ref.startsWith("./") || ref.startsWith("../"))) return ref;
+  const fromRoot = toPosix(relative(projectRoot, resolve(cwd, ref)));
   return fromRoot.startsWith("../") ? fromRoot : `./${fromRoot}`;
 }
 
@@ -114,17 +113,24 @@ function installFromEditedManifest(
     cwd: dirname(file),
     flags: { ...ctx.flags, extras },
   };
+  const note = `${safePath(file)} was left as it was, because the install did not succeed.`;
   let output: CommandOutput;
   try {
     output = install(bare);
   } catch (err) {
     restore();
-    throw err;
+    // The error is the only output of a run that raises, so it carries the note.
+    if (!(err instanceof CrewError)) throw err;
+    throw new CrewError(err.code, `${err.message} (${note})`, err.details, err.remedy);
   }
   if (output.exitCode === 0) return { output, succeeded: true };
   restore();
-  const note = `${safePath(file)} was left as it was, because the install did not succeed.`;
-  return { output: { ...output, stderr: [...(output.stderr ?? []), note] }, succeeded: false };
+  // stderr is not printed under `--json`, where an empty `saved` says the same.
+  const json = { ...(output.json as object), saved: [] };
+  return {
+    output: { ...output, json, stderr: [...(output.stderr ?? []), note] },
+    succeeded: false,
+  };
 }
 
 /**
@@ -137,16 +143,17 @@ export function saveThenInstall(
 ): CommandOutput {
   rejectUnsavableFlags(ctx);
   const { "from-git": fromGit, save: _save, ...extras } = ctx.flags.extras;
-  const given = [...ctx.positional];
-  if (typeof fromGit === "string") given.push(normalizeFromGit(fromGit, ctx.cwd));
-  if (given.length === 0) {
+  const refsToSave = [...ctx.positional];
+  if (typeof fromGit === "string") refsToSave.push(normalizeFromGit(fromGit, ctx.cwd));
+  if (refsToSave.length === 0) {
     throw new CrewError(
       "usage_error",
       "`crew install --save` needs at least one skill reference to add to `.crewrc`",
     );
   }
   const { file, before } = manifestToEdit(ctx.cwd);
-  const lines = given.map((ref) => manifestLineFor(ref, ctx.cwd, dirname(file)));
+  const projectRoot = dirname(file);
+  const lines = refsToSave.map((ref) => manifestLineFor({ ref, cwd: ctx.cwd, projectRoot }));
   const edit = addManifestLines(before ?? "", lines);
   const { output, succeeded } = installFromEditedManifest(
     ctx,
@@ -155,10 +162,11 @@ export function saveThenInstall(
   );
   if (!succeeded) return output;
   const added = edit.changedRefs;
+  const alreadyListed = refsToSave.length === 1 ? "that reference" : "those references";
   const summary =
-    added.length === 0
-      ? `${safePath(file)} already lists ${given.length === 1 ? "that reference" : "those references"}.`
-      : `Added to ${safePath(file)}: ${added.map((ref) => safePath(ref)).join(", ")}`;
+    added.length > 0
+      ? `Added to ${safePath(file)}: ${added.map((ref) => safePath(ref)).join(", ")}`
+      : `${safePath(file)} already lists ${alreadyListed}.`;
   return {
     ...output,
     human: [summary, "", ...(output.human ?? [])],
