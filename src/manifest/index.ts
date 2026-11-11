@@ -4,6 +4,7 @@
  * `.crewrc.lock` that records what its git lines resolved to.
  */
 
+export { addManifestLines, type ManifestEdit, removeManifestLines } from "./edit.ts";
 export { loadManifestFor, type Manifest, readFileAt } from "./load.ts";
 export {
   LOCK_FILENAME,
