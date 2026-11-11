@@ -1,26 +1,24 @@
 /**
- * `crew install <ref> [<ref>...]` (§5.1).
+ * `crew install [<ref>...]` (§5.1).
  *
- * Thin command wrapper: reads config, resolves any tap/skill-name
- * collision prompts, runs the install flow, and hands the result to
- * `./render.ts` for human output.
+ * Thin command wrapper: reads config, takes its references from the
+ * command line or from the project manifest (§9.2), runs the install
+ * flow, and hands the result to `./render/` for human output.
  */
 
 import { readConfig } from "../../config/load.ts";
 import { CrewError } from "../../core/errors.ts";
-import type { Config } from "../../core/types.ts";
-import { detectCollision } from "../../install/collision-check.ts";
 import { runInstall } from "../../install/flow.ts";
 import { UNUSABLE_PROJECT_ROOT_WARNING } from "../../install/metadata-warning.ts";
 import type { KindHint } from "../../install/resolve-ref/index.ts";
 import { parseRef } from "../../refs/parse.ts";
 import { GitDiscoveryWarnings } from "../../sources/discovery.ts";
-import { withTapLocks } from "../../sources/tap-lock.ts";
+import { safePath } from "../../util/redact.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
-import { promptBareNameAmbiguity } from "./ambiguity-prompt.ts";
-import { promptForCollision } from "./collision-prompt.ts";
+import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
+import { manifestForBareInstall, nothingToInstall } from "./manifest.ts";
 import { renderInstall } from "./render/index.ts";
 
 /** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
@@ -43,26 +41,31 @@ function readKindHint(ctx: CommandContext): KindHint {
 
 export function installCommand(ctx: CommandContext): CommandOutput {
   const fromGit = ctx.flags.extras["from-git"];
-  if (ctx.positional.length === 0 && typeof fromGit !== "string") {
-    throw new CrewError(
-      "usage_error",
-      "`crew install` needs at least one skill reference — e.g. `crew install python-testing`, `crew install @acme/skills`, or `crew install ./my-skill`",
-    );
+  // §9.2: with nothing named on the command line, the project's manifest names the skills.
+  const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";
+  const manifest = isBare ? manifestForBareInstall(ctx) : null;
+  if (manifest?.entries.length === 0) {
+    return nothingToInstall(manifest, ctx, `${safePath(manifest.file)} declares no skills.`);
   }
   const kindHint = readKindHint(ctx);
   rejectRecursiveTapRefs(ctx);
   const config = readConfig(ctx.home);
   const discovery = new GitDiscoveryWarnings();
-  const refs = resolveCollisions(ctx, config, discovery);
+  const refs = manifest
+    ? manifest.entries.map((entry) => entry.ref)
+    : resolveCollisions(ctx, config, discovery, kindHint);
   // §5.3: `--from-git` is never bare, so it skips collision resolution.
   if (typeof fromGit === "string") refs.push(normalizeFromGit(fromGit, ctx.cwd));
+  // A manifest's skills belong to its project: relative paths resolve
+  // against the manifest's directory, which is also the project root.
+  const cwd = manifest?.projectRoot ?? ctx.cwd;
   const installOptions = {
     refs,
-    scope: ctx.flags.scope,
+    scope: manifest ? ("project" as const) : ctx.flags.scope,
     force: ctx.flags.force,
     dryRun: ctx.flags.dryRun,
     restrictAgents: ctx.flags.agent,
-    cwd: ctx.cwd,
+    cwd,
     home: ctx.home,
     kindHint,
     recursive: Boolean(ctx.flags.extras["recursive"]),
@@ -73,7 +76,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     result = runInstall(config, installOptions);
   } catch (err) {
     if (!(err instanceof CrewError)) throw err;
-    throw withKnownTapInstallSuggestions(err, refs, config, ctx.cwd, kindHint);
+    throw withKnownTapInstallSuggestions(err, refs, config, cwd, kindHint);
   }
 
   // Exit-code rules (PRD §9 step 9). Per-skill outcome is
@@ -105,7 +108,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       resolved: result.resolved,
       skipped: result.skipped,
       dryRun: ctx.flags.dryRun,
-      cwd: ctx.cwd,
+      cwd,
       width: ctx.width,
     },
     ctx.style,
@@ -121,6 +124,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
       records: result.summary.records,
       skipped: result.skipped,
       dry_run: ctx.flags.dryRun,
+      ...(manifest ? { manifest: manifest.file } : {}),
       ...(warnings.length > 0 ? { warnings } : {}),
     },
   };
@@ -136,62 +140,4 @@ function rejectRecursiveTapRefs(ctx: CommandContext): void {
       "`--recursive` only applies to direct git or path sources — for tap-name installs, run `crew tap add --recursive <url-or-path> <name>` first",
     );
   }
-}
-
-/**
- * Walk each positional and resolve the tap-vs-skill collision case
- * described in §16.4. A positional matching both a tap name AND a
- * same-named skill in one or more other taps triggers a prompt:
- *   - exactly one other tap → binary [Y/n]. Enter/Y picks the tap,
- *     n picks the one other skill.
- *   - two or more other taps → numbered menu [1..N]. Choice 1 is the
- *     tap (the default); 2..N are the qualified skills in config
- *     order.
- * `--yes` or non-TTY short-circuit per the spec. Returns the
- * (possibly-rewritten) refs the install flow should run with.
- *
- * Non-bare positionals (paths, git URLs, `<tap>/<skill>`) are passed
- * through unchanged.
- */
-function resolveCollisions(
-  ctx: CommandContext,
-  config: Config,
-  discovery: GitDiscoveryWarnings,
-): string[] {
-  const refs: string[] = [];
-  const kindHint = readKindHint(ctx);
-  for (const raw of ctx.positional) {
-    const trimmed = raw.trim();
-    const canonical = trimmed.toLowerCase();
-    if (!isBareName(trimmed)) {
-      refs.push(raw);
-      continue;
-    }
-    // Kind hints skip prompting entirely — the user told us what they meant.
-    if (kindHint !== null) {
-      refs.push(raw);
-      continue;
-    }
-    const collision = withTapLocks(config.taps, ctx.home, () =>
-      detectCollision(canonical, config, ctx.home, discovery),
-    );
-    if (collision && !ctx.flags.yes) {
-      refs.push(promptForCollision(ctx, collision, canonical, raw, discovery));
-      continue;
-    }
-    if (collision) {
-      refs.push(raw);
-      continue;
-    }
-    // No tap-vs-other-tap-skill collision. Check for bare-name
-    // ambiguity across skills and namespaces (§8.3).
-    refs.push(promptBareNameAmbiguity(ctx, config, canonical, raw, discovery));
-  }
-  return refs;
-}
-
-const BARE_NAME = /^[a-z0-9][a-z0-9-]*$/i;
-
-function isBareName(s: string): boolean {
-  return BARE_NAME.test(s);
 }
