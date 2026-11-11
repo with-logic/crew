@@ -18,7 +18,8 @@ import type { CommandContext, CommandOutput } from "../types.ts";
 import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
-import { manifestForBareInstall, nothingToInstall } from "./manifest.ts";
+import { claimManifestOwnership } from "./manifest/claim.ts";
+import { manifestForBareInstall, nothingToInstall } from "./manifest/index.ts";
 import { renderInstall } from "./render/index.ts";
 
 /** Read --tap / --bundle / --skill, enforce mutual exclusivity. */
@@ -99,6 +100,15 @@ export function installCommand(ctx: CommandContext): CommandOutput {
     exitCode = 4; // Zero succeeded; at least one invalid skill.
   } else {
     exitCode = 1; // Zero succeeded; purely operational failures.
+  }
+
+  // §9.2: the manifest owns what it resolved to — but only once all of it
+  // has landed, and never on a dry run.
+  const everythingInstalled = failed === 0;
+  const mayWriteState = !ctx.flags.dryRun;
+  if (manifest && everythingInstalled && mayWriteState) {
+    const resolvedSkillNames = new Set(result.resolved.map((skill) => skill.name));
+    claimManifestOwnership({ home: ctx.home, projectRoot: cwd, resolvedSkillNames });
   }
 
   const human = renderInstall(
