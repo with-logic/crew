@@ -3063,6 +3063,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-13k | §10.1.1, §5.4 | When two tap rows cover one source, a child installed while re-expanding the first is not installed again by the second in the same run. |
 | C-INST-14 | §5.4 | `--force` on a `name_conflict` is NOT honored (the spec forbids `--force` overriding name conflicts). |
 | C-INST-15 | §9 | `--dry-run` on install produces a summary of what would happen and writes no files. |
+| C-INST-15a | §5.2, §9 step 8 | `crew install --dry-run` leaves `store/` unchanged for git and path sources, including dependencies and a run that fails partway: no entry is added and existing entries are byte-identical before and after. |
 | C-INST-16 | §9 | `--agent <skill>` restricts the operation to the named agent(s). |
 | C-INST-17 | §9 | `--scope project` writes to the agent's project-scope path instead of the user-scope path. |
 | C-INST-18 | §11.1 | A project-scope install records `project_root` in the state entry equal to the user's working directory at install time. User-scope installs do NOT have a `project_root`. |

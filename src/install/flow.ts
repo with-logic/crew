@@ -11,6 +11,7 @@ import type { Config, ResolvedSkill, Scope } from "../core/types.ts";
 import { garbageCollectAutoTaps } from "../maintenance/auto-taps.ts";
 import { GitDiscoveryWarnings } from "../sources/discovery.ts";
 import type { SkippedSkill } from "../sources/expand.ts";
+import { withThrowawayStore } from "../sources/store.ts";
 import { readState, writeState } from "../state/load.ts";
 import { withStateLock } from "../state/lock.ts";
 import { computeAgentSet } from "./agent-set.ts";
@@ -69,18 +70,22 @@ export function runInstall(config: Config, options: InstallOptions): InstallFlow
 
   // Resolve the install set — this stages everything into the store
   // and may extend the config with auto-taps for new git URLs / paths.
+  const resolve = () =>
+    resolveInstallSet(options.refs, config, {
+      cwd,
+      home,
+      kindHint: options.kindHint ?? null,
+      recursive: options.recursive ?? false,
+      discovery: options.discovery ?? new GitDiscoveryWarnings(),
+    });
+  // §5.2: a dry run needs each skill's name and content hash but adds no
+  // store entry; a new skill's `storePath` is gone once this returns.
   const {
     skills: resolvedAll,
     requiredBy,
     config: configWithAutoTaps,
     skipped,
-  } = resolveInstallSet(options.refs, config, {
-    cwd,
-    home,
-    kindHint: options.kindHint ?? null,
-    recursive: options.recursive ?? false,
-    discovery: options.discovery ?? new GitDiscoveryWarnings(),
-  });
+  } = options.dryRun ? withThrowawayStore(home, resolve) : resolve();
 
   // Apply §5.4 — duplicate installs. An install with a new active
   // adapter that didn't previously own the entry still has real work
