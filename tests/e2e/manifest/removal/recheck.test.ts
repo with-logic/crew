@@ -1,16 +1,13 @@
 /**
- * The last manifest check before deletion (§9.2): if `.crewrc` stops being
- * current while dropped entries are being pre-checked, nothing is removed.
+ * Checks repeated right before each deletion (§9.2): the manifest must
+ * still be current, and the install directory still the project's own.
  */
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, readFileSync, renameSync, symlinkSync } from "node:fs";
+import { existsSync, renameSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { runCli } from "../../../../src/cli/main.ts";
-import { processDroppedEntries } from "../../../../src/commands/install/manifest/removal/index.ts";
-import type { CommandContext } from "../../../../src/commands/types.ts";
 import { readState } from "../../../../src/state/load.ts";
-import { makeStyler } from "../../../../src/util/term.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { makeTempDir } from "../../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
@@ -24,45 +21,36 @@ afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
 
-test("C-RC-33 a manifest that stops being current during the pre-checks costs no skill", () => {
+test("C-RC-33 a manifest replaced partway through the removals stops them there", () => {
   const home = makeCrewHome();
-  const project = makeProject([makeSkillRepo(["alpha"])]);
+  const repo = makeSkillRepo(["alpha", "beta"]);
+  const project = makeProject([repo]);
   expect(crew(home, project, ["install"]).code).toBe(0);
-  const stateBefore = readFileSync(join(home, "state.json"), "utf8");
-  const ctx = {
-    positional: [],
-    flags: {
-      scope: "project",
-      scopeGiven: false,
-      agent: [],
-      dryRun: false,
-      json: false,
-      quiet: false,
-      verbose: false,
-      yes: false,
-      force: false,
-      extras: {},
-    },
-    cwd: project,
-    home,
-    style: makeStyler(false),
-    width: 80,
-    // Removal never prompts, so the prompt functions are left out.
-  } as unknown as CommandContext;
-  // Current when removal starts, not current by the time the pre-checks finish.
-  const answers = [true, false];
+  writeManifest(project, []);
+  let stderr = "";
+  let restored = false;
 
-  const outcome = processDroppedEntries(readState(home), {
-    ctx,
-    projectRoot: project,
-    resolvedSkillNames: new Set(),
-    isStillCurrent: () => answers.shift() ?? false,
+  // While the first of the two is being removed, the manifest lists them again.
+  const code = runCli(["install", "--verbose"], {
+    home,
+    cwd: project,
+    streams: {
+      stdout: () => {},
+      stderr: (chunk) => {
+        stderr += chunk;
+        if (restored || !/removing (alpha|beta) /.test(chunk)) return;
+        restored = true;
+        writeManifest(project, [repo]);
+      },
+    },
   });
 
-  expect(outcome).toBeNull();
-  expect(answers).toEqual([]);
-  expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
-  expect(readFileSync(join(home, "state.json"), "utf8")).toBe(stateBefore);
+  expect(restored).toBe(true);
+  expect(code).toBe(0);
+  expect(stderr).toContain("crew stopped reconciling");
+  const left = ["alpha", "beta"].filter((name) => existsSync(skillDir(project, name)));
+  expect(left).toHaveLength(1);
+  expect(readState(home).installations.map((entry) => entry.name)).toEqual(left);
 });
 
 test("C-RC-30 a directory that becomes a link after the pre-checks is still not deleted", () => {

@@ -27,6 +27,8 @@ export interface RemovalOutcome {
   readonly records: readonly UninstallRecord[];
   /** Names kept because their install directories are not provably the project's own. */
   readonly keptAsUnsafe: readonly string[];
+  /** True when the sweep stopped early because the manifest stopped being current. */
+  readonly interrupted: boolean;
 }
 
 /** What to remove, and the conditions it is removed under. */
@@ -37,9 +39,9 @@ export interface RemovalRequest {
   readonly resolvedSkillNames: ReadonlySet<string>;
   /**
    * Whether the manifest this request came from is confirmed to still be
-   * the one on disk. Asked before the pre-checks and again just before the
-   * first deletion. On a normal run both happen with the target locks
-   * held; a dry run previews without locks.
+   * the one on disk. Asked before the pre-checks and again before every
+   * deletion. On a normal run that happens with the target locks held; a
+   * dry run previews without locks.
    */
   readonly isStillCurrent: () => boolean;
 }
@@ -84,7 +86,7 @@ function removeInOrder(
   dropped: readonly ProjectEntry[],
   request: RemovalRequest,
   unavailableBases?: ReadonlySet<string>,
-): RemovalOutcome | null {
+): RemovalOutcome {
   const { ctx, isStillCurrent } = request;
   const preview: CommandContext = { ...ctx, flags: { ...ctx.flags, dryRun: true } };
   /** Uninstall `entry` from every agent it is on, fully, updating `state` as it goes. */
@@ -115,13 +117,17 @@ function removeInOrder(
     staying.add(entry.name);
     records.push(rec);
   }
-  // The pre-checks took time too. This is the last point before anything
-  // is deleted, so the manifest is confirmed once more.
-  if (!isStillCurrent()) return null;
   let state = initial;
   const byName = new Map(dropped.map((entry) => [entry.name, entry]));
+  let interrupted = false;
   for (const name of removalOrder(dropped, staying)) {
     const entry = byName.get(name) as ProjectEntry;
+    // `.crewrc` is not covered by any lock, so it is confirmed before every
+    // delete, not only the first: an edit mid-sweep stops the sweep there.
+    if (!isStillCurrent()) {
+      interrupted = true;
+      break;
+    }
     // Looked at again right before the delete, to keep the gap between
     // checking a directory and removing it as short as it can be.
     if (!areProjectInstallPathsSafeToRemove(entry)) {
@@ -136,5 +142,5 @@ function removeInOrder(
     // survivor may still need.
     if (removal.rec.failures.length > 0) break;
   }
-  return { state, records, keptAsUnsafe };
+  return { state, records, keptAsUnsafe, interrupted };
 }

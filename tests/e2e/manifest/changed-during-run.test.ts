@@ -70,7 +70,7 @@ describe("a manifest that changes during the run", () => {
 
       expect(human.rewritten).toBe(true);
       expect(human.code).toBe(0);
-      expect(human.stderr).toContain("nothing was claimed or removed");
+      expect(human.stderr).toContain("crew stopped reconciling");
       expect(installed(home)).toEqual([`alpha@${project}`]);
       expect(ownedNames(home)).toEqual([]);
     });
@@ -84,7 +84,7 @@ describe("a manifest that changes during the run", () => {
 
     expect(run.code).toBe(0);
     const { warnings } = JSON.parse(run.stdout) as { warnings: string[] };
-    expect(warnings.join("\n")).toContain("nothing was claimed or removed");
+    expect(warnings.join("\n")).toContain("crew stopped reconciling");
     expect(ownedNames(home)).toEqual([]);
   });
 
@@ -99,7 +99,7 @@ describe("a manifest that changes during the run", () => {
 
     const run = installWhileManifestBecomes(home, project, [alphaRepo]);
 
-    expect(run.stderr).toContain("nothing was claimed or removed");
+    expect(run.stderr).toContain("crew stopped reconciling");
     expect(installed(home)).toEqual([`alpha@${project}`, `beta@${project}`]);
     expect(ownedNames(home)).toEqual(["alpha"]);
   });

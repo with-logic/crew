@@ -25,13 +25,14 @@ export interface Reconciliation {
   readonly keptAsUnsafe: readonly string[];
   /**
    * True when the run could not confirm `.crewrc` is still the manifest it
-   * read — it changed, or could not be re-read — so nothing was claimed or
-   * removed.
+   * read — it changed, or could not be re-read. Reconciling stopped at that
+   * point: before anything was claimed or removed, or partway through the
+   * removals, in which case `removed` holds the ones already done.
    */
   readonly manifestUnconfirmed: boolean;
 }
 
-/** The result when ownership matches the manifest and nothing had to be removed. */
+/** The result of a run that did not reconcile, or that reconciled and had nothing to remove or report. */
 export const IN_STEP_WITH_MANIFEST: Reconciliation = {
   removed: [],
   keptAsUnsafe: [],
@@ -91,7 +92,7 @@ function reconciliationOf(outcome: RemovalOutcome): Reconciliation {
   return {
     removed: outcome.records,
     keptAsUnsafe: outcome.keptAsUnsafe,
-    manifestUnconfirmed: false,
+    manifestUnconfirmed: outcome.interrupted,
   };
 }
 
@@ -103,11 +104,18 @@ export function reconciliationWarnings(reconciled: Reconciliation): string[] {
   );
   if (reconciled.manifestUnconfirmed) {
     warnings.push(
-      "warning: .crewrc changed, or could not be read again, while crew was installing, so nothing was claimed or removed. Check .crewrc and run `crew install` again.",
+      "warning: .crewrc changed, or could not be read again, while crew was installing, so crew stopped reconciling against it. Check .crewrc and run `crew install` again.",
     );
   }
   return warnings;
 }
+
+/** The uninstall safety checks `--force` overrides (§7.4); it does not override filesystem errors (§13). */
+const FORCE_OVERRIDES: ReadonlySet<string> = new Set([
+  "untracked_directory",
+  "inconsistent_marker",
+  "not_installed_here",
+]);
 
 /**
  * stderr lines for removals that aborted, for a plain `--quiet` run, whose
@@ -119,7 +127,7 @@ export function quietRemovalFailures(reconciled: Reconciliation, ctx: CommandCon
   for (const record of reconciled.removed) {
     for (const failure of record.failures) {
       lines.push(
-        `error: could not remove \`${safePath(record.name)}\` from ${failure.agent} (${failure.error.code}): ${sanitizeLine(failure.error.message)} Pass --force to remove it anyway.`,
+        `error: could not remove \`${safePath(record.name)}\` from ${failure.agent} (${failure.error.code}): ${sanitizeLine(failure.error.message)}${FORCE_OVERRIDES.has(failure.error.code) ? " Pass --force to remove it anyway." : ""}`,
       );
     }
   }

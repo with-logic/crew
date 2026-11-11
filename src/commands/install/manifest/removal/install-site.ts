@@ -44,8 +44,7 @@ export type ProjectEntry = StateEntry & {
 };
 
 /**
- * True when every directory `entry` is installed into passes the checks
- * above. A directory that does not exist has nothing in it to protect.
+ * True when every install directory for `entry` passes the checks above. A directory that does not exist has nothing in it to protect.
  */
 export function areProjectInstallPathsSafeToRemove(entry: ProjectEntry): boolean {
   if (!NAME_PATTERN.test(entry.name) || entry.agents.length === 0) return false;
