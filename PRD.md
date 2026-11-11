@@ -1436,13 +1436,6 @@ lines is valid and declares no skills.
   directory but reaches outside it through a symbolic link is rejected. A
   path that does not exist cannot be checked this way and is left for the
   install flow to report as a missing source.
-- A git source whose line carries a credential: a password in its URL, a
-  userinfo token on an `http(s)` URL, or one of the sensitive query parameters
-  named in §5.2. Any other query string — a pasted browser URL ending in
-  `?tab=readme`, say — is not a credential and is accepted. A
-  manifest is meant to be checked in. The diagnostic, including `details`,
-  MUST NOT echo the credential. An SSH username such as `git@` is not a
-  credential.
 - A line that is not a valid reference under §8.4.
 - A line identical, after trimming, to an earlier reference line.
 
@@ -1525,8 +1518,8 @@ as if the line had been typed by hand.
   written as given and so refused by the next rule.
 - **Validated first.** The edited text must be a valid manifest (above)
   before anything is written: a skill name from a tap, a path outside the
-  project, an absolute path, or a reference carrying a credential fails with
-  `manifest_invalid` and leaves the file untouched, or uncreated.
+  project, or an absolute path fails with `manifest_invalid` and leaves the
+  file untouched, or uncreated.
 - **All or nothing.** If the install that follows raises an error or exits
   non-zero, the manifest and its lockfile are put back exactly as they were
   (or removed, if this run created them), the lockfile even when the
@@ -1559,8 +1552,7 @@ is a manifest line.
   different lines.
 - **All named lines must exist.** If any reference is not a line of the
   manifest, the command is a `usage_error` whose `details.refs` lists the
-  ones not found, with any credential in them redacted (§5.2), and nothing
-  is changed. With no manifest governing the
+  ones not found, and nothing is changed. With no manifest governing the
   current directory it is a `usage_error` too; none is created.
 - **All or nothing.** As for `crew install --save`: if the install that
   follows raises an error or exits non-zero, including because a removal
@@ -3775,7 +3767,7 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-06 | §9.2 | Bare `crew install` with no manifest at or above the working directory is a `usage_error`, exit 4, whose message mentions `.crewrc`. |
 | C-RC-07 | §9.2 | A manifest above a repository root does not govern that repository, whether the root's `.git` entry is a directory or a file: bare `crew install` inside the repository is a `usage_error` and installs nothing. |
 | C-RC-08 | §9.2 | A directory named `.crewrc` is not a manifest. A symbolic link named `.crewrc` is not a manifest, and its target's contents never appear in output. |
-| C-RC-09 | §9.2, §13 | An invalid manifest fails with `manifest_invalid`, exit 4, with `details` carrying `file`, `line`, and `ref`; none of its lines is installed, including valid ones. A line whose URL carries a credential is invalid, and the credential appears nowhere in the output. |
+| C-RC-09 | §9.2, §13 | An invalid manifest fails with `manifest_invalid`, exit 4, with `details` carrying `file`, `line`, and `ref`; none of its lines is installed, including valid ones. |
 | C-RC-10 | §9.2 | Bare `crew install --scope user` is a `usage_error` and installs nothing; bare `crew install --scope project` behaves as bare `crew install`. |
 | C-RC-11 | §9.2 | Bare `crew install` with `--recursive`, `--tap`, `--bundle`, or `--skill` is a `usage_error` and installs nothing. |
 | C-RC-12 | §9.2 | `crew install <ref>` never reads a manifest: with an invalid `.crewrc` in the working directory it installs `<ref>` at the requested scope and succeeds. |
@@ -3819,10 +3811,10 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-50 | §9.3 | Under `--latest`, an unreachable source fails the command with `source_unreachable` and leaves the installed skills and the lockfile unchanged. With no active agent and no `--agent`, it exits 0 with `no_agents: true` without contacting any source; with `--agent` it remains `no_agents`. |
 | C-RC-51 | §9.2 | `crew install --save <ref>` appends the reference to the governing `.crewrc`, leaving its other lines and comments as they were, installs it, marks it `manifest_owned`, and records it in the lockfile; `--json` carries it in `saved`. With no manifest, one is created in the current directory. `--from-git <value>` is saved as the git reference it names. |
 | C-RC-52 | §9.2 | Under `--save`, a path given from a subdirectory is written relative to the manifest's directory and no manifest is created in the subdirectory. A reference already listed is not written again: the file is byte-for-byte unchanged and `saved` is empty. |
-| C-RC-53 | §9.2 | Under `--save`, a tap skill name, a path outside the project, an absolute path, a reference carrying a credential, or a malformed reference fails with `manifest_invalid` without modifying or creating `.crewrc`, and without printing the credential. When the install that follows fails (an unreachable source, a skill that fails validation), `.crewrc` is restored byte-for-byte, or removed if the run created it, and stderr says it was left as it was. |
+| C-RC-53 | §9.2 | Under `--save`, a tap skill name, a path outside the project, an absolute path, or a malformed reference fails with `manifest_invalid` without modifying or creating `.crewrc`. When the install that follows fails (an unreachable source, a skill that fails validation), `.crewrc` is restored byte-for-byte, or removed if the run created it, and stderr says it was left as it was. |
 | C-RC-54 | §9.2 | `--save` with `--dry-run`, with `--scope user`, with `--recursive`, with `--latest`, or with no reference is a `usage_error` and leaves `.crewrc` unchanged. |
 | C-RC-55 | §9.2 | `crew uninstall --save <ref>` (and `crew remove --save <ref>`) deletes that line from the governing `.crewrc`, leaving its other lines and comments as they were, uninstalls the skill the line brought in, and drops its lockfile entry; `--json` carries the reference in `unsaved` and the skill in `removed`. A path given from a subdirectory matches the line written relative to the manifest. |
-| C-RC-56 | §9.2 | Under `crew uninstall --save`, a reference that is not a line of the manifest, including a skill name, is a `usage_error` listing it in `details.refs`, and neither `.crewrc` nor any skill changes even when other references given do match. A reference not found is redacted wherever the error repeats it. When the removal that follows aborts, the command exits 1, `.crewrc` and `.crewrc.lock` are restored byte-for-byte, and stderr says it was left as it was. |
+| C-RC-56 | §9.2 | Under `crew uninstall --save`, a reference that is not a line of the manifest, including a skill name, is a `usage_error` listing it in `details.refs` exactly as typed (C-REF-28 does not apply to this list), and neither `.crewrc` nor any skill changes even when other references given do match. When the removal that follows aborts, the command exits 1, `.crewrc` and `.crewrc.lock` are restored byte-for-byte, and stderr says it was left as it was. |
 | C-RC-57 | §9.2 | `crew uninstall --save` with `--dry-run`, `--scope user`, `--all`, `--prune`, `--agent`, with no reference, or with no manifest governing the current directory is a `usage_error`; `.crewrc` is unchanged and none is created. |
 
 ### 18.4 Worked examples

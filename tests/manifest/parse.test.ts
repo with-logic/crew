@@ -74,6 +74,15 @@ describe("parseManifest: accepted references", () => {
     ]);
   });
 
+  test("a URL is taken as written, userinfo and query included: what a line holds is the project's business", () => {
+    const lines = [
+      "https://ci-bot:token123@git.example.com/acme/skills.git",
+      "https://git.example.com/acme/skills.git?access_token=abc",
+    ];
+
+    expect(parse(`${lines.join("\n")}\n`).map((entry) => entry.ref)).toEqual(lines);
+  });
+
   test("a relative path resolves against the manifest's directory, not the working directory", () => {
     const [entry] = parse("./tools/skills/notes\n");
     expect(entry?.source).toEqual({ type: "path", path: "/work/app/tools/skills/notes" });
@@ -113,57 +122,5 @@ describe("parseManifest: rejected references", () => {
 
   test("nothing is returned when any line is invalid", () => {
     expect(() => parse("@acme/skills\npython-testing\n")).toThrow(CrewError);
-  });
-
-  for (const ref of [
-    "https://ghp_secret123@github.com/acme/skills",
-    "https://user:hunter2secret@host.example/acme/skills//pdf",
-    "https://host.example/acme/skills?access_token=tok_secret9",
-  ]) {
-    test(`a URL carrying a credential is manifest_invalid, and the credential is not echoed: ${ref.slice(0, 22)}…`, () => {
-      const err = rejection(`${ref}\n`);
-      expect(err.code).toBe("manifest_invalid");
-      expect(err.message).toContain("credential");
-      expect(err.details).toMatchObject({ file: FILE, line: 1 });
-      expect(String(err.details["ref"])).toContain("***");
-      const shown = `${err.message} ${JSON.stringify(err.details)}`;
-      for (const secret of ["ghp_secret123", "hunter2secret", "tok_secret9"]) {
-        expect(shown).not.toContain(secret);
-      }
-    });
-  }
-
-  test("a URL with a harmless query, a default port, or an uppercase host is not a credential", () => {
-    const accepted = [
-      "https://host.example:443/acme/skills",
-      "https://HOST.example/acme/skills",
-      "https://github.com/acme/skills?tab=readme-ov-file",
-      "https://github.com/acme/skills/tree/main/pdf?plain=1",
-      "https://github.com/acme/skills#readme?token=note",
-    ];
-    expect(parse(`${accepted.join("\n")}\n`).map((e) => e.line)).toEqual([1, 2, 3, 4, 5]);
-  });
-
-  test("a password is a credential on any URL with a scheme, including ssh://", () => {
-    const err = rejection("ssh://git:hunter2secret@host.example/acme/skills.git\n");
-    expect(err.message).toContain("credential");
-  });
-
-  test.each(["token", "access_token", "private_token", "api_key", "apikey", "PASSWORD", "%74oken"])(
-    "the sensitive query parameter %p is a credential, and its value is not echoed",
-    (key) => {
-      const err = rejection(`https://host.example/acme/skills?x=1&${key}=s3cretValue\n`);
-      expect(err.message).toContain("credential");
-      expect(`${err.message} ${JSON.stringify(err.details)}`).not.toContain("s3cretValue");
-    },
-  );
-
-  test("an scp-style remote is judged as one even when its path contains ://", () => {
-    expect(parse("git@host.example:acme/repo://path\n").map((e) => e.line)).toEqual([1]);
-  });
-
-  test("an SSH URL's username is not a credential", () => {
-    const refs = "git@github.com:acme/skills.git\nssh://git@host.example/acme/skills.git\n";
-    expect(parse(refs).map((e) => e.line)).toEqual([1, 2]);
   });
 });

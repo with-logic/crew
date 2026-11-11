@@ -50,26 +50,16 @@ describe("crew uninstall --save that does not go through", () => {
     expect(beta).not.toBe(alpha);
   });
 
-  test("C-RC-56 a reference that matches no line is redacted wherever the error repeats it", () => {
+  test("C-RC-56 details.refs repeats an unmatched reference exactly as typed", () => {
     const home = makeCrewHome();
     const { project } = projectWithTwoSkills(home);
-    const secret = "https://user:hunter2@example.com/acme/skills";
+    const typed = "https://someone:something@git.example.invalid/acme/skills?access_token=abc";
 
-    const json = crew(home, project, ["uninstall", "--save", secret, "--json"]);
-    const human = crew(home, project, ["uninstall", "--save", secret]);
+    const run = crew(home, project, ["uninstall", "--save", typed, "--json"]);
 
-    expect(json.code).toBe(4);
-    const { error } = JSON.parse(json.stdout) as {
-      error: { name: string; details: { refs: string[] } };
-    };
-    expect(error.name).toBe("usage_error");
-    expect(error.details.refs).toHaveLength(1);
-    expect(error.details.refs[0]).toContain("example.com/acme/skills");
-    expect(json.stdout).not.toContain("hunter2");
-    expect(human.code).toBe(4);
-    expect(human.stderr).toContain("usage_error");
-    expect(human.stderr).toContain("has no line");
-    expect(human.stderr).not.toContain("hunter2");
+    expect(run.code).toBe(4);
+    const { error } = JSON.parse(run.stdout) as { error: { details: { refs: string[] } } };
+    expect(error.details.refs).toEqual([typed]);
   });
 
   test("C-RC-56 a lockfile that did not exist before a failed run does not exist after it", () => {
