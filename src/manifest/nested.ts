@@ -18,12 +18,19 @@ import { readFileAt } from "./load.ts";
 import { MANIFEST_FILENAME } from "./parse.ts";
 
 /**
+ * What git says, under `LC_ALL=C`, when a directory is in no repository at
+ * all. A bare "not a git repository" is not enough: git says that too about
+ * a repository it was pointed at and could not open (a bad `GIT_DIR`).
+ */
+const NOT_IN_A_REPOSITORY = "not a git repository (or any";
+
+/**
  * The projects strictly beneath `root`: every candidate git lists that
  * `isOwnProject` accepts, as absolute paths in a stable order. Raises
  * `manifest_invalid` for a candidate that must not be applied.
  */
 export function nestedProjectDirs(root: string): string[] {
-  return nestedManifestCandidateDirs(root).filter((dir) => isOwnProject(root, dir));
+  return nestedManifestCandidateDirs(root).filter((dir) => isOwnProject({ root, dir }));
 }
 
 /**
@@ -42,26 +49,26 @@ export function nestedProjectDirs(root: string): string[] {
  * describes the filesystem at the moment it is given: a caller that acts
  * on a candidate later asks again immediately before it does.
  */
-export function isOwnProject(root: string, dir: string): boolean {
+export function isOwnProject(at: { readonly root: string; readonly dir: string }): boolean {
+  const { root, dir } = at;
   const file = join(dir, MANIFEST_FILENAME);
-  let at = root;
+  let path = root;
   for (const segment of relative(root, dir).split(sep)) {
-    at = join(at, segment);
-    const stat = lstatSync(at, { throwIfNoEntry: false });
+    path = join(path, segment);
+    const stat = lstatSync(path, { throwIfNoEntry: false });
     if (stat === undefined) return false;
     if (stat.isSymbolicLink()) {
       throw new CrewError(
         "manifest_invalid",
-        `${file}: ${at} is a symbolic link, so this manifest is not applied as part of the repository`,
+        `${file}: ${path} is a symbolic link, so this manifest is not applied as part of the repository`,
         { file },
       );
     }
   }
   const found = readFileAt(file);
-  if (found.kind === "other") {
-    throw new CrewError("manifest_invalid", `${file} is not a regular file`, { file });
-  }
-  return found.kind === "file";
+  if (found.kind === "absent") return false;
+  if (found.kind === "file") return true;
+  throw new CrewError("manifest_invalid", `${file} is not a regular file`, { file });
 }
 
 /**
@@ -84,7 +91,7 @@ export function nestedManifestCandidateDirs(root: string): string[] {
     throwOnError: false,
   });
   if (inside.exitCode !== 0) {
-    if (inside.stderr.includes("not a git repository")) return [];
+    if (inside.stderr.includes(NOT_IN_A_REPOSITORY)) return [];
     // git is refusing or failing for some other reason (an ownership check,
     // a damaged repository). Nested projects may exist, so this is not "none".
     throw new GitProcessError(

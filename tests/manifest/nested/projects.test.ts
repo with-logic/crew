@@ -5,30 +5,27 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { CrewError } from "../../src/core/errors.ts";
-import { isOwnProject, nestedProjectDirs } from "../../src/manifest/index.ts";
-import { commitAll, makeGitRepo, makeTempDir } from "../helpers/fixtures.ts";
-
-/** Write an empty `.crewrc` in `<root>/<dir>`, creating the directory. */
-function addManifest(root: string, dir: string): void {
-  mkdirSync(join(root, dir), { recursive: true });
-  writeFileSync(join(root, dir, ".crewrc"), "");
-}
+import { CrewError } from "../../../src/core/errors.ts";
+import { isOwnProject, nestedProjectDirs } from "../../../src/manifest/index.ts";
+import { makeGitRepo, makeTempDir } from "../../helpers/fixtures.ts";
+import { addManifest } from "./helpers.ts";
 
 /** A repository with `.crewrc` committed in `packages/api` and `packages/web`. */
 function makeRepo(): string {
   const root = realpathSync(makeTempDir("crew-mono-"));
-  makeGitRepo(root);
   addManifest(root, "packages/api");
   addManifest(root, "packages/web");
-  commitAll(root, "projects");
+  makeGitRepo(root, "projects");
   return root;
 }
 
 /** The code and `details.file` of the `CrewError` that `run` raises. */
-function refusal(run: () => unknown): { code: string; file: unknown } {
+function refusal(run: () => unknown): {
+  code: CrewError["code"] | "(nothing was raised)";
+  file: unknown;
+} {
   try {
     run();
   } catch (err) {
@@ -107,13 +104,13 @@ describe("isOwnProject", () => {
   test("answers for the filesystem as it is when asked", () => {
     const root = makeRepo();
     const api = join(root, "packages/api");
-    expect(isOwnProject(root, api)).toBe(true);
+    expect(isOwnProject({ root, dir: api })).toBe(true);
 
     rmSync(join(api, ".crewrc"));
-    expect(isOwnProject(root, api)).toBe(false);
+    expect(isOwnProject({ root, dir: api })).toBe(false);
 
     rmSync(api, { recursive: true });
     symlinkSync(makeTempDir("crew-outside-"), api);
-    expect(refusal(() => isOwnProject(root, api)).code).toBe("manifest_invalid");
+    expect(refusal(() => isOwnProject({ root, dir: api })).code).toBe("manifest_invalid");
   });
 });

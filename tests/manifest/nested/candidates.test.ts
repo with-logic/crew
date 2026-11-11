@@ -6,15 +6,10 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { setGitRunner } from "../../src/git/exec.ts";
-import { nestedManifestCandidateDirs } from "../../src/manifest/index.ts";
-import { commitAll, makeGitRepo, makeTempDir } from "../helpers/fixtures.ts";
-
-/** Write an empty `.crewrc` in `<root>/<dir>`, creating the directory. */
-function addManifest(root: string, dir: string): void {
-  mkdirSync(join(root, dir), { recursive: true });
-  writeFileSync(join(root, dir, ".crewrc"), "");
-}
+import { setGitRunner } from "../../../src/git/exec.ts";
+import { nestedManifestCandidateDirs } from "../../../src/manifest/index.ts";
+import { commitAll, makeGitRepo, makeTempDir } from "../../helpers/fixtures.ts";
+import { addManifest } from "./helpers.ts";
 
 /** A git repository with one commit, as a physical path. */
 function makeRepo(): string {
@@ -136,6 +131,19 @@ describe("nestedManifestCandidateDirs", () => {
       join(root, "packages/api"),
       join(root, "packages/web"),
     ]);
+  });
+
+  test("a repository git was pointed at and cannot open is raised, not read as 'no repository'", () => {
+    const root = makeRepo();
+    addManifest(root, "packages/web");
+    const before = process.env["GIT_DIR"];
+    process.env["GIT_DIR"] = join(root, "no-such-git-dir");
+    try {
+      expect(() => nestedManifestCandidateDirs(root)).toThrow("not a git repository");
+    } finally {
+      if (before === undefined) delete process.env["GIT_DIR"];
+      else process.env["GIT_DIR"] = before;
+    }
   });
 
   test("is empty outside a git repository", () => {
