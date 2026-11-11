@@ -1561,8 +1561,10 @@ so a later bare install removes it once the reason is gone:
   before any entry is removed. One that would abort keeps its files and its
   state entry, is reported, and makes the command exit 1. Under `--quiet`,
   where the human report is suppressed, each such failure is written to
-  stderr (§5.2), naming the skill, the agent, the error code, and its
-  message. Deciding this first
+  stderr (§5.2), one line each, naming the skill, the agent, the error code,
+  and the same reason the human report gives for that code. The line does
+  not repeat the error's own message, which can carry text read from the
+  install site (§13). Deciding this first
   is what keeps the rule above sound: no skill is removed on the strength of
   another removal that then does not happen. `--force` overrides those checks
   here as it does for `crew uninstall`.

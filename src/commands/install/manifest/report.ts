@@ -3,9 +3,9 @@
  * the removals, the skills kept, and a manifest that changed mid-run.
  */
 
-import type { CrewErrorName } from "../../../core/errors.ts";
-import { safePath, sanitizeLine } from "../../../util/redact.ts";
+import { safePath } from "../../../util/redact.ts";
 import type { CommandContext } from "../../types.ts";
+import { failureReason } from "../../uninstall/render.ts";
 import { renderDropped } from "../render/dropped.ts";
 import type { Reconciliation } from "./reconcile.ts";
 
@@ -23,13 +23,6 @@ interface ReconciliationReport {
    */
   readonly quietDiagnostics: readonly string[];
 }
-
-/** The uninstall safety checks `--force` overrides (§7.4); it does not override filesystem errors (§13). */
-const FORCE_OVERRIDES: ReadonlySet<string> = new Set<CrewErrorName>([
-  "untracked_directory",
-  "inconsistent_marker",
-  "not_installed_here",
-]);
 
 /**
  * Turn a reconciliation into output: the removal records as human lines, a
@@ -51,19 +44,20 @@ export function reportReconciliation(
       "warning: .crewrc changed, or could not be read again, while crew was installing, so crew stopped bringing the project in line with it. Check .crewrc and run `crew install` again.",
     );
   }
-  const aborted: string[] = [];
-  for (const record of reconciled.removed) {
+  const quietDiagnostics: string[] = [];
+  for (const record of ctx.flags.quiet ? reconciled.removed : []) {
     for (const { agent, error } of record.failures) {
-      const hint = FORCE_OVERRIDES.has(error.code) ? " (pass --force to remove it anyway)" : "";
-      aborted.push(
-        `error: could not remove \`${safePath(record.name)}\` from ${agent} (${error.code}): ${sanitizeLine(error.message)}${hint}`,
+      // The reason is the human report's own fixed wording for the code,
+      // never the error's message, which can carry text from the install site.
+      quietDiagnostics.push(
+        `error: could not remove \`${safePath(record.name)}\` from ${safePath(agent)} (${error.code}): ${failureReason(error.code)}`,
       );
     }
   }
   return {
-    hasAbortedRemoval: aborted.length > 0,
+    hasAbortedRemoval: reconciled.removed.some((record) => record.failures.length > 0),
     human: renderDropped(reconciled.removed, ctx),
     warnings,
-    quietDiagnostics: ctx.flags.quiet ? aborted : [],
+    quietDiagnostics,
   };
 }
