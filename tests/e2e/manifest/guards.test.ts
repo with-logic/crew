@@ -9,7 +9,14 @@ import { join } from "node:path";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
-import { addLocalSkill, crew, installed, makeProject, writeManifest } from "./helpers.ts";
+import {
+  addLocalSkill,
+  crew,
+  installed,
+  makeProject,
+  makeSkillRepo,
+  writeManifest,
+} from "./helpers.ts";
 
 let redirected: ReturnType<typeof redirectClaudeCode>;
 beforeEach(() => {
@@ -145,6 +152,22 @@ describe("bare crew install guards", () => {
     expect(installed(home)).toEqual([]);
   });
 
+  test("C-RC-26 a symlink that stays inside the project is followed; a missing path is a missing source", () => {
+    const home = makeCrewHome();
+    const project = makeProject(["./alias/gamma"]);
+    addLocalSkill(project, "tools", "gamma");
+    symlinkSync(join(project, "tools"), join(project, "alias"));
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    expect(installed(home)).toEqual([`gamma@${project}`]);
+
+    writeManifest(project, ["./tools/absent"]);
+    const missing = crew(home, project, ["install", "--json"]);
+    expect(missing.code).not.toBe(0);
+    expect((JSON.parse(missing.stdout) as { error: { name: string } }).error.name).not.toBe(
+      "manifest_invalid",
+    );
+  });
+
   test("C-RC-12 references on the command line ignore the manifest entirely", () => {
     const home = makeCrewHome();
     const project = makeTempDir("crew-proj-");
@@ -155,5 +178,16 @@ describe("bare crew install guards", () => {
 
     expect(installed(home)).toEqual(["gamma@user"]);
     expect(existsSync(join(redirected.userRoot, "gamma", "SKILL.md"))).toBe(true);
+  });
+
+  test("C-RC-12 --from-git ignores the manifest too", () => {
+    const home = makeCrewHome();
+    const project = makeTempDir("crew-proj-");
+    writeManifest(project, ["python-testing"]);
+
+    const run = crew(home, project, ["install", "--from-git", makeSkillRepo(["alpha"])]);
+
+    expect(run.code).toBe(0);
+    expect(installed(home)).toEqual(["alpha@user"]);
   });
 });

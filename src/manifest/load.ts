@@ -1,12 +1,20 @@
 /**
  * Locate and read a project manifest (§9.2).
  *
- * The manifest that governs a directory is the nearest `.crewrc` at or
- * above it. The search stops at a repository root so a stray `.crewrc`
+ * The manifest that governs a directory is the nearest regular file named
+ * `.crewrc` at or above it. The search stops at a repository root so a stray `.crewrc`
  * higher up — a home directory's, say — never claims an unrelated project.
  */
 
-import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { MANIFEST_FILENAME, type ManifestEntry, manifestInvalid, parseManifest } from "./parse.ts";
 
@@ -19,26 +27,49 @@ export interface Manifest {
   readonly entries: readonly ManifestEntry[];
 }
 
-/** Absolute path of the manifest governing `cwd`, or null when there is none. */
-export function findManifest(cwd: string): string | null {
+/** The manifest governing `cwd`, read and parsed, or null when there is none. */
+export function loadManifestFor(cwd: string): Manifest | null {
   let dir = resolve(cwd);
   for (;;) {
-    const candidate = join(dir, MANIFEST_FILENAME);
-    // lstat, not stat: a symlinked `.crewrc` is not a manifest. Following one
-    // would read whatever file a checkout chose to point it at.
-    if (lstatSync(candidate, { throwIfNoEntry: false })?.isFile()) return candidate;
+    const file = join(dir, MANIFEST_FILENAME);
+    const text = readRegularFile(file);
+    if (text !== null) return buildManifest(file, text);
     const parent = dirname(dir);
     if (parent === dir || existsSync(join(dir, ".git"))) return null;
     dir = parent;
   }
 }
 
-/** Read and parse the manifest at `file`. Throws `manifest_invalid` per §9.2. */
-export function loadManifest(file: string): Manifest {
+/**
+ * Read `file` only if it is a regular file, deciding that on the same open
+ * handle the bytes come from. A symlinked `.crewrc` is not a manifest:
+ * following one would read whatever file a checkout chose to point it at.
+ * Checking the path first and reading it second would leave a window in
+ * which the file could be swapped for a link, so the open itself refuses
+ * links (`O_NOFOLLOW`) and the type is confirmed on the descriptor.
+ */
+function readRegularFile(file: string): string | null {
+  let fd: number;
+  try {
+    // O_NONBLOCK: opening a FIFO named `.crewrc` must not hang waiting for a writer.
+    fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch {
+    return null; // Absent, or a symbolic link.
+  }
+  try {
+    return fstatSync(fd).isFile() ? readFileSync(fd, "utf8") : null;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Parse `text` read from `file`. Throws `manifest_invalid` per §9.2. */
+function buildManifest(file: string, text: string): Manifest {
   const projectRoot = dirname(file);
-  const entries = parseManifest({ text: readFileSync(file, "utf8"), file });
+  const entries = parseManifest({ text, file });
+  const physicalRoot = realpathSync(projectRoot);
   for (const entry of entries) {
-    if (entry.source.type === "path" && escapesThroughSymlink(entry.source.path, projectRoot)) {
+    if (entry.source.type === "path" && escapesThroughSymlink(entry.source.path, physicalRoot)) {
       throw manifestInvalid(
         { file, line: entry.line, ref: entry.ref },
         `\`${entry.ref}\` reaches outside the project through a symbolic link`,
@@ -54,8 +85,8 @@ export function loadManifest(file: string): Manifest {
  * symlinked directory. A path that does not exist yet cannot escape, and
  * the install flow reports it as missing.
  */
-function escapesThroughSymlink(path: string, projectRoot: string): boolean {
+function escapesThroughSymlink(path: string, physicalRoot: string): boolean {
   if (!existsSync(path)) return false;
-  const fromRoot = relative(realpathSync(projectRoot), realpathSync(path));
+  const fromRoot = relative(physicalRoot, realpathSync(path));
   return fromRoot === ".." || fromRoot.startsWith(`..${sep}`);
 }

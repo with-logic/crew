@@ -1410,7 +1410,10 @@ lines is valid and declares no skills.
 
 **Accepted references.** A manifest line MUST be one of:
 
-- A git source (§8.2), in any form §8.4 accepts.
+- A git source (§8.2), in any form §8.4 accepts. A git source names its
+  repository by URL, so it is only as portable as that URL: a `file://` URL or
+  other machine-local address is accepted but resolves only where that
+  location exists.
 - A path source (§8.1) written relative to the manifest, starting with `./` or
   `../`, that resolves to the manifest's directory or a location beneath it.
   The path is resolved against the directory containing the manifest, never
@@ -1443,7 +1446,9 @@ implementation MUST NOT act on the valid lines of an invalid manifest.
    `.crewrc` supplies the manifest. A symbolic link named `.crewrc` is not a
    manifest and MUST NOT be followed or read: a checkout could otherwise point
    it at any readable file and have that file's contents echoed in a
-   `manifest_invalid` diagnostic. A directory named `.crewrc` is not a
+   `manifest_invalid` diagnostic. The decision that `.crewrc` is a regular
+   file and the read of its contents MUST apply to the same opened file, so
+   replacing it with a link between the two cannot defeat the rule. A directory named `.crewrc` is not a
    manifest either. The search stops, without a result, after
    checking a directory that contains a `.git` entry (a repository root) or
    the filesystem root. A manifest above a repository root therefore never

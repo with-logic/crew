@@ -8,12 +8,7 @@
  */
 
 import { CrewError } from "../../core/errors.ts";
-import {
-  findManifest,
-  loadManifest,
-  MANIFEST_FILENAME,
-  type Manifest,
-} from "../../manifest/index.ts";
+import { loadManifestFor, MANIFEST_FILENAME, type Manifest } from "../../manifest/index.ts";
 import type { CommandContext, CommandOutput } from "../types.ts";
 
 /** Flags that reinterpret references; meaningless without references on the command line. */
@@ -21,8 +16,8 @@ const REFERENCE_FLAGS = ["recursive", "tap", "bundle", "skill"] as const;
 
 /** Load the manifest governing `ctx.cwd`, or fail with the usage error a bare install earns. */
 export function manifestForBareInstall(ctx: CommandContext): Manifest {
-  const file = findManifest(ctx.cwd);
-  if (file === null) {
+  const manifest = loadManifestFor(ctx.cwd);
+  if (manifest === null) {
     throw new CrewError(
       "usage_error",
       `\`crew install\` needs at least one skill reference — e.g. \`crew install python-testing\`, \`crew install @acme/skills\`, or \`crew install ./my-skill\` — or a \`${MANIFEST_FILENAME}\` in this project listing them`,
@@ -41,7 +36,7 @@ export function manifestForBareInstall(ctx: CommandContext): Manifest {
       `\`--${flag}\` only applies to references given on the command line, not to \`${MANIFEST_FILENAME}\``,
     );
   }
-  return loadManifest(file);
+  return manifest;
 }
 
 /**
