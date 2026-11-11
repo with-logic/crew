@@ -1,5 +1,6 @@
 /** Synchronous filesystem, walking, and atomic replacement helpers (§6, §9 step 3, §12.1). */
 
+import { randomBytes } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -54,9 +55,10 @@ export function writeText(path: string, contents: string): void {
   ensureDir(dirname(path));
   // The suffix keeps the temp name out of any directory listing crew
   // treats as meaningful (a skill dir, a tap root) if we crash mid-write.
-  const tmp = `${path}.tmp-${process.pid}-${Date.now()}`;
+  // Unpredictable name + exclusive create (`wx`): a link planted there is refused.
+  const tmp = `${path}.tmp-${process.pid}-${randomBytes(8).toString("hex")}`;
   try {
-    writeFileSync(tmp, contents, { encoding: "utf8", mode: modeFor(path) });
+    writeFileSync(tmp, contents, { encoding: "utf8", mode: modeFor(path), flag: "wx" });
     renameSync(tmp, path);
   } catch (err) {
     // The temp file can hold whatever the caller was writing — config.yaml

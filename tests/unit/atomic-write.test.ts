@@ -116,3 +116,30 @@ test("writeText preserves the open failure when temporary cleanup also fails", (
   expect(readFileSync(target, "utf8")).toBe("old: 1\n");
   expect(readdirSync(dir)).toEqual(["config.yaml"]);
 });
+
+test("writeText names its temporary file unpredictably, afresh for every write", () => {
+  const dir = makeTempDir("crew-atomic-");
+  const target = join(dir, "config.yaml");
+  /** The temp path a write tried to create, taken from its failure in an unwritable directory. */
+  const attemptedTempPath = (): string => {
+    try {
+      writeText(target, "new: 2\n");
+    } catch (error) {
+      return String((error as NodeJS.ErrnoException).path);
+    }
+    throw new Error("expected the write to fail");
+  };
+  chmodSync(dir, 0);
+  let first: string;
+  let second: string;
+  try {
+    first = attemptedTempPath();
+    second = attemptedTempPath();
+  } finally {
+    chmodSync(dir, 0o700);
+  }
+  const shape = new RegExp(`\\.tmp-${process.pid}-[0-9a-f]{16}$`);
+  expect(first).toMatch(shape);
+  expect(second).toMatch(shape);
+  expect(first).not.toBe(second);
+});
