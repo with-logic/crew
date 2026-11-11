@@ -5,6 +5,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { runCli } from "../../../src/cli/main.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../helpers/scoped-install.ts";
@@ -20,13 +22,13 @@ afterEach(() => {
 
 /**
  * Run a verbose bare install and rewrite `.crewrc` to `lines` the moment
- * the first skill starts installing — after the manifest was read, before
+ * (or delete it, for `null`) the first skill starts installing — after the manifest was read, before
  * ownership is reconciled.
  */
 function installWhileManifestBecomes(
   home: string,
   project: string,
-  lines: readonly string[],
+  lines: readonly string[] | null,
   extraArgs: readonly string[] = [],
 ) {
   let rewritten = false;
@@ -43,7 +45,8 @@ function installWhileManifestBecomes(
         stderr += chunk;
         if (rewritten || !chunk.includes("installing")) return;
         rewritten = true;
-        writeManifest(project, lines);
+        if (lines === null) rmSync(join(project, ".crewrc"));
+        else writeManifest(project, lines);
       },
     },
   });
@@ -51,9 +54,10 @@ function installWhileManifestBecomes(
 }
 
 describe("a manifest that changes during the run", () => {
-  const cases: readonly (readonly [string, () => string[]])[] = [
+  const cases: readonly (readonly [string, () => string[] | null])[] = [
     ["is replaced by a different valid manifest", () => [makeSkillRepo(["beta"])]],
     ["becomes invalid", () => ["python-testing"]],
+    ["is deleted", () => null],
   ];
   for (const [what, becomes] of cases) {
     test(`C-RC-31 when .crewrc ${what}, the run claims nothing and says so`, () => {
@@ -64,7 +68,7 @@ describe("a manifest that changes during the run", () => {
 
       expect(human.rewritten).toBe(true);
       expect(human.code).toBe(0);
-      expect(human.stderr).toContain(".crewrc changed while crew was installing");
+      expect(human.stderr).toContain("ownership of the installed skills was not recorded");
       expect(installed(home)).toEqual([`alpha@${project}`]);
       expect(ownedNames(home)).toEqual([]);
     });
@@ -78,7 +82,7 @@ describe("a manifest that changes during the run", () => {
 
     expect(run.code).toBe(0);
     const { warnings } = JSON.parse(run.stdout) as { warnings: string[] };
-    expect(warnings.join("\n")).toContain(".crewrc changed while crew was installing");
+    expect(warnings.join("\n")).toContain("ownership of the installed skills was not recorded");
     expect(ownedNames(home)).toEqual([]);
   });
 });

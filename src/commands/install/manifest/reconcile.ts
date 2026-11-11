@@ -15,12 +15,12 @@ import { withStateLock } from "../../../state/lock.ts";
 
 /** What reconciling did. */
 export interface Reconciliation {
-  /** True when `.crewrc` changed during the run, so nothing was claimed. */
+  /** True when `.crewrc` changed, or could not be re-read, during the run: nothing was claimed. */
   readonly manifestChanged: boolean;
 }
 
-/** The result of a run that had nothing to reconcile. */
-export const NOTHING_RECONCILED: Reconciliation = { manifestChanged: false };
+/** The result when ownership matches the manifest: reconciled, or nothing to reconcile. */
+export const IN_STEP_WITH_MANIFEST: Reconciliation = { manifestChanged: false };
 
 /**
  * Mark the skills in `resolvedSkillNames`, the manifest's resolved install
@@ -37,7 +37,7 @@ export function reconcileOwnership(reconcile: {
     const state = readState(home);
     const claimed = claimForManifest(state, manifest.projectRoot, resolvedSkillNames);
     if (claimed !== state) writeState(claimed, home);
-    return NOTHING_RECONCILED;
+    return IN_STEP_WITH_MANIFEST;
   }, home);
 }
 
@@ -56,6 +56,6 @@ function hasChangedOnDisk(snapshot: Manifest): boolean {
 export function staleManifestWarnings(reconciled: Reconciliation): string[] {
   if (!reconciled.manifestChanged) return [];
   return [
-    "warning: .crewrc changed while crew was installing, so nothing was reconciled. Run `crew install` again.",
+    "warning: .crewrc changed, or could not be read again, while crew was installing, so ownership of the installed skills was not recorded. Check .crewrc and run `crew install` again.",
   ];
 }

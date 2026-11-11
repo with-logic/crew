@@ -20,7 +20,7 @@ import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall, nothingToInstall } from "./manifest/index.ts";
 import {
-  NOTHING_RECONCILED,
+  IN_STEP_WITH_MANIFEST,
   reconcileOwnership,
   staleManifestWarnings,
 } from "./manifest/reconcile.ts";
@@ -117,7 +117,7 @@ export function installCommand(ctx: CommandContext): CommandOutput {
           manifest,
           resolvedSkillNames: new Set(result.resolved.map((skill) => skill.name)),
         })
-      : NOTHING_RECONCILED;
+      : IN_STEP_WITH_MANIFEST;
 
   const human = renderInstall(
     {
