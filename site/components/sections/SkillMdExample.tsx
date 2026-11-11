@@ -14,7 +14,7 @@ export function SkillMdExample() {
           label="Anatomy of a skill"
           title={
             <>
-              No proprietary manifest. Just <code>SKILL.md</code>.
+              No proprietary format. Just <code>SKILL.md</code>.
             </>
           }
           description={

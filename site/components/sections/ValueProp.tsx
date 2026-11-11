@@ -13,8 +13,8 @@ export function ValueProp() {
         <p className={styles.sub}>
           <span>
             Install one skill for yourself, publish a repo for your team, or tap into a shared
-            collection. Git is the package index; <code className={styles.codePaper}>SKILL.md</code>{" "}
-            is the manifest.
+            collection. Git is the package index; a skill is a folder with a{" "}
+            <code className={styles.codePaper}>SKILL.md</code>.
           </span>
         </p>
         <div className={styles.chips}>
@@ -23,6 +23,10 @@ export function ValueProp() {
           </Pill>
           <Pill>
             <strong>team taps</strong> · private git repos become registries
+          </Pill>
+          <Pill>
+            <strong>project skills</strong> · check in a <code>.crewrc</code>, run{" "}
+            <code>crew install</code>
           </Pill>
           <Pill>
             <strong>no telemetry</strong> · Homecrew never phones home

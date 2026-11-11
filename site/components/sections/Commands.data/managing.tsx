@@ -18,6 +18,22 @@ export const MANAGING: CommandGroup = {
       ],
     },
     {
+      name: "install (project)",
+      signature: <>crew install [--latest] | crew install --save &lt;ref&gt;…</>,
+      description: (
+        <>
+          With nothing named, install the skills listed in this project&apos;s <code>.crewrc</code>,
+          for this project, at the commits recorded in <code>.crewrc.lock</code>. Skills whose line
+          was removed are uninstalled, unless a listed skill still depends on them.{" "}
+          <span className={styles.flag}>--latest</span> moves lines that name a branch, a tag, or no
+          version to what that points at now and updates the lockfile.{" "}
+          <span className={styles.flag}>--save</span> adds a reference to <code>.crewrc</code> and
+          installs it. In a repository with several projects, each with its own <code>.crewrc</code>
+          , one run at the top installs them all.
+        </>
+      ),
+    },
+    {
       name: "uninstall",
       signature: <>crew uninstall [--scope {"{user,project}"}] &lt;selector&gt;…</>,
       description: (
@@ -26,7 +42,9 @@ export const MANAGING: CommandGroup = {
           tap, or a namespace — qualified as <code>acme/marketing</code>, or bare when only one of
           your taps has skills under that name. <span className={styles.flag}>--all</span> clears
           the whole scope. One scope at a time: your user-scoped install by default, or this
-          project&apos;s with <span className={styles.flag}>--scope project</span>.
+          project&apos;s with <span className={styles.flag}>--scope project</span>.{" "}
+          <span className={styles.flag}>--save</span> instead takes a line out of this
+          project&apos;s <code>.crewrc</code> and removes the skills it brought in.
         </>
       ),
     },
