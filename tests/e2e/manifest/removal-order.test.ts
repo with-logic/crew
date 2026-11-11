@@ -20,10 +20,13 @@ afterEach(() => {
   restoreClaudeCode(redirected.originals);
 });
 
-/** Skills under `<project>/tools`, each depending on the one named after it. */
-function addChain(project: string, chain: Record<string, string | null>): void {
+/** Skills under `<project>/tools`; each maps to the one skill it depends on, or null. */
+function addSkillsWithDependencies(
+  project: string,
+  dependenciesBySkill: Record<string, string | null>,
+): void {
   mkdirSync(join(project, "tools"), { recursive: true });
-  for (const [name, dependency] of Object.entries(chain)) {
+  for (const [name, dependency] of Object.entries(dependenciesBySkill)) {
     const dependencies = dependency === null ? [] : [dependency];
     makeSkill(join(project, "tools"), name, skillFrontmatter({ name, dependencies }));
   }
@@ -41,7 +44,12 @@ describe("removal order", () => {
   test("C-RC-28 skills a hand-installed skill still needs are kept and released, down the chain", () => {
     const home = makeCrewHome();
     const project = makeProject(["./tools/top"]);
-    addChain(project, { base: null, middle: "base", top: "middle", mine: "middle" });
+    addSkillsWithDependencies(project, {
+      base: null,
+      middle: "base",
+      top: "middle",
+      mine: "middle",
+    });
     expect(crew(home, project, ["install"]).code).toBe(0);
     expect(ownedNames(home)).toEqual(["base", "middle", "top"]);
     expect(crew(home, project, ["install", "--scope", "project", "./tools/mine"]).code).toBe(0);
@@ -59,7 +67,7 @@ describe("removal order", () => {
   test("C-RC-29 when a dependent's removal aborts, its dependency stays and stays owned", () => {
     const home = makeCrewHome();
     const project = makeProject(["./tools/top"]);
-    addChain(project, { base: null, top: "base" });
+    addSkillsWithDependencies(project, { base: null, top: "base" });
     expect(crew(home, project, ["install"]).code).toBe(0);
     rmSync(join(skillDir(project, "top"), ".crew.json"));
 
@@ -74,7 +82,7 @@ describe("removal order", () => {
   test("C-RC-35 a dropped chain nothing else needs is removed in full, dependents first", () => {
     const home = makeCrewHome();
     const project = makeProject(["./tools/top"]);
-    addChain(project, { base: null, middle: "base", top: "middle" });
+    addSkillsWithDependencies(project, { base: null, middle: "base", top: "middle" });
     expect(crew(home, project, ["install"]).code).toBe(0);
 
     const run = dropEverything(home, project);
@@ -89,7 +97,7 @@ describe("removal order", () => {
   test("C-RC-35 a dropped dependency cycle nothing else needs is removed in full", () => {
     const home = makeCrewHome();
     const project = makeProject(["./tools/ping"]);
-    addChain(project, { ping: "pong", pong: "ping" });
+    addSkillsWithDependencies(project, { ping: "pong", pong: "ping" });
     expect(crew(home, project, ["install"]).code).toBe(0);
     expect(ownedNames(home)).toEqual(["ping", "pong"]);
 
@@ -103,7 +111,7 @@ describe("removal order", () => {
   test("C-RC-28 a cycle that a hand-installed skill needs is kept whole and released", () => {
     const home = makeCrewHome();
     const project = makeProject(["./tools/ping"]);
-    addChain(project, { ping: "pong", pong: "ping", mine: "ping" });
+    addSkillsWithDependencies(project, { ping: "pong", pong: "ping", mine: "ping" });
     expect(crew(home, project, ["install"]).code).toBe(0);
     expect(crew(home, project, ["install", "--scope", "project", "./tools/mine"]).code).toBe(0);
 

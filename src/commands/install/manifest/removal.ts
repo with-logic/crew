@@ -19,11 +19,11 @@ import { entryTargetBases } from "../../../agents/target-lock/bases.ts";
 import { withTargetLocks } from "../../../agents/target-lock/index.ts";
 import type { StateEntry, StateFile } from "../../../core/types.ts";
 import { garbageCollectAutoTaps } from "../../../maintenance/auto-taps.ts";
-import { entryKey } from "../../../state/identity.ts";
 import { readState, writeState } from "../../../state/load.ts";
 import { withStateLock } from "../../../state/lock.ts";
 import type { CommandContext } from "../../types.ts";
 import { removeOne, type UninstallRecord } from "../../uninstall/core.ts";
+import { neededNames, release } from "./retained.ts";
 import { type ProjectEntry, sharesPhysicalTarget } from "./shared-target.ts";
 
 /**
@@ -64,13 +64,13 @@ function processDroppedEntries(
   projectRoot: string,
   resolvedSkillNames: ReadonlySet<string>,
 ): Outcome {
-  const dropped = state.installations.filter(
-    (entry): entry is ProjectEntry =>
-      entry.scope === "project" &&
-      entry.project_root === projectRoot &&
-      entry.manifest_owned === true &&
-      !resolvedSkillNames.has(entry.name),
-  );
+  const isDropped = (entry: StateEntry): entry is ProjectEntry => {
+    const isHere = entry.scope === "project" && entry.project_root === projectRoot;
+    const isOwned = entry.manifest_owned === true;
+    const isStillResolved = resolvedSkillNames.has(entry.name);
+    return isHere && isOwned && !isStillResolved;
+  };
+  const dropped = state.installations.filter(isDropped);
   if (dropped.length === 0) return { state, records: [] };
   const run = (unavailable?: ReadonlySet<string>) =>
     removeInOrder(state, dropped, ctx, unavailable);
@@ -102,81 +102,36 @@ function removeInOrder(
   const shared = dropped.filter((entry) => sharesPhysicalTarget(entry, initial));
   const pending = new Set(dropped.filter((e) => !shared.includes(e)).map((e) => e.name));
   const projectRoot = dropped[0]!.project_root;
-  const current = (name: string): StateEntry =>
-    state.installations.find(
-      (entry) =>
-        entry.name === name && entry.scope === "project" && entry.project_root === projectRoot,
-    )!;
+  // Each pass indexes the location once and computes the needed set once,
+  // so a large manifest costs one scan of state per removal, not per pair.
+  const entriesHere = (): Map<string, StateEntry> => {
+    const byName = new Map<string, StateEntry>();
+    for (const entry of state.installations) {
+      if (entry.scope === "project" && entry.project_root === projectRoot) {
+        byName.set(entry.name, entry);
+      }
+    }
+    return byName;
+  };
   for (;;) {
-    const removable = [...pending].filter((name) => !neededNames(pending, current).has(name));
-    const name = removable.find((n) => current(n).required_by.length === 0) ?? removable[0];
+    const here = entriesHere();
+    const needed = neededNames(pending, here);
+    let name: string | undefined;
+    for (const candidate of pending) {
+      if (needed.has(candidate)) continue;
+      name ??= candidate;
+      if (here.get(candidate)!.required_by.length > 0) continue;
+      name = candidate;
+      break;
+    }
     if (name === undefined) break;
     pending.delete(name);
-    const next = current(name);
-    const subject = { raw: name, name, entries: [next] };
+    const subject = { raw: name, name, entries: [here.get(name)!] };
     const removal = removeOne(state, subject, ctx, false, null, false, unavailableBases);
     state = removal.updatedState;
     records.push(removal.rec);
   }
-  return { state: release(state, dropped, shared, [...pending].map(current)), records };
-}
-
-/** The pending names that something staying requires, directly or through another needed one. */
-function neededNames(
-  pending: ReadonlySet<string>,
-  current: (name: string) => StateEntry,
-): ReadonlySet<string> {
-  const needed = new Set<string>();
-  let grew: boolean;
-  do {
-    grew = false;
-    for (const name of pending) {
-      if (needed.has(name)) continue;
-      const requiredByStayer = current(name).required_by.some(
-        (dependent) => !pending.has(dependent) || needed.has(dependent),
-      );
-      if (!requiredByStayer) continue;
-      needed.add(name);
-      grew = true;
-    }
-  } while (grew);
-  return needed;
-}
-
-/**
- * Clear the ownership flag on the dropped entries that are staying for
- * good: the ones sharing a physical target, and any left over because a
- * skill the manifest does not own requires them, directly or through
- * another released skill. An entry held back only by a dependent whose own
- * removal aborted stays owned, so it goes when that dependent finally does.
- */
-function release(
-  state: StateFile,
-  dropped: readonly StateEntry[],
-  shared: readonly StateEntry[],
-  leftover: readonly StateEntry[],
-): StateFile {
-  const owned = new Set(dropped.map((entry) => entry.name));
-  const released = new Set(shared.map(entryKey));
-  for (const entry of shared) owned.delete(entry.name);
-  let grew: boolean;
-  do {
-    grew = false;
-    for (const entry of leftover) {
-      if (released.has(entryKey(entry))) continue;
-      if (entry.required_by.every((name) => owned.has(name))) continue;
-      released.add(entryKey(entry));
-      owned.delete(entry.name);
-      grew = true;
-    }
-  } while (grew);
-  if (released.size === 0) return state;
-  return {
-    schema_version: 1,
-    installations: state.installations.map((entry) => {
-      if (!released.has(entryKey(entry))) return entry;
-      const { manifest_owned: _released, ...rest } = entry;
-      return rest;
-    }),
-  };
+  const here = entriesHere();
+  const leftover = [...pending].map((name) => here.get(name)!);
+  return { state: release(state, dropped, shared, leftover), records };
 }

@@ -2371,7 +2371,10 @@ on a line of its own (§9.2). Set by bare `crew install`. Only project-scope
 entries carry it. It survives an update or reinstall of the skill. It is
 recorded in state only, not in the install-site marker: if state is rebuilt
 from markers (`crew doctor --repair`) the flag is lost, and the next bare
-install re-claims every skill the manifest still resolves to.
+install re-claims every skill the manifest still resolves to. An entry that has left the resolved install set keeps
+the flag while its removal is still owed — an attempt aborted, or it is held
+back by a dependent whose attempt aborted — and loses it when removal
+releases it (§9.2).
 
 **`tracks_tap`** (boolean, optional; absent means false). True when
 this entry came from a whole-tap install (`crew install <tap-url>` or

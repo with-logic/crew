@@ -6,6 +6,10 @@
  * manifest's resolved install set, which is every skill a manifest line
  * expands to plus every dependency resolved with them. It does not mean
  * the skill is named on a line of its own.
+ *
+ * The flag outlives membership in one case: an entry that has left the
+ * set but whose removal aborted keeps it, so the next bare install tries
+ * again. Removal clears it on entries it deliberately keeps.
  */
 
 import type { StateEntry, StateFile } from "../core/types.ts";

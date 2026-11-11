@@ -68,6 +68,21 @@ describe("removal safety", () => {
     expect(installed(home)).toEqual([`alpha@${project}`, `gamma@${project}`]);
   });
 
+  test("C-RC-27 when a declared skill cannot be installed into its directory, a dropped skill stays", () => {
+    const home = makeCrewHome();
+    const project = makeProject([makeSkillRepo(["alpha"])]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    addLocalSkill(project, "tools", "gamma");
+    // Something other than crew already occupies gamma's destination (§7.3).
+    mkdirSync(skillDir(project, "gamma"), { recursive: true });
+    writeManifest(project, ["./tools/gamma"]);
+
+    expect(crew(home, project, ["install"]).code).not.toBe(0);
+
+    expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
+    expect(installed(home)).toEqual([`alpha@${project}`]);
+  });
+
   test("C-RC-27 when one skill of a declared source fails validation, a dropped skill stays", () => {
     const home = makeCrewHome();
     const project = makeProject([makeSkillRepo(["alpha"])]);
@@ -136,8 +151,11 @@ describe("removal safety", () => {
 
     expect(existsSync(join(skillDir(other, "alpha"), "SKILL.md"))).toBe(true);
     expect(installed(home)).toEqual([`alpha@${other}`, `alpha@${project}`].sort());
-    expect(
-      readState(home).installations.map((entry) => [entry.project_root, entry.manifest_owned]),
-    ).toContainEqual([other, true]);
+    const ownership = readState(home).installations.map((entry) => [
+      entry.project_root,
+      entry.manifest_owned,
+    ]);
+    expect(ownership).toContainEqual([other, true]);
+    expect(ownership).toContainEqual([project, undefined]);
   });
 });

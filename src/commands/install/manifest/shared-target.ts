@@ -16,7 +16,10 @@ import type { StateEntry, StateFile } from "../../../core/types.ts";
 import { entryKey } from "../../../state/identity.ts";
 
 /** A project-scope entry: its `project_root` is known to be present. */
-export type ProjectEntry = StateEntry & { readonly project_root: string };
+export type ProjectEntry = StateEntry & {
+  readonly scope: "project";
+  readonly project_root: string;
+};
 
 /**
  * True when one of `entry`'s install directories is physically the same

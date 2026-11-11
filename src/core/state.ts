@@ -33,8 +33,10 @@ export interface StateEntry {
   /** True when this entry came from a whole-tap install and should be re-expanded. */
   readonly tracks_tap?: boolean;
   /**
-   * True when a project manifest at `project_root` accounts for this skill:
-   * it is in the manifest's resolved install set, dependencies included (§9.2).
+   * True when a project manifest at `project_root` owns this skill (§9.2):
+   * it is in the manifest's resolved install set, dependencies included, or
+   * it has left that set and its removal is still owed because an attempt
+   * aborted.
    */
   readonly manifest_owned?: boolean;
   /** For `scope === "project"` entries: the absolute install project root. */

@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { readConfig } from "../../../src/config/load.ts";
 import { readState } from "../../../src/state/load.ts";
 import { makeCrewHome } from "../../helpers/env.ts";
@@ -112,5 +113,36 @@ describe("removing dropped skills", () => {
     expect(payload.removed.map((r) => r.name)).toEqual(["alpha"]);
     expect(existsSync(join(skillDir(project, "alpha"), "SKILL.md"))).toBe(true);
     expect({ state: readState(home), config: readConfig(home) }).toEqual(before);
+  });
+
+  test("C-RC-24 --dry-run with skills still declared names the removal in human output too", () => {
+    const home = makeCrewHome();
+    const project = makeProject([makeSkillRepo(["alpha"]), "./tools/gamma"]);
+    addLocalSkill(project, "tools", "gamma");
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    writeManifest(project, ["./tools/gamma"]);
+
+    const run = crew(home, project, ["install", "--dry-run"]);
+
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain("No longer in .crewrc");
+    expect(run.stdout).toContain("alpha");
+    expect(installed(home)).toEqual([`alpha@${project}`, `gamma@${project}`]);
+  });
+
+  test("C-RC-21 an emptied manifest removes what it owned even with no agent coder active", () => {
+    const home = makeCrewHome();
+    const project = makeProject([makeSkillRepo(["alpha"])]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    writeManifest(project, []);
+    const detect = claudeCodeAdapter.detect;
+    (claudeCodeAdapter as { detect: () => boolean }).detect = () => false;
+    try {
+      expect(crew(home, project, ["install"]).code).toBe(0);
+    } finally {
+      (claudeCodeAdapter as { detect: () => boolean }).detect = detect;
+    }
+    expect(installed(home)).toEqual([]);
+    expect(existsSync(skillDir(project, "alpha"))).toBe(false);
   });
 });
