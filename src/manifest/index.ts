@@ -14,7 +14,7 @@ export {
   pinnedRef,
   serializeLock,
 } from "./lock.ts";
-export { nestedManifestDirs } from "./nested.ts";
+export { isOwnProject, nestedManifestCandidateDirs, nestedProjectDirs } from "./nested.ts";
 export { claimForManifest, isManifestOwned } from "./ownership.ts";
 export {
   isOutside,
