@@ -24,6 +24,7 @@
 
 import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import type { Config, StateEntry, StateFile } from "../../core/types.ts";
+import { isManifestOwned } from "../../manifest/index.ts";
 import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import type { GitDiscoveryWarnings } from "../../sources/discovery.ts";
 import { entryIdentity } from "../../state/collections/index.ts";
@@ -110,7 +111,7 @@ export function reexpandTaps(
     if (!tracksTap) continue;
     // §9.2: a manifest-owned group gains siblings through the manifest,
     // not through update.
-    if (members.some((m) => m.manifest_owned === true)) continue;
+    if (members.some(isManifestOwned)) continue;
 
     // Restrict by selection — re-expand only if the user selected a
     // member of THIS group, or named the tap itself. Membership is

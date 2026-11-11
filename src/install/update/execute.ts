@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { cwdForEntry } from "../../agents/adapter.ts";
 import type { TargetBaseFailures } from "../../agents/target-lock/index.ts";
 import type { Config, StateEntry, TapConfig } from "../../core/types.ts";
+import { isManifestOwned } from "../../manifest/index.ts";
 import { type AcquiredTap, withAcquiredSkillPath } from "../../sources/acquire/index.ts";
 import type { PreparedSources } from "../../sources/acquire/revision.ts";
 import { isGistTap } from "../../sources/gist.ts";
@@ -32,7 +33,7 @@ export function updateOne(
 
   // §9.2: a project manifest decides what version of its skills a project
   // has. An update, forced or not, never moves them out from under it.
-  if (entry.manifest_owned === true) return { kind: "skipped", reason: "managed by .crewrc" };
+  if (isManifestOwned(entry)) return { kind: "skipped", reason: "managed by .crewrc" };
 
   const entryCwd = cwdForEntry(entry, fallbackCwd);
   if (entry.pinned && entry.ref !== null && /^[0-9a-f]{40}$/i.test(entry.ref) && !force) {

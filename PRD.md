@@ -1507,11 +1507,13 @@ user scope or under another project root are never touched.
 
 **Updates.** `crew update` and autoupdate never change a manifest-owned
 entry. Each one is reported as `skipped` with the reason `managed by .crewrc`
-(§10.1), with or without `--force`, and no source is fetched on its behalf.
-Tap re-expansion (§10.1.1) skips a group that contains a manifest-owned
-entry, so no sibling is added to it. The version of a manifest-owned skill
-changes only through the manifest, by a bare `crew install`; otherwise a
-background update could move a project off the version its manifest gave it.
+(§10.1), with or without `--force`, and no revision is acquired on its
+behalf; the run's general tap refresh (§10.1 step 1) is unaffected. Tap
+re-expansion (§10.1.1) skips a group that contains a manifest-owned entry, so
+no sibling is added to it, including to hand-installed members of that group.
+`crew update` and autoupdate therefore cannot move a project off the version
+its manifest gave it. An explicit `crew install <ref>` is a deliberate act
+and follows §5.4 as for any other entry.
 An entry installed by hand from the same source elsewhere is updated as usual.
 
 ## 10. Update and autoupdate
@@ -3453,8 +3455,8 @@ Implementations and test suites refer to criteria by ID.
 | C-RC-15 | §9.2 | A skill installed in the project by hand gains `manifest_owned: true` once the manifest declares it. |
 | C-RC-16 | §9.2 | No entry is marked when a declared reference fails to resolve, when one skill of a multi-skill source fails validation, or on `--dry-run`. |
 | C-RC-17 | §9.2 | A repeat bare `crew install` with nothing new to claim leaves `state.json` byte-for-byte unchanged. |
-| C-RC-18 | §9.2, §10.1 | `crew update`, with or without `--force`, reports a manifest-owned skill as `skipped` with reason `managed by .crewrc`, leaves its files and state entry unchanged, fetches no source for it, and adds no sibling to it. An explicit reinstall of an owned skill keeps `manifest_owned: true`. |
-| C-RC-19 | §9.2, §10.1.1 | The same source installed by hand under another project root is still updated and re-expanded by `crew update`. |
+| C-RC-18 | §9.2, §10.1 | `crew update`, with or without `--force`, reports a manifest-owned skill as `skipped` with reason `managed by .crewrc`, leaves its files and state entry unchanged, and exits 0 even when that skill's source is unreachable. No sibling is added to a tap group containing an owned entry, even when the group also has a hand-installed member. An explicit reinstall of an owned skill keeps `manifest_owned: true`. |
+| C-RC-19 | §9.2, §10.1.1 | The same source installed by hand under another project root is still updated and re-expanded by `crew update`, and its entries stay unowned. |
 | C-RC-26 | §9.2 | A manifest path line that reaches outside the project through a symbolic link is `manifest_invalid`, with `details` naming its line; nothing from outside the project is installed. |
 
 ### 18.4 Worked examples

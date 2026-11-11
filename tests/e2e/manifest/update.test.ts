@@ -21,12 +21,11 @@ afterEach(() => {
 });
 
 /** Commit a changed `alpha` and a brand-new `beta` to the repository behind `repo`. */
-function publishV2(repo: string): string {
+function publishV2(repo: string): void {
   const dir = repo.slice("file://".length);
   writeFileSync(join(dir, "alpha", "notes.md"), "v2\n");
   makeSkill(dir, "beta", skillFrontmatter({ name: "beta" }));
   commitAll(dir, "v2 changes alpha, adds beta");
-  return dir;
 }
 
 interface Row {
@@ -60,7 +59,7 @@ describe("crew update and manifest-owned skills", () => {
     expect(existsSync(join(project, ".claude", "skills", "beta"))).toBe(false);
   });
 
-  test("C-RC-18 update reaches no source for an owned skill", () => {
+  test("C-RC-18 update still succeeds when an owned skill's source cannot be reached", () => {
     const home = makeCrewHome();
     const repo = makeSkillRepo(["alpha"]);
     const project = makeProject([repo]);
@@ -85,6 +84,25 @@ describe("crew update and manifest-owned skills", () => {
     expect(existsSync(join(other, ".claude", "skills", "alpha", "notes.md"))).toBe(true);
     expect(existsSync(join(other, ".claude", "skills", "beta", "SKILL.md"))).toBe(true);
     expect(existsSync(join(project, ".claude", "skills", "alpha", "notes.md"))).toBe(false);
+    expect(existsSync(join(project, ".claude", "skills", "beta"))).toBe(false);
+    const elsewhere = readState(home).installations.filter((e) => e.project_root === other);
+    expect(elsewhere.map((e) => [e.name, e.manifest_owned]).sort()).toEqual([
+      ["alpha", undefined],
+      ["beta", undefined],
+    ]);
+  });
+
+  test("C-RC-18 a group with one owned member gains no sibling, even for its hand-installed member", () => {
+    const home = makeCrewHome();
+    const repo = makeSkillRepo(["alpha", "gamma"]);
+    const project = makeProject([`${repo}//alpha`]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    expect(crew(home, project, ["install", "--scope", "project", repo]).code).toBe(0);
+    publishV2(repo);
+
+    expect(crew(home, project, ["update"]).code).toBe(0);
+
+    expect(existsSync(join(project, ".claude", "skills", "gamma", "SKILL.md"))).toBe(true);
     expect(existsSync(join(project, ".claude", "skills", "beta"))).toBe(false);
   });
 });

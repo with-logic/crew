@@ -37,3 +37,11 @@ export function claimForManifest(
     ),
   };
 }
+
+/**
+ * True when a project manifest owns `entry`. Only project-scope entries can
+ * be owned (§11.1), so a stray flag on a user-scope entry does not count.
+ */
+export function isManifestOwned(entry: StateEntry): boolean {
+  return entry.scope === "project" && entry.manifest_owned === true;
+}
