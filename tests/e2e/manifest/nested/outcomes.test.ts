@@ -133,6 +133,8 @@ describe("several manifests, one run", () => {
     const api = join(root, "packages/api");
     expect(crew(home, root, ["install"]).code).toBe(0);
     expect(installed(home)).toEqual([`alpha@${root}`, `alpha@${api}`]);
+    expect(existsSync(join(skillDir(root, "alpha"), "SKILL.md"))).toBe(true);
+    expect(existsSync(join(skillDir(api, "alpha"), "SKILL.md"))).toBe(true);
 
     writeManifest(api, []);
     const run = crew(home, root, ["install", "--json"]);
@@ -142,6 +144,7 @@ describe("several manifests, one run", () => {
     expect(result.nested[0]?.removed.map((record) => record.name)).toEqual(["alpha"]);
     expect(installed(home)).toEqual([`alpha@${root}`]);
     expect(existsSync(skillDir(api, "alpha"))).toBe(false);
+    expect(existsSync(join(skillDir(root, "alpha"), "SKILL.md"))).toBe(true);
   });
 
   test("C-RC-61 --save edits and installs the governing project only", () => {
