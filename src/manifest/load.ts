@@ -15,7 +15,7 @@ import {
   readFileSync,
   realpathSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { CrewError } from "../core/errors.ts";
 import {
   isOutside,
@@ -47,37 +47,56 @@ export function loadManifestFor(cwd: string): Manifest | null {
   }
 }
 
+/** What is at a path crew expects to hold one of its own text files. */
+export type FileAtPath =
+  | { readonly kind: "absent" }
+  | { readonly kind: "file"; readonly text: string }
+  /** Something is there that is not a regular file: a link, a directory, a device. */
+  | { readonly kind: "other" };
+
 /**
- * Read `file` only if it is a regular file, deciding that on the same open
- * handle the bytes come from. A symlinked `.crewrc` is not a manifest:
- * following one would read whatever file a checkout chose to point it at.
- * Checking the path first and reading it second would leave a window in
- * which the file could be swapped for a link, so the open itself refuses
- * links (`O_NOFOLLOW`) and the type is confirmed on the descriptor.
+ * Open `file` once, without following a symbolic link, and report what is
+ * there: nothing, a regular file (with its text), or something else. The
+ * type is decided on the same open handle the bytes come from, so the file
+ * cannot be swapped for a link between a check and a read.
  */
-function readRegularFile(file: string): string | null {
+export function readFileAt(file: string): FileAtPath {
   let fd: number;
   try {
-    // O_NONBLOCK: opening a FIFO named `.crewrc` must not hang waiting for a writer.
+    // O_NONBLOCK: opening a FIFO must not hang waiting for a writer.
     fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch (err) {
-    // Absent (ENOENT), or a symbolic link (ELOOP): not a manifest, keep looking.
     const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ELOOP") return null;
-    // Anything else means a manifest is there and cannot be read. Skipping
-    // it would let a manifest further up govern this project instead.
+    if (code === "ENOENT") return { kind: "absent" };
+    if (code === "ELOOP") return { kind: "other" }; // A symbolic link.
+    // Anything else means something is there that could not be opened.
+    // Callers must be able to tell that from absence: a manifest read as
+    // absent would let one further up govern the project, and a lockfile
+    // read as absent would let its lines install unpinned.
     throw new CrewError(
       "source_unreachable",
       `couldn't read \`${file}\` (${code})`,
       { file },
-      `Check that \`${MANIFEST_FILENAME}\` is readable and that the directories above it can be entered.`,
+      `Check that \`${basename(file)}\` is readable and that the directories above it can be entered.`,
     );
   }
   try {
-    return fstatSync(fd).isFile() ? readFileSync(fd, "utf8") : null;
+    return fstatSync(fd).isFile()
+      ? { kind: "file", text: readFileSync(fd, "utf8") }
+      : { kind: "other" };
   } finally {
     closeSync(fd);
   }
+}
+
+/**
+ * The text of `file` if it is a regular file, else null. A symlinked
+ * `.crewrc` is not a manifest: following one would read whatever file a
+ * checkout chose to point it at.
+ */
+function readRegularFile(file: string): string | null {
+  const found = readFileAt(file);
+  return found.kind === "file" ? found.text : null;
 }
 
 /** Parse `text` read from `file`. Throws `manifest_invalid` per §9.2. */

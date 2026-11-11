@@ -19,6 +19,7 @@ import { resolveCollisions } from "./collisions.ts";
 import { normalizeFromGit } from "./from-git.ts";
 import { withKnownTapInstallSuggestions } from "./known-tap-fallback/index.ts";
 import { manifestForBareInstall, noAgentsOutcome, nothingToInstall } from "./manifest/index.ts";
+import { readLock, refsToInstall } from "./manifest/lockfile.ts";
 import {
   IN_STEP_WITH_MANIFEST,
   reconcileOwnership,
@@ -50,14 +51,16 @@ export function installCommand(ctx: CommandContext): CommandOutput {
   const isBare = ctx.positional.length === 0 && typeof fromGit !== "string";
   const manifest = isBare ? manifestForBareInstall(ctx) : null;
   if (manifest?.entries.length === 0) {
+    readLock(manifest); // §9.3: an invalid lockfile is an error even with nothing to install.
     return nothingToInstall(manifest, ctx, `${safePath(manifest.file)} declares no skills.`);
   }
   const kindHint = readKindHint(ctx);
   rejectRecursiveTapRefs(ctx);
   const config = readConfig(ctx.home);
   const discovery = new GitDiscoveryWarnings();
+  // §9.3: a line with a lock entry installs at its recorded commit.
   const refs = manifest
-    ? manifest.entries.map((entry) => entry.ref)
+    ? refsToInstall(manifest, readLock(manifest))
     : resolveCollisions(ctx, config, discovery, kindHint);
   // §5.3: `--from-git` is never bare, so it skips collision resolution.
   if (typeof fromGit === "string") refs.push(normalizeFromGit(fromGit, ctx.cwd));
