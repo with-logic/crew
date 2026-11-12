@@ -154,10 +154,7 @@ function removeWithSkills(ctx: CommandContext, plan: RemovePlan, dryRun: boolean
         state,
         { raw: name, name, entries },
         ctx,
-        false,
-        null,
-        true,
-        unavailableBases,
+        { deferStateEntryDrops: true, unavailableBases },
       );
       state = updatedState;
       records.push(rec);

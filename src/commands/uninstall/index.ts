@@ -121,15 +121,10 @@ function runUninstall(
   const remove = (unavailableBases?: ReadonlySet<string>) => {
     for (const target of targets) {
       const subject = target.subject;
-      const { updatedState, rec, meta } = removeOne(
-        state,
-        subject,
-        ctx,
-        false,
+      const { updatedState, rec, meta } = removeOne(state, subject, ctx, {
         agentFilter,
-        false,
         unavailableBases,
-      );
+      });
       if (target.kind === "collection") rec.collection = target.collection;
       state = updatedState;
       records.push(rec);
@@ -175,15 +170,10 @@ function pruneOrphans(
   while (orphan) {
     attempted.add(entryKey(orphan));
     const subject = { raw: orphan.name, name: orphan.name, entries: [orphan] };
-    const { updatedState, rec } = removeOne(
-      current,
-      subject,
-      ctx,
-      true,
-      null,
-      false,
+    const { updatedState, rec } = removeOne(current, subject, ctx, {
+      pruned: true,
       unavailableBases,
-    );
+    });
     records.push(rec);
     current = updatedState;
     orphan = findOrphan(current, ctx.flags.scope, roots, attempted);
