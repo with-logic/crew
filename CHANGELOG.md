@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.14.0] — 2026-11-12
+
+### Added
+- `CREW_GIT_TIMEOUT_SECONDS` setting and a default 600-second deadline for git commands that talk to a remote (`clone`, `fetch`, `ls-remote`). A stalled remote is stopped and fails as `source_unreachable` (exit 5) with `git did not finish within N seconds and was stopped`. Local git commands have no deadline.
+- `crew install --quiet` now reports each failed skill on stderr, with the path or skill and agent, the error code and the message. A quiet install with no failures still prints nothing.
+
+### Changed
+- Installing several new git or path sources is much faster. Resolution no longer restarts for each new root source. In a test with 20 new local repos, install time dropped from 14.9 s to 1.1 s.
+- `crew help install` names its argument `<ref>`.
+- `crew help doctor` notes that an entry rebuilt by `crew doctor --repair` loses its `.crewrc` ownership until the next bare `crew install`.
+
+### Fixed
+- The site no longer advertises a new version before its release binaries are uploaded, so `crew self-update` can't point at files that don't exist yet.
+- A nested `--latest` lookup now joins the open lookup cache. This stops the same ref from being looked up twice and recorded as two commits.
+
 ## [0.13.0] — 2026-11-11
 
 ### Added
