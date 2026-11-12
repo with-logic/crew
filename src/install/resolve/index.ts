@@ -24,7 +24,7 @@ import { topoSort } from "../topo.ts";
 import { type DependencyTrees, withDependencyTrees } from "./dep/context.ts";
 import { enqueueDeps } from "./dep/index.ts";
 import type { PendingItem } from "./enqueue.ts";
-import { enqueueRoot, sameInstallSetSource, sourceLabel } from "./root.ts";
+import { enqueueRoot, sameInstallSetSource, sourceLabel, tapsOfRoots } from "./root.ts";
 
 /** Options for resolution. */
 export interface ResolveOptions {
@@ -68,7 +68,10 @@ export function resolveInstallSet(
 ): ResolveResult {
   const home = options.home ?? crewHome();
   const discovery = options.discovery ?? new GitDiscoveryWarnings();
-  return withDiscoveredTapLocks(startingConfig.taps, home, (requireTap) =>
+  // The taps the root references name are known before anything is acquired.
+  const cwd = options.cwd ?? process.cwd();
+  const rootTaps = tapsOfRoots(refs, startingConfig, cwd, options.recursive ?? false);
+  return withDiscoveredTapLocks([...startingConfig.taps, ...rootTaps], home, (requireTap) =>
     withDependencyTrees(home, (trees) =>
       resolveLockedInstallSet(refs, startingConfig, options, requireTap, trees, discovery),
     ),
