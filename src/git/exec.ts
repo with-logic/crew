@@ -89,18 +89,43 @@ export function resetGitRunner(): void {
   runner = baseRunner;
 }
 
-/** The real runner: invokes `git` via `Bun.spawnSync`. */
+/** §17.1: how long one git command may run before it is stopped. */
+const DEFAULT_TIMEOUT_SECONDS = 600;
+
+/** The exit code reported for a git command that was stopped at its deadline, as `timeout(1)` uses. */
+export const GIT_TIMED_OUT_EXIT_CODE = 124;
+
+/** §17.1: the deadline in seconds; `CREW_GIT_TIMEOUT` when it is a positive number, else the default. */
+function timeoutSeconds(): number {
+  const given = Number(process.env["CREW_GIT_TIMEOUT"]);
+  return Number.isFinite(given) && given > 0 ? given : DEFAULT_TIMEOUT_SECONDS;
+}
+
+/**
+ * The real runner: invokes `git` via `Bun.spawnSync`. A command still
+ * running at its deadline (§17.1) is stopped and reported as a failed
+ * command, so a remote that accepts a connection and then stalls cannot
+ * hold a `crew` command, and the locks it has taken, forever.
+ */
 function defaultRunner(args: readonly string[], options: GitRunOptions): GitResult {
+  const seconds = timeoutSeconds();
   const proc = Bun.spawnSync({
     cmd: ["git", ...args],
     cwd: options.cwd ?? process.cwd(),
     env: options.env ? { ...process.env, ...options.env } : process.env,
     stdout: "pipe",
     stderr: "pipe",
+    timeout: seconds * 1000,
   });
-  return {
-    stdout: proc.stdout?.toString() ?? "",
-    stderr: proc.stderr?.toString() ?? "",
-    exitCode: proc.exitCode ?? -1,
-  };
+  const stdout = proc.stdout?.toString() ?? "";
+  const stderr = proc.stderr?.toString() ?? "";
+  if (proc.exitedDueToTimeout) {
+    const stopped = `git did not finish within ${seconds} seconds and was stopped`;
+    return {
+      stdout,
+      stderr: [stderr.trim(), stopped].filter(Boolean).join("\n"),
+      exitCode: GIT_TIMED_OUT_EXIT_CODE,
+    };
+  }
+  return { stdout, stderr, exitCode: proc.exitCode ?? -1 };
 }
