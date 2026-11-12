@@ -46,6 +46,7 @@ export const doctorHelp: CommandHelp = {
   ],
   notes: [
     "`--repair` is conservative — it won't touch skills you've edited, and only changes Homecrew's own state, install folders, and scheduler files.",
+    "A state entry rebuilt from an install folder no longer says the skill came from a project's `.crewrc`, because only state records that. Run `crew install` in that project and it is marked again.",
   ],
   seeAlso: ["cache", "list"],
 };
