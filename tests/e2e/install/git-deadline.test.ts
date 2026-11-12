@@ -18,6 +18,12 @@ import { remoteCommitOf } from "../../../src/git/repo/remote.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkillsRepo, makeTempDir } from "../../helpers/fixtures.ts";
 
+/** How long the stalled clone would run if nothing stopped it: far past the 1 second deadline. */
+const STALL_SECONDS = 20;
+
+/** The install must end well before the stall would: proof it was the deadline that ended it. */
+const MAX_INSTALL_ELAPSED_MS = 15_000;
+
 const SETTINGS = ["CREW_GIT_TIMEOUT_SECONDS", "GIT_CONFIG_GLOBAL"] as const;
 
 let restore: (() => void) | null = null;
@@ -65,7 +71,7 @@ describe("the deadline on git commands that talk to a remote", () => {
     process.env["CREW_GIT_TIMEOUT_SECONDS"] = "1";
     const stallingConfig = join(makeTempDir("crew-gitconfig-"), "config");
     // The `#` discards the pack-objects arguments git appends.
-    writeFileSync(stallingConfig, '[uploadpack]\n\tpackObjectsHook = "sleep 20 #"\n');
+    writeFileSync(stallingConfig, `[uploadpack]\n\tpackObjectsHook = "sleep ${STALL_SECONDS} #"\n`);
     process.env["GIT_CONFIG_GLOBAL"] = stallingConfig;
     const capture = captureStreams();
     const started = performance.now();
@@ -75,7 +81,7 @@ describe("the deadline on git commands that talk to a remote", () => {
       streams: capture.streams,
     });
 
-    expect(performance.now() - started).toBeLessThan(15_000);
+    expect(performance.now() - started).toBeLessThan(MAX_INSTALL_ELAPSED_MS);
     expect(code).toBe(5);
     const error = JSON.parse(capture.stdout()).error;
     expect(error.name).toBe("source_unreachable");

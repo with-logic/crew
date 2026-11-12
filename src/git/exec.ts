@@ -118,9 +118,8 @@ export function gitTimeoutSeconds(): number {
  * The real runner: invokes `git` via `Bun.spawnSync`. A `talksToRemote` command
  * still running at its deadline is stopped and reported like any other
  * failed command: a non-zero exit code, and a last line of stderr that
- * says why. It is stopped with SIGTERM, which git handles by stopping the
- * transport helpers it started (`git-remote-https`, …) before it exits;
- * SIGKILL would orphan them, still holding their connections.
+ * says why. Only the git process itself is stopped: what a helper it
+ * started (such as `git-remote-https`) does afterwards is left to git.
  */
 function defaultRunner(args: readonly string[], options: GitRunOptions): GitResult {
   const seconds = gitTimeoutSeconds();
@@ -131,9 +130,7 @@ function defaultRunner(args: readonly string[], options: GitRunOptions): GitResu
     stdout: "pipe",
     stderr: "pipe",
     // Whole milliseconds: a fractional number of seconds is a valid setting.
-    ...(options.talksToRemote
-      ? { timeout: Math.ceil(seconds * 1000), killSignal: "SIGTERM" as const }
-      : {}),
+    ...(options.talksToRemote ? { timeout: Math.ceil(seconds * 1000) } : {}),
   });
   const stdout = proc.stdout?.toString() ?? "";
   const stderr = proc.stderr?.toString() ?? "";
