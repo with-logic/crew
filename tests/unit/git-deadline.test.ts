@@ -17,7 +17,7 @@ import { remoteCommitOf } from "../../src/git/repo/remote.ts";
 import { makeTempDir } from "../helpers/fixtures.ts";
 
 /** A git command that takes far longer than the limits these tests set. */
-const HANGS = ["-c", "alias.hang=!sleep 20", "hang"] as const;
+const HANGS = ["-c", "alias.hang=!echo said-before-hanging >&2; sleep 20", "hang"] as const;
 
 const before = process.env["CREW_GIT_TIMEOUT_SECONDS"];
 afterEach(() => {
@@ -37,21 +37,25 @@ function thrownBy(work: () => unknown): unknown {
 }
 
 describe("the git deadline", () => {
-  test("C-INST-26 a command still running at the limit is stopped and fails, even for a caller that tolerates failure", () => {
+  test("C-GIT-01 a command still running at the limit is stopped and fails, even for a caller that tolerates failure", () => {
     process.env["CREW_GIT_TIMEOUT_SECONDS"] = "1";
     const started = performance.now();
 
     const thrown = thrownBy(() => runGit(HANGS, { cwd: makeTempDir(), throwOnError: false }));
 
-    expect(performance.now() - started).toBeLessThan(10_000);
+    const elapsed = performance.now() - started;
+    expect(elapsed).toBeGreaterThan(500);
+    expect(elapsed).toBeLessThan(10_000);
     expect(thrown).toBeInstanceOf(GitProcessError);
     const { result } = thrown as GitProcessError;
     expect(result.exitCode).toBe(GIT_TIMED_OUT_EXIT_CODE);
     expect(result.timedOut).toBe(true);
+    // What git said before it was stopped is kept, ahead of the reason.
+    expect(result.stderr).toContain("said-before-hanging");
     expect(result.stderr).toContain("git did not finish within 1 second and was stopped");
   });
 
-  test("C-INST-26 a remote that stalls past the limit is source_unreachable", () => {
+  test("C-GIT-01 a remote that stalls past the limit is source_unreachable", () => {
     process.env["CREW_GIT_TIMEOUT_SECONDS"] = "2";
     const url = `file://${makeTempDir()}`;
     // The lookup itself is replaced by the command that hangs; real git still runs it.
@@ -66,14 +70,22 @@ describe("the git deadline", () => {
     expect((thrown as CrewError).message).toContain("git did not finish within 2 seconds");
   });
 
-  test("C-INST-26 the limit is 600 seconds unless the setting is a positive number", () => {
+  test("C-GIT-01 the limit is 600 seconds unless the setting is a positive number", () => {
     delete process.env["CREW_GIT_TIMEOUT_SECONDS"];
     expect(gitTimeoutSeconds()).toBe(600);
-    for (const value of ["soon", "0", "-5", ""]) {
+    for (const value of ["soon", "0", "-5", "", "Infinity"]) {
       process.env["CREW_GIT_TIMEOUT_SECONDS"] = value;
       expect(gitTimeoutSeconds()).toBe(600);
     }
     process.env["CREW_GIT_TIMEOUT_SECONDS"] = "45";
     expect(gitTimeoutSeconds()).toBe(45);
+  });
+
+  test("C-GIT-01 a fractional number of seconds is a usable limit", () => {
+    process.env["CREW_GIT_TIMEOUT_SECONDS"] = "1.0005";
+
+    const thrown = thrownBy(() => runGit(HANGS, { cwd: makeTempDir() }));
+
+    expect((thrown as GitProcessError).result.timedOut).toBe(true);
   });
 });

@@ -49,8 +49,8 @@ export function runGit(args: readonly string[], options: GitRunOptions = {}): Gi
   const rendered = safeArgs(args);
   progress(options.cwd ? `$ git ${rendered}  (in ${safePath(options.cwd)})` : `$ git ${rendered}`);
   const result = runner(args, options);
-  const failed = result.exitCode !== 0 && options.throwOnError !== false;
-  if (result.timedOut || failed) {
+  const shouldThrowForNonzeroExit = result.exitCode !== 0 && options.throwOnError !== false;
+  if (result.timedOut || shouldThrowForNonzeroExit) {
     const stderr = result.stderr.trim();
     throw new GitProcessError(
       `git ${args.join(" ")} failed (${result.exitCode}): ${stderr}`,
@@ -60,7 +60,10 @@ export function runGit(args: readonly string[], options: GitRunOptions = {}): Gi
   return result;
 }
 
-/** Error raised when `git` exits non-zero. Not a `CrewError` — callers map. */
+/**
+ * Error raised when `git` exits non-zero, or is stopped at its deadline
+ * (§17.1). Not a `CrewError` — callers map.
+ */
 export class GitProcessError extends Error {
   readonly result: GitResult;
   constructor(message: string, result: GitResult) {
@@ -122,7 +125,8 @@ function defaultRunner(args: readonly string[], options: GitRunOptions): GitResu
     env: options.env ? { ...process.env, ...options.env } : process.env,
     stdout: "pipe",
     stderr: "pipe",
-    timeout: seconds * 1000,
+    // Whole milliseconds: a fractional number of seconds is a valid setting.
+    timeout: Math.ceil(seconds * 1000),
   });
   const stdout = proc.stdout?.toString() ?? "";
   const stderr = proc.stderr?.toString() ?? "";
