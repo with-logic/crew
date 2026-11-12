@@ -81,6 +81,12 @@ export function displayUpdateErrors(
   };
 }
 
-function failureLine(subject: string, code: string, message: string, remedy?: string): string {
+/** One quiet diagnostic: who failed, the error code, and the full message (§5.2). */
+export function failureLine(
+  subject: string,
+  code: string,
+  message: string,
+  remedy?: string,
+): string {
   return sanitizeLine(withRemedy(`${subject}: failed (${code}): ${message}`, { remedy }));
 }

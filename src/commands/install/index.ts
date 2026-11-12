@@ -32,6 +32,7 @@ import { installEveryProject } from "./manifest/projects.ts";
 import { EMPTY_RECONCILIATION, reconcileManifestInstalls } from "./manifest/reconcile.ts";
 import { reportReconciliation } from "./manifest/report.ts";
 import { saveThenInstall, wantsSave } from "./manifest/save.ts";
+import { quietInstallFailures } from "./quiet.ts";
 import { renderInstall } from "./render/index.ts";
 
 /**
@@ -154,6 +155,7 @@ export function runOneInstall(ctx: CommandContext, expectedManifestFile?: string
     stderr: [
       ...(result.unusableProjectRoots ? [UNUSABLE_PROJECT_ROOT_WARNING] : []),
       ...warnings,
+      ...quietInstallFailures(result, ctx),
       ...reconciliation.quietDiagnostics,
     ],
     json: {
