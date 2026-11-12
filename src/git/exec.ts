@@ -34,8 +34,8 @@ export interface GitRunOptions {
   readonly throwOnError?: boolean;
   /**
    * The command talks to a remote, which can accept a connection and then
-   * stall. The real runner stops such a command at the deadline
-   * (`gitTimeoutSeconds`) and reports it as a failed command. Never set it
+   * stall. The real runner stops such a command at the deadline (§17.1,
+   * `gitTimeoutSeconds`) and reports it as a failed command. Never set it
    * for a command that only uses local data, such as a checkout of a
    * remote-tracking ref: stopping one could leave a half-written work tree.
    */
@@ -99,7 +99,7 @@ export function resetGitRunner(): void {
 }
 
 /**
- * How long a git command that talks to a remote may run before it is
+ * §17.1: how long a git command that talks to a remote may run before it is
  * stopped. Ten minutes: long enough that a large clone on a slow
  * connection still finishes, short enough that a stalled remote does not
  * hold an unattended run (autoupdate, CI) and its locks indefinitely.

@@ -41,7 +41,7 @@ export function remoteCommitOf(url: string, branchOrTag: string | null): string 
 function listRemote(url: string, names: readonly string[]): Map<string, string> {
   let stdout: string;
   try {
-    stdout = runGit(["ls-remote", "--", url, ...names]).stdout;
+    stdout = runGit(["ls-remote", "--", url, ...names], { talksToRemote: true }).stdout;
   } catch (err) {
     // Anything else, such as git failing to start, is not about the remote.
     if (!(err instanceof GitProcessError)) throw err;

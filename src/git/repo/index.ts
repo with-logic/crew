@@ -28,7 +28,7 @@ import { type GitProcessError, runGit } from "../exec.ts";
 export function cloneRepo(url: string, dest: string, full: boolean = false): void {
   try {
     const args = full ? ["clone", url, dest] : ["clone", "--no-single-branch", url, dest];
-    runGit(args);
+    runGit(args, { talksToRemote: true });
   } catch (err) {
     // `runGit` only ever throws `GitProcessError`, so this narrow is
     // safe. Translate to the user-facing error category.
@@ -105,7 +105,10 @@ export function fetchRefs(dest: string): void {
     // `--prune` alone only prunes remote-tracking branches, leaving a
     // vanished tag locally resolvable and letting `crew update` report
     // an entry up to date against a ref that no longer exists.
-    runGit(["fetch", "--tags", "--force", "--prune", "--prune-tags", "origin"], { cwd: dest });
+    runGit(["fetch", "--tags", "--force", "--prune", "--prune-tags", "origin"], {
+      cwd: dest,
+      talksToRemote: true,
+    });
   } catch (err) {
     const ge = err as GitProcessError;
     throw new CrewError(
