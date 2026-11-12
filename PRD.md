@@ -3309,6 +3309,16 @@ The following are deliberately **not** specified. Implementations may choose fre
 ### 17.1 Required external dependencies
 
 - `git` on `PATH` at runtime.
+
+  **Deadline.** A `git` command that talks to a remote (cloning a
+  repository, fetching into a clone, asking a remote about a ref) and has
+  not finished within 600 seconds is stopped and treated like any other
+  failure of that command: `source_unreachable` wherever such a failure is
+  reported (an unreachable tap is still skipped per §16.6), with a message
+  saying git did not finish within the limit. This bounds a remote that accepts a connection and then
+  stalls. Git commands that only touch local files have no deadline.
+  `CREW_GIT_TIMEOUT_SECONDS` set to a positive number of seconds replaces
+  the limit; any other value leaves the default.
 - `launchctl` on macOS (present on all supported macOS hosts).
 - `systemctl` with user-service support on Linux, only for `crew autoupdate`.
 
@@ -3464,6 +3474,7 @@ Implementations and test suites refer to criteria by ID.
 | C-INST-23 | §9 step 8 | A staging or store publication failure releases only that attempt's private staging directory. If cleanup also fails, the original failure retains its name, exit code, details, and remedy, and reports the retained staging path and cleanup error with §5.2 escaping/redaction. Source paths, peer staging directories, reused entries, and published canonical bytes remain unchanged. |
 | C-INST-24 | §5.2, §9 | Human `crew install` output escapes C0, DEL, and C1 control characters as `\xNN` in every echoed filesystem path — the project directory shown for a project-scope install and each per-agent install path, for both fresh and already-installed skills — so a crafted directory name cannot forge or reposition terminal output. `--json` values are unchanged. |
 | C-INST-25 | §5.2, §9 step 11 | `crew install --quiet` that exits non-zero reports on stderr each skill that failed validation (its path, error code, and message) and each agent a skill could not be installed into (skill, agent, error code, and message), and prints no human output on stdout (`--quiet --json` still prints its JSON). A quiet install in which nothing failed adds no such line, and without `--quiet` stderr carries none. |
+| C-INST-26 | §17.1, §13 | A `git` command that talks to a remote (clone, fetch, or asking a remote about a ref) and is still running at the deadline (600 seconds, or `CREW_GIT_TIMEOUT_SECONDS` seconds when that is a positive number) is stopped. `crew install` of a git source whose clone stalls past the deadline fails with `source_unreachable`, exit 5, with a message saying git did not finish within the limit, and installs nothing. |
 
 #### C-NS: Namespaces (§8.3, §9 step 5)
 
