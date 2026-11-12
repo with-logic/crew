@@ -54,12 +54,13 @@ export function hasAgentToInstallInto(config: Config, ctx: CommandContext): bool
 }
 
 /**
- * Remote lookups already made by the command now running, by repository and ref.
- * Null outside `withSharedRemoteLookups`, where every lookup goes to the remote.
+ * Remote lookups already made inside the outermost `withSharedRemoteLookups`
+ * call now open, by repository and ref. Null when none is open: then every
+ * lookup goes to the remote.
  */
 let lookups: Map<string, string | null> | null = null;
 
-/** The sharing ends when `work` returns, so `work` must finish its lookups by then: no promises. */
+/** The sharing ends when the outermost `work` returns, so `work` must finish its lookups by then: no promises. */
 type NotAPromise<T> = T extends PromiseLike<unknown> ? never : T;
 
 /**
