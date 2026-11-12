@@ -10,7 +10,7 @@ import { afterEach, beforeEach } from "bun:test";
 import { claudeCodeAdapter } from "../../../src/agents/claude-code.ts";
 import { readConfig, writeConfig } from "../../../src/config/load.ts";
 import { resetGitRunner, setGitRunner } from "../../../src/git/exec.ts";
-import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import { makeSkillsRepo, makeTempDir } from "../../helpers/fixtures.ts";
 
 let restore: (() => void) | null = null;
 
@@ -40,10 +40,7 @@ export function redirectClaudeCode(): void {
  * reports it already installed rather than doing the work.
  */
 export function makeRepo(name: string = "demo"): string {
-  const repo = makeTempDir("crew-repo-");
-  makeSkill(repo, name, skillFrontmatter({ name }));
-  makeGitRepo(repo);
-  return repo;
+  return makeSkillsRepo([name]);
 }
 
 /** Point a configured tap at an unreachable remote carrying `url`. */
