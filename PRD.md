@@ -1675,7 +1675,9 @@ declared skill succeeded. Every entry at the manifest's install location that
 carries `manifest_owned: true` and whose name is not in the resolved install
 set is a *dropped* entry, and each is uninstalled through the uninstall
 algorithm of §7.4, including its safety checks. If that leaves an auto tap
-with no entries, the tap is garbage-collected (§16.5).
+with no entries, the tap is garbage-collected (§16.5). Every bare install that
+reaches this step does so, including one that drops nothing, so an unused auto
+tap that an earlier run failed to collect goes on the next.
 
 Three kinds of dropped entry are kept. Each keeps its `manifest_owned` flag,
 so a later bare install removes it once the reason is gone:

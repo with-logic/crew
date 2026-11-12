@@ -86,9 +86,12 @@ export function reconcileManifestInstalls(
     // Compared by value: an aborted removal can hand back an equal copy.
     if (JSON.stringify(outcome.state) !== JSON.stringify(before)) {
       writeState(outcome.state, ctx.home);
-      // A dropped line may have been the last use of its auto tap (§16.5).
-      garbageCollectAutoTaps(outcome.state, ctx.home);
     }
+    // A dropped line may have been the last use of its auto tap (§16.5).
+    // Run on every bare install, not only one that removed something: if
+    // this step failed after an earlier run wrote state, that run's removals
+    // are no longer visible here, and the unused tap would stay configured.
+    garbageCollectAutoTaps(outcome.state, ctx.home);
     if (outcome.interrupted || !request.isStillCurrent()) {
       return { ...reconciliationOf(outcome), manifestChanged: true };
     }

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCodeAdapter } from "../../../../src/agents/claude-code.ts";
-import { readConfig } from "../../../../src/config/load.ts";
+import { readConfig, writeConfig } from "../../../../src/config/load.ts";
 import { readState } from "../../../../src/state/load.ts";
 import { makeCrewHome } from "../../../helpers/env.ts";
 import { redirectClaudeCode, restoreClaudeCode } from "../../../helpers/scoped-install.ts";
@@ -47,6 +47,26 @@ describe("removing dropped skills", () => {
     expect(existsSync(skillDir(project, "alpha"))).toBe(false);
     expect(installed(home)).toEqual([`gamma@${project}`]);
     // The dropped line was the only use of its auto tap (§16.5).
+    expect(readConfig(home).taps.some((tap) => tap.url === repo)).toBe(false);
+  });
+
+  test("C-RC-20 an unused auto tap an earlier run left configured is collected by the next one", () => {
+    const home = makeCrewHome();
+    const repo = makeSkillRepo(["alpha"]);
+    const project = makeProject([repo]);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    const withTap = readConfig(home);
+    writeManifest(project, []);
+    expect(crew(home, project, ["install"]).code).toBe(0);
+    // As if collecting the tap had failed after the removal was written to state.
+    writeConfig(withTap, home);
+    expect(readConfig(home).taps.some((tap) => tap.url === repo)).toBe(true);
+
+    // Nothing is dropped this time; the leftover tap still goes.
+    const run = crew(home, project, ["install", "--json"]);
+
+    expect(run.code).toBe(0);
+    expect((JSON.parse(run.stdout) as { removed: unknown[] }).removed).toEqual([]);
     expect(readConfig(home).taps.some((tap) => tap.url === repo)).toBe(false);
   });
 
