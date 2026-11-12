@@ -73,9 +73,10 @@ export function ensureClone(url: string, dest: string): boolean {
  */
 export function fetchAndCheckout(dest: string): void {
   fetchRefs(dest);
-  // Fast-forward the working tree to origin/HEAD. Failures here are
+  // Fast-forward the working tree to origin/HEAD. A non-zero exit here is
   // non-fatal — the fetched refs are still usable by `acquireSource`,
-  // which resolves specific SHAs directly.
+  // which resolves specific SHAs directly. A command stopped at its
+  // deadline (§17.1) is not a non-zero exit: `runGit` raises it.
   const headSha = runGit(["rev-parse", "--verify", "refs/remotes/origin/HEAD^{commit}"], {
     cwd: dest,
     throwOnError: false,

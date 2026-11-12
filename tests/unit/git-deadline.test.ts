@@ -55,19 +55,21 @@ describe("the git deadline", () => {
     expect(result.stderr).toContain("git did not finish within 1 second and was stopped");
   });
 
-  test("C-GIT-01 a remote that stalls past the limit is source_unreachable", () => {
-    process.env["CREW_GIT_TIMEOUT_SECONDS"] = "2";
+  test("C-GIT-01 a remote lookup that was stopped is source_unreachable", () => {
     const url = `file://${makeTempDir()}`;
-    // The lookup itself is replaced by the command that hangs; real git still runs it.
+    const stopped = "git did not finish within 2 seconds and was stopped";
+    // Only the mapping is under test here; the test above stops a real process.
     const real = setGitRunner((args, options) =>
-      real(args[0] === "ls-remote" ? HANGS : args, options),
+      args[0] === "ls-remote"
+        ? { stdout: "", stderr: stopped, exitCode: GIT_TIMED_OUT_EXIT_CODE, timedOut: true }
+        : real(args, options),
     );
     const thrown = thrownBy(() => remoteCommitOf(url, "main"));
     setGitRunner(real);
 
     expect(thrown).toBeInstanceOf(CrewError);
     expect((thrown as CrewError).code).toBe("source_unreachable");
-    expect((thrown as CrewError).message).toContain("git did not finish within 2 seconds");
+    expect((thrown as CrewError).message).toContain(stopped);
   });
 
   test("C-GIT-01 the limit is 600 seconds unless the setting is a positive number", () => {
