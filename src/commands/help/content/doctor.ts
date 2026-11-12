@@ -1,3 +1,8 @@
+/**
+ * `crew help doctor` content (§5.5): what `crew doctor` checks and what
+ * `--repair` changes (§11.2).
+ */
+
 import type { CommandHelp } from "./types.ts";
 
 export const doctorHelp: CommandHelp = {
@@ -46,7 +51,7 @@ export const doctorHelp: CommandHelp = {
   ],
   notes: [
     "`--repair` is conservative — it won't touch skills you've edited, and only changes Homecrew's own state, install folders, and scheduler files.",
-    "A state entry rebuilt from an install folder no longer says the skill came from a project's `.crewrc`, because only state records that. Run `crew install` in that project and it is marked again.",
+    "A state entry rebuilt from an install folder no longer says that a project's `.crewrc` accounts for the skill, because only state records that. Run `crew install` in that project: every skill its `.crewrc` still lists or requires is marked again.",
   ],
   seeAlso: ["cache", "list"],
 };
