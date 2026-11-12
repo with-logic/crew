@@ -10,6 +10,7 @@
  * one place that touches the subprocess boundary.
  */
 
+import { positiveEnvNumber } from "../util/env-number.ts";
 import { progress } from "../util/progress.ts";
 import { safeArgs, safePath } from "../util/redact.ts";
 
@@ -18,6 +19,8 @@ export interface GitResult {
   readonly stdout: string;
   readonly stderr: string;
   readonly exitCode: number;
+  /** True when the command was stopped at its deadline (§17.1) instead of exiting. */
+  readonly timedOut?: true;
 }
 
 /** Signature of a git runner. */
@@ -29,7 +32,11 @@ export interface GitRunOptions {
   readonly cwd?: string;
   /** Environment variables to add to the subprocess. */
   readonly env?: Readonly<Record<string, string>>;
-  /** If true (default), throw on non-zero exit. If false, return the `GitResult` either way. */
+  /**
+   * If true (default), throw on non-zero exit. If false, return the
+   * `GitResult` either way, except for a command stopped at its deadline,
+   * which always throws: it is never the miss a caller is probing for.
+   */
   readonly throwOnError?: boolean;
 }
 
@@ -42,7 +49,8 @@ export function runGit(args: readonly string[], options: GitRunOptions = {}): Gi
   const rendered = safeArgs(args);
   progress(options.cwd ? `$ git ${rendered}  (in ${safePath(options.cwd)})` : `$ git ${rendered}`);
   const result = runner(args, options);
-  if (result.exitCode !== 0 && options.throwOnError !== false) {
+  const failed = result.exitCode !== 0 && options.throwOnError !== false;
+  if (result.timedOut || failed) {
     const stderr = result.stderr.trim();
     throw new GitProcessError(
       `git ${args.join(" ")} failed (${result.exitCode}): ${stderr}`,
@@ -95,10 +103,9 @@ const DEFAULT_TIMEOUT_SECONDS = 600;
 /** The exit code reported for a git command that was stopped at its deadline, as `timeout(1)` uses. */
 export const GIT_TIMED_OUT_EXIT_CODE = 124;
 
-/** §17.1: the deadline in seconds; `CREW_GIT_TIMEOUT` when it is a positive number, else the default. */
-function timeoutSeconds(): number {
-  const given = Number(process.env["CREW_GIT_TIMEOUT"]);
-  return Number.isFinite(given) && given > 0 ? given : DEFAULT_TIMEOUT_SECONDS;
+/** §17.1: the deadline in seconds; `CREW_GIT_TIMEOUT_SECONDS` when it is a positive number, else the default. */
+export function gitTimeoutSeconds(): number {
+  return positiveEnvNumber("CREW_GIT_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS);
 }
 
 /**
@@ -108,7 +115,7 @@ function timeoutSeconds(): number {
  * hold a `crew` command, and the locks it has taken, forever.
  */
 function defaultRunner(args: readonly string[], options: GitRunOptions): GitResult {
-  const seconds = timeoutSeconds();
+  const seconds = gitTimeoutSeconds();
   const proc = Bun.spawnSync({
     cmd: ["git", ...args],
     cwd: options.cwd ?? process.cwd(),
@@ -120,11 +127,13 @@ function defaultRunner(args: readonly string[], options: GitRunOptions): GitResu
   const stdout = proc.stdout?.toString() ?? "";
   const stderr = proc.stderr?.toString() ?? "";
   if (proc.exitedDueToTimeout) {
-    const stopped = `git did not finish within ${seconds} seconds and was stopped`;
+    const limit = seconds === 1 ? "1 second" : `${seconds} seconds`;
+    const stopped = `git did not finish within ${limit} and was stopped`;
     return {
       stdout,
       stderr: [stderr.trim(), stopped].filter(Boolean).join("\n"),
       exitCode: GIT_TIMED_OUT_EXIT_CODE,
+      timedOut: true,
     };
   }
   return { stdout, stderr, exitCode: proc.exitCode ?? -1 };

@@ -12,6 +12,7 @@ import { dirname } from "node:path";
 import lockfile from "proper-lockfile";
 import { CrewError } from "../core/errors.ts";
 import { ensureDir, exists, touch } from "../util/fs.ts";
+import { positiveEnvNumber } from "./env-number.ts";
 import { lockOwnerFs } from "./lock-owner.ts";
 
 /** Handle representing a held advisory lock. */
@@ -29,8 +30,7 @@ const SPEC_TIMEOUT_MS = 30_000;
  * matching how `CREW_HOME` and `CREW_NOW` are handled.
  */
 export function defaultTimeoutMs(): number {
-  const override = Number(process.env["CREW_LOCK_TIMEOUT_MS"]);
-  return Number.isFinite(override) && override > 0 ? override : SPEC_TIMEOUT_MS;
+  return positiveEnvNumber("CREW_LOCK_TIMEOUT_MS", SPEC_TIMEOUT_MS);
 }
 
 /**
