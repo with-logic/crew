@@ -7,8 +7,8 @@
 import type { InstallRecord } from "../../install/perform/index.ts";
 import type { SkippedSkill } from "../../sources/expand.ts";
 import { safePath } from "../../util/redact.ts";
+import { failureLine } from "../failure-line.ts";
 import type { CommandContext } from "../types.ts";
-import { failureLine } from "../update/diagnostics.ts";
 
 /** The parts of an install's result that can hold a failure. */
 interface InstallFailures {

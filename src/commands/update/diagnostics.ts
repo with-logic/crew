@@ -1,8 +1,8 @@
 /** Safe display fields and error projections for update diagnostics (§5.2, §10.1, §13). */
 
 import { displayText } from "../../refs/display-url.ts";
-import { withRemedy } from "../../util/error-remedy.ts";
 import { sanitizeLine } from "../../util/redact.ts";
+import { failureLine } from "../failure-line.ts";
 import { projectTag } from "./location.ts";
 import type { UpdatePlan } from "./plan.ts";
 
@@ -79,14 +79,4 @@ export function displayUpdateErrors(
         : row,
     ),
   };
-}
-
-/** One quiet diagnostic: who failed, the error code, and the full message (§5.2). */
-export function failureLine(
-  subject: string,
-  code: string,
-  message: string,
-  remedy?: string,
-): string {
-  return sanitizeLine(withRemedy(`${subject}: failed (${code}): ${message}`, { remedy }));
 }
