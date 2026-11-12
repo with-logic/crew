@@ -65,14 +65,16 @@ type NotAPromise<T> = T extends PromiseLike<unknown> ? never : T;
 /**
  * Run `work` with remote lookups shared: one command that installs several
  * projects asks each remote about each ref once, however many of the
- * projects name it. Nothing is remembered once `work` returns.
+ * projects name it. Nothing is remembered once the outermost `work` returns:
+ * a call made while another is open joins it, and leaves its lookups in place.
  */
 export function withSharedRemoteLookups<T>(work: () => NotAPromise<T>): T {
-  lookups = new Map();
+  const enclosing = lookups;
+  lookups = enclosing ?? new Map();
   try {
     return work();
   } finally {
-    lookups = null;
+    lookups = enclosing;
   }
 }
 
