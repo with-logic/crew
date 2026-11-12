@@ -40,7 +40,7 @@ describe("the git deadline", () => {
     process.env["CREW_GIT_TIMEOUT_SECONDS"] = "1";
     const started = performance.now();
 
-    const thrown = thrownBy(() => runGit(sleeps(20), { cwd: makeTempDir(), remote: true }));
+    const thrown = thrownBy(() => runGit(sleeps(20), { cwd: makeTempDir(), talksToRemote: true }));
 
     const elapsed = performance.now() - started;
     expect(elapsed).toBeGreaterThan(500);
@@ -57,7 +57,11 @@ describe("the git deadline", () => {
   test("a stopped command is an ordinary failure to a caller that tolerates failure", () => {
     process.env["CREW_GIT_TIMEOUT_SECONDS"] = "1.0005";
 
-    const result = runGit(sleeps(20), { cwd: makeTempDir(), remote: true, throwOnError: false });
+    const result = runGit(sleeps(20), {
+      cwd: makeTempDir(),
+      talksToRemote: true,
+      throwOnError: false,
+    });
 
     expect(result.exitCode).toBe(GIT_TIMED_OUT_EXIT_CODE);
     expect(result.stderr).toContain("git did not finish within 1.0005 seconds and was stopped");
@@ -71,13 +75,29 @@ describe("the git deadline", () => {
     expect(result.exitCode).toBe(0);
   });
 
-  test("the limit is 600 seconds unless the setting is a positive number", () => {
+  test("a command that finishes before the limit succeeds", () => {
+    process.env["CREW_GIT_TIMEOUT_SECONDS"] = "30";
+
+    const result = runGit(["--version"], { talksToRemote: true });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("git version");
+  });
+
+  test("the limit is 600 seconds when the setting is absent", () => {
     delete process.env["CREW_GIT_TIMEOUT_SECONDS"];
     expect(gitTimeoutSeconds()).toBe(600);
-    for (const value of ["soon", "0", "-5", "", "Infinity"]) {
+  });
+
+  test.each(["soon", "0", "-5", "", "Infinity"])(
+    "the limit stays 600 seconds when the setting is %p",
+    (value) => {
       process.env["CREW_GIT_TIMEOUT_SECONDS"] = value;
       expect(gitTimeoutSeconds()).toBe(600);
-    }
+    },
+  );
+
+  test("a positive setting replaces the limit", () => {
     process.env["CREW_GIT_TIMEOUT_SECONDS"] = "45";
     expect(gitTimeoutSeconds()).toBe(45);
   });

@@ -35,9 +35,11 @@ export interface GitRunOptions {
   /**
    * The command talks to a remote, which can accept a connection and then
    * stall. The real runner stops such a command at the deadline
-   * (`gitTimeoutSeconds`) and reports it as a failed command.
+   * (`gitTimeoutSeconds`) and reports it as a failed command. Never set it
+   * for a command that only uses local data, such as a checkout of a
+   * remote-tracking ref: stopping one could leave a half-written work tree.
    */
-  readonly remote?: true;
+  readonly talksToRemote?: true;
 }
 
 let runner: GitRunner = defaultRunner;
@@ -96,7 +98,12 @@ export function resetGitRunner(): void {
   runner = baseRunner;
 }
 
-/** How long a git command that talks to a remote may run before it is stopped. */
+/**
+ * How long a git command that talks to a remote may run before it is
+ * stopped. Ten minutes: long enough that a large clone on a slow
+ * connection still finishes, short enough that a stalled remote does not
+ * hold an unattended run (autoupdate, CI) and its locks indefinitely.
+ */
 const DEFAULT_TIMEOUT_SECONDS = 600;
 
 /** The exit code reported for a git command stopped at its deadline, as `timeout(1)` uses. */
@@ -108,10 +115,11 @@ export function gitTimeoutSeconds(): number {
 }
 
 /**
- * The real runner: invokes `git` via `Bun.spawnSync`. A `remote` command
+ * The real runner: invokes `git` via `Bun.spawnSync`. A `talksToRemote` command
  * still running at its deadline is stopped and reported like any other
  * failed command: a non-zero exit code, and a last line of stderr that
- * says why.
+ * says why. Only the git process itself is stopped. A helper it started
+ * is not signalled: it ends on its own, normally when its pipe to git closes.
  */
 function defaultRunner(args: readonly string[], options: GitRunOptions): GitResult {
   const seconds = gitTimeoutSeconds();
@@ -122,7 +130,7 @@ function defaultRunner(args: readonly string[], options: GitRunOptions): GitResu
     stdout: "pipe",
     stderr: "pipe",
     // Whole milliseconds: a fractional number of seconds is a valid setting.
-    ...(options.remote ? { timeout: Math.ceil(seconds * 1000) } : {}),
+    ...(options.talksToRemote ? { timeout: Math.ceil(seconds * 1000) } : {}),
   });
   const stdout = proc.stdout?.toString() ?? "";
   const stderr = proc.stderr?.toString() ?? "";

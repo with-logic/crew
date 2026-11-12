@@ -1,5 +1,5 @@
 /**
- * Numeric settings read from the environment (§14, §17.1): a value that is
+ * Numeric settings read from the environment (§14): a value that is
  * not a finite positive number leaves the default in force.
  */
 
@@ -13,13 +13,20 @@ afterEach(() => {
   else process.env["CREW_LOCK_TIMEOUT_MS"] = before;
 });
 
-test("the lock timeout is 30 seconds unless the setting is a finite positive number", () => {
+test("the lock timeout is 30 seconds when the setting is absent", () => {
   delete process.env["CREW_LOCK_TIMEOUT_MS"];
   expect(defaultTimeoutMs()).toBe(30_000);
-  for (const value of ["soon", "0", "-5", "", "Infinity"]) {
+});
+
+test.each(["soon", "0", "-5", "", "Infinity"])(
+  "the lock timeout stays 30 seconds when the setting is %p",
+  (value) => {
     process.env["CREW_LOCK_TIMEOUT_MS"] = value;
     expect(defaultTimeoutMs()).toBe(30_000);
-  }
+  },
+);
+
+test("a finite positive setting replaces the lock timeout", () => {
   process.env["CREW_LOCK_TIMEOUT_MS"] = "250";
   expect(defaultTimeoutMs()).toBe(250);
   expect(positiveEnvNumber("CREW_LOCK_TIMEOUT_MS", 7)).toBe(250);
