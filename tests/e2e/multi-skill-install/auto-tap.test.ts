@@ -19,10 +19,10 @@ import {
   commitAll,
   makeGitRepo,
   makeSkill,
+  makeSkillsRepo,
   makeTempDir,
   skillFrontmatter,
 } from "../../helpers/fixtures.ts";
-import { makeMultiSkillRepo } from "./helpers.ts";
 
 let ccRoot: string;
 let originals: {
@@ -59,7 +59,7 @@ afterEach(() => {
 describe("multi-skill install creates an auto tap (§16.5)", () => {
   test("C-UPD-14 multi-skill git source attributes every child to a single auto tap", () => {
     const home = makeCrewHome();
-    const repo = makeMultiSkillRepo(["alpha", "beta"]);
+    const repo = makeSkillsRepo(["alpha", "beta"]);
     const ref = `file://${repo}`;
     const code = runCli(["install", ref], { home, streams: captureStreams().streams });
     expect(code).toBe(0);

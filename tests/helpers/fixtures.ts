@@ -144,3 +144,14 @@ export function cloneDirs(home: string): string[] {
   if (!isDirectory(dir)) return [];
   return listDir(dir).sort();
 }
+
+/**
+ * A local git repository holding one top-level skill per name and no root
+ * `SKILL.md`, committed. Returns its directory.
+ */
+export function makeSkillsRepo(names: readonly string[]): string {
+  const repo = makeTempDir("crew-repo-");
+  for (const name of names) makeSkill(repo, name, skillFrontmatter({ name }));
+  makeGitRepo(repo);
+  return repo;
+}
