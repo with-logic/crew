@@ -54,25 +54,28 @@ export function hasAgentToInstallInto(config: Config, ctx: CommandContext): bool
 }
 
 /**
- * Remote lookups already made by the command now running, by repository and ref.
- * Null outside `withSharedRemoteLookups`, where every lookup goes to the remote.
+ * Remote lookups already made inside the outermost `withSharedRemoteLookups`
+ * call now open, by repository and ref. Null when none is open: then every
+ * lookup goes to the remote.
  */
 let lookups: Map<string, string | null> | null = null;
 
-/** The sharing ends when `work` returns, so `work` must finish its lookups by then: no promises. */
+/** The sharing ends when the outermost `work` returns, so `work` must finish its lookups by then: no promises. */
 type NotAPromise<T> = T extends PromiseLike<unknown> ? never : T;
 
 /**
  * Run `work` with remote lookups shared: one command that installs several
  * projects asks each remote about each ref once, however many of the
- * projects name it. Nothing is remembered once `work` returns.
+ * projects name it. Nothing is remembered once the outermost `work` returns:
+ * a call made while another is open joins it, and leaves its lookups in place.
  */
 export function withSharedRemoteLookups<T>(work: () => NotAPromise<T>): T {
-  lookups = new Map();
+  const enclosing = lookups;
+  lookups = enclosing ?? new Map();
   try {
     return work();
   } finally {
-    lookups = null;
+    lookups = enclosing;
   }
 }
 

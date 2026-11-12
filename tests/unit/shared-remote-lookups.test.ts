@@ -51,6 +51,22 @@ describe("withSharedRemoteLookups", () => {
     expect(b.get(repo)).toBe(a.get(repo) as string);
   });
 
+  test("a call made inside another joins it, and does not end the sharing when it returns", () => {
+    const { repo } = makeRepo();
+    const [first, second, third] = [manifestOf([repo]), manifestOf([repo]), manifestOf([repo])];
+
+    withSharedRemoteLookups(() => {
+      latestLock(first, new Map());
+      withSharedRemoteLookups(() => latestLock(second, new Map()));
+      latestLock(third, new Map());
+    });
+
+    expect(lookups).toBe(1);
+    // Once the outermost call has returned, nothing is remembered.
+    latestLock(first, new Map());
+    expect(lookups).toBe(2);
+  });
+
   test("two spellings of one repository are one source", () => {
     const { repo } = makeRepo();
     const [first, second] = [manifestOf([`${repo}@main`]), manifestOf([`${repo}/@main`])];
