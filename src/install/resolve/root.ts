@@ -63,6 +63,47 @@ export function enqueueRoot(
 }
 
 /**
+ * The taps the git and path references among `refs` will be attributed to,
+ * worked out from the references and `config` alone, before anything is
+ * acquired. The resolver locks these with the configured taps from the
+ * start (§14). Otherwise each new tap is discovered one at a time, and each
+ * discovery restarts resolution from the first reference under a wider lock
+ * set: N new sources cost about N²/2 acquisitions.
+ *
+ * Attribution here follows the same rule as `enqueueRoot`. A reference that
+ * does not parse ends the list early; resolution raises its error when it
+ * reaches that reference, as before. A tap missed here is still discovered
+ * during resolution, so this only ever saves work.
+ */
+export function tapsOfRoots(
+  refs: readonly string[],
+  startingConfig: Config,
+  cwd: string,
+  recursive: boolean,
+): TapConfig[] {
+  const taps: TapConfig[] = [];
+  let config = startingConfig;
+  for (const raw of refs) {
+    const source = parsedOrNull(raw, cwd);
+    if (source === null) break;
+    if (source.type === "tap") continue;
+    const attrib = attributeRef(source, config, recursive ? "recursive" : undefined);
+    config = attrib.config;
+    taps.push(attrib.tap);
+  }
+  return taps;
+}
+
+/** `parseRef`, or null for a reference that does not parse. */
+function parsedOrNull(raw: string, cwd: string): ReturnType<typeof parseRef> | null {
+  try {
+    return parseRef(raw, cwd);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * True when an already-resolved skill and a newly pending one name the
  * same source, so a duplicate reference can collapse instead of
  * conflicting. Path-kind taps have no resolved SHA, so tap name plus
