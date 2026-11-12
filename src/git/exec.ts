@@ -10,6 +10,7 @@
  * one place that touches the subprocess boundary.
  */
 
+import { positiveEnvNumber } from "../util/env-number.ts";
 import { progress } from "../util/progress.ts";
 import { safeArgs, safePath } from "../util/redact.ts";
 
@@ -31,6 +32,14 @@ export interface GitRunOptions {
   readonly env?: Readonly<Record<string, string>>;
   /** If true (default), throw on non-zero exit. If false, return the `GitResult` either way. */
   readonly throwOnError?: boolean;
+  /**
+   * The command talks to a remote, which can accept a connection and then
+   * stall. The real runner stops such a command at the deadline
+   * (`gitTimeoutSeconds`) and reports it as a failed command. Never set it
+   * for a command that only uses local data, such as a checkout of a
+   * remote-tracking ref: stopping one could leave a half-written work tree.
+   */
+  readonly talksToRemote?: true;
 }
 
 let runner: GitRunner = defaultRunner;
@@ -89,18 +98,50 @@ export function resetGitRunner(): void {
   runner = baseRunner;
 }
 
-/** The real runner: invokes `git` via `Bun.spawnSync`. */
+/**
+ * How long a git command that talks to a remote may run before it is
+ * stopped. Ten minutes: long enough that a large clone on a slow
+ * connection still finishes, short enough that a stalled remote does not
+ * hold an unattended run (autoupdate, CI) and its locks indefinitely.
+ */
+const DEFAULT_TIMEOUT_SECONDS = 600;
+
+/** The exit code reported for a git command stopped at its deadline, as `timeout(1)` uses. */
+export const GIT_TIMED_OUT_EXIT_CODE = 124;
+
+/** The deadline in seconds: `CREW_GIT_TIMEOUT_SECONDS` when it is a positive number, else the default. */
+export function gitTimeoutSeconds(): number {
+  return positiveEnvNumber("CREW_GIT_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS);
+}
+
+/**
+ * The real runner: invokes `git` via `Bun.spawnSync`. A `talksToRemote` command
+ * still running at its deadline is stopped and reported like any other
+ * failed command: a non-zero exit code, and a last line of stderr that
+ * says why. Only the git process itself is stopped. A helper it started
+ * is not signalled: it ends on its own, normally when its pipe to git closes.
+ */
 function defaultRunner(args: readonly string[], options: GitRunOptions): GitResult {
+  const seconds = gitTimeoutSeconds();
   const proc = Bun.spawnSync({
     cmd: ["git", ...args],
     cwd: options.cwd ?? process.cwd(),
     env: options.env ? { ...process.env, ...options.env } : process.env,
     stdout: "pipe",
     stderr: "pipe",
+    // Whole milliseconds: a fractional number of seconds is a valid setting.
+    ...(options.talksToRemote ? { timeout: Math.ceil(seconds * 1000) } : {}),
   });
-  return {
-    stdout: proc.stdout?.toString() ?? "",
-    stderr: proc.stderr?.toString() ?? "",
-    exitCode: proc.exitCode ?? -1,
-  };
+  const stdout = proc.stdout?.toString() ?? "";
+  const stderr = proc.stderr?.toString() ?? "";
+  if (proc.exitedDueToTimeout) {
+    const limit = seconds === 1 ? "1 second" : `${seconds} seconds`;
+    const stopped = `git did not finish within ${limit} and was stopped`;
+    return {
+      stdout,
+      stderr: [stderr.trim(), stopped].filter(Boolean).join("\n"),
+      exitCode: GIT_TIMED_OUT_EXIT_CODE,
+    };
+  }
+  return { stdout, stderr, exitCode: proc.exitCode ?? -1 };
 }
