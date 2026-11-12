@@ -81,18 +81,7 @@ export function processDroppedEntries(
     const previewContext: CommandContext = { ...ctx, flags: { ...ctx.flags, dryRun: true } };
     const uninstall: Uninstall = (from, entry, preview) => {
       const subject = { raw: entry.name, name: entry.name, entries: [entry] };
-      const isPruned = false;
-      const everyAgent: readonly string[] | null = null;
-      const deferStateEntryDrops = false;
-      return removeOne(
-        from,
-        subject,
-        preview ? previewContext : ctx,
-        isPruned,
-        everyAgent,
-        deferStateEntryDrops,
-        unavailableBases,
-      );
+      return removeOne(from, subject, preview ? previewContext : ctx, { unavailableBases });
     };
     return removeInOrder(state, dropped, preflight(state, dropped, uninstall), {
       uninstall,

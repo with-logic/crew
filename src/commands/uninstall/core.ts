@@ -15,6 +15,7 @@ import type { StateEntry, StateFile } from "../../core/types.ts";
 import type { CollectionKind } from "../../state/collections/index.ts";
 import type { StateSubject } from "../../state/subjects.ts";
 import type { CommandContext } from "../types.ts";
+import type { RemoveOptions } from "./options.ts";
 import { dropScopedEntriesAndUpdateRequiredBy, reduceEntryAgents } from "./state.ts";
 
 /** What a removal reports regardless of outcome. */
@@ -54,20 +55,12 @@ export interface RemovalMeta {
   fullyRemovedRoots: (string | null)[];
 }
 
-/**
- * Remove one named skill. If `agentFilter` is null, removes from every
- * agent the skill is on (full uninstall). If non-null, removes only
- * from the named agents; the state entry survives with a reduced
- * `agents` list if any remain.
- */
+/** Remove one named skill, as `options` says (`./options.ts`). */
 export function removeOne(
   state: StateFile,
   subject: StateSubject,
   ctx: CommandContext,
-  pruned: boolean,
-  agentFilter: readonly string[] | null,
-  deferStateEntryDrops: boolean = false,
-  unavailableBases?: ReadonlySet<string>,
+  options: RemoveOptions = {},
 ): {
   updatedState: StateFile;
   rec: UninstallRecord;
@@ -75,6 +68,7 @@ export function removeOne(
   fullyRemoved: readonly StateEntry[];
 } {
   const { name, entries } = subject;
+  const { pruned, agentFilter, deferStateEntryDrops, unavailableBases } = options;
   const rec: UninstallRecord = {
     name,
     removedFrom: [],
