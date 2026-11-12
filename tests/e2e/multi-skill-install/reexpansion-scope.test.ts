@@ -13,8 +13,13 @@ import { geminiCliAdapter } from "../../../src/agents/gemini-cli.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { makeMultiSkillRepo } from "./helpers.ts";
+import {
+  commitAll,
+  makeSkill,
+  makeSkillsRepo,
+  makeTempDir,
+  skillFrontmatter,
+} from "../../helpers/fixtures.ts";
 
 let ccRoot: string;
 let originals: {
@@ -55,7 +60,7 @@ describe("tap re-expansion on update (§10.1.1)", () => {
     // Adding a new sibling upstream should NOT appear on their
     // machine after `crew update`.
     const home = makeCrewHome();
-    const repo = makeMultiSkillRepo(["alpha", "beta"]);
+    const repo = makeSkillsRepo(["alpha", "beta"]);
     // Add the tap explicitly, then install one skill by qualified name.
     runCli(["tap", "add", `file://${repo}`, "mytap"], {
       home,
@@ -80,7 +85,7 @@ describe("tap re-expansion on update (§10.1.1)", () => {
 
   test("C-UPD-16 child removed from tap upstream → source_gone, local kept", () => {
     const home = makeCrewHome();
-    const repo = makeMultiSkillRepo(["alpha", "beta"]);
+    const repo = makeSkillsRepo(["alpha", "beta"]);
     runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
 
     rmSync(join(repo, "beta"), { recursive: true });
@@ -96,7 +101,7 @@ describe("tap re-expansion on update (§10.1.1)", () => {
 
   test("tap whose source is now unreachable reports per-member error; entries kept", () => {
     const home = makeCrewHome();
-    const repo = makeMultiSkillRepo(["alpha", "beta"]);
+    const repo = makeSkillsRepo(["alpha", "beta"]);
     runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
     rmSync(repo, { recursive: true });
     const c = captureStreams();
@@ -107,8 +112,8 @@ describe("tap re-expansion on update (§10.1.1)", () => {
 
   test("crew update <name> only re-expands taps whose members match", () => {
     const home = makeCrewHome();
-    const repoA = makeMultiSkillRepo(["a1", "a2"]);
-    const repoB = makeMultiSkillRepo(["b1", "b2"]);
+    const repoA = makeSkillsRepo(["a1", "a2"]);
+    const repoB = makeSkillsRepo(["b1", "b2"]);
     runCli(["install", `file://${repoA}`], { home, streams: captureStreams().streams });
     runCli(["install", `file://${repoB}`], { home, streams: captureStreams().streams });
     makeSkill(repoB, "b3", skillFrontmatter({ name: "b3" }));

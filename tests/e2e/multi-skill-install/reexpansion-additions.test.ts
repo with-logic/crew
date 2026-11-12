@@ -12,8 +12,13 @@ import { geminiCliAdapter } from "../../../src/agents/gemini-cli.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
-import { commitAll, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
-import { makeMultiSkillRepo } from "./helpers.ts";
+import {
+  commitAll,
+  makeSkill,
+  makeSkillsRepo,
+  makeTempDir,
+  skillFrontmatter,
+} from "../../helpers/fixtures.ts";
 
 let ccRoot: string;
 let originals: {
@@ -50,7 +55,7 @@ afterEach(() => {
 describe("tap re-expansion on update (§10.1.1)", () => {
   test("C-UPD-15 newly-added sibling is installed on next update", () => {
     const home = makeCrewHome();
-    const repo = makeMultiSkillRepo(["alpha", "beta"]);
+    const repo = makeSkillsRepo(["alpha", "beta"]);
     const ref = `file://${repo}`;
     runCli(["install", ref], { home, streams: captureStreams().streams });
 
@@ -72,7 +77,7 @@ describe("tap re-expansion on update (§10.1.1)", () => {
 
   test("newly-added sibling records source path when directory differs", () => {
     const home = makeCrewHome();
-    const repo = makeMultiSkillRepo(["alpha"]);
+    const repo = makeSkillsRepo(["alpha"]);
     runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
 
     makeSkill(repo, "numeric-source", skillFrontmatter({ name: "3-statement-model" }));
@@ -96,7 +101,7 @@ describe("tap re-expansion on update (§10.1.1)", () => {
 
   test("renamed sibling directory updates source path by declared name", () => {
     const home = makeCrewHome();
-    const repo = makeMultiSkillRepo(["alpha"]);
+    const repo = makeSkillsRepo(["alpha"]);
     runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
 
     renameSync(join(repo, "alpha"), join(repo, "alpha-renamed"));
@@ -113,7 +118,7 @@ describe("tap re-expansion on update (§10.1.1)", () => {
 
   test("duplicate declared sibling name does not re-point existing source path", () => {
     const home = makeCrewHome();
-    const repo = makeMultiSkillRepo(["alpha"]);
+    const repo = makeSkillsRepo(["alpha"]);
     runCli(["install", `file://${repo}`], { home, streams: captureStreams().streams });
 
     makeSkill(repo, "alpha-copy", skillFrontmatter({ name: "alpha" }));

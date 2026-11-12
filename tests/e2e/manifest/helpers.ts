@@ -12,7 +12,12 @@ import { runCli } from "../../../src/cli/main.ts";
 import { MANIFEST_FILENAME } from "../../../src/manifest/index.ts";
 import { readState } from "../../../src/state/load.ts";
 import { captureStreams } from "../../helpers/env.ts";
-import { makeGitRepo, makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
+import {
+  makeSkill,
+  makeSkillsRepo,
+  makeTempDir,
+  skillFrontmatter,
+} from "../../helpers/fixtures.ts";
 
 /** Create a project directory whose `.crewrc` holds `lines`. */
 export function makeProject(lines: readonly string[]): string {
@@ -37,10 +42,7 @@ export function addLocalSkill(project: string, relativeDir: string, name: string
 
 /** A local git repository holding one skill per name; returns its `file://` reference. */
 export function makeSkillRepo(names: readonly string[]): string {
-  const repo = makeTempDir("crew-repo-");
-  for (const name of names) makeSkill(repo, name, skillFrontmatter({ name }));
-  makeGitRepo(repo);
-  return `file://${repo}`;
+  return `file://${makeSkillsRepo(names)}`;
 }
 
 /** Run `crew <args>` in `cwd` and capture what it printed. */
