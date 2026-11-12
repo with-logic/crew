@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.13.0] — 2026-11-11
+
+### Added
+- `.crewrc` project manifests: list shared skills one per line (git sources or in-project paths; `#` comments allowed). A bare `crew install` installs them at project scope.
+- `.crewrc.lock`: a bare install records the commit each unpinned git line resolved to, so every checkout installs the same versions.
+- Bare `crew install` removes skills whose lines were dropped from `.crewrc`, keeping any that remaining skills still require and any whose install directory can't be verified as the project's own. `--dry-run` previews removals.
+- `crew install --latest` moves unpinned manifest lines to the newest commit and updates the lockfile.
+- `crew install --save <ref>...` adds skills to `.crewrc` and installs them, restoring `.crewrc` if the install fails.
+- `crew uninstall --save <ref>...` (alias `crew remove --save`) removes lines from `.crewrc` and uninstalls their skills, restoring the files if the run fails.
+- Monorepo support: a bare `crew install` applies the governing manifest and every `.crewrc` beneath it, each as its own project. Under `--latest`, a shared source is looked up once.
+- `manifest_invalid` error (exit 4) for malformed `.crewrc` and `.crewrc.lock` files.
+- README and landing page documentation for `.crewrc`, with `package.json` and Makefile setup recipes.
+
+### Changed
+- A bare `crew install` with no active agent exits 0 without fetching anything, so it is safe as a project setup step. `--json` reports `no_agents: true`.
+- `crew update` and autoupdate skip manifest-owned skills (`managed by .crewrc`); use `crew install --latest` to move them.
+- Under `--quiet`, an aborted removal is explained with a line on stderr.
+- `.crewrc` and its lockfile are never read through symbolic links, and path lines cannot leave the project.
+
+### Fixed
+- `crew install --dry-run` no longer adds entries to `~/.crew/store`.
+- Install output escapes control characters in project and install paths.
+- Atomic file writes use an exclusive, unpredictable temp file name, so a planted symlink cannot redirect them.
+- If `.crewrc` changes during an install, crew skips ownership changes and removals and warns.
+
 ## [0.12.0] — 2026-10-22
 
 ### Added
