@@ -22,6 +22,11 @@ import {
   skillFrontmatter,
 } from "../../helpers/fixtures.ts";
 
+let cwd: string;
+beforeEach(() => {
+  cwd = makeTempDir("crew-cwd-");
+});
+
 // Adapter redirection: any test in this file that runs `crew install`
 // would otherwise write into the real `~/.claude/skills/` etc. Point
 // each adapter's userPath at a per-test tmp root, and force `detect()`
@@ -70,7 +75,7 @@ describe("install/flow — name_conflict across every source kind", () => {
     // Install from a path.
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", skill], { home, streams: captureStreams().streams });
+    runCli(["install", skill], { home, cwd, streams: captureStreams().streams });
 
     // Now try to install from a tap with the same name.
     const tapRepo = makeTempDir();
@@ -79,10 +84,15 @@ describe("install/flow — name_conflict across every source kind", () => {
     commitAll(tapRepo, "init");
     runCli(["tap", "add", `file://${tapRepo}`, "mytap"], {
       home,
+      cwd,
       streams: captureStreams().streams,
     });
-    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
-    const code = runCli(["install", "mytap/demo"], { home, streams: captureStreams().streams });
+    runCli(["tap", "remove", "core", "--force"], { home, cwd, streams: captureStreams().streams });
+    const code = runCli(["install", "mytap/demo"], {
+      home,
+      cwd,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 });
@@ -107,6 +117,7 @@ describe("install dependency: qualified refs", () => {
     );
     const code = runCli(["install", join(parentDir, "root")], {
       home,
+      cwd,
       streams: captureStreams().streams,
     });
     expect(code).toBe(0);
@@ -117,7 +128,7 @@ describe("install dependency: qualified refs", () => {
 describe("install edge: zero refs", () => {
   test("install with no args errors", () => {
     const home = makeCrewHome();
-    const code = runCli(["install"], { home, streams: captureStreams().streams });
+    const code = runCli(["install"], { home, cwd, streams: captureStreams().streams });
     expect(code).toBe(4);
   });
 });
@@ -126,7 +137,7 @@ describe("list --json + install --json", () => {
   test("list --json empty", () => {
     const home = makeCrewHome();
     const c = captureStreams();
-    runCli(["list", "--json"], { home, streams: c.streams });
+    runCli(["list", "--json"], { home, cwd, streams: c.streams });
     const parsed = JSON.parse(c.stdout());
     expect(parsed.installations).toEqual([]);
   });
@@ -136,7 +147,7 @@ describe("list --json + install --json", () => {
     const src = makeTempDir();
     makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     const c = captureStreams();
-    runCli(["install", "--json", join(src, "demo")], { home, streams: c.streams });
+    runCli(["install", "--json", join(src, "demo")], { home, cwd, streams: c.streams });
     const parsed = JSON.parse(c.stdout());
     expect(parsed.records[0].name).toBe("demo");
   });
@@ -165,6 +176,7 @@ describe("install --force on inconsistent_marker", () => {
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     const code = runCli(["install", "--force", "--agent", "claude-code", skill], {
       home,
+      cwd,
       streams: captureStreams().streams,
     });
     expect(code).toBe(0);
@@ -176,9 +188,9 @@ describe("info — state path returns installed record", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", skill], { home, streams: captureStreams().streams });
+    runCli(["install", skill], { home, cwd, streams: captureStreams().streams });
     const c = captureStreams();
-    const code = runCli(["info", "--json", "demo"], { home, streams: c.streams });
+    const code = runCli(["info", "--json", "demo"], { home, cwd, streams: c.streams });
     expect(code).toBe(0);
     const parsed = JSON.parse(c.stdout()) as { installed?: { name: string } };
     expect(parsed.installed?.name).toBe("demo");

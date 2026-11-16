@@ -19,6 +19,11 @@ import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { pinDoctorEnv, projectEntry, unpinDoctorEnv } from "./helpers.ts";
 
+let cwd: string;
+beforeEach(() => {
+  cwd = makeTempDir("crew-cwd-");
+});
+
 beforeEach(pinDoctorEnv);
 afterEach(unpinDoctorEnv);
 
@@ -32,7 +37,7 @@ describe("C-STATE-12a doctor --repair reports only real repairs", () => {
     writeFileSync(join(home, "store", "ghost@00000000", "f"), "abc");
 
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair"], { home, cwd, streams: c.streams });
     expect(code).toBe(0);
     // The orphan store entry is gone; the missing project root isn't,
     // and the summary says so instead of claiming both were addressed.
@@ -56,14 +61,14 @@ describe("C-STATE-12a doctor --repair reports only real repairs", () => {
       return true;
     });
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair"], { home, cwd, streams: c.streams });
 
     expect(code).toBe(0);
     expect(c.stdout()).toContain("1 finding addressed");
     expect(c.stdout()).toContain("unloaded the background updater");
 
     const after = captureStreams();
-    runCli(["doctor", "--json"], { home, streams: after.streams });
+    runCli(["doctor", "--json"], { home, cwd, streams: after.streams });
     const codes = JSON.parse(after.stdout()).findings.map((f: { code: string }) => f.code);
     expect(codes).toEqual([]);
   });
@@ -74,7 +79,7 @@ describe("C-STATE-12a doctor --repair reports only real repairs", () => {
     rmSync(project, { recursive: true, force: true });
     writeState({ schema_version: 1, installations: [projectEntry(project)] }, home);
 
-    runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams });
 
     // §11.2 check 8 leaves a moved project to the user; deleting the
     // entry would discard the only record of the install.
@@ -90,7 +95,7 @@ describe("C-STATE-12a doctor --repair reports only real repairs", () => {
     const before = Bun.file(config).size;
 
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair"], { home, cwd, streams: c.streams });
 
     // A doctor-style report at a non-zero exit, not a bare CrewError.
     expect(code).toBe(1);
@@ -106,13 +111,13 @@ describe("C-STATE-12a doctor --repair reports only real repairs", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "live", skillFrontmatter({ name: "live" }));
-    runCli(["install", join(src, "live")], { home, streams: captureStreams().streams });
+    runCli(["install", join(src, "live")], { home, cwd, streams: captureStreams().streams });
     const project = makeTempDir("crew-proj-");
     rmSync(project, { recursive: true, force: true });
     const installed = readState(home).installations;
     writeState({ schema_version: 1, installations: [...installed, projectEntry(project)] }, home);
 
-    runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams });
 
     // The marker-backed install is kept because its marker matches; the
     // missing-root entry is kept because its marker was never readable.
@@ -128,7 +133,7 @@ describe("C-STATE-12a doctor --repair reports only real repairs", () => {
     writeFileSync(join(home, "store", "ghost@00000000", "f"), "abc");
 
     const c = captureStreams();
-    runCli(["doctor", "--repair"], { home, streams: c.streams });
+    runCli(["doctor", "--repair"], { home, cwd, streams: c.streams });
 
     expect(c.stdout()).toContain("Repaired what was fixable");
     expect(existsSync(join(home, "store", "ghost@00000000"))).toBe(false);

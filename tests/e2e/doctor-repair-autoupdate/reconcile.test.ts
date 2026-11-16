@@ -3,7 +3,7 @@
  * match config (§11.2 check 7, C-STATE-11a/11b).
  */
 
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { setLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
@@ -12,7 +12,13 @@ import { setSystemctlRunner } from "../../../src/autoupdate/systemd.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { paths } from "../../../src/core/paths.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
 import { setEnabled, statefulLaunchctl, useSchedulerSeams } from "./helpers.ts";
+
+let cwd: string;
+beforeEach(() => {
+  cwd = makeTempDir("crew-cwd-");
+});
 
 useSchedulerSeams();
 
@@ -24,7 +30,7 @@ describe("C-STATE-11a doctor --repair loads a scheduler the config expects", () 
     const calls: string[][] = [];
     setLaunchctlRunner(statefulLaunchctl(false, calls));
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(0);
     const parsed = JSON.parse(c.stdout());
     expect(parsed.findings.map((f: { code: string }) => f.code)).toContain("autoupdate_not_loaded");
@@ -56,7 +62,7 @@ describe("C-STATE-11a doctor --repair loads a scheduler the config expects", () 
       return { ok: true, stderr: "" };
     });
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair"], { home, cwd, streams: c.streams });
     expect(code).toBe(0);
     expect(c.stdout()).toContain("Repaired what was fixable.");
     expect(c.stdout()).toContain("loaded the background updater");
@@ -76,7 +82,7 @@ describe("C-STATE-11b doctor --repair unloads a scheduler the config disabled", 
     const calls: string[][] = [];
     setLaunchctlRunner(statefulLaunchctl(true, calls));
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(0);
     expect(JSON.parse(c.stdout()).repairs).toEqual([
       { level: "ok", code: "autoupdate_unloaded", message: "unloaded the background updater" },
@@ -104,7 +110,7 @@ describe("C-STATE-11b doctor --repair unloads a scheduler the config disabled", 
       return { ok: true, stderr: "" };
     });
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(0);
     expect(JSON.parse(c.stdout()).repairs).toEqual([
       { level: "ok", code: "autoupdate_unloaded", message: "unloaded the background updater" },
@@ -132,7 +138,7 @@ describe("C-STATE-11d a repair whose effect did not take is a failure", () => {
     // fails to stick.
     setLaunchctlRunner(() => true);
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(1);
     const repairs = JSON.parse(c.stdout()).repairs;
     expect(repairs).toHaveLength(1);
@@ -150,7 +156,7 @@ describe("C-STATE-11d a repair whose effect did not take is a failure", () => {
     // Every command succeeds, but `is-active` keeps saying it is up.
     setSystemctlRunner(() => ({ ok: true, stderr: "" }));
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(1);
     const repairs = JSON.parse(c.stdout()).repairs;
     expect(repairs).toHaveLength(1);

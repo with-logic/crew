@@ -13,6 +13,11 @@ import { readState } from "../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../helpers/fixtures.ts";
 
+let cwd: string;
+beforeEach(() => {
+  cwd = makeTempDir("crew-cwd-");
+});
+
 let targets: Record<string, string> = {};
 let restore: (() => void) | null = null;
 
@@ -55,9 +60,9 @@ describe("doctor", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", join(src, "demo")], { home, streams: captureStreams().streams });
+    runCli(["install", join(src, "demo")], { home, cwd, streams: captureStreams().streams });
     const c = captureStreams();
-    const code = runCli(["doctor"], { home, streams: c.streams });
+    const code = runCli(["doctor"], { home, cwd, streams: c.streams });
     expect(code).toBe(0);
   });
 
@@ -65,11 +70,11 @@ describe("doctor", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", join(src, "demo")], { home, streams: captureStreams().streams });
+    runCli(["install", join(src, "demo")], { home, cwd, streams: captureStreams().streams });
     // Corrupt one installed target.
     writeFileSync(join(targets["claude-code"]!, "demo", "SKILL.md"), "tampered");
     const c = captureStreams();
-    runCli(["doctor", "--verify"], { home, streams: c.streams });
+    runCli(["doctor", "--verify"], { home, cwd, streams: c.streams });
     expect(c.stdout()).toContain("customized");
   });
 
@@ -77,10 +82,10 @@ describe("doctor", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", join(src, "demo")], { home, streams: captureStreams().streams });
+    runCli(["install", join(src, "demo")], { home, cwd, streams: captureStreams().streams });
     // Delete state.
     require("node:fs").rmSync(join(home, "state.json"));
-    const code = runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    const code = runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams });
     expect(code).toBe(0);
     expect(readState(home).installations.length).toBeGreaterThanOrEqual(1);
   });
@@ -89,13 +94,13 @@ describe("doctor", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", join(src, "demo")], { home, streams: captureStreams().streams });
+    runCli(["install", join(src, "demo")], { home, cwd, streams: captureStreams().streams });
     // Nuke state AND config so --repair has to rebuild the tap row
     // from the marker on disk, exercising the reconstruction branch.
     const fs = require("node:fs") as typeof import("node:fs");
     fs.rmSync(join(home, "state.json"));
     fs.rmSync(join(home, "config.yaml"));
-    const code = runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    const code = runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams });
     expect(code).toBe(0);
     const state = readState(home);
     expect(state.installations.length).toBeGreaterThanOrEqual(1);
@@ -115,12 +120,12 @@ describe("doctor", () => {
     const nested = join(src, "teams", "support");
     require("node:fs").mkdirSync(nested, { recursive: true });
     makeSkill(nested, "ticket-triage", skillFrontmatter({ name: "ticket-triage" }));
-    runCli(["install", "--recursive", src], { home, streams: captureStreams().streams });
+    runCli(["install", "--recursive", src], { home, cwd, streams: captureStreams().streams });
 
     const fs = require("node:fs") as typeof import("node:fs");
     fs.rmSync(join(home, "state.json"));
     fs.rmSync(join(home, "config.yaml"));
-    const code = runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    const code = runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams });
     expect(code).toBe(0);
     const { readConfig } =
       require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
@@ -133,18 +138,19 @@ describe("doctor", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "alpha", skillFrontmatter({ name: "alpha" }));
-    runCli(["tap", "add", src, "local"], { home, streams: captureStreams().streams });
-    runCli(["tap", "remove", "core", "--force"], { home, streams: captureStreams().streams });
-    runCli(["install", "local/alpha"], { home, streams: captureStreams().streams });
+    runCli(["tap", "add", src, "local"], { home, cwd, streams: captureStreams().streams });
+    runCli(["tap", "remove", "core", "--force"], { home, cwd, streams: captureStreams().streams });
+    runCli(["install", "local/alpha"], { home, cwd, streams: captureStreams().streams });
     runCli(["tap", "add", "--recursive", src, "local"], {
       home,
+      cwd,
       streams: captureStreams().streams,
     });
 
     const fs = require("node:fs") as typeof import("node:fs");
     fs.rmSync(join(home, "state.json"));
     fs.rmSync(join(home, "config.yaml"));
-    const code = runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    const code = runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams });
     expect(code).toBe(0);
     const { readConfig } =
       require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
@@ -157,13 +163,13 @@ describe("doctor", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "alpha", skillFrontmatter({ name: "alpha" }));
-    runCli(["install", src], { home, streams: captureStreams().streams });
-    runCli(["install", "--recursive", src], { home, streams: captureStreams().streams });
+    runCli(["install", src], { home, cwd, streams: captureStreams().streams });
+    runCli(["install", "--recursive", src], { home, cwd, streams: captureStreams().streams });
 
     const fs = require("node:fs") as typeof import("node:fs");
     fs.rmSync(join(home, "state.json"));
     fs.rmSync(join(home, "config.yaml"));
-    const code = runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    const code = runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams });
     expect(code).toBe(0);
     const { readConfig } =
       require("../../src/config/load.ts") as typeof import("../../src/config/load.ts");
@@ -175,7 +181,7 @@ describe("doctor", () => {
   test("--json output", () => {
     const home = makeCrewHome();
     const c = captureStreams();
-    runCli(["doctor", "--json"], { home, streams: c.streams });
+    runCli(["doctor", "--json"], { home, cwd, streams: c.streams });
     const parsed = JSON.parse(c.stdout());
     expect(Array.isArray(parsed.findings)).toBe(true);
   });
