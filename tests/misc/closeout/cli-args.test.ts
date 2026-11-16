@@ -15,6 +15,12 @@ import { resetGitRunner } from "../../../src/git/exec.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 
+// A fresh project per test: without `cwd` the CLI reads the repository root.
+let cwd: string;
+beforeEach(() => {
+  cwd = makeTempDir("crew-cwd-");
+});
+
 // Adapter redirection: any test in this file that runs `crew install`
 // would otherwise write into the real `~/.claude/skills/` etc. Point
 // each adapter's userPath at a per-test tmp root, and force `detect()`
@@ -64,6 +70,7 @@ describe("flags parser", () => {
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     const code = runCli(["install", "--scope=user", skill], {
       home,
+      cwd,
       streams: captureStreams().streams,
     });
     expect(code).toBe(0);
@@ -73,6 +80,7 @@ describe("flags parser", () => {
     const home = makeCrewHome();
     const code = runCli(["install", "--scope", "other", "foo"], {
       home,
+      cwd,
       streams: captureStreams().streams,
     });
     expect(code).toBe(4);
@@ -82,6 +90,7 @@ describe("flags parser", () => {
     const home = makeCrewHome();
     const code = runCli(["install", "--", "--weird-name"], {
       home,
+      cwd,
       streams: captureStreams().streams,
     });
     // This parses as a single ref that can't be found; exit 4 (invalid_ref) or 1.
@@ -90,19 +99,23 @@ describe("flags parser", () => {
 
   test("--flag requiring value but missing", () => {
     const home = makeCrewHome();
-    const code = runCli(["install", "--agent"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--agent"], { home, cwd, streams: captureStreams().streams });
     expect(code).toBe(4);
   });
 
   test("boolean flag with = fails", () => {
     const home = makeCrewHome();
-    const code = runCli(["install", "--dry-run=true"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "--dry-run=true"], {
+      home,
+      cwd,
+      streams: captureStreams().streams,
+    });
     expect(code).toBe(4);
   });
 
   test("short flag rejected", () => {
     const home = makeCrewHome();
-    const code = runCli(["install", "-q", "foo"], { home, streams: captureStreams().streams });
+    const code = runCli(["install", "-q", "foo"], { home, cwd, streams: captureStreams().streams });
     expect(code).toBe(4);
   });
 
@@ -112,6 +125,7 @@ describe("flags parser", () => {
     const skill = makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
     const code = runCli(["install", "--agent", "claude-code", "--agent", "codex", skill], {
       home,
+      cwd,
       streams: captureStreams().streams,
     });
     expect(code).toBe(0);
@@ -121,19 +135,19 @@ describe("flags parser", () => {
 describe("commands — usage errors for wrong argument counts", () => {
   test("`crew info` with no args errors (info.ts:19)", () => {
     const home = makeCrewHome();
-    const code = runCli(["info"], { home, streams: captureStreams().streams });
+    const code = runCli(["info"], { home, cwd, streams: captureStreams().streams });
     expect(code).toBe(4);
   });
 
   test("`crew info` with more than one arg errors", () => {
     const home = makeCrewHome();
-    const code = runCli(["info", "a", "b"], { home, streams: captureStreams().streams });
+    const code = runCli(["info", "a", "b"], { home, cwd, streams: captureStreams().streams });
     expect(code).toBe(4);
   });
 
   test("`crew uninstall` with no args errors (uninstall.ts:18)", () => {
     const home = makeCrewHome();
-    const code = runCli(["uninstall"], { home, streams: captureStreams().streams });
+    const code = runCli(["uninstall"], { home, cwd, streams: captureStreams().streams });
     expect(code).toBe(4);
   });
 });
@@ -158,7 +172,7 @@ describe("CrewError catches unexpected errors", () => {
     // non-CrewError — but parseArgs only throws CrewError. So trigger a
     // runtime error by passing a truly nonsensical option that our parser
     // handles... give up and just confirm existing behavior.
-    const code = runCli(["install", "--bogus-unknown"], { home, streams: c.streams });
+    const code = runCli(["install", "--bogus-unknown"], { home, cwd, streams: c.streams });
     expect(code).toBe(4);
   });
 });

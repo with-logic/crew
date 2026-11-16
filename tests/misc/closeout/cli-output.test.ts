@@ -17,6 +17,12 @@ import { makeStyler } from "../../../src/util/term.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeTempDir } from "../../helpers/fixtures.ts";
 
+// A fresh project per test: without `cwd` the CLI reads the repository root.
+let cwd: string;
+beforeEach(() => {
+  cwd = makeTempDir("crew-cwd-");
+});
+
 // Adapter redirection: any test in this file that runs `crew install`
 // would otherwise write into the real `~/.claude/skills/` etc. Point
 // each adapter's userPath at a per-test tmp root, and force `detect()`
@@ -106,7 +112,7 @@ describe("cli/main — unexpected runtime error path", () => {
     });
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["info", "gh:owner/repo"], { home, streams: c.streams });
+    const code = runCli(["info", "gh:owner/repo"], { home, cwd, streams: c.streams });
     expect(code).toBe(4);
     expect(c.stderr()).toContain("unexpected error");
   });
@@ -117,7 +123,7 @@ describe("cli/main — unexpected runtime error path", () => {
     });
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["info", "--json", "gh:owner/repo"], { home, streams: c.streams });
+    const code = runCli(["info", "--json", "gh:owner/repo"], { home, cwd, streams: c.streams });
     expect(code).toBe(4);
     const parsed = JSON.parse(c.stdout()) as { error: { name: string } };
     expect(parsed.error.name).toBe("usage_error");
@@ -130,7 +136,7 @@ describe("cli/main — unexpected runtime error path", () => {
     });
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["info", "gh:owner/repo"], { home, streams: c.streams });
+    const code = runCli(["info", "gh:owner/repo"], { home, cwd, streams: c.streams });
     expect(code).toBe(4);
   });
 });
@@ -139,7 +145,7 @@ describe("error output non-json mode", () => {
   test("CrewError writes to stderr", () => {
     const home = makeCrewHome();
     const c = captureStreams();
-    runCli(["uninstall", "ghost"], { home, streams: c.streams });
+    runCli(["uninstall", "ghost"], { home, cwd, streams: c.streams });
     // Error message names the skill and points the user toward a remedy.
     expect(c.stderr()).toContain("ghost");
     expect(c.stderr()).toContain("crew list");
@@ -149,7 +155,7 @@ describe("error output non-json mode", () => {
     const home = makeCrewHome();
     const c = captureStreams();
     // `crew install` with no args → `usage_error`, which has a remedy hint.
-    runCli(["install"], { home, streams: c.streams });
+    runCli(["install"], { home, cwd, streams: c.streams });
     expect(c.stderr()).toContain("Error");
     expect(c.stderr()).toContain("Next step");
     expect(c.stderr()).toContain("crew help");
@@ -158,7 +164,7 @@ describe("error output non-json mode", () => {
   test("tap add with no URL surfaces a friendly usage hint", () => {
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["tap", "add"], { home, streams: c.streams });
+    const code = runCli(["tap", "add"], { home, cwd, streams: c.streams });
     expect(code).toBe(4);
     expect(c.stderr()).toContain("crew tap add");
   });
@@ -166,7 +172,7 @@ describe("error output non-json mode", () => {
   test("tap remove with no name surfaces a friendly usage hint", () => {
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["tap", "remove"], { home, streams: c.streams });
+    const code = runCli(["tap", "remove"], { home, cwd, streams: c.streams });
     expect(code).toBe(4);
     expect(c.stderr()).toContain("crew tap remove");
   });
@@ -174,7 +180,7 @@ describe("error output non-json mode", () => {
   test("targets enable/disable with no name surfaces a friendly usage hint", () => {
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["agents", "enable"], { home, streams: c.streams });
+    const code = runCli(["agents", "enable"], { home, cwd, streams: c.streams });
     expect(code).toBe(4);
     expect(c.stderr()).toContain("crew agents enable");
   });

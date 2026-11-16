@@ -4,7 +4,7 @@
  * did not take effect.
  */
 
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { setLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
@@ -12,7 +12,14 @@ import { setAutoupdatePlatform } from "../../../src/autoupdate/scheduler.ts";
 import { setSystemctlRunner } from "../../../src/autoupdate/systemd.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
 import { setEnabled, useSchedulerSeams } from "./helpers.ts";
+
+// A fresh project per test: without `cwd` the CLI reads the repository root.
+let cwd: string;
+beforeEach(() => {
+  cwd = makeTempDir("crew-cwd-");
+});
 
 useSchedulerSeams();
 
@@ -27,14 +34,14 @@ describe("C-STATE-11c a scheduler failure is a finding, not an abort", () => {
     mkdirSync(orphan, { recursive: true });
     setLaunchctlRunner(() => false); // not loaded; bootstrap and load both fail
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair"], { home, cwd, streams: c.streams });
     expect(code).toBe(1);
     expect(c.stdout()).toContain("1 repair failed");
     expect(c.stdout()).toContain("couldn't reconcile the background updater");
     expect(existsSync(orphan)).toBe(false);
     const j = captureStreams();
     setLaunchctlRunner(() => false);
-    runCli(["doctor", "--repair", "--json"], { home, streams: j.streams });
+    runCli(["doctor", "--repair", "--json"], { home, cwd, streams: j.streams });
     const repairs = JSON.parse(j.stdout()).repairs;
     expect(repairs).toHaveLength(1);
     expect(repairs[0].code).toBe("autoupdate_repair_failed");
@@ -53,7 +60,7 @@ describe("C-STATE-11c a scheduler failure is a finding, not an abort", () => {
       stderr: args[0] === "is-active" ? "" : "Failed to enable unit: Unit is masked.",
     }));
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(1);
     const repairs = JSON.parse(c.stdout()).repairs;
     expect(repairs).toHaveLength(1);
@@ -71,7 +78,7 @@ describe("C-STATE-11d a repair that did not take effect is not a success", () =>
     // early here reported a successful unload while it kept running.
     setLaunchctlRunner((args) => args[0] === "list");
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(1);
     const repairs = JSON.parse(c.stdout()).repairs;
     expect(repairs).toHaveLength(1);
@@ -90,7 +97,7 @@ describe("C-STATE-11d a load that silently did not take effect is a failure", ()
     // post-repair state check can catch it.
     setLaunchctlRunner((args) => args[0] !== "list");
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(1);
     const repairs = JSON.parse(c.stdout()).repairs;
     expect(repairs).toHaveLength(1);
@@ -114,7 +121,7 @@ describe("C-STATE-11c launchctl diagnostics reach the repair result", () => {
       return { ok: false, stderr: "Load failed: 37: Operation already in progress" };
     });
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(1);
     const repairs = JSON.parse(c.stdout()).repairs;
     expect(repairs[0].message).toContain("Bootstrap failed");

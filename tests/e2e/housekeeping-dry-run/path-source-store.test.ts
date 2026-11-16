@@ -17,7 +17,14 @@ import type { StateEntry } from "../../../src/core/types.ts";
 import { garbageCollectStore } from "../../../src/maintenance/gc.ts";
 import { writeState } from "../../../src/state/load.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
 import { pinDoctorEnv, unpinDoctorEnv } from "./helpers.ts";
+
+// A fresh project per test: without `cwd` the CLI reads the repository root.
+let cwd: string;
+beforeEach(() => {
+  cwd = makeTempDir("crew-cwd-");
+});
 
 beforeEach(pinDoctorEnv);
 afterEach(unpinDoctorEnv);
@@ -51,7 +58,7 @@ describe("C-STATE-12c path-source store entries are not orphans", () => {
     writeFileSync(join(home, "store", STORE_KEY, "SKILL.md"), "x");
 
     const c = captureStreams();
-    runCli(["doctor"], { home, streams: c.streams });
+    runCli(["doctor"], { home, cwd, streams: c.streams });
 
     expect(c.stdout()).not.toContain("unreferenced store entry");
     expect(c.stdout()).not.toContain(STORE_KEY);
@@ -80,7 +87,7 @@ describe("C-STATE-12c path-source store entries are not orphans", () => {
     writeFileSync(join(home, "store", ".DS_Store"), "junk");
 
     const c = captureStreams();
-    runCli(["doctor"], { home, streams: c.streams });
+    runCli(["doctor"], { home, cwd, streams: c.streams });
 
     // The collector only removes directories, so reporting a file as an
     // orphan entry promises a cleanup that never happens.

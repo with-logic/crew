@@ -13,9 +13,10 @@
  *    `projectPath` function (which returns `<cwd>/.claude/skills`).
  *    Lots of tests hand-craft fixtures at `<projCwd>/.claude/skills/`
  *    then run uninstall/doctor flows against them; they rely on that
- *    mapping. Project scope is safe because `cwd` is always a tmp dir
- *    in tests. The `userPath` stays pointed at the inert dir so
- *    user-scope installs don't hit the real `~/.claude/skills/`.
+ *    mapping. Project scope is safe when the test passes a tmp `cwd` to
+ *    `runCli`; without one the project is the repository root. The
+ *    `userPath` stays pointed at the inert dir so user-scope installs
+ *    don't hit the real `~/.claude/skills/`.
  *
  * Tests that need other adapters active override specific ones in
  * their own `beforeEach` — e.g. `redirectAdapters()` in

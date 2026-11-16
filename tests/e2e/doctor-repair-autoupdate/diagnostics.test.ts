@@ -2,12 +2,19 @@
  * Failed and freshly discovered scheduler repair output (§11.2, §5.2).
  */
 
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { setLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
 import { setAutoupdatePlatform } from "../../../src/autoupdate/scheduler.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
 import { setEnabled, useSchedulerSeams } from "./helpers.ts";
+
+// A fresh project per test: without `cwd` the CLI reads the repository root.
+let cwd: string;
+beforeEach(() => {
+  cwd = makeTempDir("crew-cwd-");
+});
 
 useSchedulerSeams();
 
@@ -21,16 +28,16 @@ describe("scheduler repair diagnostics", () => {
       stderr: args[0] === "list" ? "" : "Load failed: https://user:secret@example.com/repo\nforged",
     }));
     const c = captureStreams();
-    expect(runCli(["doctor", "--repair", "--quiet"], { home, streams: c.streams })).toBe(1);
+    expect(runCli(["doctor", "--repair", "--quiet"], { home, cwd, streams: c.streams })).toBe(1);
     expect(c.stdout()).toBe("");
     expect(c.stderr()).toContain("couldn't reconcile the background updater");
     expect(c.stderr()).toContain("Load failed");
     expect(c.stderr()).not.toContain("secret");
     expect(c.stderr()).not.toContain("\nforged");
     const j = captureStreams();
-    expect(runCli(["doctor", "--repair", "--quiet", "--json"], { home, streams: j.streams })).toBe(
-      1,
-    );
+    expect(
+      runCli(["doctor", "--repair", "--quiet", "--json"], { home, cwd, streams: j.streams }),
+    ).toBe(1);
     expect(JSON.parse(j.stdout()).repairs[0].code).toBe("autoupdate_repair_failed");
     expect(j.stderr()).toBe("");
   });
@@ -49,7 +56,7 @@ describe("scheduler repair diagnostics", () => {
       return { ok: false, stderr: "Load failed: scheduler unavailable" };
     });
     const c = captureStreams();
-    expect(runCli(["doctor", "--repair"], { home, streams: c.streams })).toBe(1);
+    expect(runCli(["doctor", "--repair"], { home, cwd, streams: c.streams })).toBe(1);
     expect(c.stdout()).toContain("1 repair failed");
     expect(c.stdout()).toContain("0 findings addressed");
     expect(c.stdout()).toContain("1 finding left for you");

@@ -15,6 +15,12 @@ import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { pinDoctorEnv, projectEntry, snapshot, unpinDoctorEnv } from "./helpers.ts";
 
+// A fresh project per test: without `cwd` the CLI reads the repository root.
+let cwd: string;
+beforeEach(() => {
+  cwd = makeTempDir("crew-cwd-");
+});
+
 beforeEach(pinDoctorEnv);
 afterEach(unpinDoctorEnv);
 
@@ -25,7 +31,7 @@ describe("C-STATE-12 doctor --repair --dry-run", () => {
     mkdirSync(orphan, { recursive: true });
     writeFileSync(join(orphan, "f"), "abc");
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--dry-run"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--dry-run"], { home, cwd, streams: c.streams });
     // An orphan store entry is a warning, not an error, so exit 0 —
     // and nothing was repaired, so the orphan is still there.
     expect(code).toBe(0);
@@ -34,7 +40,7 @@ describe("C-STATE-12 doctor --repair --dry-run", () => {
     expect(c.stdout()).not.toContain("Repaired what was fixable");
     expect(existsSync(join(orphan, "f"))).toBe(true);
     // The real repair removes it.
-    runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams });
     expect(existsSync(orphan)).toBe(false);
   });
 
@@ -42,7 +48,7 @@ describe("C-STATE-12 doctor --repair --dry-run", () => {
     const home = makeCrewHome();
     const src = makeTempDir();
     makeSkill(src, "demo", skillFrontmatter({ name: "demo" }));
-    runCli(["install", join(src, "demo")], { home, streams: captureStreams().streams });
+    runCli(["install", join(src, "demo")], { home, cwd, streams: captureStreams().streams });
     // Drop the state entry so the marker on disk is orphaned: repair
     // would rebuild state AND reconstruct the tap from the marker.
     writeState({ schema_version: 1, installations: [] }, home);
@@ -51,13 +57,13 @@ describe("C-STATE-12 doctor --repair --dry-run", () => {
 
     const before = snapshot(home);
     const c = captureStreams();
-    runCli(["doctor", "--repair", "--dry-run"], { home, streams: c.streams });
+    runCli(["doctor", "--repair", "--dry-run"], { home, cwd, streams: c.streams });
     expect(c.stdout()).toContain("Nothing was changed");
     expect(snapshot(home)).toEqual(before);
 
     // The real repair rebuilds state from the marker, proving the dry
     // run had genuine work available to skip.
-    runCli(["doctor", "--repair"], { home, streams: captureStreams().streams });
+    runCli(["doctor", "--repair"], { home, cwd, streams: captureStreams().streams });
     expect(readState(home).installations.map((e) => e.name)).toEqual(["demo"]);
   });
 
@@ -72,7 +78,7 @@ describe("C-STATE-12 doctor --repair --dry-run", () => {
     writeState({ schema_version: 1, installations: [projectEntry(project)] }, home);
 
     const c = captureStreams();
-    runCli(["doctor", "--repair", "--dry-run"], { home, streams: c.streams });
+    runCli(["doctor", "--repair", "--dry-run"], { home, cwd, streams: c.streams });
     expect(c.stdout()).toContain("a project folder is missing");
     expect(c.stdout()).toContain("would address 0 findings");
   });
@@ -87,7 +93,7 @@ describe("C-STATE-12 doctor --repair --dry-run", () => {
     mkdirSync(join(home, "store", "ghost@00000000"), { recursive: true });
 
     const c = captureStreams();
-    runCli(["doctor", "--repair", "--dry-run"], { home, streams: c.streams });
+    runCli(["doctor", "--repair", "--dry-run"], { home, cwd, streams: c.streams });
 
     const out = c.stdout();
     const repairLine = out.split("\n").find((l) => l.includes("a cached skill is no longer"));
@@ -101,7 +107,7 @@ describe("C-STATE-12 doctor --repair --dry-run", () => {
     mkdirSync(join(home, "store", "ghost@00000000"), { recursive: true });
 
     const c = captureStreams();
-    runCli(["doctor"], { home, streams: c.streams });
+    runCli(["doctor"], { home, cwd, streams: c.streams });
 
     // The marking answers "what would --repair do"; without --repair
     // the question wasn't asked.
@@ -113,7 +119,7 @@ describe("C-STATE-12 doctor --repair --dry-run", () => {
     const home = makeCrewHome();
     mkdirSync(join(home, "store", "ghost@00000000"), { recursive: true });
     const c = captureStreams();
-    runCli(["doctor", "--repair", "--dry-run", "--json"], { home, streams: c.streams });
+    runCli(["doctor", "--repair", "--dry-run", "--json"], { home, cwd, streams: c.streams });
     const parsed = JSON.parse(c.stdout());
     expect(parsed.dry_run).toBe(true);
     expect(parsed.findings.some((f: { code: string }) => f.code === "orphan_store_entry")).toBe(
@@ -125,7 +131,7 @@ describe("C-STATE-12 doctor --repair --dry-run", () => {
   test("--dry-run without --repair is a plain check", () => {
     const home = makeCrewHome();
     const c = captureStreams();
-    const code = runCli(["doctor", "--dry-run", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--dry-run", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(0);
     expect(JSON.parse(c.stdout())).toEqual({ findings: [], dry_run: false });
   });

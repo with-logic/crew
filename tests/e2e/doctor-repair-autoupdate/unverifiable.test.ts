@@ -4,13 +4,20 @@
  * run is not claimed as done.
  */
 
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { setLaunchctlRunner } from "../../../src/autoupdate/launchctl.ts";
 import { setAutoupdatePlatform } from "../../../src/autoupdate/scheduler.ts";
 import { setSystemctlRunner } from "../../../src/autoupdate/systemd.ts";
 import { runCli } from "../../../src/cli/main.ts";
 import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
+import { makeTempDir } from "../../helpers/fixtures.ts";
 import { setEnabled, useSchedulerSeams } from "./helpers.ts";
+
+// A fresh project per test: without `cwd` the CLI reads the repository root.
+let cwd: string;
+beforeEach(() => {
+  cwd = makeTempDir("crew-cwd-");
+});
 
 useSchedulerSeams();
 
@@ -40,7 +47,7 @@ describe("C-STATE-11f an unverifiable repair is not a success", () => {
         : { ok: true, stderr: "" }; // detection: the job is loaded
     });
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(1);
     const repairs = JSON.parse(c.stdout()).repairs;
     expect(repairs).toHaveLength(1);
@@ -64,7 +71,7 @@ describe("C-STATE-11f an unverifiable repair is not a success", () => {
         : { ok: true, stderr: "" }; // detection: the timer is active
     });
     const c = captureStreams();
-    const code = runCli(["doctor", "--repair", "--json"], { home, streams: c.streams });
+    const code = runCli(["doctor", "--repair", "--json"], { home, cwd, streams: c.streams });
     expect(code).toBe(1);
     const repairs = JSON.parse(c.stdout()).repairs;
     expect(repairs[0].code).toBe("autoupdate_repair_failed");
