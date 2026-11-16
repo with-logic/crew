@@ -1,5 +1,5 @@
 # Review a PR once when it opens, or when a current writer comments /review.
-# Check trust before secrets, then reuse Bun packages for all twelve review skills.
+# Check trust before secrets, then reuse Bun packages for all thirteen review skills.
 name: Code review
 on:
   pull_request:
@@ -122,6 +122,10 @@ jobs:
         timeout-minutes: 75
         uses: ./.pipeline/actions/code-review
         with:
+          review-source: skills
+          # The token action accepts a client ID through its app-id input.
+          skills-app-id: ${{ vars.PIPELINE_SOURCE_APP_CLIENT_ID }}
+          skills-app-private-key: ${{ secrets.PIPELINE_SOURCE_APP_PRIVATE_KEY }}
           github-token: ${{ github.token }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           pr-number: ${{ needs.authorize.outputs.pr-number }}
