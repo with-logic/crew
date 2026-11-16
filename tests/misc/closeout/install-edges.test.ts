@@ -22,6 +22,7 @@ import {
   skillFrontmatter,
 } from "../../helpers/fixtures.ts";
 
+// A fresh project per test: without `cwd` the CLI reads the repository root.
 let cwd: string;
 beforeEach(() => {
   cwd = makeTempDir("crew-cwd-");

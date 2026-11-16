@@ -15,6 +15,7 @@ import { captureStreams, makeCrewHome } from "../../helpers/env.ts";
 import { makeSkill, makeTempDir, skillFrontmatter } from "../../helpers/fixtures.ts";
 import { pinDoctorEnv, projectEntry, snapshot, unpinDoctorEnv } from "./helpers.ts";
 
+// A fresh project per test: without `cwd` the CLI reads the repository root.
 let cwd: string;
 beforeEach(() => {
   cwd = makeTempDir("crew-cwd-");
