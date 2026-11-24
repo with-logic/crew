@@ -122,9 +122,7 @@ jobs:
         timeout-minutes: 75
         uses: ./.pipeline/actions/code-review
         with:
-          review-source: skills
-          # The token action accepts a client ID through its app-id input.
-          skills-app-id: ${{ vars.PIPELINE_SOURCE_APP_CLIENT_ID }}
+          skills-app-client-id: ${{ vars.PIPELINE_SOURCE_APP_CLIENT_ID }}
           skills-app-private-key: ${{ secrets.PIPELINE_SOURCE_APP_PRIVATE_KEY }}
           github-token: ${{ github.token }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
