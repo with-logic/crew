@@ -56,6 +56,47 @@ CREW_HOME=/tmp/crew-test dist/crew install <ref>
 Tests must not write to real agent skill directories such as `~/.claude/skills`
 or `~/.agents/skills`.
 
+## Shared local review
+
+Shared review skills and the PR-description helper come from `.crewrc` through
+Crew. `bun install` does not run Crew. This repository has no `install` or
+`postinstall` script that fetches skills. Prepare the skills with one Crew
+command.
+
+Use a published [Crew release](https://crew.logic.inc/) with project manifests
+(0.13+; 0.14.0 verified), not a build from this checkout. Check `crew version`
+and Git read access to `with-logic/skills`. Enable the agent if needed with
+`crew agents enable codex` or `crew agents enable claude-code`, then run this
+from the repository root:
+
+```sh
+crew install --latest --json
+```
+
+A failure exits nonzero; fix the reported cause and run it again. A zero exit
+does not prove that your agent is ready. The preparation checks of each review
+confirm it. To recover:
+
+- After a timeout, run the command one more time.
+- After a `no_agents` result, enable your agent with the command above, then run
+  the install again.
+- If Crew cannot reach `with-logic/skills`, check your Git access to that
+  repository. Without access, the local review is skipped; see `CLAUDE.md`.
+- If the failure stays, report the local review as not run.
+
+Before **each required local review**, the coding agent refreshes again and
+verifies the result. The "Required local review" section of `CLAUDE.md` holds
+that procedure. Failed preparation stops review. The shared procedure runs the
+full lens roster and proposes PR text through the separate helper.
+
+Commit `.crewrc` and its Crew-generated `.crewrc.lock`. Plain `crew install`
+retains the locked revision; `--latest` can advance it. As the agent, do not
+discard a `.crewrc.lock` change. The author commits it in the pull request under
+review or discards it after the review. `bun run release` requires a clean
+working tree, so commit or restore a `.crewrc.lock` change before a release.
+Downloaded project skills stay ignored; authored and personal skills remain
+owned by their authors.
+
 ## Review Expectations
 
 We optimize for behavior that is easy to explain, test, and maintain. Expect
