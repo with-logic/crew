@@ -701,15 +701,14 @@ Failed preparation stops required review. A successful `bun install`, a
 use stale or personal skills as a fallback. A timeout is a failed preparation.
 See `CONTRIBUTING.md#shared-local-review` for recovery. If you cannot recover the
 preparation for any other reason, report the local review as not run and ask the
-user before you open the pull request. Do not commit files under
-`.agents/skills/` or `.claude/skills/` that Crew installed.
+user before you open the pull request. Do not commit Crew-installed copies under
+any agent skill directory (`.agents/skills/`, `.claude/skills/`,
+`.factory/skills/` and others).
 
 The shared procedure includes proposed PR title and body text from the separately
 installed pull-request-description helper. This local step does not edit the PR
 or change the code-review verdict. Keep `.crewrc` and its generated lock tracked;
 keep downloaded copies ignored and lock changes visible for review. Do not
 refresh while reviewers run or add a repository-specific wrapper for the review.
-The hosted review workflow is the one exception to the wrapper rule above: its
-`review-source` input, with the variable `PIPELINE_SOURCE_APP_CLIENT_ID` and the
-secret `PIPELINE_SOURCE_APP_PRIVATE_KEY`, selects the Skills source for hosted CI
-only.
+Hosted CI selects the Skills source through the `review-source` input in
+`.github/workflows/review.yml`. Local sessions never use that input.

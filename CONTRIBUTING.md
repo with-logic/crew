@@ -75,7 +75,14 @@ crew install --latest --json
 
 A failure exits nonzero; fix the reported cause and run it again. A zero exit
 does not prove that your agent is ready. The preparation checks of each review
-confirm it.
+confirm it. To recover:
+
+- After a timeout, run the command one more time.
+- After a `no_agents` result, enable your agent with the command above, then run
+  the install again.
+- If Crew cannot reach `with-logic/skills`, check your Git access to that
+  repository. Without access, the local review is skipped; see `CLAUDE.md`.
+- If the failure stays, report the local review as not run.
 
 Before **each required local review**, the coding agent refreshes again and
 verifies the result. The "Required local review" section of `CLAUDE.md` holds
