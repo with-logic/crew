@@ -1,0 +1,3 @@
+# Shared local review instructions; refresh before each required review.
+@with-logic/skills@main//skills/code-review
+@with-logic/skills@main//skills/pull-request-description

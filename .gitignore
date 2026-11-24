@@ -16,3 +16,8 @@ bun.lockb
 
 # Temporary clones used while building the bundled known-tap registry.
 .crew-known-taps-work/
+
+# Crew-managed project copies. Crew installs the shared review skills into the
+# skill directory of each enabled agent (.agents/, .claude/, .factory/ and
+# others); nothing from those directories is committed here.
+/.*/skills/

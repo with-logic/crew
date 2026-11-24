@@ -669,3 +669,47 @@ on `$PATH`.
   (e.g. NEVER `name_conflict` or `invalid_skill`).
 - **Don't catch and swallow `CrewError`.** Let it bubble; the CLI
   top-level knows how to format it.
+
+---
+
+## Required local review
+
+This section applies to local coding-agent sessions only. A hosted CI review
+gets its instructions from the workflow. In hosted CI, do not run Crew and do not
+treat missing Crew as a failed review.
+
+This step needs read access to `with-logic/skills`, which is private to Logic.
+If you do not have that access (Crew reports that it cannot reach
+`with-logic/skills`), skip the local review. This is not a failed preparation:
+do not ask the user about it, and say in the pull request that the local review
+was skipped.
+
+Run the local review before you open a pull request. It does not replace the
+hosted review, which stays the merge requirement.
+
+Prepare each required local review in the existing coding-agent session. From this
+repository root, run `crew version` and `crew install --latest --json` with a
+command timeout. Require the published Crew release that
+`CONTRIBUTING.md#shared-local-review` names. Then read the updated project
+`review/SKILL.md`: `.agents/skills/review/SKILL.md` for Codex or
+`.claude/skills/review/SKILL.md` for Claude Code. Follow its shared preparation
+procedure to verify this agent's full roster, helper and source records, then
+continue `/review` in this session. Refresh once per invocation.
+
+Failed preparation stops required review. A successful `bun install`, a
+`no_agents` result, or another agent's install does not prove readiness. Do not
+use stale or personal skills as a fallback. A timeout is a failed preparation.
+See `CONTRIBUTING.md#shared-local-review` for recovery. If you cannot recover the
+preparation for any other reason, report the local review as not run and ask the
+user before you open the pull request. Do not commit files under
+`.agents/skills/` or `.claude/skills/` that Crew installed.
+
+The shared procedure includes proposed PR title and body text from the separately
+installed pull-request-description helper. This local step does not edit the PR
+or change the code-review verdict. Keep `.crewrc` and its generated lock tracked;
+keep downloaded copies ignored and lock changes visible for review. Do not
+refresh while reviewers run or add a repository-specific wrapper for the review.
+The hosted review workflow is the one exception to the wrapper rule above: its
+`review-source` input, with the variable `PIPELINE_SOURCE_APP_CLIENT_ID` and the
+secret `PIPELINE_SOURCE_APP_PRIVATE_KEY`, selects the Skills source for hosted CI
+only.
