@@ -710,5 +710,5 @@ installed pull-request-description helper. This local step does not edit the PR
 or change the code-review verdict. Keep `.crewrc` and its generated lock tracked;
 keep downloaded copies ignored and lock changes visible for review. Do not
 refresh while reviewers run or add a repository-specific wrapper for the review.
-Hosted CI selects the Skills source through the `review-source` input in
+Hosted CI passes the source App client ID as `skills-app-client-id` in
 `.github/workflows/review.yml`. Local sessions never use that input.
